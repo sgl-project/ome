@@ -136,7 +136,6 @@ func TestReconcile_CapacityUsesReadyInstanceCount(t *testing.T) {
 		{name: "half-capacity-instance-shortfall", step: 0, readyPods: 16, readyInstances: 3},
 		// The final step stages every instance but the held stable one: 7 of 8.
 		{name: "full-capacity-instance-shortfall", step: 1, readyPods: 16, readyInstances: 6},
-		{name: "pod-readiness-shortfall", step: 0, readyPods: 3, readyInstances: 8},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			isvc := canaryISVC(twoStep(), nil)
@@ -173,6 +172,25 @@ func TestReconcile_InitialConvergenceUsesReadyInstanceCount(t *testing.T) {
 	}
 	if phaseOf(isvc) != v1beta1.RolloutPhasePending {
 		t.Fatalf("initial step must wait for four ready Instances, got %q", phaseOf(isvc))
+	}
+}
+
+// The replica's account of its Instances decides the gate over the pod
+// view: eight Instances the replica reports serving on the canary revision
+// fill a step that stages four, however many of their pods the pod list has
+// caught up with, and the split serves under the step's pause.
+func TestReconcile_ServingInstancesDecideOverTheReadyPodCount(t *testing.T) {
+	isvc := canaryISVC(twoStep(), nil)
+	isvc.Status.Canary = &v1beta1.CanaryStatus{CanaryRevisionHash: "new", StableRevisionHash: "old"}
+	in := baseInputs(isvc, map[string]int32{"new": 3, "old": 8})
+	in.DesiredReplicas = 8
+	in.ReadyCanaryInstances = i32(8)
+
+	if _, err := Reconcile(context.Background(), in); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if got := phaseOf(isvc); got != v1beta1.RolloutPhasePaused {
+		t.Fatalf("eight serving Instances over three Ready pods must open the step, got %q", got)
 	}
 }
 

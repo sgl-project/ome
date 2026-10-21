@@ -8,29 +8,23 @@ import (
 	"github.com/stretchr/testify/require"
 	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	netv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/ptr"
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/interfaces"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestIngressReconciler_Reconcile(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, v1beta1.AddToScheme(scheme))
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, netv1.AddToScheme(scheme))
-	require.NoError(t, istioclientv1beta1.AddToScheme(scheme))
-	require.NoError(t, gatewayapiv1.Install(scheme))
+	scheme := fakeclient.Scheme(t, istioclientv1beta1.AddToScheme, gatewayapiv1.Install)
 
 	tests := []struct {
 		name                 string
@@ -48,7 +42,7 @@ func TestIngressReconciler_Reconcile(t *testing.T) {
 			ingressConfig: &controllerconfig.IngressConfig{
 				EnableGatewayAPI:       false,
 				IngressDomain:          "example.com",
-				IngressClassName:       stringPtr("nginx"),
+				IngressClassName:       ptr.To("nginx"),
 				DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 				UrlScheme:              "https",
 				DisableIngressCreation: false,
@@ -79,7 +73,7 @@ func TestIngressReconciler_Reconcile(t *testing.T) {
 			deploymentMode: constants.RawDeployment,
 			ingressConfig: &controllerconfig.IngressConfig{
 				IngressDomain:          "example.com",
-				IngressClassName:       stringPtr("nginx"),
+				IngressClassName:       ptr.To("nginx"),
 				DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 				UrlScheme:              "https",
 				DisableIngressCreation: true,
@@ -93,10 +87,7 @@ func TestIngressReconciler_Reconcile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create fake clients
-			fakeClient := fakeclient.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(tt.isvc).
-				Build()
+			fakeClient := fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(tt.isvc))
 			fakeClientset := fake.NewSimpleClientset()
 
 			// Create reconciler
@@ -163,9 +154,7 @@ func TestIngressReconciler_Reconcile(t *testing.T) {
 }
 
 func TestIngressReconciler_GetDeploymentMode(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, v1beta1.AddToScheme(scheme))
-	require.NoError(t, corev1.AddToScheme(scheme))
+	scheme := fakeclient.Scheme(t)
 
 	intPtr := func(i int) *int { return &i }
 
@@ -208,7 +197,7 @@ func TestIngressReconciler_GetDeploymentMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fakeClient := fakeclient.NewClientBuilder().WithScheme(scheme).Build()
+			fakeClient := fakeclient.New(t, fakeclient.WithScheme(scheme))
 			fakeClientset := fake.NewSimpleClientset()
 
 			reconciler := &IngressReconciler{
@@ -238,12 +227,7 @@ func TestIngressReconciler_GetDeploymentMode(t *testing.T) {
 }
 
 func TestIngressReconciler_GetStrategy(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, v1beta1.AddToScheme(scheme))
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, netv1.AddToScheme(scheme))
-	require.NoError(t, istioclientv1beta1.AddToScheme(scheme))
-	require.NoError(t, gatewayapiv1.Install(scheme))
+	scheme := fakeclient.Scheme(t, istioclientv1beta1.AddToScheme, gatewayapiv1.Install)
 
 	tests := []struct {
 		name           string
@@ -256,7 +240,7 @@ func TestIngressReconciler_GetStrategy(t *testing.T) {
 			name:           "raw deployment strategy",
 			deploymentMode: constants.RawDeployment,
 			opts: interfaces.ReconcilerOptions{
-				Client: fakeclient.NewClientBuilder().WithScheme(scheme).Build(),
+				Client: fakeclient.New(t, fakeclient.WithScheme(scheme)),
 				Scheme: scheme,
 				IngressConfig: &controllerconfig.IngressConfig{
 					EnableGatewayAPI: false,
@@ -272,7 +256,7 @@ func TestIngressReconciler_GetStrategy(t *testing.T) {
 			name:           "gateway api strategy",
 			deploymentMode: constants.RawDeployment,
 			opts: interfaces.ReconcilerOptions{
-				Client: fakeclient.NewClientBuilder().WithScheme(scheme).Build(),
+				Client: fakeclient.New(t, fakeclient.WithScheme(scheme)),
 				Scheme: scheme,
 				IngressConfig: &controllerconfig.IngressConfig{
 					EnableGatewayAPI:  true,
@@ -289,7 +273,7 @@ func TestIngressReconciler_GetStrategy(t *testing.T) {
 			name:           "unsupported deployment mode",
 			deploymentMode: "unsupported",
 			opts: interfaces.ReconcilerOptions{
-				Client:        fakeclient.NewClientBuilder().WithScheme(scheme).Build(),
+				Client:        fakeclient.New(t, fakeclient.WithScheme(scheme)),
 				Scheme:        scheme,
 				IngressConfig: &controllerconfig.IngressConfig{},
 				IsvcConfig:    &controllerconfig.InferenceServicesConfig{},
@@ -325,11 +309,9 @@ func TestIngressReconciler_GetStrategy(t *testing.T) {
 }
 
 func TestIngressReconciler_NilFactory(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, v1beta1.AddToScheme(scheme))
-	require.NoError(t, corev1.AddToScheme(scheme))
+	scheme := fakeclient.Scheme(t)
 
-	fakeClient := fakeclient.NewClientBuilder().WithScheme(scheme).Build()
+	fakeClient := fakeclient.New(t, fakeclient.WithScheme(scheme))
 
 	reconciler := &IngressReconciler{
 		client:        fakeClient,
@@ -378,9 +360,7 @@ func (m *mockFactory) CreateStrategyWithOptions(deploymentMode string, opts inte
 }
 
 func TestIngressReconciler_ReconcileWithMockStrategy(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, v1beta1.AddToScheme(scheme))
-	require.NoError(t, corev1.AddToScheme(scheme))
+	scheme := fakeclient.Scheme(t)
 
 	isvc := createTestInferenceServiceWithStatus("test-isvc", "default")
 
@@ -424,10 +404,7 @@ func TestIngressReconciler_ReconcileWithMockStrategy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fakeClient := fakeclient.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(isvc).
-				Build()
+			fakeClient := fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(isvc))
 			fakeClientset := fake.NewSimpleClientset()
 
 			reconciler := &IngressReconciler{
@@ -451,11 +428,6 @@ func TestIngressReconciler_ReconcileWithMockStrategy(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Helper function to create string pointer
-func stringPtr(s string) *string {
-	return &s
 }
 
 // Helper function to create test InferenceService with proper status

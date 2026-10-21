@@ -122,6 +122,7 @@ func newPDCanary(t *testing.T, name string, decoderBumped bool) *pdCanary {
 
 func (f *pdCanary) dispatch(pass string) {
 	f.t.Helper()
+	syncInstanceRows(f.t, f.c, f.isvc, v1beta1.EngineComponent, v1beta1.DecoderComponent)
 	if _, err := Dispatch(context.Background(), f.deps); err != nil {
 		f.t.Fatalf("Dispatch (%s): %v", pass, err)
 	}

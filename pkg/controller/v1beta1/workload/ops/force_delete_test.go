@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/audit"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/evidence"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
+	fixture "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	workload "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -172,7 +173,7 @@ func fdNodeUnreachable(name string, since time.Duration) *corev1.Node {
 }
 
 func fdISVC(name string) *v1beta1.InferenceService {
-	return legacyMinimalISVC(name, "prod", 1)
+	return fixture.MinimalInferenceService(name, "prod", 1)
 }
 
 func fdInput(isvc *v1beta1.InferenceService, policy *workload.ForceDeletePolicy) workload.ReconcileInput {
@@ -795,9 +796,9 @@ func TestUpdateWithPods_ForceDeletesStuckTerminatingSource(t *testing.T) {
 			stuck.Spec.NodeName = "dead-node"
 
 			rec := record.NewFakeRecorder(16)
-			input := legacyTestInput(f.isvc, f.client, workload.ComponentEngine)
+			input := fixture.ReconcileInput(f.isvc, f.client, workload.ComponentEngine)
 			input.ForceDelete = fdPolicy()
-			plan := legacyComponentPlan(workload.UpdateStrategySurgeThenDrain, nil)
+			plan := fixture.SinglePodPlan(workload.UpdateStrategySurgeThenDrain, nil)
 
 			if _, err := UpdateWithPods(context.Background(), workload.Deps{Client: f.client, Recorder: rec},
 				input, plan, plan.Instances[0], f.targetCR, f.targetSpec,
@@ -995,9 +996,9 @@ func TestUpdateWithPods_MarkerPodsAreOutsideTheSourcesSweep(t *testing.T) {
 	markerPod.DeletionTimestamp = &dt
 
 	rec := record.NewFakeRecorder(16)
-	input := legacyTestInput(f.isvc, f.client, workload.ComponentEngine)
+	input := fixture.ReconcileInput(f.isvc, f.client, workload.ComponentEngine)
 	input.ForceDelete = fdPolicy()
-	plan := legacyComponentPlan(workload.UpdateStrategySurgeThenDrain, nil)
+	plan := fixture.SinglePodPlan(workload.UpdateStrategySurgeThenDrain, nil)
 
 	// The dispatcher hands the pass the pods of the row it dispatches —
 	// the source's — so the marker's wedged pod is never a candidate.

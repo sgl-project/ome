@@ -5,12 +5,17 @@ import (
 	"errors"
 	"fmt"
 
+	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	v1 "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -79,9 +84,10 @@ type removedObject struct {
 	component v1beta1.ComponentType
 }
 
-// backendWorkloadList is an empty typed list for one workload kind. Typed
-// lists read from the informer cache the owned-object watches already keep.
-type backendWorkloadList struct {
+// kindList is an empty typed list for one kind the cleanup reads. A typed
+// list is served by the informer cache; an unstructured list is read from
+// the apiserver on every pass.
+type kindList struct {
 	gvk  schema.GroupVersionKind
 	list client.ObjectList
 }
@@ -217,13 +223,13 @@ func (r *InferenceServiceReconciler) cleanupVirtualDeployment(ctx context.Contex
 
 // backendWorkloadLists lists the workload kinds the cluster can hold. The
 // LeaderWorkerSet scheme is registered only when its CRD is installed.
-func (r *InferenceServiceReconciler) backendWorkloadLists() []backendWorkloadList {
-	lists := []backendWorkloadList{
+func (r *InferenceServiceReconciler) backendWorkloadLists() []kindList {
+	lists := []kindList{
 		{gvk: deploymentGVK, list: &appsv1.DeploymentList{}},
 		{gvk: inferenceReplicaGVK, list: &v1beta1.InferenceReplicaList{}},
 	}
 	if r.Client.Scheme().Recognizes(leaderWorkerSetGVK) {
-		lists = append(lists, backendWorkloadList{gvk: leaderWorkerSetGVK, list: &lws.LeaderWorkerSetList{}})
+		lists = append(lists, kindList{gvk: leaderWorkerSetGVK, list: &lws.LeaderWorkerSetList{}})
 	}
 	return lists
 }
@@ -333,37 +339,35 @@ func (r *InferenceServiceReconciler) deleteOrphanedResourcesByOwnerRef(
 		constants.InferenceServicePodLabelKey: isvc.Name,
 	}.AsSelector()
 
-	gvks, err := r.getAvailableResourceTypes()
-	if err != nil {
-		log.Error(err, "Failed to retrieve all available resource types, using core set")
-		gvks = getCoreResourceTypes()
-	}
-
 	var deleted []removedObject
-	for _, gvk := range gvks {
-		objs, err := r.cleanupResourcesOfType(ctx, gvk, isvc, selector, activeComponents)
-		if err != nil {
-			log.Error(err, "Failed to cleanup resources of type", "gvk", gvk)
+	for _, kind := range r.sweptKinds() {
+		objs, err := r.cleanupResourcesOfType(ctx, kind, isvc, selector, activeComponents)
+		if err != nil && shutdownCutShort(ctx, err) {
+			log.V(1).Info("Cleanup of resources of type stopped by the manager's shutdown", "gvk", kind.gvk, "error", err)
+		} else if err != nil {
+			log.Error(err, "Failed to cleanup resources of type", "gvk", kind.gvk)
 		}
 		deleted = append(deleted, objs...)
 	}
 	return deleted, nil
 }
 
-// cleanupResourcesOfType deletes orphaned resources of a specific GVK and
-// returns the ones it deleted.
+// cleanupResourcesOfType deletes the owned objects of one kind whose
+// Component is not active and returns the ones it deleted. The list is read
+// from the cache: an object the cache does not hold yet is swept on the
+// pass its watch event brings, and one it still holds after its deletion
+// yields a NotFound the delete ignores.
 func (r *InferenceServiceReconciler) cleanupResourcesOfType(
 	ctx context.Context,
-	gvk schema.GroupVersionKind,
+	kind kindList,
 	isvc *v1beta1.InferenceService,
 	selector labels.Selector,
 	activeComponents map[v1beta1.ComponentType]bool,
 ) ([]removedObject, error) {
 	log := log.FromContext(ctx)
+	gvk := kind.gvk
 
-	list := &unstructured.UnstructuredList{}
-	list.SetGroupVersionKind(gvk)
-	owned, err := r.listOwnedObjects(ctx, list, isvc, selector)
+	owned, err := r.listOwnedObjects(ctx, kind.list, isvc, selector)
 	if err != nil {
 		return nil, err
 	}
@@ -456,50 +460,57 @@ func (r *InferenceServiceReconciler) shouldKeepExternalService(isvc *v1beta1.Inf
 	return false
 }
 
-// getAvailableResourceTypes returns known and discovered GVKs.
-func (r *InferenceServiceReconciler) getAvailableResourceTypes() ([]schema.GroupVersionKind, error) {
-	core := getCoreResourceTypes()
-
-	optionals := []struct {
-		gvk schema.GroupVersionKind
-	}{
-		{gvk: leaderWorkerSetGVK},
-		{gvk: schema.GroupVersionKind{Group: "keda.sh", Version: "v1alpha1", Kind: "ScaledObject"}},
-		{gvk: schema.GroupVersionKind{Group: "monitoring.coreos.com", Version: "v1", Kind: "PodMonitor"}},
+// sweptKinds is every kind the owner-reference sweep lists: the kinds every
+// cluster has, then each optional kind whose CRD the cluster has. The probe
+// is answered from the process's discovery cache after its first call, and
+// a kind that is not installed is never listed, so an absent CRD costs no
+// request per pass. A reconciler without a client config sweeps the core
+// kinds only.
+func (r *InferenceServiceReconciler) sweptKinds() []kindList {
+	kinds := coreSweptKinds()
+	if r.ClientConfig == nil {
+		return kinds
 	}
-
-	for _, res := range optionals {
-		if r.ClientConfig == nil {
-			continue
-		}
-		ok, err := utils.IsCrdAvailable(r.ClientConfig, res.gvk.GroupVersion().String(), res.gvk.Kind)
+	for _, optional := range optionalSweptKinds() {
+		ok, err := utils.IsCrdAvailable(r.ClientConfig, optional.gvk.GroupVersion().String(), optional.gvk.Kind)
 		if err != nil {
-			log.Log.V(1).Info("Failed to check CRD", "gvk", res.gvk, "error", err)
+			log.Log.V(1).Info("Failed to check CRD", "gvk", optional.gvk, "error", err)
 			continue
 		}
 		if ok {
-			core = append(core, res.gvk)
+			kinds = append(kinds, optional)
 		}
 	}
-
-	return core, nil
+	return kinds
 }
 
-// getCoreResourceTypes returns always-available Kubernetes resource types.
-func getCoreResourceTypes() []schema.GroupVersionKind {
-	return []schema.GroupVersionKind{
-		deploymentGVK,
-		serviceGVK,
-		{Group: "autoscaling", Version: "v2", Kind: "HorizontalPodAutoscaler"},
-		{Group: "policy", Version: "v1", Kind: "PodDisruptionBudget"},
-		{Group: "networking.k8s.io", Version: "v1", Kind: "Ingress"},
-		{Group: "", Version: "v1", Kind: "ConfigMap"},
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
-		{Group: "", Version: "v1", Kind: "ServiceAccount"},
-		{Group: "", Version: "v1", Kind: "PersistentVolumeClaim"},
+// coreSweptKinds are the kinds every cluster has among the objects a
+// Component owns.
+func coreSweptKinds() []kindList {
+	return []kindList{
+		{gvk: deploymentGVK, list: &appsv1.DeploymentList{}},
+		{gvk: serviceGVK, list: &v1.ServiceList{}},
+		{gvk: autoscalingv2.SchemeGroupVersion.WithKind("HorizontalPodAutoscaler"), list: &autoscalingv2.HorizontalPodAutoscalerList{}},
+		{gvk: policyv1.SchemeGroupVersion.WithKind("PodDisruptionBudget"), list: &policyv1.PodDisruptionBudgetList{}},
+		{gvk: netv1.SchemeGroupVersion.WithKind("Ingress"), list: &netv1.IngressList{}},
+		{gvk: v1.SchemeGroupVersion.WithKind("ConfigMap"), list: &v1.ConfigMapList{}},
+		{gvk: rbacv1.SchemeGroupVersion.WithKind("Role"), list: &rbacv1.RoleList{}},
+		{gvk: rbacv1.SchemeGroupVersion.WithKind("RoleBinding"), list: &rbacv1.RoleBindingList{}},
+		{gvk: v1.SchemeGroupVersion.WithKind("ServiceAccount"), list: &v1.ServiceAccountList{}},
+		{gvk: v1.SchemeGroupVersion.WithKind("PersistentVolumeClaim"), list: &v1.PersistentVolumeClaimList{}},
 		// OME's own per-Component projection: a removed component's IR must
 		// get deletion requested; its finalizer drains pods before it goes.
-		inferenceReplicaGVK,
+		{gvk: inferenceReplicaGVK, list: &v1beta1.InferenceReplicaList{}},
+	}
+}
+
+// optionalSweptKinds are the kinds behind an optional CRD. Each is listed
+// only when the cluster has its CRD, and its type is in the scheme exactly
+// then.
+func optionalSweptKinds() []kindList {
+	return []kindList{
+		{gvk: leaderWorkerSetGVK, list: &lws.LeaderWorkerSetList{}},
+		{gvk: kedav1.SchemeGroupVersion.WithKind(constants.KEDAScaledObjectKind), list: &kedav1.ScaledObjectList{}},
+		{gvk: monitoringv1.SchemeGroupVersion.WithKind(constants.PodMonitorKind), list: &monitoringv1.PodMonitorList{}},
 	}
 }

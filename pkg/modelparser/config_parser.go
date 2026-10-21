@@ -11,12 +11,9 @@ import (
 	"strings"
 
 	"go.uber.org/zap"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/util/retry"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
-	"sigs.k8s.io/ome/pkg/client/clientset/versioned"
 	"sigs.k8s.io/ome/pkg/modelconfig"
 )
 
@@ -54,26 +51,26 @@ type ModelConfigFileInput struct {
 type modelConfigLoader func(configPath string) (modelconfig.HuggingFaceModel, error)
 
 // ModelConfigParser parses model config files and applies the extracted
-// metadata to BaseModel / ClusterBaseModel CRD specs.
+// metadata to a BaseModel or ClusterBaseModel spec in memory. It holds no
+// API client: the caller that owns the object persists it.
 type ModelConfigParser struct {
 	logger          *zap.SugaredLogger
-	omeClient       versioned.Interface
 	loadModelConfig modelConfigLoader
 }
 
 // NewModelConfigParser creates a parser backed by modelconfig.LoadModelConfig.
-func NewModelConfigParser(omeClient versioned.Interface, logger *zap.SugaredLogger) *ModelConfigParser {
+func NewModelConfigParser(logger *zap.SugaredLogger) *ModelConfigParser {
 	return &ModelConfigParser{
 		logger:          logger,
-		omeClient:       omeClient,
 		loadModelConfig: modelconfig.LoadModelConfig,
 	}
 }
 
 // ParseModelConfig reads model_index.json (if present) or config.json
-// from modelDir and extracts metadata without writing to the API
-// server — callers decide when (and whether) to persist via
-// ApplyModelMetadata or by passing baseModel/clusterBaseModel.
+// from modelDir and extracts metadata. A BaseModel or ClusterBaseModel
+// passed in (both may be nil) supplies the skip-parsing annotation and
+// receives the metadata in its spec, in memory; callers persist it
+// themselves, or apply the returned metadata with ApplyModelMetadata.
 func (p *ModelConfigParser) ParseModelConfig(modelDir string, baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel) (*ModelMetadata, error) {
 	return p.parseModelConfigDir(modelDir, nil, baseModel, clusterBaseModel)
 }
@@ -224,18 +221,14 @@ func (p *ModelConfigParser) loadModelConfigFromDir(modelDir string) (modelconfig
 	return hfModel, configPath, nil
 }
 
+// updateParsedModelMetadata fills the unset spec fields of the model the
+// caller passed, in memory. Persisting the object is the caller's job.
 func (p *ModelConfigParser) updateParsedModelMetadata(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel, metadata ModelMetadata) {
 	switch {
 	case baseModel != nil:
-		if err := p.updateBaseModel(baseModel, metadata); err != nil {
-			p.logger.Errorw("update BaseModel failed",
-				"namespace", baseModel.Namespace, "name", baseModel.Name, "error", err)
-		}
+		p.updateModelSpec(&baseModel.Spec, metadata)
 	case clusterBaseModel != nil:
-		if err := p.updateClusterBaseModel(clusterBaseModel, metadata); err != nil {
-			p.logger.Errorw("update ClusterBaseModel failed",
-				"name", clusterBaseModel.Name, "error", err)
-		}
+		p.updateModelSpec(&clusterBaseModel.Spec, metadata)
 	}
 }
 
@@ -426,59 +419,6 @@ func (p *ModelConfigParser) findModelIndexFile(modelDir string) (string, error) 
 	return indexPath, nil
 }
 
-// updateModel applies metadata to a BaseModel or ClusterBaseModel CRD,
-// re-fetching the latest revision on conflict so the merge isn't lost
-// to a parallel writer.
-func (p *ModelConfigParser) updateModel(model interface{}, metadata ModelMetadata) error {
-	var namespace, name, kind string
-
-	switch m := model.(type) {
-	case *v1beta1.BaseModel:
-		p.updateModelSpec(&m.Spec, metadata)
-		namespace, name, kind = m.Namespace, m.Name, "BaseModel"
-	case *v1beta1.ClusterBaseModel:
-		p.updateModelSpec(&m.Spec, metadata)
-		name, kind = m.Name, "ClusterBaseModel"
-	default:
-		return fmt.Errorf("unsupported model type: %T", model)
-	}
-
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		var latest interface{}
-		var err error
-		switch model.(type) {
-		case *v1beta1.BaseModel:
-			latest, err = p.omeClient.OmeV1beta1().BaseModels(namespace).Get(context.TODO(), name, metav1.GetOptions{})
-		case *v1beta1.ClusterBaseModel:
-			latest, err = p.omeClient.OmeV1beta1().ClusterBaseModels().Get(context.TODO(), name, metav1.GetOptions{})
-		}
-		if err != nil {
-			return fmt.Errorf("get latest %s %s/%s: %w", kind, namespace, name, err)
-		}
-
-		switch m := latest.(type) {
-		case *v1beta1.BaseModel:
-			p.updateModelSpec(&m.Spec, metadata)
-			_, err = p.omeClient.OmeV1beta1().BaseModels(namespace).Update(context.TODO(), m, metav1.UpdateOptions{})
-		case *v1beta1.ClusterBaseModel:
-			p.updateModelSpec(&m.Spec, metadata)
-			_, err = p.omeClient.OmeV1beta1().ClusterBaseModels().Update(context.TODO(), m, metav1.UpdateOptions{})
-		}
-		if err != nil {
-			return fmt.Errorf("update %s %s/%s: %w", kind, namespace, name, err)
-		}
-		return nil
-	})
-}
-
-func (p *ModelConfigParser) updateBaseModel(model *v1beta1.BaseModel, metadata ModelMetadata) error {
-	return p.updateModel(model, metadata)
-}
-
-func (p *ModelConfigParser) updateClusterBaseModel(model *v1beta1.ClusterBaseModel, metadata ModelMetadata) error {
-	return p.updateModel(model, metadata)
-}
-
 // extractModelMetadataFromHF is a thin shim used only by the
 // mock-driven unit tests; production paths call
 // extractModelMetadataFromHFWithParameterCount directly.
@@ -615,7 +555,8 @@ func (p *ModelConfigParser) updateModelSpec(spec *v1beta1.BaseModelSpec, metadat
 }
 
 // updateField writes new into current only when current is the zero
-// value for its type (nil pointer, empty slice, empty struct). Returns
+// value for its type (nil pointer, empty slice, empty struct) and new
+// carries a value; a nil pointer in new is nothing to write. Returns
 // whether the write happened. The type switch covers every pointer/slice
 // kind that BaseModelSpec uses for parser-derived fields.
 func updateField(current interface{}, new interface{}) bool {
@@ -637,8 +578,8 @@ func updateField(current interface{}, new interface{}) bool {
 			return true
 		}
 	case **v1beta1.ModelFrameworkSpec:
-		if *c == nil && new != nil {
-			*c = new.(*v1beta1.ModelFrameworkSpec)
+		if framework, ok := new.(*v1beta1.ModelFrameworkSpec); ok && framework != nil && *c == nil {
+			*c = framework
 			return true
 		}
 	case **int32:
@@ -649,8 +590,8 @@ func updateField(current interface{}, new interface{}) bool {
 			}
 		}
 	case **v1beta1.DiffusionPipelineSpec:
-		if *c == nil && new != nil {
-			*c = new.(*v1beta1.DiffusionPipelineSpec)
+		if pipeline, ok := new.(*v1beta1.DiffusionPipelineSpec); ok && pipeline != nil && *c == nil {
+			*c = pipeline
 			return true
 		}
 	case **v1beta1.ModelQuantization:

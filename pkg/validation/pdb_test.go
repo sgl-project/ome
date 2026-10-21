@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-func TestValidatePodDisruptionBudgetAcceptsValidBudgets(t *testing.T) {
+func TestValidatePodDisruptionBudget_ValidBudgets_Accepted(t *testing.T) {
 	tests := []struct {
 		name           string
 		minAvailable   *intstr.IntOrString
@@ -29,7 +29,7 @@ func TestValidatePodDisruptionBudgetAcceptsValidBudgets(t *testing.T) {
 	}
 }
 
-func TestValidatePodDisruptionBudgetRejectsInvalidBudgets(t *testing.T) {
+func TestValidatePodDisruptionBudget_InvalidBudgets_RejectedNamingTheField(t *testing.T) {
 	const path = "config.podDisruptionBudget.rawDeployment"
 
 	tests := []struct {

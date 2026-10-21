@@ -133,6 +133,40 @@ func TestSelectorWeightOverlap(t *testing.T) {
 	require.Equal(t, int64(6), matched.Weight, "duplicate weighted terms remain additive")
 }
 
+func TestComponentWeights(t *testing.T) {
+	cluster := &v1beta1.WorkloadCluster{ObjectMeta: metav1.ObjectMeta{Name: "cluster-a", Labels: map[string]string{"region": "west"}}}
+	type weights struct{ engine, decoder, router int64 }
+	for _, tt := range []struct {
+		name   string
+		weight [2]*int32
+		blocks [2]*v1beta1.ClusterAffinityWeights
+		want   weights
+	}{
+		{name: "nothing set weighs every component one", want: weights{1, 1, 1}},
+		{name: "the scalar weight is the default", weight: [2]*int32{ptr.To[int32](3)}, want: weights{4, 4, 4}},
+		{name: "default weighs every component", blocks: [2]*v1beta1.ClusterAffinityWeights{{Default: ptr.To[int32](2)}, {Default: ptr.To[int32](5)}}, want: weights{7, 7, 7}},
+		{name: "the decoder takes default before the engine's", blocks: [2]*v1beta1.ClusterAffinityWeights{{Default: ptr.To[int32](2), Engine: ptr.To[int32](3)}}, want: weights{4, 3, 4}},
+		{name: "a decoder without default takes the engine's", blocks: [2]*v1beta1.ClusterAffinityWeights{{Engine: ptr.To[int32](3)}, {Decoder: ptr.To[int32](2)}}, want: weights{4, 5, 4}},
+		{name: "a router weight beside the scalar weight", weight: [2]*int32{ptr.To[int32](2)}, blocks: [2]*v1beta1.ClusterAffinityWeights{{Router: ptr.To[int32](5)}}, want: weights{3, 3, 6}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			terms := []v1beta1.ClusterAffinityTerm{expression(requirement("region", corev1.NodeSelectorOpIn, "west")), nameTerm("cluster-a")}
+			for i := range terms {
+				terms[i].Weight, terms[i].Weights = tt.weight[i], tt.blocks[i]
+			}
+			weightOf := func(component v1beta1.ComponentType) int64 {
+				selector, err := CompileFor(terms, true, component)
+				require.NoError(t, err)
+				matched, ok := selector.Match(cluster)
+				require.True(t, ok)
+				return matched.Weight
+			}
+			got := weights{weightOf(v1beta1.EngineComponent), weightOf(v1beta1.DecoderComponent), weightOf(v1beta1.RouterComponent)}
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestSelectorOmissionAndSnapshot(t *testing.T) {
 	cluster := &v1beta1.WorkloadCluster{ObjectMeta: metav1.ObjectMeta{Name: "cluster-a", Labels: map[string]string{"region": "west"}}}
 	selector, err := Compile(nil, false)
@@ -206,6 +240,26 @@ func TestSelectorRejectsMalformedIntent(t *testing.T) {
 	term.Weight = ptr.To(int32(1))
 	_, err := Compile([]v1beta1.ClusterAffinityTerm{term}, false)
 	require.ErrorContains(t, err, "weight is permitted only in Split")
+	for _, tt := range []struct {
+		name    string
+		weight  *int32
+		weights v1beta1.ClusterAffinityWeights
+		split   bool
+		wantErr string
+	}{
+		{name: "outside Split", weights: v1beta1.ClusterAffinityWeights{Decoder: ptr.To[int32](1)}, wantErr: "weights is permitted only in Split"},
+		{name: "an empty block", split: true, wantErr: "weights must set at least one component"},
+		{name: "a zero weight", weights: v1beta1.ClusterAffinityWeights{Router: ptr.To[int32](0)}, split: true, wantErr: "weights.router must be positive"},
+		{name: "weight beside default", weight: ptr.To[int32](1), weights: v1beta1.ClusterAffinityWeights{Default: ptr.To[int32](1)}, split: true, wantErr: "weight means weights.default"},
+		{name: "weight beside engine", weight: ptr.To[int32](1), weights: v1beta1.ClusterAffinityWeights{Engine: ptr.To[int32](1)}, split: true, wantErr: "weight means weights.default"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			term := nameTerm("cluster-a")
+			term.Weight, term.Weights = tt.weight, &tt.weights
+			_, err := Compile([]v1beta1.ClusterAffinityTerm{term}, tt.split)
+			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
 }
 
 func TestSelectorBounds(t *testing.T) {

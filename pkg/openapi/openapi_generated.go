@@ -72,6 +72,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutLastRun":          schema_pkg_apis_ome_v1beta1_CandidateRolloutLastRun(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutStatus":           schema_pkg_apis_ome_v1beta1_CandidateRolloutStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityTerm":              schema_pkg_apis_ome_v1beta1_ClusterAffinityTerm(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityWeights":           schema_pkg_apis_ome_v1beta1_ClusterAffinityWeights(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModel":                 schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":             schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterConnectionSource":          schema_pkg_apis_ome_v1beta1_ClusterConnectionSource(ref),
@@ -82,7 +83,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAffinityMatch":           schema_pkg_apis_ome_v1beta1_ComponentAffinityMatch(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler":              schema_pkg_apis_ome_v1beta1_ComponentAutoscaler(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscalerStatus":        schema_pkg_apis_ome_v1beta1_ComponentAutoscalerStatus(ref),
-		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentClusterAffinity":         schema_pkg_apis_ome_v1beta1_ComponentClusterAffinity(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentExtensionSpec":           schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec":              schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentTrafficTarget":           schema_pkg_apis_ome_v1beta1_ComponentTrafficTarget(ref),
@@ -100,6 +100,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeight":                  schema_pkg_apis_ome_v1beta1_FineTunedWeight(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeightList":              schema_pkg_apis_ome_v1beta1_FineTunedWeightList(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeightSpec":              schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FollowerScalingStatus":            schema_pkg_apis_ome_v1beta1_FollowerScalingStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupBlueGreen":                   schema_pkg_apis_ome_v1beta1_GroupBlueGreen(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupCanary":                      schema_pkg_apis_ome_v1beta1_GroupCanary(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupRollingUpdate":               schema_pkg_apis_ome_v1beta1_GroupRollingUpdate(ref),
@@ -208,6 +209,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScaleTargetRef":                   schema_pkg_apis_ome_v1beta1_ScaleTargetRef(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalerAuthenticationRef":          schema_pkg_apis_ome_v1beta1_ScalerAuthenticationRef(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicy":                    schema_pkg_apis_ome_v1beta1_ScalingPolicy(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicyStatus":              schema_pkg_apis_ome_v1beta1_ScalingPolicyStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServiceMetadata":                  schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntime":                   schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeList":               schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
@@ -3221,6 +3223,13 @@ func schema_pkg_apis_ome_v1beta1_CanaryStatus(ref common.ReferenceCallback) comm
 							Format:      "",
 						},
 					},
+					"rollbackRequested": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RollbackRequested records that this unit's rollback was applied from an ome.io/rollout-rollback request. The request stays on the InferenceService through the hold and is this unit's while set: no other unit's canary acts on it. It clears when the request is observed removed, and with the hold when the unit starts its next canary.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 					"analysisFailedChecks": {
 						SchemaProps: spec.SchemaProps{
 							Description: "AnalysisFailedChecks counts failing analysis samples in the CURRENT step (reset to zero on each advance). Auto-rollback fires when it reaches Analysis.FailureLimit. Set only under Promotion=Analysis.",
@@ -3380,7 +3389,7 @@ func schema_pkg_apis_ome_v1beta1_CandidateAllocationStatus(ref common.ReferenceC
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "ComponentMatches records, under the ComponentAffinity policy, how each component other than the primary one matched this cluster. MatchingTerms and Weight hold the primary component's match. The accepted plan keeps them so that member floors never follow unaccepted label changes.",
+							Description: "ComponentMatches records the Split weight of the other components when the affinity terms set weights: the decoder's, and the router's when routers are divided. Weight holds the primary component's. The accepted plan keeps them so that member floors never follow unaccepted label changes.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -3809,14 +3818,20 @@ func schema_pkg_apis_ome_v1beta1_ClusterAffinityTerm(ref common.ReferenceCallbac
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ClusterAffinityTerm selects WorkloadClusters by ANDing its requirements. Multiple terms form a union; a weight assigns replica shares to each match.",
+				Description: "ClusterAffinityTerm selects WorkloadClusters by ANDing its requirements. Multiple terms form a union; weights assign replica shares to each match.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"weight": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Weight is permitted only for static Split. If any term has an explicit weight, matching term weights add and omitted weights contribute one. Omission must be preserved to distinguish unweighted overlapping terms. Weights are replica ratios, so they have no upper bound.",
+							Description: "Deprecated: Weight is weights.default, and is permitted only for static Split. It is the only weight a manager without weights support reads, so a rollback to such a manager keeps the engine shares set here.",
 							Type:        []string{"integer"},
 							Format:      "int32",
+						},
+					},
+					"weights": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Weights sets each component's replica weight on the clusters this term matches, and is permitted only for static Split. If any term gives a component a weight, the weights of matching terms add and a term that gives none contributes one. Weights are ratios, so they have no upper bound.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityWeights"),
 						},
 					},
 					"matchExpressions": {
@@ -3861,7 +3876,48 @@ func schema_pkg_apis_ome_v1beta1_ClusterAffinityTerm(ref common.ReferenceCallbac
 			},
 		},
 		Dependencies: []string{
-			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterSelectorRequirement"},
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityWeights", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterSelectorRequirement"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ClusterAffinityWeights(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ClusterAffinityWeights holds one term's weight per component. The engine takes engine, then default. The decoder takes decoder, then default, then the engine's weight. Routers are divided across clusters only when a term sets router; a term without it then contributes the engine's weight.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"default": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Default is the weight of every component this term does not name.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"engine": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Engine is the engine's weight.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"decoder": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Decoder is the decoder's weight.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"router": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Router is the router's weight. Setting it on any term divides router.minReplicas across the clusters; otherwise every cluster runs the full router policy.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -4156,7 +4212,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentAffinityMatch(ref common.ReferenceCall
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ComponentAffinityMatch records how one component's own affinity terms matched a cluster.",
+				Description: "ComponentAffinityMatch records the weight the affinity terms give one component on a cluster.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"component": {
@@ -4164,26 +4220,6 @@ func schema_pkg_apis_ome_v1beta1_ComponentAffinityMatch(ref common.ReferenceCall
 							Default: "",
 							Type:    []string{"string"},
 							Format:  "",
-						},
-					},
-					"matchingTerms": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "set",
-							},
-						},
-						SchemaProps: spec.SchemaProps{
-							Description: "MatchingTerms contains zero-based indexes into the component's terms.",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: 0,
-										Type:    []string{"integer"},
-										Format:  "int32",
-									},
-								},
-							},
 						},
 					},
 					"weight": {
@@ -4326,83 +4362,6 @@ func schema_pkg_apis_ome_v1beta1_ComponentAutoscalerStatus(ref common.ReferenceC
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_ComponentClusterAffinity(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "ComponentClusterAffinity holds one affinity term list per component. Every listed component must match the same clusters. In Split, each list's weights set that component's shares; in Single and All the lists only select.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"engine": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "atomic",
-							},
-						},
-						SchemaProps: spec.SchemaProps{
-							Description: "Engine selects clusters for the engine and, in Split, weights its shares. It is required when the service declares an engine.",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityTerm"),
-									},
-								},
-							},
-						},
-					},
-					"decoder": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "atomic",
-							},
-						},
-						SchemaProps: spec.SchemaProps{
-							Description: "Decoder selects clusters for the decoder and, in Split, weights its shares over the clusters that hold engine replicas. It is required when the service declares a decoder.",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityTerm"),
-									},
-								},
-							},
-						},
-					},
-					"router": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "atomic",
-							},
-						},
-						SchemaProps: spec.SchemaProps{
-							Description: "Router selects clusters for the router. In Split, it divides router.minReplicas across the clusters that hold engine replicas; without it, each such cluster runs the full router policy.",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityTerm"),
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			VendorExtensible: spec.VendorExtensible{
-				Extensions: spec.Extensions{
-					"x-kubernetes-map-type": "atomic",
-				},
-			},
-		},
-		Dependencies: []string{
-			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityTerm"},
-	}
-}
-
 func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -4419,7 +4378,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 					},
 					"maxReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Maximum number of replicas for autoscaling.",
+							Description: "Maximum number of replicas for autoscaling. A proportional-scaling follower that leaves it unset has no ceiling of its own.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -5261,7 +5220,7 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 					},
 					"maxReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Maximum number of replicas for autoscaling.",
+							Description: "Maximum number of replicas for autoscaling. A proportional-scaling follower that leaves it unset has no ceiling of its own.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -6100,7 +6059,7 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 					},
 					"maxReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Maximum number of replicas for autoscaling.",
+							Description: "Maximum number of replicas for autoscaling. A proportional-scaling follower that leaves it unset has no ceiling of its own.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -6517,6 +6476,56 @@ func schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref common.ReferenceCallbac
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/runtime.RawExtension", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ObjectReference", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.StorageSpec"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_FollowerScalingStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "FollowerScalingStatus compares a target with the committed desired count.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"component": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"ratio": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+					"target": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Target is the anchor's desired count times the ratio, rounded up, after the follower's own bounds.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"current": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Current is the follower's desired count after this pass.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"clamped": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Clamped is true when the follower's minReplicas or a declared maxReplicas moved the target; the Ready condition names the bound.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"component", "ratio", "target"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }
 
@@ -7049,6 +7058,13 @@ func schema_pkg_apis_ome_v1beta1_InferenceReplicaStatus(ref common.ReferenceCall
 							Description: "ObservedGeneration is the InferenceReplica.metadata.generation the most recent status flush reflects.",
 							Type:        []string{"integer"},
 							Format:      "int64",
+						},
+					},
+					"observedTemplateHash": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedTemplateHash is the pod-template hash (the ome.io/template-hash annotation the projector stamps beside the spec's templates) that updateRevision was last computed from. It names the roll target this status describes: a spec whose stamp differs asks for a revision the status has not recorded yet, while a spec change outside the templates leaves both unchanged.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"placementObservedGeneration": {
@@ -7689,11 +7705,17 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref common.ReferenceCall
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationStatus"),
 						},
 					},
+					"scalingPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ScalingPolicy reports the applied cross-component desired-count policy.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicyStatus"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"knative.dev/pkg/apis.Condition", "knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CanaryStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationHistoryEntry", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MountedOverlay", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficStatus"},
+			"knative.dev/pkg/apis.Condition", "knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CanaryStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationHistoryEntry", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MountedOverlay", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicyStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficStatus"},
 	}
 }
 
@@ -9265,7 +9287,7 @@ func schema_pkg_apis_ome_v1beta1_MaintainRatio(ref common.ReferenceCallback) com
 				Properties: map[string]spec.Schema{
 					"tolerance": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Tolerance is the maximum percentage drift from the starting ratio. A roll step that would exceed it is paused until the pools rebalance. An explicit 0 means zero drift. When omitted, the operator-configured default (the coordination block of the operator's ConfigMap) applies; if the operator configures no default either, the group rolls with no drift bound. Admission rejects a drain-first member (RecreatePod, or an in-place strategy on multi-node gangs) whose single drain would empty its side or move the serving ratio more than twice the tolerance from the start, since such a member could never take its first step. A group whose members all roll drain-first is paced by the batch step instead: each member's drains are counted in batches of its maxUnavailable, and no member opens its next batch until every member's previous batch serves. The ratio band is not consulted for such a group, so admission admits it.",
+							Description: "Tolerance is the maximum percentage drift from the starting ratio. A roll step that would exceed it is paused until the pools rebalance. An explicit 0 means zero drift. When omitted, the operator-configured default (the coordination block of the operator's ConfigMap) applies; if the operator configures no default either, the group rolls with no drift bound. A value of 100 opts out of the bound. Admission rejects a drain-first member (RecreatePod, or an in-place strategy on multi-node gangs) whose single drain would empty its side or move the serving ratio more than twice the tolerance from the start, since such a member could never take its first step. A group whose members all roll drain-first is paced by the batch step instead: each member's drains are counted in batches of its maxUnavailable, and no member opens its next batch until every member's previous batch serves. The ratio band is not consulted for such a group, so admission admits it. With the operator's prefillDecodeRoll.keepRatio rule on, the batch step paces every group that lists both the engine and the decoder, on every update path, and sizes each batch so that the share of each side already moving to the new version stays within this tolerance of the other side's share; a batch that cannot fit shrinks, and at least one Instance moves per batch, so a tight tolerance slows the roll and never stops it.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -9575,7 +9597,7 @@ func schema_pkg_apis_ome_v1beta1_MigrationStatus(ref common.ReferenceCallback) c
 					},
 					"deadline": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Deadline is when a non-terminal entry expires. Manual: accept time plus InstanceReadyTimeout.",
+							Description: "Deadline is when a non-terminal entry expires. Manual: accept time plus InstanceReadyTimeout. Cleared while the Component is paused and started again, a full InstanceReadyTimeout from the pass the pause clears.",
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
 						},
 					},
@@ -10878,7 +10900,7 @@ func schema_pkg_apis_ome_v1beta1_PlacementSpec(ref common.ReferenceCallback) com
 				Properties: map[string]spec.Schema{
 					"policy": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Policy selects affinity matching and persisted allocation plans. ComponentAffinity reads per-component terms from componentAffinity.",
+							Description: "Policy selects affinity matching and persisted allocation plans.",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -10899,7 +10921,7 @@ func schema_pkg_apis_ome_v1beta1_PlacementSpec(ref common.ReferenceCallback) com
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "ClusterAffinity ORs terms whose requirements are ANDed, for every component. Requires the ClusterAffinity policy; omission then matches every registration. An explicit empty or null list is invalid.",
+							Description: "ClusterAffinity ORs terms whose requirements are ANDed. The engine's clusters are every component's clusters; in Split, each term's weights set the components' shares. Omission matches every registration. An explicit empty or null list is invalid.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -10909,12 +10931,6 @@ func schema_pkg_apis_ome_v1beta1_PlacementSpec(ref common.ReferenceCallback) com
 									},
 								},
 							},
-						},
-					},
-					"componentAffinity": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ComponentAffinity holds one affinity term list per component and requires the ComponentAffinity policy. Every component must match the same clusters; in Split, each component's weights set its own shares. An explicit null is invalid.",
-							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentClusterAffinity"),
 						},
 					},
 					"maxSurge": {
@@ -10941,7 +10957,7 @@ func schema_pkg_apis_ome_v1beta1_PlacementSpec(ref common.ReferenceCallback) com
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityTerm", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentClusterAffinity", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SplitSpec"},
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityTerm", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.SplitSpec"},
 	}
 }
 
@@ -11665,7 +11681,7 @@ func schema_pkg_apis_ome_v1beta1_ProportionalPolicy(ref common.ReferenceCallback
 					},
 					"ratios": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Ratios maps each follower Component to its replica ratio relative to the anchor. A ratio of 1.0 means parity; 0.25 means one follower per four anchor replicas (rounded up). Components not listed scale independently.",
+							Description: "Ratios maps each follower Component to its replica ratio relative to the anchor. A ratio of 1.0 means parity; 0.25 means one follower per four anchor replicas (rounded up). Components not listed scale independently. A follower's minReplicas is a floor on the count it is given. Its maxReplicas, when set, is a ceiling; a follower that sets none has no ceiling of its own, and the anchor's bounds cap its count. The status reports a follower as clamped when either bound moved its target.",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -12155,7 +12171,7 @@ func schema_pkg_apis_ome_v1beta1_RolloutCoordinationRatio(ref common.ReferenceCa
 				Properties: map[string]spec.Schema{
 					"original": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Original is the snapshot of desired replica counts per Component at rollout start. The keys are ComponentType strings.",
+							Description: "Original is the reference the ratio rule measures against: each Component's desired replica count as its spec asks for it now. It follows the spec, so a resize mid-roll or while idle moves it to the new counts. The keys are ComponentType strings.",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -12357,7 +12373,7 @@ func schema_pkg_apis_ome_v1beta1_RolloutGroup(ref common.ReferenceCallback) comm
 					},
 					"maintainRatio": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MaintainRatio guards the cross-Component replica ratio while this group rolls. Meaningful only on multi-Component blueGreen/rollingUpdate groups (e.g. a PD engine+decoder pair); ignored on single-Component groups and rejected by admission on canary groups (the canary engine does not enforce it).",
+							Description: "MaintainRatio bounds how far the two sides of a multi-Component blueGreen/rollingUpdate group (e.g. a PD engine+decoder pair) may drift apart while the group rolls. A group that lists both the engine and the decoder is held to the operator's default tolerance even when it omits this field; set a tolerance of 100 to roll with no bound. Rejected by admission on single-Component groups (there is no second side) and on canary groups (the canary engine does not enforce it).",
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MaintainRatio"),
 						},
 					},
@@ -13651,7 +13667,7 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 					},
 					"maxReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Maximum number of replicas for autoscaling.",
+							Description: "Maximum number of replicas for autoscaling. A proportional-scaling follower that leaves it unset has no ceiling of its own.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -14522,6 +14538,87 @@ func schema_pkg_apis_ome_v1beta1_ScalingPolicy(ref common.ReferenceCallback) com
 		},
 		Dependencies: []string{
 			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ProportionalPolicy"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ScalingPolicyStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ScalingPolicyStatus records the coordinator's last decision.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"mode": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"source": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"anchor": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"anchorDesired": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"integer"},
+							Format: "int32",
+						},
+					},
+					"followers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"component",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FollowerScalingStatus"),
+									},
+								},
+							},
+						},
+					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FollowerScalingStatus"},
 	}
 }
 

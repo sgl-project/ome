@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/escalation"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
@@ -60,6 +61,32 @@ type TickView struct {
 	// StuckPodGrace is the configured grace a pod may fail its readiness
 	// for before the engine reads it as out of service.
 	StuckPodGrace time.Duration
+	// PodWrites are the writes the engine made to pods during the tick, in
+	// order, each with the pod as the apiserver stored it once the write
+	// landed. The driver's own staging writes are not listed.
+	PodWrites []PodWrite
+	// Revisions are the stored revisions of the Component after the pass,
+	// keyed by the hash a pod's revision label carries.
+	Revisions map[string]RevisionTemplate
+}
+
+// PodWrite is one write the engine made to a pod, with the pod as the
+// apiserver stored it once the write landed.
+type PodWrite struct {
+	// Verb is the trace's name for the write: create, patch, update, or
+	// the subresource form such as status-patch.
+	Verb string
+	Pod  *corev1.Pod
+}
+
+// RevisionTemplate is what a stored revision asks a pod to run, as far as an
+// in-place patch moves it: the images of the leader and worker templates and
+// the pod template's own labels and annotations.
+type RevisionTemplate struct {
+	Images       map[string]string
+	WorkerImages map[string]string
+	Labels       map[string]string
+	Annotations  map[string]string
 }
 
 // MigrationCommit is one migration record write as the driver applied it.
@@ -121,6 +148,7 @@ const (
 	InvariantBoundedWaits = "I3"
 	InvariantStatusTruth  = "I4"
 	InvariantSingleOwner  = "I5"
+	InvariantLabelTruth   = "I6"
 	InvariantSurgeCeiling = "ceiling"
 )
 
@@ -133,7 +161,83 @@ func CheckInvariants(view TickView) []Finding {
 	findings = append(findings, CheckStatusTruth(view)...)
 	findings = append(findings, CheckSingleOwner(view)...)
 	findings = append(findings, CheckOwnership(view)...)
+	findings = append(findings, CheckLabelTruth(view)...)
 	return findings
+}
+
+// CheckLabelTruth is invariant I6, label truth: no engine write leaves a pod
+// running one revision's template under another revision's label, which the
+// routed Services select by. A label naming no stored revision is not judged.
+func CheckLabelTruth(view TickView) []Finding {
+	var findings []Finding
+	for _, write := range view.PodWrites {
+		pod := write.Pod
+		if pod == nil {
+			continue
+		}
+		hash := pod.Labels[query.LabelRevisionHash]
+		template, known := view.Revisions[hash]
+		if !known {
+			continue
+		}
+		why := templateDisagreement(pod, template)
+		if why == "" {
+			continue
+		}
+		index, _ := query.InstanceIdxFromLabels(pod)
+		findings = append(findings, Finding{
+			Invariant: InvariantLabelTruth,
+			Index:     index,
+			Class:     fmt.Sprintf("%s/label-template-apart[%s]", InvariantLabelTruth, write.Verb),
+			Detail:    fmt.Sprintf("pod %s after its %s carries revision label %s but %s", pod.Name, write.Verb, hash, why),
+		})
+	}
+	return findings
+}
+
+// templateDisagreement says how a pod differs from the template its label
+// names, empty when it does not. The labels the workload stamps and the
+// in-place transition marker are not template.
+func templateDisagreement(pod *corev1.Pod, template RevisionTemplate) string {
+	images := template.Images
+	if pod.Labels[query.LabelRunner] == RunnerWorker && template.WorkerImages != nil {
+		images = template.WorkerImages
+	}
+	running := make(map[string]string, len(pod.Spec.Containers))
+	for _, container := range pod.Spec.Containers {
+		running[container.Name] = container.Image
+	}
+	for _, name := range sortedKeys(images) {
+		if got := running[name]; got != images[name] {
+			return fmt.Sprintf("runs container %s at %s where that revision's template has %s", name, orNil(got), images[name])
+		}
+	}
+	for _, key := range sortedKeys(template.Labels) {
+		if query.WorkloadOwnedLabel(key) {
+			continue
+		}
+		if got := pod.Labels[key]; got != template.Labels[key] {
+			return fmt.Sprintf("carries label %s=%s where that revision's template has %s", key, orNil(got), template.Labels[key])
+		}
+	}
+	for _, key := range sortedKeys(template.Annotations) {
+		if key == constants.InferenceServiceInPlaceImageTransitionAnnotationKey {
+			continue
+		}
+		if got := pod.Annotations[key]; got != template.Annotations[key] {
+			return fmt.Sprintf("carries annotation %s=%s where that revision's template has %s", key, orNil(got), template.Annotations[key])
+		}
+	}
+	return ""
+}
+
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // CheckCapacity is invariant I1, capacity: the pods that are Ready,

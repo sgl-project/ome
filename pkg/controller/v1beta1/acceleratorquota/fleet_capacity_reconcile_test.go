@@ -18,9 +18,10 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workloadcluster"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
-func TestFleetCapacityReconcileWriteFailures(t *testing.T) {
+func TestReconcile_FleetCapacityWriteFails_ConflictRequeuesOtherErrorsSurface(t *testing.T) {
 	conflict := apierrors.NewConflict(quotaGR, rootName, errors.New("resource version changed"))
 	capacityFailure := errors.New("capacity write unavailable")
 	statusFailure := errors.New("quota status unavailable")
@@ -43,7 +44,7 @@ func TestFleetCapacityReconcileWriteFailures(t *testing.T) {
 			r, base := projectingReconciler(t, fleet, root, capacityRegistration("member-a", "registration-a"))
 			r.ResyncInterval = time.Minute
 			attempts := 0
-			r.Client = interceptor.NewClient(base.(client.WithWatch), interceptor.Funcs{
+			r.Client = fakeclient.Wrap(t, base, fakeclient.WithInterceptors(interceptor.Funcs{
 				SubResourcePatch: func(ctx context.Context, cl client.Client, sub string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
 					quota, ok := obj.(*v1beta1.AcceleratorQuota)
 					if ok && sub == "status" {
@@ -58,7 +59,7 @@ func TestFleetCapacityReconcileWriteFailures(t *testing.T) {
 					}
 					return cl.SubResource(sub).Patch(ctx, obj, patch, opts...)
 				},
-			})
+			}))
 			got, err := r.Reconcile(t.Context(), ctrl.Request{})
 			if diff := cmp.Diff(tt.wantResult, got); diff != "" {
 				t.Errorf("result (-want +got):\n%s", diff)
@@ -84,7 +85,7 @@ func TestFleetCapacityReconcileWriteFailures(t *testing.T) {
 	}
 }
 
-func TestFleetCapacityConflictRefreshesObservation(t *testing.T) {
+func TestReconcile_FleetCapacityWriteConflicts_NextPassReadsFreshReport(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
 		resync time.Duration
@@ -100,7 +101,7 @@ func TestFleetCapacityConflictRefreshesObservation(t *testing.T) {
 			r.ResyncInterval = tt.resync
 			remote := member(t, capacityMemberRoot())
 			concurrentWrite := true
-			fleet.members["member-a"] = workloadcluster.NewNeverCachingClient(interceptor.NewClient(remote, interceptor.Funcs{
+			fleet.members["member-a"] = workloadcluster.NewNeverCachingClient(fakeclient.Wrap(t, remote, fakeclient.WithInterceptors(interceptor.Funcs{
 				Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 					if err := cl.Get(ctx, key, obj, opts...); err != nil {
 						return err
@@ -116,7 +117,7 @@ func TestFleetCapacityConflictRefreshesObservation(t *testing.T) {
 					}
 					return nil
 				},
-			}))
+			})))
 			got, err := r.Reconcile(t.Context(), ctrl.Request{})
 			if diff := cmp.Diff(ctrl.Result{Requeue: true}, got); diff != "" {
 				t.Errorf("conflict result (-want +got):\n%s", diff)

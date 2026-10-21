@@ -16,10 +16,12 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
+	isvcstatus "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/status"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/v1beta1convert"
 	workloadops "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/ops"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/revision"
+	workloadstatus "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/status"
 	types "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -46,9 +48,17 @@ type member struct {
 	target  string
 	rows    []rowState
 	pods    []podState
-	// stale publishes the next status with an ObservedGeneration behind the
-	// replica's generation, then clears.
+	// stale publishes the next status as one written before the spec in
+	// hand: an ObservedGeneration behind the replica's generation and no
+	// template hash acknowledged, then clears.
 	stale bool
+	// keepStatus skips the next publish, so the status the replica carries
+	// stands as the last one written, then clears.
+	keepStatus bool
+	// missing marks a replica the scenario removed: the member publishes
+	// nothing and syncs no pod until the projector has created the object
+	// again.
+	missing bool
 	// revisions maps an image to the ControllerRevision its template minted.
 	revisions map[string]*appsv1.ControllerRevision
 	// readyAt is when the replica's Ready condition last flipped.
@@ -63,6 +73,12 @@ type rowState struct {
 	running    string
 	target     string
 	readySince time.Time
+	// replacement is the index a gang surge builds this row's replacement
+	// at while the pair stands; replaces is the source's index on that
+	// replacement row. Both are nil for a single-pod surge, which adds its
+	// new pod to the row itself.
+	replacement *int32
+	replaces    *int32
 }
 
 // podState is one pod of a member.
@@ -165,12 +181,16 @@ func (d *driver) ensureRevision(ctx context.Context, m *member, image string) (*
 		Name:      irprojector.InferenceReplicaName(d.opts.ServiceName, m.component),
 		Labels:    d.selectorLabels(m.component),
 	}
+	hash, raw, err := revision.HashTemplate(revision.Template{PodSpec: d.podTemplate(image), PairingProtocol: d.protocolOf(image)}, nil, d.isvcUID())
+	if err != nil {
+		return nil, fmt.Errorf("replay: hash revision for %s %s: %w", m.component, image, err)
+	}
 	var cr *appsv1.ControllerRevision
 	err = d.cluster.staging(func() error {
 		var collision bool
 		var err error
-		cr, collision, err = revision.EnsureControllerRevision(ctx, d.cluster.cli, d.cluster.cli, ir,
-			v1beta1.SchemeGroupVersion.WithKind("InferenceReplica"), key, d.podTemplate(image), nil, nil, d.isvcUID())
+		cr, collision, err = revision.EnsureControllerRevisionFromHash(ctx, d.cluster.cli, d.cluster.cli, ir,
+			v1beta1.SchemeGroupVersion.WithKind("InferenceReplica"), key, hash, raw)
 		if err != nil {
 			return err
 		}
@@ -184,6 +204,12 @@ func (d *driver) ensureRevision(ctx context.Context, m *member, image string) (*
 	}
 	m.revisions[image] = cr
 	return cr, nil
+}
+
+// protocolOf is the pairing protocol the revision minted from an image
+// carries: the one the scenario declares for it, else none.
+func (d *driver) protocolOf(image string) string {
+	return d.service.RevisionProtocols[image]
 }
 
 // revisionName is the ControllerRevision name an image's template hashes
@@ -233,7 +259,7 @@ func (d *driver) renderPod(ctx context.Context, m *member, p podState) (*corev1.
 	if err != nil {
 		return nil, err
 	}
-	plan := types.ComponentPlan{Component: v1beta1convert.ComponentTypeToWorkload(m.component), Replicas: int32(len(m.rows))}
+	plan := types.ComponentPlan{Component: v1beta1convert.ComponentTypeToWorkload(m.component), Replicas: int32(len(m.rows)), PairingProtocol: d.protocolOf(p.image)}
 	inst := types.InstancePlan{Index: p.index, Incarnation: 1, Runners: []types.RunnerPlan{{Name: defaultRunner, Size: 1}}}
 	runner := types.RunnerPlan{Name: defaultRunner, Size: 1}
 	pod, err := workloadops.RenderWithRevision(ir, v1beta1.SchemeGroupVersion.WithKind("InferenceReplica"), d.workloadKey(m.component),
@@ -336,6 +362,25 @@ func (d *driver) syncPods(ctx context.Context, m *member) error {
 	})
 }
 
+// publishedOperation is the attempt a row publishes while a surge is in
+// flight, nil otherwise: a gang surge's source names the row its replacement
+// gang is built at, as the engine writes the pair; the replacement gang's
+// own row stands at the GangSurgeTarget step until the old gang leaves and
+// it is promoted in the source's place; a single-pod surge keeps the attempt
+// on its own row while the replacement stands beside the old pod.
+func (m *member) publishedOperation(r rowState, phase v1beta1.OMENativeInstancePhase, running, rowTarget string) *v1beta1.InstanceOperation {
+	switch {
+	case r.replacement != nil:
+		surgeIndex := *r.replacement
+		return &v1beta1.InstanceOperation{Type: v1beta1.InstanceOperationUpdate, Step: types.UpdateStepSurge, TargetRevision: rowTarget, SurgeIndex: &surgeIndex}
+	case r.replaces != nil:
+		return &v1beta1.InstanceOperation{Type: v1beta1.InstanceOperationUpdate, Step: types.UpdateStepGangSurgeTarget, TargetRevision: rowTarget}
+	case phase == v1beta1.OMENativeInstanceUpdating && rowTarget != "" && rowTarget != running && m.podOn(r.index, r.target) != nil:
+		return &v1beta1.InstanceOperation{Type: v1beta1.InstanceOperationUpdate, Step: types.UpdateStepSurge, TargetRevision: rowTarget}
+	}
+	return nil
+}
+
 // instancePods counts a row's pods: all, Ready, and serving.
 func (m *member) instancePods(index int32) (total, ready, serving int32) {
 	for _, p := range m.pods {
@@ -358,6 +403,10 @@ func (m *member) instancePods(index int32) (total, ready, serving int32) {
 // from the rows and their pods, the dense rows, the Ready condition and
 // the observed generation.
 func (d *driver) publish(ctx context.Context, m *member) error {
+	if m.keepStatus {
+		m.keepStatus = false
+		return nil
+	}
 	ir, err := d.replica(ctx, m.component)
 	if err != nil {
 		return err
@@ -400,6 +449,7 @@ func (d *driver) publish(ctx context.Context, m *member) error {
 			ServingPodCount:   serving,
 			AvailablePodCount: ready,
 		}
+		row.Operation = m.publishedOperation(r, phase, running, rowTarget)
 		if !r.readySince.IsZero() {
 			at := metav1.NewTime(r.readySince)
 			row.ReadySince = &at
@@ -423,15 +473,13 @@ func (d *driver) publish(ctx context.Context, m *member) error {
 	status.Replicas = int32(len(rows))
 	status.InstanceStatuses = rows
 	status.ObservedGeneration = ir.Generation
+	status.ObservedTemplateHash = ir.Annotations[constants.InferenceReplicaTemplateHashAnnotationKey]
 	if m.stale {
 		status.ObservedGeneration = ir.Generation - 1
+		status.ObservedTemplateHash = ""
 		m.stale = false
 	}
-	readyStatus := metav1.ConditionFalse
-	reason := "InstancesNotReady"
-	if status.Replicas > 0 && status.ReadyReplicas == status.Replicas {
-		readyStatus, reason = metav1.ConditionTrue, "AllInstancesReady"
-	}
+	readyStatus, reason := standInReadyCondition(ir, &status, rows)
 	if m.readyStatus != readyStatus {
 		m.readyStatus, m.readyAt = readyStatus, d.clock.Now()
 	}
@@ -454,6 +502,34 @@ func (d *driver) publish(ctx context.Context, m *member) error {
 	return nil
 }
 
+// standInReadyCondition is the replica controller's Ready condition, decided
+// in its order: a Failed row, the staged shape under a partition, a roll in
+// flight, no Instances, every Instance Ready, then the serving minimum.
+// The engine measures the Sequential wait from this condition's transition
+// to True, so the stand-in publishes the transitions the replica would.
+func standInReadyCondition(ir *v1beta1.InferenceReplica, status *v1beta1.InferenceReplicaStatus, rows []v1beta1.OMENativeInstanceStatus) (metav1.ConditionStatus, string) {
+	for _, r := range rows {
+		if r.Phase == v1beta1.OMENativeInstanceFailed {
+			return metav1.ConditionFalse, "InstanceFailed"
+		}
+	}
+	if partition := irprojector.IRPartition(ir); partition > 0 &&
+		workloadstatus.ReachedDesiredShape(v1beta1convert.InstanceStatusSliceToWorkload(rows), status.UpdateRevision, partition, status.Replicas) {
+		return metav1.ConditionTrue, "Staged"
+	}
+	switch {
+	case status.UpdateRevision != "" && status.CurrentRevision != status.UpdateRevision:
+		return metav1.ConditionUnknown, "RolloutInProgress"
+	case status.Replicas == 0:
+		return metav1.ConditionFalse, "NoReplicas"
+	case status.ReadyReplicas == status.Replicas:
+		return metav1.ConditionTrue, "AllInstancesReady"
+	case status.ServingReplicas >= isvcstatus.InstanceAvailabilityFloor(status.Replicas, ir.Spec.Replicas, ir.Spec.Lifecycle):
+		return metav1.ConditionTrue, "MinimumAvailable"
+	}
+	return metav1.ConditionFalse, "ReplicaCountMismatch"
+}
+
 // renderRows prints the dense rows as index:phase@hash.
 func renderRows(rows []v1beta1.OMENativeInstanceStatus) string {
 	parts := make([]string, 0, len(rows))
@@ -464,8 +540,17 @@ func renderRows(rows []v1beta1.OMENativeInstanceStatus) string {
 }
 
 // sync publishes a member after the scenario touched it: its pods first,
-// then its status.
+// then its status. A member whose replica the scenario removed waits
+// until the object exists again.
 func (d *driver) sync(ctx context.Context, m *member) error {
+	if m.missing {
+		if _, err := d.replica(ctx, m.component); apierrors.IsNotFound(err) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		m.missing = false
+	}
 	if err := d.syncPods(ctx, m); err != nil {
 		return err
 	}

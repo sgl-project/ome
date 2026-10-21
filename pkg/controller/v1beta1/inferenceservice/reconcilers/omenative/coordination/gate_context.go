@@ -74,6 +74,11 @@ type GateContext struct {
 	// cohort even while the live spec field still names the rejected one.
 	// Nil fails the pairing gate closed.
 	TargetRevision *appsv1.ControllerRevision
+
+	// Defaults are the operator-configured fill-ins the groups were
+	// resolved with; the batch step reads its rules and the fallback
+	// tolerance from them.
+	Defaults GroupDefaults
 }
 
 // ResolveGateContext walks the shared prelude every Check*Gate runs:
@@ -152,6 +157,7 @@ func ResolveGateContextWithDefaults(ctx context.Context, reads client.Reader, is
 		Group:     group,
 		Ctx:       ctx,
 		Reads:     reads,
+		Defaults:  defaults,
 	}
 }
 

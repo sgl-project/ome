@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 )
 
-func TestRequiredTrafficCapabilities(t *testing.T) {
+func TestRequiredTrafficCapabilities_TrafficShapes_ListsOneTokenPerFeature(t *testing.T) {
 	tests := []struct {
 		name    string
 		traffic *v1beta1.TrafficSpec

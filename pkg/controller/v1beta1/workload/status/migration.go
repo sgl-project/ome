@@ -2,7 +2,6 @@ package status
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -93,35 +92,30 @@ func StartMigration(
 	surgeIdx int32,
 	timeout time.Duration,
 ) (bool, error) {
-	if err := RequireOwner(input); err != nil {
+	write, err := newGuardedWrite(input)
+	if err != nil {
 		return false, err
 	}
-	ownerUID := input.OwnerObject.GetUID()
 	sourceGuard, sourceState := Guard(input, source.Index, source)
 	surgeGuard, surgeState := Guard(input, surgeIdx, surge)
-	confirmed := false
-	batchGuard := func(snapshot types.InstanceMutationSnapshot) bool {
-		if snapshot.OwnerUID != ownerUID {
-			confirmed = false
-			return false
-		}
-		currentSource, sourceFound := snapshot.Instances[source.Index]
-		currentSurge, surgeFound := snapshot.Instances[surgeIdx]
+	batchGuard := write.guard(func(rows types.InstanceMutationSnapshot) bool {
+		currentSource, sourceFound := rows.Instances[source.Index]
+		currentSurge, surgeFound := rows.Instances[surgeIdx]
 		currentSourceOwned := sourceFound && MigrationSourceOwnsRemoval(&currentSource, requestUUID, surgeIdx)
 		currentSurgeOwned := surgeFound && MigrationSurgeOwnsPromotion(&currentSurge, requestUUID, source.Index)
 		if (currentSourceOwned && currentSurgeOwned) ||
 			(surge == nil && currentSourceOwned && !surgeFound) {
-			confirmed = true
+			write.confirmed = true
 			return true
 		}
-		confirmed = sourceGuard(snapshot) && sourceState.Matched && surgeGuard(snapshot)
+		write.confirmed = sourceGuard(rows) && sourceState.Matched && surgeGuard(rows)
 		if surge == nil {
-			confirmed = confirmed && surgeState.Absent
+			write.confirmed = write.confirmed && surgeState.Absent
 		} else {
-			confirmed = confirmed && surgeState.Matched
+			write.confirmed = write.confirmed && surgeState.Matched
 		}
-		return confirmed
-	}
+		return write.confirmed
+	})
 
 	sourceMutation := MigrationPinMutation(input, source.Index, surgeIdx, MigrationRoleSource, requestUUID, timeout)
 	sourceMutation.BatchPrecondition = batchGuard
@@ -132,11 +126,7 @@ func StartMigration(
 	surgeMutation.Postcondition = func(row *types.InstanceStatus) bool {
 		return MigrationSurgeOwnsPromotion(row, requestUUID, source.Index)
 	}
-	err := Apply(ctx, input, []types.InstanceMutation{sourceMutation, surgeMutation})
-	if errors.Is(err, types.ErrStatusMutationPrecondition) || errors.Is(err, types.ErrStatusOwnerGone) {
-		return false, nil
-	}
-	return confirmed, err
+	return write.commit(ctx, input, []types.InstanceMutation{sourceMutation, surgeMutation}, "", nil)
 }
 
 // StampMigrationSurgeReady is the migration's promote terminator: the
@@ -152,35 +142,30 @@ func StampMigrationSurgeReady(
 	requestUUID string,
 	targetRevision string,
 ) (bool, error) {
-	if err := RequireOwner(input); err != nil {
+	write, err := newGuardedWrite(input)
+	if err != nil {
 		return false, err
 	}
 	sourceGuard, sourceState := Guard(input, source.Index, source)
 	surgeGuard, surgeState := Guard(input, surge.Index, surge)
 	mutation := ReadyOnRevisionMutation(surge.Index, targetRevision, input.Now())
-	promoted := false
-	mutation.BatchPrecondition = func(snapshot types.InstanceMutationSnapshot) bool {
-		if !sourceGuard(snapshot) || !sourceState.Matched ||
-			!surgeGuard(snapshot) || !surgeState.Matched {
+	mutation.BatchPrecondition = write.guard(func(rows types.InstanceMutationSnapshot) bool {
+		if !sourceGuard(rows) || !sourceState.Matched ||
+			!surgeGuard(rows) || !surgeState.Matched {
 			return false
 		}
-		currentSource := snapshot.Instances[source.Index]
-		currentSurge := snapshot.Instances[surge.Index]
+		currentSource := rows.Instances[source.Index]
+		currentSurge := rows.Instances[surge.Index]
 		return MigrationSourceOwnsRemoval(&currentSource, requestUUID, surge.Index) &&
 			MigrationSurgeOwnsPromotion(&currentSurge, requestUUID, source.Index)
-	}
+	})
 	mutation.Postcondition = func(row *types.InstanceStatus) bool {
 		return row != nil && row.Index == surge.Index &&
 			row.Incarnation == surge.Incarnation && row.ActiveOrdinal == surge.ActiveOrdinal &&
 			MigrationPromotedSurgeMatches(row, targetRevision)
 	}
-	mutation.OnCommit = func(_, _ *types.InstanceStatus) {
-		promoted = true
-	}
-	err := Apply(ctx, input, []types.InstanceMutation{mutation})
-	if errors.Is(err, types.ErrStatusMutationPrecondition) || errors.Is(err, types.ErrStatusOwnerGone) {
-		return false, nil
-	}
+	mutation.OnCommit = write.recordCommit
+	promoted, err := write.commit(ctx, input, []types.InstanceMutation{mutation}, "", nil)
 	if err != nil || !promoted {
 		return false, err
 	}

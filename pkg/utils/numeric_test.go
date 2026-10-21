@@ -2,7 +2,7 @@ package utils
 
 import "testing"
 
-func TestDerefInt32(t *testing.T) {
+func TestDerefInt32_UnsetOrSetPointer_ZeroWhenUnsetElseTheValue(t *testing.T) {
 	if got := DerefInt32(nil); got != 0 {
 		t.Fatalf("DerefInt32(nil) = %d, want 0", got)
 	}
@@ -20,7 +20,7 @@ func TestDerefInt32(t *testing.T) {
 	}
 }
 
-func TestClampInt32(t *testing.T) {
+func TestClampInt32_InsideAtOrOutsideTheBounds_StaysInsideAndHiWinsOverLo(t *testing.T) {
 	tests := []struct {
 		name      string
 		v, lo, hi int32

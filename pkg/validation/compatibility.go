@@ -4,25 +4,28 @@ import (
 	"fmt"
 	"strings"
 
-	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	modelVer "sigs.k8s.io/ome/pkg/modelver"
+
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 // CompatibilityOptions configures model-to-format compatibility checks.
 type CompatibilityOptions struct {
-	ModelCacheProvider string
+	// ModelCacheProvider names the model cache provider the cluster runs. nil skips the model
+	// cache check; an empty name means the cluster runs none.
+	ModelCacheProvider *string
 }
 
 // CompatibilityOption is a functional option for CompareModelToFormat and
 // GetFormatMismatchReason.
 type CompatibilityOption func(*CompatibilityOptions)
 
-// WithModelCacheProvider sets the cluster's model cache provider name. When
-// set, sharded-distribution models are checked against the format's supported
-// providers. When omitted, the model-cache check is skipped (suitable for
-// offline validation where cluster config is unavailable).
+// WithModelCacheProvider names the model cache provider the cluster runs. With it, a model
+// that loads through an external model cache fits only a format that lists that provider, and
+// an empty name fits no such model. Without it the model cache check is skipped, which suits
+// offline validation that has no cluster config.
 func WithModelCacheProvider(provider string) CompatibilityOption {
-	return func(o *CompatibilityOptions) { o.ModelCacheProvider = provider }
+	return func(o *CompatibilityOptions) { o.ModelCacheProvider = &provider }
 }
 
 func buildOptions(opts []CompatibilityOption) CompatibilityOptions {
@@ -33,264 +36,236 @@ func buildOptions(opts []CompatibilityOption) CompatibilityOptions {
 	return o
 }
 
-// CompareModelToFormat checks if a model matches a supported format entry. It
-// mirrors the logic of DefaultRuntimeMatcher.compareSupportedModelFormats but
-// is a pure function with no receiver or config dependency.
+// CompareModelToFormat reports whether a model fits one supported format of a runtime. The
+// runtime selector and admission both read this one rule.
 func CompareModelToFormat(model *v1beta1.BaseModelSpec, format v1beta1.SupportedModelFormat, opts ...CompatibilityOption) bool {
-	o := buildOptions(opts)
-
-	if o.ModelCacheProvider != "" {
-		if modelRequiresCacheProvider(model) && !supportedFormatSupportsModelCacheProvider(format, o.ModelCacheProvider) {
-			return false
-		}
-	}
-
-	if ok, _ := compareDiffusionPipeline(model.DiffusionPipeline, format.DiffusionPipeline); !ok {
-		return false
-	}
-
-	// architecture
-	if model.ModelArchitecture != nil && format.ModelArchitecture != nil {
-		if *model.ModelArchitecture != *format.ModelArchitecture {
-			return false
-		}
-	} else if (model.ModelArchitecture == nil) != (format.ModelArchitecture == nil) {
-		return false
-	}
-
-	// quantization
-	if model.Quantization != nil && format.Quantization != nil {
-		if *model.Quantization != *format.Quantization {
-			return false
-		}
-	} else if (model.Quantization == nil) != (format.Quantization == nil) {
-		return false
-	}
-
-	// model format
-	if format.ModelFormat != nil {
-		if format.ModelFormat.Name != model.ModelFormat.Name {
-			return false
-		}
-		if format.ModelFormat.Version != nil && model.ModelFormat.Version != nil {
-			if !compareModelFormatVersions(format.ModelFormat, &model.ModelFormat) {
-				return false
-			}
-		} else if (format.ModelFormat.Version == nil) != (model.ModelFormat.Version == nil) {
-			return false
-		}
-	} else {
-		return false
-	}
-
-	// model framework
-	if format.ModelFramework != nil && model.ModelFramework != nil {
-		if format.ModelFramework.Name != model.ModelFramework.Name {
-			return false
-		}
-		if format.ModelFramework.Version != nil && model.ModelFramework.Version != nil {
-			if !compareModelFrameworkVersions(format.ModelFramework, model.ModelFramework) {
-				return false
-			}
-		} else if (format.ModelFramework.Version == nil) != (model.ModelFramework.Version == nil) {
-			return false
-		}
-	} else if (format.ModelFramework != nil) != (model.ModelFramework != nil) {
-		return false
-	}
-
-	return true
+	ok, _ := formatMismatches(model, format, buildOptions(opts))
+	return ok
 }
 
-// GetFormatMismatchReason returns a human-readable reason why a model doesn't
-// match a supported format. Returns "unknown mismatch" if no specific reason
-// can be determined.
+// GetFormatMismatchReason names every rule the model fails, joined by ", ". A model that fails
+// for no named reason reads "unknown mismatch".
 func GetFormatMismatchReason(model *v1beta1.BaseModelSpec, format v1beta1.SupportedModelFormat, opts ...CompatibilityOption) string {
-	o := buildOptions(opts)
-	var reasons []string
-
-	if o.ModelCacheProvider != "" {
-		if modelRequiresCacheProvider(model) && !supportedFormatSupportsModelCacheProvider(format, o.ModelCacheProvider) {
-			reasons = append(reasons, modelCacheProviderMismatchReason(o.ModelCacheProvider, format))
-		}
-	}
-
-	if ok, reason := compareDiffusionPipeline(model.DiffusionPipeline, format.DiffusionPipeline); !ok {
-		if reason != "" {
-			reasons = append(reasons, reason)
-		} else {
-			reasons = append(reasons, "diffusion pipeline mismatch")
-		}
-	}
-
-	// architecture
-	if model.ModelArchitecture != nil && format.ModelArchitecture != nil {
-		if *model.ModelArchitecture != *format.ModelArchitecture {
-			reasons = append(reasons, fmt.Sprintf("architecture mismatch (model=%s, runtime=%s)",
-				*model.ModelArchitecture, *format.ModelArchitecture))
-		}
-	} else if (model.ModelArchitecture == nil) != (format.ModelArchitecture == nil) {
-		if model.ModelArchitecture == nil {
-			reasons = append(reasons, fmt.Sprintf("model has no architecture but runtime requires %s",
-				*format.ModelArchitecture))
-		} else {
-			reasons = append(reasons, fmt.Sprintf("model has architecture %s but runtime has no architecture requirement",
-				*model.ModelArchitecture))
-		}
-	}
-
-	// quantization
-	if model.Quantization != nil && format.Quantization != nil {
-		if *model.Quantization != *format.Quantization {
-			reasons = append(reasons, fmt.Sprintf("quantization mismatch (model=%s, runtime=%s)",
-				*model.Quantization, *format.Quantization))
-		}
-	} else if (model.Quantization == nil) != (format.Quantization == nil) {
-		if model.Quantization == nil {
-			reasons = append(reasons, fmt.Sprintf("model has no quantization but runtime requires %s",
-				*format.Quantization))
-		} else {
-			reasons = append(reasons, fmt.Sprintf("model has quantization %s but runtime has no quantization requirement",
-				*model.Quantization))
-		}
-	}
-
-	// model format
-	if format.ModelFormat != nil {
-		if format.ModelFormat.Name != model.ModelFormat.Name {
-			reasons = append(reasons, fmt.Sprintf("format name mismatch (model=%s, runtime=%s)",
-				model.ModelFormat.Name, format.ModelFormat.Name))
-		} else if format.ModelFormat.Version != nil && model.ModelFormat.Version != nil {
-			if !compareModelFormatVersions(format.ModelFormat, &model.ModelFormat) {
-				reasons = append(reasons, fmt.Sprintf("format version mismatch (model=%s, runtime=%s)",
-					*model.ModelFormat.Version, *format.ModelFormat.Version))
-			}
-		} else if (format.ModelFormat.Version == nil) != (model.ModelFormat.Version == nil) {
-			if model.ModelFormat.Version == nil {
-				reasons = append(reasons, fmt.Sprintf("model has no format version but runtime requires %s",
-					*format.ModelFormat.Version))
-			} else {
-				reasons = append(reasons, "model has format version but runtime has no version requirement")
-			}
-		}
-	}
-
-	// model framework
-	if format.ModelFramework != nil && model.ModelFramework != nil {
-		if format.ModelFramework.Name != model.ModelFramework.Name {
-			reasons = append(reasons, fmt.Sprintf("framework name mismatch (model=%s, runtime=%s)",
-				model.ModelFramework.Name, format.ModelFramework.Name))
-		} else if format.ModelFramework.Version != nil && model.ModelFramework.Version != nil {
-			if !compareModelFrameworkVersions(format.ModelFramework, model.ModelFramework) {
-				reasons = append(reasons, fmt.Sprintf("framework version mismatch (model=%s, runtime=%s)",
-					*model.ModelFramework.Version, *format.ModelFramework.Version))
-			}
-		} else if (format.ModelFramework.Version == nil) != (model.ModelFramework.Version == nil) {
-			if model.ModelFramework.Version == nil {
-				reasons = append(reasons, fmt.Sprintf("model has no framework version but runtime requires %s",
-					*format.ModelFramework.Version))
-			} else {
-				reasons = append(reasons, "model has framework version but runtime has no version requirement")
-			}
-		}
-	} else if (format.ModelFramework != nil) != (model.ModelFramework != nil) {
-		if model.ModelFramework == nil {
-			reasons = append(reasons, fmt.Sprintf("model has no framework but runtime requires %s",
-				format.ModelFramework.Name))
-		} else {
-			reasons = append(reasons, fmt.Sprintf("model has framework %s but runtime has no framework requirement",
-				model.ModelFramework.Name))
-		}
-	}
-
+	_, reasons := formatMismatches(model, format, buildOptions(opts))
 	if len(reasons) == 0 {
 		return "unknown mismatch"
 	}
 	return strings.Join(reasons, ", ")
 }
 
-// --- version comparison helpers ---
-
-func compareModelFormatVersions(supportedFormat *v1beta1.ModelFormat, modelFormat *v1beta1.ModelFormat) bool {
-	baseVersion, err := modelVer.Parse(*modelFormat.Version)
-	if err != nil {
-		return false
+// formatMismatches runs every rule a model must pass to fit a supported format and collects
+// the reasons of the failed ones in reporting order: the model cache provider when the caller
+// names one, the diffusion pipeline, then the attributes of formatAttributes. A failed rule may
+// add no reason, so ok can be false with no reasons.
+func formatMismatches(model *v1beta1.BaseModelSpec, format v1beta1.SupportedModelFormat, options CompatibilityOptions) (ok bool, reasons []string) {
+	ok = true
+	fail := func(reason string) {
+		ok = false
+		if reason != "" {
+			reasons = append(reasons, reason)
+		}
 	}
-
-	supportedVersion, err := modelVer.Parse(*supportedFormat.Version)
-	if err != nil {
-		return false
+	if provider := options.ModelCacheProvider; provider != nil &&
+		ModelRequiresCacheProvider(model) && !FormatSupportsModelCacheProvider(format, *provider) {
+		fail(ModelCacheProviderMismatchReason(*provider, format))
 	}
-
-	hasUnofficial := modelVer.ContainsUnofficialVersion(baseVersion) ||
-		modelVer.ContainsUnofficialVersion(supportedVersion)
-
-	operator := getRuntimeSelectorOperator(supportedFormat.Operator)
-
-	if hasUnofficial || operator == "Equal" {
-		return modelVer.Equal(supportedVersion, baseVersion)
+	if pipelineOK, reason := CompareDiffusionPipeline(model.DiffusionPipeline, format.DiffusionPipeline); !pipelineOK {
+		fail(reason)
 	}
-
-	if baseVersion.Precision != supportedVersion.Precision ||
-		strings.Compare(baseVersion.MajorPrefix, supportedVersion.MajorPrefix) != 0 {
-		return false
+	for _, attribute := range formatAttributes {
+		if attributeOK, reason := attribute.compare(model, format); !attributeOK {
+			fail(reason)
+		}
 	}
+	return ok, reasons
+}
 
-	switch operator {
-	case "GreaterThan":
-		return modelVer.GreaterThan(supportedVersion, baseVersion)
-	case "GreaterThanOrEqual":
-		return modelVer.GreaterThanOrEqual(supportedVersion, baseVersion)
+// optionalAttribute is one attribute of a model that a supported format may constrain and that
+// either side may leave unset. Both unset, or both set and equal, is a match. Each of the three
+// other outcomes has its own reason text, in which {model} and {runtime} stand for the two
+// values; a text may leave either out, and an empty text adds nothing to the reason.
+type optionalAttribute struct {
+	// model and runtime read the attribute from each side; set is false when that side leaves
+	// it unset.
+	model   func(*v1beta1.BaseModelSpec) (value string, set bool)
+	runtime func(v1beta1.SupportedModelFormat) (value string, set bool)
+	// equal compares two set values; nil means they must be the same string.
+	equal func(modelValue, runtimeValue string, format v1beta1.SupportedModelFormat) bool
+	// version is the attribute's version, compared only when both sides set the attribute and
+	// agree on it; nil when the attribute carries no version.
+	version *optionalAttribute
+	// The reason texts: both set and different; only the runtime sets it; only the model sets it.
+	differ, modelMissing, runtimeMissing string
+}
+
+// formatAttributes lists the attributes in the order their reasons are reported: the
+// architecture, the quantization, the format's name and under it its version, the framework's
+// name and under it its version.
+var formatAttributes = []optionalAttribute{
+	{
+		model:          func(m *v1beta1.BaseModelSpec) (string, bool) { return optional(m.ModelArchitecture) },
+		runtime:        func(f v1beta1.SupportedModelFormat) (string, bool) { return optional(f.ModelArchitecture) },
+		differ:         "architecture mismatch (model={model}, runtime={runtime})",
+		modelMissing:   "model has no architecture but runtime requires {runtime}",
+		runtimeMissing: "model has architecture {model} but runtime has no architecture requirement",
+	},
+	{
+		model:          func(m *v1beta1.BaseModelSpec) (string, bool) { return optional(m.Quantization) },
+		runtime:        func(f v1beta1.SupportedModelFormat) (string, bool) { return optional(f.Quantization) },
+		differ:         "quantization mismatch (model={model}, runtime={runtime})",
+		modelMissing:   "model has no quantization but runtime requires {runtime}",
+		runtimeMissing: "model has quantization {model} but runtime has no quantization requirement",
+	},
+	{
+		// A model always names its format. A format entry that names none fits no model and
+		// adds nothing to the reason.
+		model: func(m *v1beta1.BaseModelSpec) (string, bool) { return m.ModelFormat.Name, true },
+		runtime: func(f v1beta1.SupportedModelFormat) (string, bool) {
+			if f.ModelFormat == nil {
+				return "", false
+			}
+			return f.ModelFormat.Name, true
+		},
+		differ: "format name mismatch (model={model}, runtime={runtime})",
+		version: &optionalAttribute{
+			model: func(m *v1beta1.BaseModelSpec) (string, bool) { return optional(m.ModelFormat.Version) },
+			runtime: func(f v1beta1.SupportedModelFormat) (string, bool) {
+				if f.ModelFormat == nil {
+					return "", false
+				}
+				return optional(f.ModelFormat.Version)
+			},
+			equal: func(modelVersion, runtimeVersion string, f v1beta1.SupportedModelFormat) bool {
+				return VersionsMatch(modelVersion, runtimeVersion, f.ModelFormat.Operator)
+			},
+			differ:         "format version mismatch (model={model}, runtime={runtime})",
+			modelMissing:   "model has no format version but runtime requires {runtime}",
+			runtimeMissing: "model has format version but runtime has no version requirement",
+		},
+	},
+	{
+		model: func(m *v1beta1.BaseModelSpec) (string, bool) {
+			if m.ModelFramework == nil {
+				return "", false
+			}
+			return m.ModelFramework.Name, true
+		},
+		runtime: func(f v1beta1.SupportedModelFormat) (string, bool) {
+			if f.ModelFramework == nil {
+				return "", false
+			}
+			return f.ModelFramework.Name, true
+		},
+		differ:         "framework name mismatch (model={model}, runtime={runtime})",
+		modelMissing:   "model has no framework but runtime requires {runtime}",
+		runtimeMissing: "model has framework {model} but runtime has no framework requirement",
+		version: &optionalAttribute{
+			model: func(m *v1beta1.BaseModelSpec) (string, bool) {
+				if m.ModelFramework == nil {
+					return "", false
+				}
+				return optional(m.ModelFramework.Version)
+			},
+			runtime: func(f v1beta1.SupportedModelFormat) (string, bool) {
+				if f.ModelFramework == nil {
+					return "", false
+				}
+				return optional(f.ModelFramework.Version)
+			},
+			equal: func(modelVersion, runtimeVersion string, f v1beta1.SupportedModelFormat) bool {
+				return VersionsMatch(modelVersion, runtimeVersion, f.ModelFramework.Operator)
+			},
+			differ:         "framework version mismatch (model={model}, runtime={runtime})",
+			modelMissing:   "model has no framework version but runtime requires {runtime}",
+			runtimeMissing: "model has framework version but runtime has no version requirement",
+		},
+	},
+}
+
+// compare reports whether the attribute matches on both sides and, when it does not, the
+// reason an operator reads.
+func (a optionalAttribute) compare(model *v1beta1.BaseModelSpec, format v1beta1.SupportedModelFormat) (bool, string) {
+	modelValue, modelSet := a.model(model)
+	runtimeValue, runtimeSet := a.runtime(format)
+	switch {
+	case !modelSet && !runtimeSet:
+		return true, ""
+	case !runtimeSet:
+		return false, reasonText(a.runtimeMissing, modelValue, runtimeValue)
+	case !modelSet:
+		return false, reasonText(a.modelMissing, modelValue, runtimeValue)
+	case !a.same(modelValue, runtimeValue, format):
+		return false, reasonText(a.differ, modelValue, runtimeValue)
+	case a.version != nil:
+		return a.version.compare(model, format)
 	default:
-		return modelVer.Equal(supportedVersion, baseVersion)
+		return true, ""
 	}
 }
 
-func compareModelFrameworkVersions(supportedFramework *v1beta1.ModelFrameworkSpec, modelFramework *v1beta1.ModelFrameworkSpec) bool {
-	baseVersion, err := modelVer.Parse(*modelFramework.Version)
-	if err != nil {
-		return false
+func (a optionalAttribute) same(modelValue, runtimeValue string, format v1beta1.SupportedModelFormat) bool {
+	if a.equal == nil {
+		return modelValue == runtimeValue
 	}
-
-	supportedVersion, err := modelVer.Parse(*supportedFramework.Version)
-	if err != nil {
-		return false
-	}
-
-	hasUnofficial := modelVer.ContainsUnofficialVersion(baseVersion) ||
-		modelVer.ContainsUnofficialVersion(supportedVersion)
-
-	operator := getRuntimeSelectorOperator(supportedFramework.Operator)
-
-	if hasUnofficial || operator == "Equal" {
-		return modelVer.Equal(supportedVersion, baseVersion)
-	}
-
-	if baseVersion.Precision != supportedVersion.Precision ||
-		strings.Compare(baseVersion.MajorPrefix, supportedVersion.MajorPrefix) != 0 {
-		return false
-	}
-
-	switch operator {
-	case "GreaterThan":
-		return modelVer.GreaterThan(supportedVersion, baseVersion)
-	case "GreaterThanOrEqual":
-		return modelVer.GreaterThanOrEqual(supportedVersion, baseVersion)
-	default:
-		return modelVer.Equal(supportedVersion, baseVersion)
-	}
+	return a.equal(modelValue, runtimeValue, format)
 }
 
-func getRuntimeSelectorOperator(operator *v1beta1.RuntimeSelectorOperator) string {
-	if operator == nil {
-		return string(v1beta1.RuntimeSelectorOpEqual)
+// reasonText fills a reason text, in which {model} and {runtime} stand for the two values.
+func reasonText(text, modelValue, runtimeValue string) string {
+	return strings.NewReplacer("{model}", modelValue, "{runtime}", runtimeValue).Replace(text)
+}
+
+// optional reads an attribute a side may leave unset.
+func optional[T ~string](value *T) (string, bool) {
+	if value == nil {
+		return "", false
 	}
-	return string(*operator)
+	return string(*value), true
+}
+
+// VersionsMatch reports whether a model's version meets a supported format's version under the
+// format's operator, Equal when nil. A version that does not parse never matches. An unofficial
+// version, such as a pre-release, on either side must be equal whatever the operator. The
+// ordering operators also need both versions at the same precision and with the same major
+// prefix.
+func VersionsMatch(modelVersion, supportedVersion string, operator *v1beta1.RuntimeSelectorOperator) bool {
+	model, err := modelVer.Parse(modelVersion)
+	if err != nil {
+		return false
+	}
+	supported, err := modelVer.Parse(supportedVersion)
+	if err != nil {
+		return false
+	}
+
+	comparison := v1beta1.RuntimeSelectorOpEqual
+	if operator != nil {
+		comparison = *operator
+	}
+	if comparison == v1beta1.RuntimeSelectorOpEqual ||
+		modelVer.ContainsUnofficialVersion(model) ||
+		modelVer.ContainsUnofficialVersion(supported) {
+		return modelVer.Equal(supported, model)
+	}
+	if model.Precision != supported.Precision || model.MajorPrefix != supported.MajorPrefix {
+		return false
+	}
+	switch comparison {
+	case v1beta1.RuntimeSelectorOpGreaterThan:
+		return modelVer.GreaterThan(supported, model)
+	case v1beta1.RuntimeSelectorOpGreaterThanOrEqual:
+		return modelVer.GreaterThanOrEqual(supported, model)
+	default:
+		return modelVer.Equal(supported, model)
+	}
 }
 
 // --- diffusion pipeline helpers ---
 
-func compareDiffusionPipeline(model *v1beta1.DiffusionPipelineSpec, format *v1beta1.DiffusionPipelineSpec) (bool, string) {
+// CompareDiffusionPipeline reports whether a model's diffusion pipeline fits the one a
+// supported format requires, and the reason when it does not. A format that requires no
+// pipeline fits every model; a failed check always names its reason.
+func CompareDiffusionPipeline(model *v1beta1.DiffusionPipelineSpec, format *v1beta1.DiffusionPipelineSpec) (bool, string) {
 	if format == nil {
 		return true, ""
 	}
@@ -366,13 +341,17 @@ func compareDiffusionComponent(name string, model *v1beta1.DiffusionComponentSpe
 
 // --- model cache provider helpers ---
 
-func modelRequiresCacheProvider(model *v1beta1.BaseModelSpec) bool {
+// ModelRequiresCacheProvider reports whether a model's distribution loads it through an
+// external model cache, so that serving it needs a model cache provider.
+func ModelRequiresCacheProvider(model *v1beta1.BaseModelSpec) bool {
 	return model != nil &&
 		model.Distribution != nil &&
 		*model.Distribution == v1beta1.DistributionSharded
 }
 
-func supportedFormatSupportsModelCacheProvider(format v1beta1.SupportedModelFormat, provider string) bool {
+// FormatSupportsModelCacheProvider reports whether a supported format lists the named provider.
+// An empty name, or a format that lists none, never matches.
+func FormatSupportsModelCacheProvider(format v1beta1.SupportedModelFormat, provider string) bool {
 	provider = strings.TrimSpace(provider)
 	if provider == "" || len(format.ModelCacheProviders) == 0 {
 		return false
@@ -385,7 +364,9 @@ func supportedFormatSupportsModelCacheProvider(format v1beta1.SupportedModelForm
 	return false
 }
 
-func modelCacheProviderMismatchReason(provider string, format v1beta1.SupportedModelFormat) string {
+// ModelCacheProviderMismatchReason is the reason a model that needs a model cache provider
+// does not fit a format under the named provider.
+func ModelCacheProviderMismatchReason(provider string, format v1beta1.SupportedModelFormat) string {
 	provider = strings.TrimSpace(provider)
 	if len(format.ModelCacheProviders) == 0 {
 		if provider == "" {

@@ -10,17 +10,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 // fakeRegistry records what the connector asked the transport to do.
@@ -61,18 +59,6 @@ func (f *fakeRegistry) Connected() []string {
 	return out
 }
 
-func connectScheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
-	s := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(s); err != nil {
-		t.Fatalf("add client-go scheme: %v", err)
-	}
-	if err := v1beta1.AddToScheme(s); err != nil {
-		t.Fatalf("add ome scheme: %v", err)
-	}
-	return s
-}
-
 func workloadCluster(name string, ready bool, secretName, key string) *v1beta1.WorkloadCluster {
 	wc := &v1beta1.WorkloadCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: name, UID: types.UID(name + "-uid")},
@@ -107,7 +93,7 @@ func kubeconfigSecret(name, key, body string) *corev1.Secret {
 // this backwards in either direction is expensive: connecting to a cluster the
 // registry has given up on wastes informers on an unreachable apiserver, and
 // dropping one it still calls Ready silently stops projection to a live member.
-func TestConnectorMirrorsTheRegistry(t *testing.T) {
+func TestConnector_RegistryReadyOrNot_ConnectsReadyAndDropsTheRest(t *testing.T) {
 	tests := []struct {
 		name string
 		// objects seeds the control plane. Absent WorkloadCluster => deregistered.
@@ -164,8 +150,7 @@ func TestConnectorMirrorsTheRegistry(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			s := connectScheme(t)
-			c := fake.NewClientBuilder().WithScheme(s).WithObjects(tc.objects...).Build()
+			c := fakeclient.New(t, fakeclient.WithObjects(tc.objects...))
 			reg := newFakeRegistry()
 			conn := &Connector{Client: c, Log: logf.Log.WithName("test"), Clusters: reg}
 
@@ -205,15 +190,12 @@ func TestConnectorMirrorsTheRegistry(t *testing.T) {
 // WorkloadCluster status has one writer whose grace and backoff state is in
 // memory and not behind a lease; a second writer would flap the condition and
 // lose the argument silently, since conflicts on that path requeue unreported.
-func TestConnectorNeverWritesTheRegistry(t *testing.T) {
-	s := connectScheme(t)
+func TestConnector_ReadyMember_WritesNothingToTheControlPlane(t *testing.T) {
 	var writes []string
-	c := fake.NewClientBuilder().WithScheme(s).
-		WithObjects(
-			workloadCluster("member-a", true, "creds", "kubeconfig"),
-			kubeconfigSecret("creds", "kubeconfig", "KUBECONFIG-A"),
-		).
-		WithInterceptorFuncs(interceptor.Funcs{
+	c := fakeclient.New(t,
+		fakeclient.WithObjects(workloadCluster("member-a", true, "creds", "kubeconfig"),
+			kubeconfigSecret("creds", "kubeconfig", "KUBECONFIG-A")),
+		fakeclient.WithInterceptors(interceptor.Funcs{
 			Create: func(_ context.Context, _ client.WithWatch, obj client.Object,
 				_ ...client.CreateOption) error {
 				writes = append(writes, "create "+obj.GetName())
@@ -244,7 +226,8 @@ func TestConnectorNeverWritesTheRegistry(t *testing.T) {
 				writes = append(writes, "status-patch "+obj.GetName())
 				return nil
 			},
-		}).Build()
+		}),
+	)
 
 	conn := &Connector{Client: c, Log: logf.Log.WithName("test"), Clusters: newFakeRegistry()}
 	if _, err := conn.Reconcile(context.Background(),
@@ -271,7 +254,7 @@ func TestConnectorNeverWritesTheRegistry(t *testing.T) {
 // is its own misconfiguration and clears when someone fixes it, so the pass
 // fails and backs off. A source it structurally cannot use will never resolve,
 // so retrying it forever would be noise.
-func TestConnectorRetryBehaviour(t *testing.T) {
+func TestConnector_CredentialMissingOrUnusable_RetriesOnlyFixableFaults(t *testing.T) {
 	profileOnly := &v1beta1.WorkloadCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "member-a"},
 		Spec: v1beta1.WorkloadClusterSpec{
@@ -327,8 +310,7 @@ func TestConnectorRetryBehaviour(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			s := connectScheme(t)
-			c := fake.NewClientBuilder().WithScheme(s).WithObjects(tc.objects...).Build()
+			c := fakeclient.New(t, fakeclient.WithObjects(tc.objects...))
 			reg := newFakeRegistry()
 			reg.connectErr = tc.connectErr
 			conn := &Connector{Client: c, Log: logf.Log.WithName("test"), Clusters: reg}
@@ -351,14 +333,8 @@ func TestConnectorRetryBehaviour(t *testing.T) {
 // A read failure that is not NotFound must not be mistaken for deregistration:
 // dropping every client whenever the apiserver hiccups would take the whole
 // fleet offline for the duration of a blip.
-func TestConnectorDoesNotDropOnAReadFailure(t *testing.T) {
-	s := connectScheme(t)
-	c := fake.NewClientBuilder().WithScheme(s).
-		WithInterceptorFuncs(interceptor.Funcs{
-			Get: func(_ context.Context, _ client.WithWatch, _ client.ObjectKey, _ client.Object, _ ...client.GetOption) error {
-				return apierrors.NewServiceUnavailable("apiserver down")
-			},
-		}).Build()
+func TestConnector_RegistryReadFails_SurfacesErrorAndDropsNobody(t *testing.T) {
+	c := fakeclient.New(t, fakeclient.FailingVerb(fakeclient.Get, fakeclient.EveryCall, apierrors.NewServiceUnavailable("apiserver down")))
 	reg := newFakeRegistry()
 	conn := &Connector{Client: c, Log: logf.Log.WithName("test"), Clusters: reg}
 
@@ -380,7 +356,7 @@ func TestConnectorDoesNotDropOnAReadFailure(t *testing.T) {
 // Only a MOVE in the reachable set counts. Connect is content-keyed and called
 // on every pass, so signalling whenever it runs would wake the whole fleet on
 // every member's health probe.
-func TestConnectorWakesTheProjectorOnlyWhenReachabilityMoves(t *testing.T) {
+func TestConnector_ReachableSetMoves_SignalsProjectorOnceElseNot(t *testing.T) {
 	tests := []struct {
 		name     string
 		existing []client.Object
@@ -436,9 +412,7 @@ func TestConnectorWakesTheProjectorOnlyWhenReachabilityMoves(t *testing.T) {
 			ch := make(chan event.GenericEvent, 4)
 
 			c := &Connector{
-				Client: fake.NewClientBuilder().
-					WithScheme(connectScheme(t)).
-					WithObjects(tc.existing...).Build(),
+				Client:   fakeclient.New(t, fakeclient.WithObjects(tc.existing...)),
 				Log:      logf.Log.WithName("test"),
 				Clusters: reg,
 				Changed:  ch,
@@ -468,12 +442,10 @@ func TestConnectorWakesTheProjectorOnlyWhenReachabilityMoves(t *testing.T) {
 
 // A Connector with nowhere to signal must still work: workload mode wires no
 // channel, and neither do most tests.
-func TestConnectorWithoutAChannel(t *testing.T) {
+func TestConnector_NoSignalChannel_StillConnectsTheMember(t *testing.T) {
 	reg := newFakeRegistry()
 	c := &Connector{
-		Client: fake.NewClientBuilder().
-			WithScheme(connectScheme(t)).
-			WithObjects(workloadCluster("member-a", true, "kc-a", "kubeconfig"), kubeconfigSecret("kc-a", "kubeconfig", "body")).Build(),
+		Client:   fakeclient.New(t, fakeclient.WithObjects(workloadCluster("member-a", true, "kc-a", "kubeconfig"), kubeconfigSecret("kc-a", "kubeconfig", "body"))),
 		Log:      logf.Log.WithName("test"),
 		Clusters: reg,
 	}

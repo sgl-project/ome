@@ -7,7 +7,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-func TestValidateTrafficSpec(t *testing.T) {
+func TestValidateTrafficSpec_HashAndOverrideShapes_RejectsMissingOrDoubledKeys(t *testing.T) {
 	consistentHash := v1beta1.LoadBalancingTypeConsistentHash
 	leastRequest := v1beta1.LoadBalancingTypeLeastRequest
 	ttlSecs := int64(3600)

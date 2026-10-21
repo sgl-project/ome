@@ -82,10 +82,10 @@ func TestValidateCanary_TrafficToZeroPercentCapacity(t *testing.T) {
 	}
 }
 
-// TestParseCanaryCapacity covers the strict parser: the runtime int/percent
+// TestParseCanaryCapacity_EveryStringForm_RejectsWhatResolvesToZero covers the strict parser: the runtime int/percent
 // resolver maps anything unparsable to zero, so the parser must reject every
 // form the resolver would drop and accept exactly the forms it resolves.
-func TestParseCanaryCapacity(t *testing.T) {
+func TestParseCanaryCapacity_EveryStringForm_RejectsWhatResolvesToZero(t *testing.T) {
 	cases := []struct {
 		name      string
 		in        intstr.IntOrString

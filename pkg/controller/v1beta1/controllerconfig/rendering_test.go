@@ -11,7 +11,7 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 )
 
-func TestRenderingConfigMatchesMemberLoaders(t *testing.T) {
+func TestRenderingConfig_SameConfigMap_MatchesMemberLoadersInputUntouched(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		data map[string]string
@@ -52,7 +52,7 @@ func TestRenderingConfigMatchesMemberLoaders(t *testing.T) {
 	}
 }
 
-func TestRenderingConfigRejectsInvalidInputs(t *testing.T) {
+func TestRenderingConfig_MissingOrMalformedBlock_ErrorWithNoPartialConfig(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		cm   *corev1.ConfigMap

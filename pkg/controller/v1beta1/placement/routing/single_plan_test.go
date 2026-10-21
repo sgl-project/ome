@@ -7,7 +7,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-func TestSingleRoutingUsesCommittedWinner(t *testing.T) {
+func TestServingCandidates_SingleModeMoves_PublishOnlyCommittedClusters(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
 		winner string
@@ -20,7 +20,7 @@ func TestSingleRoutingUsesCommittedWinner(t *testing.T) {
 		{name: "selected replacement can serve alongside winner", winner: "member-a", move: &v1beta1.PlacementSingleMoveStatus{Selected: "member-b"}, want: []string{"member-a", "member-b"}},
 		{name: "committed handoff excludes original", winner: "member-b", move: &v1beta1.PlacementSingleMoveStatus{Selected: "member-b"}, want: []string{"member-b"}},
 		{name: "cancelled selection excludes replacement", winner: "member-a", move: &v1beta1.PlacementSingleMoveStatus{Selected: "member-a"}, want: []string{"member-a"}},
-		{name: "only retained home is published", winner: "member-b", want: []string{"member-b"}},
+		{name: "only retained cluster is published", winner: "member-b", want: []string{"member-b"}},
 		{name: "absent winner does not publish loser", winner: "member-c"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -39,7 +39,7 @@ func TestSingleRoutingUsesCommittedWinner(t *testing.T) {
 	}
 }
 
-func TestSingleZeroFloorRouting(t *testing.T) {
+func TestServingCandidates_SingleModeMinimumZero_RoutesOnlyTheChosenWithReplicas(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
 		winner   string
@@ -73,15 +73,15 @@ func TestSingleZeroFloorRouting(t *testing.T) {
 	}
 }
 
-func TestCancelledSingleSelectionKeepsServingUntilDrain(t *testing.T) {
+func TestServingCandidates_SingleMoveCancelled_OldSelectionServesUntilDrained(t *testing.T) {
 	for _, tt := range []struct {
 		name       string
 		pending    bool
 		allocation v1beta1.CandidateAllocationStatus
 		want       []string
 	}{
-		{name: "selected home can still back the floor", allocation: v1beta1.CandidateAllocationStatus{CurrentReplicas: 1}, want: []string{"member-a", "member-b"}},
-		{name: "allocator authorizes retiring selected home", allocation: v1beta1.CandidateAllocationStatus{CurrentReplicas: 1, DrainRequested: true}, want: []string{"member-a"}},
+		{name: "selected cluster can still back the floor", allocation: v1beta1.CandidateAllocationStatus{CurrentReplicas: 1}, want: []string{"member-a", "member-b"}},
+		{name: "allocator authorizes retiring selected cluster", allocation: v1beta1.CandidateAllocationStatus{CurrentReplicas: 1, DrainRequested: true}, want: []string{"member-a"}},
 		{name: "unselected race probe never receives traffic", allocation: v1beta1.CandidateAllocationStatus{CurrentReplicas: 1, RaceCandidate: true}, want: []string{"member-a"}},
 		{name: "missing selection cannot publish a retained copy", pending: true, allocation: v1beta1.CandidateAllocationStatus{CurrentReplicas: 1}, want: []string{"member-a"}},
 		{name: "retired selection has no positive authority", want: []string{"member-a"}},

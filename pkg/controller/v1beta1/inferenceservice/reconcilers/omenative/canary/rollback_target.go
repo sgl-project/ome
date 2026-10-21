@@ -70,14 +70,14 @@ func describeEmptyTargets(targets []emptyTarget) string {
 // a rollback with nothing to return to; the event says which member and
 // which revision. The operator's rollback request still proceeds from the
 // park, and a new target re-arms the unit.
-func rollBackOnGateFailure(in ReconcileInputs, cs *v1beta1.CanaryStatus, partition int32) *Result {
+func rollBackOnGateFailure(in ReconcileInputs, cs *v1beta1.CanaryStatus) *Result {
 	if empty := emptyRollbackTargets(in, cs); len(empty) > 0 {
 		holdGroupTraffic(in)
-		parkFailed(in.ISVC, in.Component, cs, v1beta1.CanaryFailureStableRevisionMissing, in.Now)
 		emit(in.Recorder, in.ISVC, corev1.EventTypeWarning, EventReasonCanaryStableRevisionEmpty,
 			"%s is not rolled back on its own: %s runs no live Instance to return to; parked Failed at step %d until a rollback is requested (%s) or a new target appears",
 			in.Component, describeEmptyTargets(empty), cs.CurrentStep, constants.RolloutRollbackAnnotation)
-		return (&Result{Active: true, Partition: partition}).wake(in.ParkedRequeue)
+		parkFailed(in, cs, v1beta1.CanaryFailureStableRevisionMissing)
+		return (&Result{Active: true, Partition: in.DesiredReplicas}).wake(in.ParkedRequeue)
 	}
 	cs.RolledBackRevisionHash = cs.CanaryRevisionHash
 	return reconcileRollback(in, cs)

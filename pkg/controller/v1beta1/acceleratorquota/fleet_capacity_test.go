@@ -14,11 +14,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workloadcluster"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 var capacityTime = metav1.NewTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
@@ -78,7 +78,7 @@ func capacityRegistration(name string, uid types.UID) *v1beta1.WorkloadCluster {
 	return &v1beta1.WorkloadCluster{ObjectMeta: metav1.ObjectMeta{Name: name, UID: uid}}
 }
 
-func TestCollectFleetCapacity(t *testing.T) {
+func TestReconcileFleetCapacity_MemberReportShapes_CollectsOnlyIdentifiedRoots(t *testing.T) {
 	fresh := capacityCell(capacityRow())
 	unavailable := capacityCell(capacityRow())
 	unavailable[0].ObservedAt = nil
@@ -179,7 +179,7 @@ func TestCollectFleetCapacity(t *testing.T) {
 	}
 }
 
-func TestCollectFleetCapacityReadFailures(t *testing.T) {
+func TestReconcileFleetCapacity_MemberReadFailsOrDrifts_KeepsSampleAsUnavailable(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
 		intercept interceptor.Funcs
@@ -232,7 +232,7 @@ func TestCollectFleetCapacityReadFailures(t *testing.T) {
 			local := cohort(rootName, "")
 			local.UID = "management-root"
 			local.Status.Capacity = capacityCell(capacityRow())
-			remote := workloadcluster.NewNeverCachingClient(interceptor.NewClient(member(t, capacityMemberRoot()), tt.intercept))
+			remote := workloadcluster.NewNeverCachingClient(fakeclient.Wrap(t, member(t, capacityMemberRoot()), fakeclient.WithInterceptors(tt.intercept)))
 			fleet := &identityFleet{fakeFleet: &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": remote}}, uids: map[string]types.UID{"member-a": "registration-a"}}
 			r, c := projectingReconciler(t, fleet, local, capacityRegistration("member-a", "registration-a"))
 			if err := r.reconcileFleetCapacity(context.Background(), local.UID); err != nil {
@@ -252,7 +252,7 @@ func TestCollectFleetCapacityReadFailures(t *testing.T) {
 	}
 }
 
-func TestAggregateCapacity(t *testing.T) {
+func TestAggregateCapacity_ReportsFromMembers_SumsPerPairAndKeepsOldestTime(t *testing.T) {
 	a := capacityRow()
 	b := capacityRow()
 	b.Cluster, b.ClusterUID, b.ReportUID = "member-b", "registration-b", "report-b"
@@ -296,7 +296,7 @@ func TestAggregateCapacity(t *testing.T) {
 	}
 }
 
-func TestFleetCapacityCollectionFencesConcurrentChanges(t *testing.T) {
+func TestReconcileFleetCapacity_RegistryOrRootChangesMidRead_DoesNotWriteStale(t *testing.T) {
 	for _, tt := range []struct {
 		name          string
 		mutate        func(context.Context, client.Client, *identityFleet) error
@@ -329,7 +329,7 @@ func TestFleetCapacityCollectionFencesConcurrentChanges(t *testing.T) {
 			local.UID = "management-root"
 			fleet := &identityFleet{fakeFleet: &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{}}, uids: map[string]types.UID{"member-a": "registration-a"}}
 			r, c := projectingReconciler(t, fleet, local, capacityRegistration("member-a", "registration-a"))
-			fleet.members["member-a"] = workloadcluster.NewNeverCachingClient(interceptor.NewClient(member(t, capacityMemberRoot()), interceptor.Funcs{Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			fleet.members["member-a"] = workloadcluster.NewNeverCachingClient(fakeclient.Wrap(t, member(t, capacityMemberRoot()), fakeclient.WithInterceptors(interceptor.Funcs{Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 				if err := cl.Get(ctx, key, obj, opts...); err != nil {
 					return err
 				}
@@ -337,7 +337,7 @@ func TestFleetCapacityCollectionFencesConcurrentChanges(t *testing.T) {
 					return tt.mutate(ctx, c, fleet)
 				}
 				return nil
-			}}))
+			}})))
 			err := r.reconcileFleetCapacity(context.Background(), local.UID)
 			if diff := cmp.Diff(tt.wantConflict, apierrors.IsConflict(err)); diff != "" {
 				t.Fatalf("conflict (-want +got):\n%s; error: %v", diff, err)
@@ -366,7 +366,7 @@ func TestFleetCapacityCollectionFencesConcurrentChanges(t *testing.T) {
 	}
 }
 
-func TestFleetCapacityReconcileWithUnreachableMember(t *testing.T) {
+func TestReconcile_OneMemberUnreachable_CollectsCapacityWithoutObservedTime(t *testing.T) {
 	local := cohort(rootName, "")
 	local.UID = "management-root"
 	fleet := &identityFleet{fakeFleet: &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": member(t, capacityMemberRoot())}}, uids: map[string]types.UID{"member-a": "registration-a"}}
@@ -385,7 +385,7 @@ func TestFleetCapacityReconcileWithUnreachableMember(t *testing.T) {
 	}
 }
 
-func TestFleetCapacityLocalReadGuards(t *testing.T) {
+func TestReconcileFleetCapacity_LocalRootMissingOrReplaced_SkipsOrFailsByCause(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
 		rootUID   types.UID
@@ -417,7 +417,7 @@ func TestFleetCapacityLocalReadGuards(t *testing.T) {
 			}
 			fleet := &identityFleet{fakeFleet: &fakeFleet{}, uids: map[string]types.UID{}}
 			r, _ := projectingReconciler(t, fleet, local)
-			r.APIReader = fake.NewClientBuilder().WithScheme(r.Scheme).WithObjects(local).WithInterceptorFuncs(tt.intercept).Build()
+			r.APIReader = fakeclient.New(t, fakeclient.WithScheme(r.Scheme), fakeclient.WithObjects(local), fakeclient.WithInterceptors(tt.intercept))
 			err := r.reconcileFleetCapacity(context.Background(), tt.rootUID)
 			if diff := cmp.Diff(tt.wantError, err != nil); diff != "" {
 				t.Fatalf("error presence (-want +got):\n%s; error: %v", diff, err)
@@ -426,20 +426,13 @@ func TestFleetCapacityLocalReadGuards(t *testing.T) {
 	}
 }
 
-func TestFleetCapacityRegistryRecheckFailure(t *testing.T) {
+func TestReconcileFleetCapacity_RegistryRecheckFails_LeavesCapacityUnchanged(t *testing.T) {
 	local := cohort(rootName, "")
 	local.UID = "management-root"
 	local.Status.Capacity = capacityCell(capacityRow())
 	fleet := &identityFleet{fakeFleet: &fakeFleet{}, uids: map[string]types.UID{}}
 	r, c := projectingReconciler(t, fleet, local)
-	var calls int
-	r.APIReader = interceptor.NewClient(c.(client.WithWatch), interceptor.Funcs{List: func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
-		calls++
-		if calls == 2 {
-			return errors.New("registry unavailable")
-		}
-		return cl.List(ctx, list, opts...)
-	}})
+	r.APIReader = fakeclient.Wrap(t, c, fakeclient.FailingVerb(fakeclient.List, 2, errors.New("registry unavailable")))
 	if err := r.reconcileFleetCapacity(context.Background(), local.UID); err == nil {
 		t.Fatal("expected registry read error")
 	}
@@ -452,7 +445,7 @@ func TestFleetCapacityRegistryRecheckFailure(t *testing.T) {
 	}
 }
 
-func TestCapacityReconcileWithoutFleetParticipation(t *testing.T) {
+func TestReconcile_NoFleetConfigured_LeavesLocalCapacityAsIs(t *testing.T) {
 	for _, mode := range []Mode{ModeWorkload, ModeManagement} {
 		t.Run(string(mode), func(t *testing.T) {
 			local := capacityMemberRoot()

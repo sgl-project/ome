@@ -167,6 +167,8 @@ func (d *Decoder) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferen
 			TopologySpread:            d.decoderSpec.TopologySpread,
 			TopologySpreadKey:         d.decoderSpec.TopologySpreadKey,
 			PacingPartition:           d.PacingPartition,
+			CoordinatorFollower:       d.CoordinatorFollower,
+			CoordinatorTarget:         d.CoordinatorTarget,
 			ResolvedAutoscaler:        res.Resolved,
 			PreserveAutoscaler:        res.Hold,
 			QuotaAcceleratorResources: d.QuotaAcceleratorResources,

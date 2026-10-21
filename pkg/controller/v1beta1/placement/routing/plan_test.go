@@ -19,15 +19,15 @@ func plannedRoutingSource() *v1beta1.InferenceService {
 	return source
 }
 
-func TestBuildSpecPlannedDrain(t *testing.T) {
+func TestBuildSpec_DrainRequestedOnCandidates_ZerosThemAndSetsRoutable(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
 		drain  []bool
 		want   []int32
 		status metav1.ConditionStatus
 	}{
-		{name: "both standing homes retain traffic", drain: []bool{false, false}, want: []int32{1, 1}, status: metav1.ConditionTrue},
-		{name: "retiring home withdraws before deletion", drain: []bool{true, false}, want: []int32{0, 1}, status: metav1.ConditionTrue},
+		{name: "both standing clusters retain traffic", drain: []bool{false, false}, want: []int32{1, 1}, status: metav1.ConditionTrue},
+		{name: "retiring cluster withdraws before deletion", drain: []bool{true, false}, want: []int32{0, 1}, status: metav1.ConditionTrue},
 		{name: "whole placement can publish empty capacity", drain: []bool{true, true}, want: []int32{0, 0}, status: metav1.ConditionFalse},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -53,7 +53,7 @@ func TestBuildSpecPlannedDrain(t *testing.T) {
 	}
 }
 
-func TestApplyRequiresCurrentAllocation(t *testing.T) {
+func TestApply_SourceMovedOnOrNoLiveReader_WritesNoMap(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
 		edit     func(*v1beta1.InferenceService)

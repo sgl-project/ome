@@ -12,11 +12,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 	"sigs.k8s.io/ome/pkg/validation"
 )
 
@@ -35,7 +35,7 @@ func runtimeProportionalPolicy(decoderRatio string) *v1beta1.ScalingPolicy {
 // mkRuntimeSpec builds the minimal valid runtime spec shared by the SR and
 // CSR scaling-policy tests.
 func mkRuntimeSpec(policy *v1beta1.ScalingPolicy) v1beta1.ServingRuntimeSpec {
-	return v1beta1.ServingRuntimeSpec{
+	spec := v1beta1.ServingRuntimeSpec{
 		SupportedModelFormats: []v1beta1.SupportedModelFormat{
 			{
 				Name:       "safetensors",
@@ -59,6 +59,11 @@ func mkRuntimeSpec(policy *v1beta1.ScalingPolicy) v1beta1.ServingRuntimeSpec {
 		},
 		ScalingPolicy: policy,
 	}
+	if policy != nil && policy.Mode == v1beta1.ScalingProportional {
+		spec.EngineConfig = &v1beta1.EngineSpec{}
+		spec.DecoderConfig = &v1beta1.DecoderSpec{}
+	}
+	return spec
 }
 
 func mkSRWithPolicy(name string, policy *v1beta1.ScalingPolicy) *v1beta1.ServingRuntime {
@@ -103,13 +108,13 @@ func updateReq(t *testing.T, oldObj, newObj any) admission.Request {
 
 func newSRValidator(t *testing.T) *ServingRuntimeValidator {
 	t.Helper()
-	c := ctrlclientfake.NewClientBuilder().WithScheme(newScheme(t)).Build()
+	c := fakeclient.New(t)
 	return &ServingRuntimeValidator{Client: c, Decoder: newCSRDecoder(t)}
 }
 
 func newCSRValidator(t *testing.T) *ClusterServingRuntimeValidator {
 	t.Helper()
-	c := ctrlclientfake.NewClientBuilder().WithScheme(newScheme(t)).Build()
+	c := fakeclient.New(t)
 	return &ClusterServingRuntimeValidator{Client: c, Decoder: newCSRDecoder(t)}
 }
 
@@ -121,7 +126,7 @@ func TestServingRuntime_ScalingPolicyCreate(t *testing.T) {
 	}{
 		{name: "nil policy allowed", policy: nil, wantAllowed: true},
 		{name: "Independent allowed", policy: &v1beta1.ScalingPolicy{Mode: v1beta1.ScalingIndependent}, wantAllowed: true},
-		{name: "Proportional denied", policy: runtimeProportionalPolicy("1")},
+		{name: "Proportional allowed", policy: runtimeProportionalPolicy("1"), wantAllowed: true},
 		{name: "Pinned denied", policy: &v1beta1.ScalingPolicy{Mode: v1beta1.ScalingPinned}},
 	}
 	for _, tt := range tests {
@@ -153,12 +158,12 @@ func TestServingRuntime_ScalingPolicyUpdate(t *testing.T) {
 	}{
 		{name: "nil to nil allowed", wantAllowed: true},
 		{name: "nil to Independent allowed", newPolicy: &v1beta1.ScalingPolicy{Mode: v1beta1.ScalingIndependent}, wantAllowed: true},
-		{name: "newly set Proportional denied", newPolicy: runtimeProportionalPolicy("1")},
+		{name: "newly set Proportional allowed", newPolicy: runtimeProportionalPolicy("1"), wantAllowed: true},
 		{name: "newly set Pinned denied", newPolicy: &v1beta1.ScalingPolicy{Mode: v1beta1.ScalingPinned}},
-		{name: "Independent to Proportional denied", oldPolicy: &v1beta1.ScalingPolicy{Mode: v1beta1.ScalingIndependent}, newPolicy: runtimeProportionalPolicy("1")},
+		{name: "Independent to Proportional allowed", oldPolicy: &v1beta1.ScalingPolicy{Mode: v1beta1.ScalingIndependent}, newPolicy: runtimeProportionalPolicy("1"), wantAllowed: true},
 		{name: "unchanged stored Proportional ratchets through", oldPolicy: runtimeProportionalPolicy("1"), newPolicy: runtimeProportionalPolicy("1"), wantAllowed: true},
 		{name: "unchanged stored Pinned ratchets through", oldPolicy: &v1beta1.ScalingPolicy{Mode: v1beta1.ScalingPinned}, newPolicy: &v1beta1.ScalingPolicy{Mode: v1beta1.ScalingPinned}, wantAllowed: true},
-		{name: "changed Proportional ratio denied", oldPolicy: runtimeProportionalPolicy("1"), newPolicy: runtimeProportionalPolicy("2")},
+		{name: "changed Proportional ratio allowed", oldPolicy: runtimeProportionalPolicy("1"), newPolicy: runtimeProportionalPolicy("2"), wantAllowed: true},
 		{name: "Proportional to Independent allowed", oldPolicy: runtimeProportionalPolicy("1"), newPolicy: &v1beta1.ScalingPolicy{Mode: v1beta1.ScalingIndependent}, wantAllowed: true},
 		{name: "Proportional removed allowed", oldPolicy: runtimeProportionalPolicy("1"), newPolicy: nil, wantAllowed: true},
 	}
@@ -184,22 +189,20 @@ func TestServingRuntime_ScalingPolicyUpdate(t *testing.T) {
 	}
 }
 
-// TestServingRuntime_ScalingPolicyCheckedWhileDisabled pins that the check
-// runs before the disabled-shortcut: a disabled runtime cannot store a
-// rejected mode that the update ratchet would later treat as pre-existing.
+// A disabled runtime still validates a newly declared scaling policy.
 func TestServingRuntime_ScalingPolicyCheckedWhileDisabled(t *testing.T) {
 	g := gomega.NewWithT(t)
-	sr := mkSRWithPolicy("rt-disabled", runtimeProportionalPolicy("1"))
+	sr := mkSRWithPolicy("rt-disabled", runtimeProportionalPolicy("0"))
 	sr.Spec.Disabled = proto.Bool(true)
 	resp := newSRValidator(t).Handle(context.Background(), createReq(t, sr))
 	g.Expect(resp.Allowed).To(gomega.BeFalse(), "resp=%v", resp.Result)
-	g.Expect(resp.Result.Message).To(gomega.ContainSubstring(validation.ReasonScalingModeNotImplemented))
+	g.Expect(resp.Result.Message).To(gomega.ContainSubstring("ratios"))
 
-	csr := mkCSRWithPolicy("crt-disabled", runtimeProportionalPolicy("1"))
+	csr := mkCSRWithPolicy("crt-disabled", runtimeProportionalPolicy("0"))
 	csr.Spec.Disabled = proto.Bool(true)
 	resp = newCSRValidator(t).Handle(context.Background(), createReq(t, csr))
 	g.Expect(resp.Allowed).To(gomega.BeFalse(), "resp=%v", resp.Result)
-	g.Expect(resp.Result.Message).To(gomega.ContainSubstring(validation.ReasonScalingModeNotImplemented))
+	g.Expect(resp.Result.Message).To(gomega.ContainSubstring("ratios"))
 }
 
 // TestServingRuntime_ScalingPolicyRatchetAllowsUnrelatedUpdate pins the

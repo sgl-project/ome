@@ -1,9 +1,8 @@
 package resolution
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"strings"
 	"testing"
 
@@ -15,13 +14,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 const unitGPU = "example.com/gpu"
@@ -73,15 +71,8 @@ func unitFineTunedWeight(f *runtimeFixture) *v1beta1.FineTunedWeight {
 	return weight
 }
 
-func unitClient(t *testing.T, f runtimeFixture, intercept interceptor.Funcs) client.WithWatch {
+func unitClient(t *testing.T, f runtimeFixture, opts ...fakeclient.Option) client.WithWatch {
 	t.Helper()
-	scheme := runtimeScheme(t)
-	if err := nodev1.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
-	if err := kueuev1beta2.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
 	objects := append([]client.Object{f.runtime}, f.extra...)
 	if f.standing != nil {
 		objects = append(objects, f.standing)
@@ -89,7 +80,11 @@ func unitClient(t *testing.T, f runtimeFixture, intercept interceptor.Funcs) cli
 	for i := range objects {
 		objects[i] = objects[i].DeepCopyObject().(client.Object)
 	}
-	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).WithInterceptorFuncs(intercept).Build()
+	return fakeclient.New(t, append([]fakeclient.Option{
+		fakeclient.WithScheme(runtimeScheme(t)),
+		fakeclient.WithTypes(nodev1.AddToScheme, kueuev1beta2.AddToScheme),
+		fakeclient.WithObjects(objects...),
+	}, opts...)...)
 }
 
 func unitJSON(t *testing.T, value any) string {
@@ -206,25 +201,8 @@ func TestResolveRenderedUnit(t *testing.T) {
 				tt.mutate(&f, cm)
 			}
 			before := unitJSON(t, []any{f.service, f.runtime, f.extra})
-			writes := 0
-			cl := unitClient(t, f, interceptor.Funcs{
-				Create: func(context.Context, client.WithWatch, client.Object, ...client.CreateOption) error {
-					writes++
-					return fmt.Errorf("unexpected create")
-				},
-				Update: func(context.Context, client.WithWatch, client.Object, ...client.UpdateOption) error {
-					writes++
-					return fmt.Errorf("unexpected update")
-				},
-				Patch: func(context.Context, client.WithWatch, client.Object, client.Patch, ...client.PatchOption) error {
-					writes++
-					return fmt.Errorf("unexpected patch")
-				},
-				Delete: func(context.Context, client.WithWatch, client.Object, ...client.DeleteOption) error {
-					writes++
-					return fmt.Errorf("unexpected delete")
-				},
-			})
+			writes := fakeclient.CountingWrites()
+			cl := unitClient(t, f, writes, fakeclient.FailingWrites(fakeclient.EveryCall, errors.New("unexpected object write")))
 			got, err := (Resolver{Client: cl, OperatorNamespace: f.namespace}).ResolveUnit(t.Context(), f.service, f.standing)
 			if err != nil {
 				t.Fatal(err)
@@ -240,7 +218,7 @@ func TestResolveRenderedUnit(t *testing.T) {
 			if err := got.Check(t.Context()); err != nil {
 				t.Fatal(err)
 			}
-			if diff := cmp.Diff(0, writes); diff != "" {
+			if diff := cmp.Diff(0, writes.Count()); diff != "" {
 				t.Fatalf("writes (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(before, unitJSON(t, []any{f.service, f.runtime, f.extra})); diff != "" {
@@ -322,7 +300,7 @@ func TestResolveUnitRejectsUnknownRendering(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f, cm := newUnitFixture()
 			tt.mutate(&f, cm)
-			got, err := (Resolver{Client: unitClient(t, f, interceptor.Funcs{}), OperatorNamespace: f.namespace}).ResolveUnit(t.Context(), f.service, f.standing)
+			got, err := (Resolver{Client: unitClient(t, f), OperatorNamespace: f.namespace}).ResolveUnit(t.Context(), f.service, f.standing)
 			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
 				t.Fatalf("error = %v, want containing %q", err, tt.wantError)
 			}

@@ -15,7 +15,6 @@ import (
 	"knative.dev/pkg/apis"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -23,6 +22,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	placementcontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/placement"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 // placedISVC builds a control-plane ISVC whose placement reports a winner with
@@ -41,12 +41,9 @@ func placedISVC(cluster, backendHost string) *v1beta1.InferenceService {
 	}
 }
 
-func newReconciler(t *testing.T, cfg Config, objs ...client.Object) (*Reconciler, client.Client) {
+func newReconciler(t *testing.T, cfg Config, objs ...client.Object) (*Reconciler, client.WithWatch) {
 	t.Helper()
-	s := pubScheme(t)
-	c := newGatewayFakeClientBuilder(t, s).
-		WithStatusSubresource(&v1beta1.InferenceService{}).
-		WithObjects(objs...).Build()
+	c := gatewayClient(t, fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}), fakeclient.WithObjects(objs...))
 	return &Reconciler{
 		Client:    c,
 		APIReader: c,
@@ -73,49 +70,12 @@ func (p *recordingEndpointPublisher) Unpublish(context.Context, *v1beta1.Inferen
 
 func (*recordingEndpointPublisher) Name() string { return "recording" }
 
-// trafficMapBlindClient simulates an informer cache that has not observed a
-// TrafficMap which is already visible through the direct API reader.
-type trafficMapBlindClient struct {
-	client.Client
-}
-
-func (c trafficMapBlindClient) Get(
-	ctx context.Context,
-	key client.ObjectKey,
-	object client.Object,
-	opts ...client.GetOption,
-) error {
-	if _, ok := object.(*v1beta1.TrafficMap); ok {
-		return apierrors.NewNotFound(schema.GroupResource{
-			Group: v1beta1.SchemeGroupVersion.Group, Resource: "trafficmaps",
-		}, key.Name)
-	}
-	return c.Client.Get(ctx, key, object, opts...)
-}
-
-// trafficMapAppearingReader simulates a TrafficMap publisher acquiring its
-// durable handoff state between the legacy reconciler's initial check and its
-// external publish or unpublish call.
-type trafficMapAppearingReader struct {
-	client.Reader
-	trafficMapReads int
-}
-
-func (r *trafficMapAppearingReader) Get(
-	ctx context.Context,
-	key client.ObjectKey,
-	object client.Object,
-	opts ...client.GetOption,
-) error {
-	if _, ok := object.(*v1beta1.TrafficMap); ok {
-		r.trafficMapReads++
-		if r.trafficMapReads == 1 {
-			return apierrors.NewNotFound(schema.GroupResource{
-				Group: v1beta1.SchemeGroupVersion.Group, Resource: "trafficmaps",
-			}, key.Name)
-		}
-	}
-	return r.Reader.Get(ctx, key, object, opts...)
+// trafficMapUnseen is the read of a TrafficMap by a cache that has not
+// observed it yet, while the direct API reader already has.
+func trafficMapUnseen() error {
+	return apierrors.NewNotFound(schema.GroupResource{
+		Group: v1beta1.SchemeGroupVersion.Group, Resource: "trafficmaps",
+	}, "svc")
 }
 
 func reconcile(t *testing.T, r *Reconciler) {
@@ -154,10 +114,7 @@ func TestReconcile_PlacedPublishesAndFinalizes(t *testing.T) {
 func TestReconcile_GatewayBackendSchedulesAddressRefresh(t *testing.T) {
 	cfg := gatewayBackendConfig()
 	cfg.GatewayBackend.EndpointSlices.AddressRefreshInterval = 45 * time.Second
-	s := pubScheme(t)
-	c := fakeclient.NewClientBuilder().WithScheme(s).
-		WithStatusSubresource(&v1beta1.InferenceService{}).
-		WithObjects(placedISVC("cluster-a", "svc.prod.cloud-a.example")).Build()
+	c := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}), fakeclient.WithObjects(placedISVC("cluster-a", "svc.prod.cloud-a.example")))
 	publisher := NewGatewayAPIPublisher(c, cfg, WithBackendAddressResolver(staticBackendAddressResolver{
 		"cluster-a": {{Address: "192.0.2.10", Type: "IPv4"}},
 	}))
@@ -174,7 +131,7 @@ func TestReconcile_RepointsOnReplacement(t *testing.T) {
 	r, c := newReconciler(t, baseConfig(), placedISVC("cluster-a", "svc.prod.cloud-a.example"))
 	reconcile(t, r)
 
-	// Simulate the placement controller re-homing onto a new cluster.
+	// Simulate the placement controller placing the service onto a new cluster.
 	cur := &v1beta1.InferenceService{}
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "svc", Namespace: "prod"}, cur))
 	cur.Status.Placement.Cluster = "cluster-b"
@@ -188,9 +145,9 @@ func TestReconcile_RepointsOnReplacement(t *testing.T) {
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "svc-global-cluster-b", Namespace: "prod"}, svc))
 	assert.Equal(t, "svc.prod.cloud-b.example", svc.Spec.ExternalName, "ExternalName repointed to new winner")
 	assert.Equal(t, "cluster-b", svc.Labels[PlacementClusterLabel])
-	// The old winner's per-home Service is garbage-collected.
+	// The old winner's per-cluster Service is garbage-collected.
 	errOld := c.Get(context.Background(), types.NamespacedName{Name: "svc-global-cluster-a", Namespace: "prod"}, &corev1.Service{})
-	assert.True(t, apierrors.IsNotFound(errOld), "old winner's Service GC'd on re-home")
+	assert.True(t, apierrors.IsNotFound(errOld), "old winner's Service GC'd on re-placement")
 }
 
 func TestReconcile_UnplacedTearsDownAndDropsFinalizer(t *testing.T) {
@@ -251,7 +208,7 @@ func TestReconcile_UnpublishRetainsFinalizerUntilRouteIsGone(t *testing.T) {
 }
 
 func TestReconcile_LegacyPublisherIgnoresTrafficMapWeights(t *testing.T) {
-	// A Split ISVC with two admitted homes whose reactive ready-replica ratio is
+	// A Split ISVC with two admitted clusters whose reactive ready-replica ratio is
 	// 5:2, plus a TrafficMap the routing controller published carrying a
 	// capacity-aware 1:3 split. Once the publisher handoff is released, the
 	// legacy route must use the reactive placement weights.
@@ -317,7 +274,7 @@ func TestReconcile_AuthoritativeTrafficMapStateBlocksLegacyEffects(t *testing.T)
 			isvc := placedISVC("cluster-a", "svc.prod.cloud-a.example")
 			r, apiClient := newReconciler(t, baseConfig(), isvc, tt.trafficMap)
 			publisher := &recordingEndpointPublisher{}
-			r.Client = trafficMapBlindClient{Client: apiClient}
+			r.Client = fakeclient.Wrap(t, apiClient, fakeclient.FailingVerb(fakeclient.Get, fakeclient.EveryCall, trafficMapUnseen()).OnKind(&v1beta1.TrafficMap{}))
 			r.APIReader = apiClient
 			r.Publisher = publisher
 
@@ -332,7 +289,7 @@ func TestReconcile_AuthoritativeTrafficMapStateBlocksLegacyEffects(t *testing.T)
 	}
 }
 
-func TestReconcile_OwnerlessTrafficMapHandoffReleaseEnqueuesFinalizerCleanup(t *testing.T) {
+func TestReconcile_DeletingMapClearsPublisherRecord_EnqueuesISVCAndUnpublishes(t *testing.T) {
 	isvc := placedISVC("cluster-a", "svc.prod.cloud-a.example")
 	isvc.Finalizers = []string{EndpointFinalizer, placementcontroller.PlacementFinalizer}
 	trafficMap := &v1beta1.TrafficMap{
@@ -389,14 +346,17 @@ func TestReconcile_RechecksTrafficMapImmediatelyBeforeEffects(t *testing.T) {
 		isvc := placedISVC("cluster-a", "svc.prod.cloud-a.example")
 		r, apiClient := newReconciler(t, baseConfig(), isvc, trafficMap.DeepCopy())
 		publisher := &recordingEndpointPublisher{}
-		reader := &trafficMapAppearingReader{Reader: apiClient}
-		r.APIReader = reader
+		// The TrafficMap publisher acquires its durable state between the
+		// reconciler's first check and its publish or unpublish call.
+		trafficMapReads := fakeclient.CountingVerb(fakeclient.Get).OnKind(&v1beta1.TrafficMap{})
+		r.APIReader = fakeclient.Wrap(t, apiClient, trafficMapReads,
+			fakeclient.FailingVerb(fakeclient.Get, 1, trafficMapUnseen()).OnKind(&v1beta1.TrafficMap{}))
 		r.Publisher = publisher
 
 		reconcile(t, r)
 
 		assert.Empty(t, publisher.published)
-		assert.Equal(t, 2, reader.trafficMapReads)
+		assert.Equal(t, 2, trafficMapReads.Count())
 	})
 
 	t.Run("unpublish", func(t *testing.T) {
@@ -406,14 +366,17 @@ func TestReconcile_RechecksTrafficMapImmediatelyBeforeEffects(t *testing.T) {
 		cfg.GlobalGateway = ""
 		r, apiClient := newReconciler(t, cfg, isvc, trafficMap.DeepCopy())
 		publisher := &recordingEndpointPublisher{}
-		reader := &trafficMapAppearingReader{Reader: apiClient}
-		r.APIReader = reader
+		// The TrafficMap publisher acquires its durable state between the
+		// reconciler's first check and its publish or unpublish call.
+		trafficMapReads := fakeclient.CountingVerb(fakeclient.Get).OnKind(&v1beta1.TrafficMap{})
+		r.APIReader = fakeclient.Wrap(t, apiClient, trafficMapReads,
+			fakeclient.FailingVerb(fakeclient.Get, 1, trafficMapUnseen()).OnKind(&v1beta1.TrafficMap{}))
 		r.Publisher = publisher
 
 		reconcile(t, r)
 
 		assert.Zero(t, publisher.unpublished)
-		assert.Equal(t, 2, reader.trafficMapReads)
+		assert.Equal(t, 2, trafficMapReads.Count())
 		got := &v1beta1.InferenceService{}
 		require.NoError(t, apiClient.Get(context.Background(), client.ObjectKeyFromObject(isvc), got))
 		assert.Contains(t, got.Finalizers, EndpointFinalizer)
@@ -448,9 +411,9 @@ func TestReconcile_ReleasedTerminatingTrafficMapUsesReactiveWeights(t *testing.T
 	reconcile(t, r)
 
 	require.Len(t, publisher.published, 1)
-	require.Len(t, publisher.published[0].Homes, 2)
-	assert.Equal(t, int32(5), publisher.published[0].Homes[0].Weight)
-	assert.Equal(t, int32(2), publisher.published[0].Homes[1].Weight)
+	require.Len(t, publisher.published[0].Clusters, 2)
+	assert.Equal(t, int32(5), publisher.published[0].Clusters[0].Weight)
+	assert.Equal(t, int32(2), publisher.published[0].Clusters[1].Weight)
 	assert.False(t, publisher.published[0].WeightsAuthoritative)
 }
 
@@ -563,7 +526,7 @@ func TestReconcile_NoGlobalHostNeverPublishes(t *testing.T) {
 	assert.True(t, apierrors.IsNotFound(err), "no host resolvable -> nothing published (no magic default)")
 }
 
-func TestResolveTarget(t *testing.T) {
+func TestResolveTarget_PlacementAndMapWeights_BuildsClustersAndWeights(t *testing.T) {
 	r := &Reconciler{Config: baseConfig()}
 
 	t.Run("placed + endpoint -> ok", func(t *testing.T) {
@@ -571,9 +534,9 @@ func TestResolveTarget(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, ok)
 		assert.Equal(t, "svc.prod.global.example", tgt.GlobalHost)
-		require.Len(t, tgt.Homes, 1)
-		assert.Equal(t, "cloud-a", tgt.Homes[0].Cluster)
-		assert.Equal(t, "h.example", tgt.Homes[0].BackendHost)
+		require.Len(t, tgt.Clusters, 1)
+		assert.Equal(t, "cloud-a", tgt.Clusters[0].Cluster)
+		assert.Equal(t, "h.example", tgt.Clusters[0].BackendHost)
 	})
 
 	t.Run("nil placement -> not ok", func(t *testing.T) {
@@ -590,7 +553,7 @@ func TestResolveTarget(t *testing.T) {
 		assert.False(t, ok)
 	})
 
-	t.Run("All: admitted candidates -> one home each, sorted", func(t *testing.T) {
+	t.Run("All: admitted candidates -> one cluster each, sorted", func(t *testing.T) {
 		isvc := &v1beta1.InferenceService{
 			ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "prod"},
 			Status: v1beta1.InferenceServiceStatus{Placement: &v1beta1.PlacementStatus{
@@ -598,21 +561,21 @@ func TestResolveTarget(t *testing.T) {
 				Candidates: []v1beta1.CandidatePlacement{
 					{Cluster: "workload-2", Phase: v1beta1.CandidatePhaseAdmitted, Endpoint: apis.HTTPS("b.example")},
 					{Cluster: "workload-1", Phase: v1beta1.CandidatePhaseAdmitted, Endpoint: apis.HTTPS("a.example")},
-					{Cluster: "workload-3", Phase: v1beta1.CandidatePhaseAdmitting}, // gated: not a home
+					{Cluster: "workload-3", Phase: v1beta1.CandidatePhaseAdmitting}, // gated: not a cluster
 				},
 			}},
 		}
 		tgt, ok, err := r.resolveTarget(isvc, nil)
 		require.NoError(t, err)
 		require.True(t, ok)
-		require.Len(t, tgt.Homes, 2, "only admitted+addressable candidates are homes")
-		assert.Equal(t, "workload-1", tgt.Homes[0].Cluster, "sorted by cluster")
-		assert.Equal(t, "a.example", tgt.Homes[0].BackendHost)
-		assert.Equal(t, "workload-2", tgt.Homes[1].Cluster)
-		assert.Equal(t, "b.example", tgt.Homes[1].BackendHost)
+		require.Len(t, tgt.Clusters, 2, "only admitted+addressable candidates are clusters")
+		assert.Equal(t, "workload-1", tgt.Clusters[0].Cluster, "sorted by cluster")
+		assert.Equal(t, "a.example", tgt.Clusters[0].BackendHost)
+		assert.Equal(t, "workload-2", tgt.Clusters[1].Cluster)
+		assert.Equal(t, "b.example", tgt.Clusters[1].BackendHost)
 	})
 
-	t.Run("placed but no addressable home -> not ok", func(t *testing.T) {
+	t.Run("placed but no addressable cluster -> not ok", func(t *testing.T) {
 		isvc := &v1beta1.InferenceService{
 			ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "prod"},
 			Status: v1beta1.InferenceServiceStatus{Placement: &v1beta1.PlacementStatus{
@@ -640,12 +603,12 @@ func TestResolveTarget(t *testing.T) {
 		tgt, ok, err := r.resolveTarget(isvc, nil)
 		require.NoError(t, err)
 		require.True(t, ok)
-		require.Len(t, tgt.Homes, 1)
-		assert.Equal(t, "svc.inf-prod.svc.cluster.local", tgt.Homes[0].BackendHost,
+		require.Len(t, tgt.Clusters, 1)
+		assert.Equal(t, "svc.inf-prod.svc.cluster.local", tgt.Clusters[0].BackendHost,
 			"port stripped so spec.externalName stays RFC-1123 valid")
 	})
 
-	t.Run("Split: per-home ready replicas become home weights", func(t *testing.T) {
+	t.Run("Split: per-cluster ready replicas become cluster weights", func(t *testing.T) {
 		isvc := &v1beta1.InferenceService{
 			ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "prod"},
 			Status: v1beta1.InferenceServiceStatus{Placement: &v1beta1.PlacementStatus{
@@ -659,9 +622,9 @@ func TestResolveTarget(t *testing.T) {
 		tgt, ok, err := r.resolveTarget(isvc, nil)
 		require.NoError(t, err)
 		require.True(t, ok)
-		require.Len(t, tgt.Homes, 2)
-		assert.Equal(t, int32(5), tgt.Homes[0].Weight, "home a weight = its ready replicas")
-		assert.Equal(t, int32(2), tgt.Homes[1].Weight, "home b weight = its ready replicas")
+		require.Len(t, tgt.Clusters, 2)
+		assert.Equal(t, int32(5), tgt.Clusters[0].Weight, "cluster a weight = its ready replicas")
+		assert.Equal(t, int32(2), tgt.Clusters[1].Weight, "cluster b weight = its ready replicas")
 	})
 
 	t.Run("TrafficMap weights override the reactive ready-replica split", func(t *testing.T) {
@@ -680,13 +643,13 @@ func TestResolveTarget(t *testing.T) {
 		tgt, ok, err := r.resolveTarget(isvc, map[string]int32{"a": 1, "b": 3})
 		require.NoError(t, err)
 		require.True(t, ok)
-		require.Len(t, tgt.Homes, 2)
-		assert.Equal(t, int32(1), tgt.Homes[0].Weight, "home a takes the TrafficMap weight, not its 5 ready replicas")
-		assert.Equal(t, int32(3), tgt.Homes[1].Weight, "home b takes the TrafficMap weight, not its 2 ready replicas")
+		require.Len(t, tgt.Clusters, 2)
+		assert.Equal(t, int32(1), tgt.Clusters[0].Weight, "cluster a takes the TrafficMap weight, not its 5 ready replicas")
+		assert.Equal(t, int32(3), tgt.Clusters[1].Weight, "cluster b takes the TrafficMap weight, not its 2 ready replicas")
 		assert.True(t, tgt.WeightsAuthoritative)
 	})
 
-	t.Run("home absent from the TrafficMap keeps its reactive weight", func(t *testing.T) {
+	t.Run("cluster absent from the TrafficMap keeps its reactive weight", func(t *testing.T) {
 		isvc := &v1beta1.InferenceService{
 			ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "prod"},
 			Status: v1beta1.InferenceServiceStatus{Placement: &v1beta1.PlacementStatus{
@@ -697,19 +660,19 @@ func TestResolveTarget(t *testing.T) {
 				},
 			}},
 		}
-		// TrafficMap lags placement: it only knows about home a. Home b falls back
+		// TrafficMap lags placement: it only knows about cluster a. cluster b falls back
 		// to its live ready-replica count rather than dropping to zero.
 		tgt, ok, err := r.resolveTarget(isvc, map[string]int32{"a": 9})
 		require.NoError(t, err)
 		require.True(t, ok)
-		require.Len(t, tgt.Homes, 2)
-		assert.Equal(t, int32(9), tgt.Homes[0].Weight, "home a takes its TrafficMap weight")
-		assert.Equal(t, int32(2), tgt.Homes[1].Weight, "home b, absent from the map, keeps its reactive weight")
+		require.Len(t, tgt.Clusters, 2)
+		assert.Equal(t, int32(9), tgt.Clusters[0].Weight, "cluster a takes its TrafficMap weight")
+		assert.Equal(t, int32(2), tgt.Clusters[1].Weight, "cluster b, absent from the map, keeps its reactive weight")
 		assert.False(t, tgt.WeightsAuthoritative, "a partial map cannot authorize an all-zero route")
 	})
 }
 
-func TestPlacementPublishChange(t *testing.T) {
+func TestPlacementPublishChange_ISVCUpdates_PassPublicationChangesDropChurn(t *testing.T) {
 	base := placedISVC("cloud-a", "h.example")
 
 	t.Run("phase change passes", func(t *testing.T) {
@@ -781,7 +744,7 @@ func TestPlacementPublishChange(t *testing.T) {
 	})
 }
 
-func TestTrafficMapPublishChange(t *testing.T) {
+func TestTrafficMapPublishChange_MapUpdates_PassPublicationChangesDropChurn(t *testing.T) {
 	base := &v1beta1.TrafficMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "prod", Generation: 1},
 		Spec: v1beta1.TrafficMapSpec{
@@ -972,7 +935,7 @@ func TestTrafficMapPublishChange(t *testing.T) {
 	})
 }
 
-func TestSetupWithManagerRequiresAPIReader(t *testing.T) {
+func TestSetupWithManager_NoAPIReader_ReturnsError(t *testing.T) {
 	err := (&Reconciler{}).SetupWithManager(nil)
 	require.ErrorContains(t, err, "API reader is not configured")
 }

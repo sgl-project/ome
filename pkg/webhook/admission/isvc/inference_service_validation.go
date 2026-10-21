@@ -114,6 +114,9 @@ func (v *InferenceServiceValidator) ValidateCreate(ctx context.Context, isvc *v1
 	if err := validation.ValidateScalingPolicy(isvc.Spec.ScalingPolicy, "spec.scalingPolicy"); err != nil {
 		return nil, err
 	}
+	if err := validation.ValidateScalingPolicyService(isvc); err != nil {
+		return nil, err
+	}
 	// old=nil: every migration-request annotation present at CREATE is
 	// an add and gets validated (parity with the update path).
 	if err := validateAddedMigrationRequests(nil, isvc); err != nil {
@@ -158,10 +161,12 @@ func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldIsvc,
 	if err := validateLegacyAutoscalerFieldsFromCtx(ctx); err != nil {
 		return nil, err
 	}
-	if err := validation.ValidatePlacementPolicyUpdate(&oldIsvc.Spec, &isvc.Spec); err != nil {
+	// The mode rule runs before the policy rule so a removed block is refused
+	// as the mode change it is, with the mode the service keeps named.
+	if err := validation.ValidatePlacementModeUpdate(&oldIsvc.Spec, &isvc.Spec); err != nil {
 		return nil, err
 	}
-	if err := validation.ValidateCoordinationUpdate(&oldIsvc.Spec, &isvc.Spec); err != nil {
+	if err := validation.ValidatePlacementPolicyUpdate(&oldIsvc.Spec, &isvc.Spec); err != nil {
 		return nil, err
 	}
 	if err := validation.ValidatePairingProtocolUpdate(&oldIsvc.Spec, &isvc.Spec); err != nil {
@@ -176,6 +181,9 @@ func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldIsvc,
 	if err := validation.ValidateScalingPolicyUpdate(oldIsvc.Spec.ScalingPolicy, isvc.Spec.ScalingPolicy, "spec.scalingPolicy"); err != nil {
 		return nil, err
 	}
+	if err := validation.ValidateScalingPolicyServiceUpdate(oldIsvc, isvc); err != nil {
+		return nil, err
+	}
 	if err := validateAddedMigrationRequests(oldIsvc, isvc); err != nil {
 		return nil, err
 	}
@@ -186,6 +194,9 @@ func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldIsvc,
 	if err != nil {
 		return warnings, err
 	}
+	// A change to some members of a rollingUpdate group and not others is
+	// admitted; the warning names the members that keep their revision.
+	warnings = append(warnings, validation.CoordinationUpdateWarnings(&oldIsvc.Spec, &isvc.Spec)...)
 	// Ratcheted rollout-ordering enforceability: applied only when this
 	// update changes spec.rollout, so stored objects keep reconciling.
 	// Runs after the structural rules so the more specific rejections keep

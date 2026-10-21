@@ -80,6 +80,8 @@ func init() {
 		"spec.gangWidth":           applyGangWidth,
 		"spec.partition":           applyPartition,
 		"spec.rollbackTarget":      applyRollbackTarget,
+		"gate.deny":                applyGateDeny,
+		"gate.allow":               applyGateAllow,
 		"spec.policyTuning":        applyPolicyTuning,
 		"spec.migrateRequest":      applyMigrateRequest,
 		"config.changed":           applyConfigChanged,
@@ -142,6 +144,47 @@ func requirePod(ev TimelineEvent) (PodRef, error) {
 		return PodRef{}, fmt.Errorf("replay: event %s needs a pod reference", ev.Key())
 	}
 	return *ev.Args.Pod, nil
+}
+
+// applyGateDeny is the pairing drain gate's answer for one pod: the other
+// pairing Component, which this lane does not model, still needs the pod
+// in rotation, so every drain question naming it is held under the
+// Pairing gate with the reason the scenario states. Only the Pairing
+// verdict is a drain-time answer; the other gates answer at a fresh start,
+// which the driver always admits, so staging them has nothing to hold.
+func applyGateDeny(_ context.Context, d *driver, ev TimelineEvent) (string, error) {
+	if ev.Variant != string(types.RolloutHoldGatePairing) {
+		return "", fmt.Errorf("replay: %s: only the Pairing verdict is a drain-time answer the driver can stage; the other gates answer at a fresh start, which the driver always admits", ev.Key())
+	}
+	ref, err := requirePod(ev)
+	if err != nil {
+		return "", err
+	}
+	if ev.Args.Message == "" {
+		return "", fmt.Errorf("replay: %s: needs the reason the gate would give (message)", ev.Key())
+	}
+	if d.pairingHolds == nil {
+		d.pairingHolds = map[string]string{}
+	}
+	name := d.podName(ref)
+	d.pairingHolds[name] = ev.Args.Message
+	return "pod=" + name, nil
+}
+
+// applyGateAllow lifts the pairing hold on one pod: the other side can
+// pair without it now. A pod no hold names has nothing to lift and fails
+// the run.
+func applyGateAllow(_ context.Context, d *driver, ev TimelineEvent) (string, error) {
+	ref, err := requirePod(ev)
+	if err != nil {
+		return "", err
+	}
+	name := d.podName(ref)
+	if _, held := d.pairingHolds[name]; !held {
+		return "", fmt.Errorf("replay: gate.allow: pod %s carries no Pairing hold to lift", name)
+	}
+	delete(d.pairingHolds, name)
+	return "pod=" + name, nil
 }
 
 func applyPodScheduled(ctx context.Context, d *driver, ev TimelineEvent) (string, error) {
@@ -607,6 +650,12 @@ func hasPodCondition(pod *corev1.Pod, condType corev1.PodConditionType) bool {
 // termination, and a current run that began after it. The restart trigger
 // reads that evidence off the runner container and dates it against the
 // Instance's ReadySince.
+// terminationUnpublished is the pod.containerRestart termination value
+// for a restart read before the kubelet has published the run that
+// ended: the container status shows the new run's start and the last
+// termination state is left as it was.
+const terminationUnpublished = "unpublished"
+
 func applyContainerRestart(ctx context.Context, d *driver, ev TimelineEvent) (string, error) {
 	ref, err := requirePod(ev)
 	if err != nil {
@@ -620,6 +669,14 @@ func applyContainerRestart(ctx context.Context, d *driver, ev TimelineEvent) (st
 	if reason == "" {
 		reason = "Error"
 	}
+	unpublished := false
+	switch ev.Args.Termination {
+	case "":
+	case terminationUnpublished:
+		unpublished = true
+	default:
+		return "", fmt.Errorf("replay: pod.containerRestart: termination %q is not one the driver stages; omit it or name %q", ev.Args.Termination, terminationUnpublished)
+	}
 	name := d.podName(ref)
 	found := false
 	if err := d.patchPod(ctx, name, func(pod *corev1.Pod) {
@@ -631,11 +688,13 @@ func applyContainerRestart(ctx context.Context, d *driver, ev TimelineEvent) (st
 			}
 			found = true
 			cs.RestartCount++
-			cs.LastTerminationState = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
-				ExitCode:   1,
-				Reason:     reason,
-				FinishedAt: now,
-			}}
+			if !unpublished {
+				cs.LastTerminationState = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+					ExitCode:   1,
+					Reason:     reason,
+					FinishedAt: now,
+				}}
+			}
 			cs.State = corev1.ContainerState{Running: &corev1.ContainerStateRunning{StartedAt: now}}
 			cs.Ready = true
 		}
@@ -645,7 +704,11 @@ func applyContainerRestart(ctx context.Context, d *driver, ev TimelineEvent) (st
 	if !found {
 		return "", fmt.Errorf("replay: pod.containerRestart: pod %s reports no container %q to restart", name, container)
 	}
-	return "pod=" + name + " container=" + container + " reason=" + reason, nil
+	detail := "pod=" + name + " container=" + container + " reason=" + reason
+	if unpublished {
+		detail += " termination=" + terminationUnpublished
+	}
+	return detail, nil
 }
 
 // containersNotReadyReason and containersNotReadyMessage are the reason and

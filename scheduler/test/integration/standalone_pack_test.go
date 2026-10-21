@@ -130,8 +130,8 @@ func TestStandalonePacksIntoPartlyUsedDomain(t *testing.T) {
 // TestStandalonePackingLeavesGangsIntact runs a gang under the same profile that
 // enables standalone packing (PreScore + Score enrolled, a pool-wide topologyKey
 // set) and checks the gang still best-fits into one domain, one member per node.
-// A gang member's domain is pinned in PreFilter, so PreScore skips it and the
-// score never fights the pin — this is the no-harm proof for the production
+// A gang member's domain is assigned in PreFilter, so PreScore skips it and the
+// score never fights the assignment — this is the no-harm proof for the production
 // profile, where the packing score is enrolled alongside gangs.
 //
 // Layout mirrors the gang happy path: domain "a" has 2 nodes, "b" has 3. A 2-pod
@@ -171,7 +171,7 @@ func TestStandalonePackingLeavesGangsIntact(t *testing.T) {
 	for _, name := range podNames {
 		node := waitForPodBound(t, tc, ns, name, 30*time.Second)
 		if !domainA[node] {
-			t.Errorf("gang pod %s bound to %s, want a node of domain a (gs-a1/gs-a2) — score must not pull a pinned member off its domain", name, node)
+			t.Errorf("gang pod %s bound to %s, want a node of domain a (gs-a1/gs-a2) — score must not pull an assigned member off its domain", name, node)
 		}
 		if bound[node] {
 			t.Errorf("two gang pods bound to the same node %s (whole-node model expects one each)", name)

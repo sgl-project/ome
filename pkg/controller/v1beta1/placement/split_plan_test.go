@@ -34,7 +34,7 @@ func TestDesiredSplitPlanUsesMatchedSet(t *testing.T) {
 		invalid    bool
 	}{
 		{name: "equal exact floor", want: map[string]int32{"member-a": 6, "member-b": 6, "member-c": 6}},
-		{name: "unready home retains share", mutate: func(_ *v1beta1.InferenceService, clusters []v1beta1.WorkloadCluster) {
+		{name: "unready member retains share", mutate: func(_ *v1beta1.InferenceService, clusters []v1beta1.WorkloadCluster) {
 			clusters[1].Status.Conditions[0].Status = "False"
 		}, want: map[string]int32{"member-a": 6, "member-b": 6, "member-c": 6}},
 		{name: "surplus admission cannot cover another share", mutate: func(s *v1beta1.InferenceService, _ []v1beta1.WorkloadCluster) {

@@ -100,7 +100,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// the same instance is read by the workload dispatcher (via
 	// Deps.Expectations below — Reconcile threads r.Expectations) and
 	// written by the pod event handler. Mirrors how the ISVC controller
-	// seeds omenative.NewExpectations(). When nil the workload dispatcher
+	// seeds workloadtypes.NewExpectations(). When nil the workload dispatcher
 	// would fall back to the global singleton, which the pod handler does
 	// not feed.
 	if r.Expectations == nil {

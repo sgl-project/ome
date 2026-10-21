@@ -10,26 +10,15 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/quota/tree"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 const rootName = "root"
-
-func testScheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
-	s := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(s); err != nil {
-		t.Fatalf("scheme: %v", err)
-	}
-	return s
-}
 
 func budget(nominal string) v1beta1.AcceleratorBudget {
 	return v1beta1.AcceleratorBudget{
@@ -74,9 +63,9 @@ func leaf(name, parent string, budgets ...v1beta1.AcceleratorBudget) *v1beta1.Ac
 
 func newValidator(t *testing.T, live ...client.Object) *Validator {
 	t.Helper()
-	s := testScheme(t)
+	s := fakeclient.Scheme(t)
 	return &Validator{
-		Client:  fake.NewClientBuilder().WithScheme(s).WithObjects(live...).Build(),
+		Client:  fakeclient.New(t, fakeclient.WithScheme(s), fakeclient.WithObjects(live...)),
 		Decoder: admission.NewDecoder(s),
 		Options: tree.Options{RootName: rootName, MaxDepth: 5},
 	}
@@ -226,13 +215,10 @@ func TestValidate(t *testing.T) {
 // so allowing here would admit exactly the tree-breaking write it exists to stop,
 // at the moment the apiserver is least healthy.
 func TestValidateFailsClosedOnListError(t *testing.T) {
-	s := testScheme(t)
+	s := fakeclient.Scheme(t)
 	v := &Validator{
-		Client: fake.NewClientBuilder().WithScheme(s).WithInterceptorFuncs(interceptor.Funcs{
-			List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
-				return apierrors.NewServiceUnavailable("apiserver down")
-			},
-		}).Build(),
+		Client: fakeclient.New(t, fakeclient.WithScheme(s),
+			fakeclient.FailingVerb(fakeclient.List, fakeclient.EveryCall, apierrors.NewServiceUnavailable("apiserver down"))),
 		Decoder: admission.NewDecoder(s),
 		Options: tree.Options{RootName: rootName},
 	}

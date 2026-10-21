@@ -1,7 +1,6 @@
 package routing
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -9,16 +8,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	k8sptr "k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func resetTrafficMapEntryMetrics(t *testing.T) {
@@ -61,7 +59,7 @@ func assertTrafficMapEntryMetrics(t *testing.T, namespace, isvc string, want map
 	}
 }
 
-func TestTrafficMapEntryMetricsFollowSavedReadiness(t *testing.T) {
+func TestTrafficMapEntryMetrics_ReadinessChanges_FollowTheSavedEntries(t *testing.T) {
 	resetTrafficMapEntryMetrics(t)
 	isvc := splitISVC([]string{"member-a", "member-b"}, []int32{4, 2}, []int32{4, 2})
 	for i := range isvc.Status.Placement.Candidates {
@@ -100,7 +98,7 @@ func TestTrafficMapEntryMetricsFollowSavedReadiness(t *testing.T) {
 	})
 }
 
-func TestTrafficMapEntryMetricsKeepHealthSeparateFromDrainWeight(t *testing.T) {
+func TestTrafficMapEntryMetrics_DrainedHealthyCluster_WeightZeroHealthyOne(t *testing.T) {
 	resetTrafficMapEntryMetrics(t)
 	isvc := splitISVC([]string{"member-a", "member-b"}, []int32{4, 2}, []int32{4, 2})
 	isvc.Annotations = map[string]string{
@@ -113,7 +111,7 @@ func TestTrafficMapEntryMetricsKeepHealthSeparateFromDrainWeight(t *testing.T) {
 	})
 }
 
-func TestTrafficMapEntryMetricsPreserveSavedValuesOnFailedWrites(t *testing.T) {
+func TestTrafficMapEntryMetrics_SpecWriteFails_KeepTheSavedValues(t *testing.T) {
 	for _, operation := range []string{"create", "update"} {
 		t.Run(operation, func(t *testing.T) {
 			resetTrafficMapEntryMetrics(t)
@@ -127,21 +125,10 @@ func TestTrafficMapEntryMetricsPreserveSavedValuesOnFailedWrites(t *testing.T) {
 				require.NoError(t, c.Status().Update(t.Context(), current))
 			}
 			writeErr := errors.New("TrafficMap spec write rejected")
-			interceptors := interceptor.Funcs{
-				Create: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
-					if _, ok := obj.(*v1beta1.TrafficMap); ok {
-						return writeErr
-					}
-					return cl.Create(ctx, obj, opts...)
-				},
-				Update: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
-					if _, ok := obj.(*v1beta1.TrafficMap); ok {
-						return writeErr
-					}
-					return cl.Update(ctx, obj, opts...)
-				},
-			}
-			r.Client = interceptor.NewClient(c.(client.WithWatch), interceptors)
+			r.Client = fakeclient.Wrap(t, c,
+				fakeclient.FailingVerb(fakeclient.Create, fakeclient.EveryCall, writeErr).OnKind(&v1beta1.TrafficMap{}),
+				fakeclient.FailingVerb(fakeclient.Update, fakeclient.EveryCall, writeErr).OnKind(&v1beta1.TrafficMap{}),
+			)
 			_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(isvc)})
 			require.ErrorIs(t, err, writeErr)
 			tm, found := getTrafficMap(t, c)
@@ -160,7 +147,7 @@ func TestTrafficMapEntryMetricsPreserveSavedValuesOnFailedWrites(t *testing.T) {
 	}
 }
 
-func TestTrafficMapEntryMetricsRecordSavedSpecWhenStatusWriteFails(t *testing.T) {
+func TestTrafficMapEntryMetrics_StatusWriteFails_RecordTheSavedSpec(t *testing.T) {
 	resetTrafficMapEntryMetrics(t)
 	isvc := splitISVC([]string{"member-a", "member-b"}, []int32{4, 2}, []int32{4, 2})
 	r, c := newReconciler(t, controllerTestConfig(), isvc)
@@ -170,11 +157,7 @@ func TestTrafficMapEntryMetricsRecordSavedSpecWhenStatusWriteFails(t *testing.T)
 	current.Status.Placement.Candidates[1].ReadyReplicas = 0
 	require.NoError(t, c.Status().Update(t.Context(), current))
 	statusErr := errors.New("TrafficMap status write rejected")
-	r.Client = interceptor.NewClient(c.(client.WithWatch), interceptor.Funcs{
-		SubResourceApply: func(context.Context, client.Client, string, runtime.ApplyConfiguration, ...client.SubResourceApplyOption) error {
-			return statusErr
-		},
-	})
+	r.Client = fakeclient.Wrap(t, c, fakeclient.FailingVerb(fakeclient.StatusApply, fakeclient.EveryCall, statusErr))
 	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(isvc)})
 	require.ErrorIs(t, err, statusErr)
 	tm, found := getTrafficMap(t, c)
@@ -185,7 +168,7 @@ func TestTrafficMapEntryMetricsRecordSavedSpecWhenStatusWriteFails(t *testing.T)
 	})
 }
 
-func TestTrafficMapEntryMetricsRemoveDroppedMembers(t *testing.T) {
+func TestTrafficMapEntryMetrics_ClusterLeavesPlacement_RemovesItsSeries(t *testing.T) {
 	resetTrafficMapEntryMetrics(t)
 	isvc := splitISVC([]string{"member-a", "member-b"}, []int32{4, 2}, []int32{4, 2})
 	r, c := newReconciler(t, controllerTestConfig(), isvc)
@@ -203,7 +186,7 @@ func TestTrafficMapEntryMetricsRemoveDroppedMembers(t *testing.T) {
 	assertTrafficMapEntryMetrics(t, testNS, testName, nil)
 }
 
-func TestTrafficMapEntryMetricsCleanupIsScopedToSource(t *testing.T) {
+func TestTrafficMapEntryMetrics_SourceGoneOrOptedOut_RemovesOnlyItsSeries(t *testing.T) {
 	for _, cause := range []string{"source absent", "source deleting", "routing disabled", "routing opted out", "placement removed"} {
 		t.Run(cause, func(t *testing.T) {
 			resetTrafficMapEntryMetrics(t)

@@ -6,23 +6,22 @@ import (
 	"time"
 
 	"github.com/onsi/gomega"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel/backends/pernode"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel/shared"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
-func TestModelDeletionAfterNodeDisappears(t *testing.T) {
+func TestModelDeletion_NodeGoneOrNotReady_RemovesFinalizerOnlyWhenNodeIsGone(t *testing.T) {
 	for _, clusterScoped := range []bool{false, true} {
 		for _, scenario := range []struct {
 			name             string
@@ -95,7 +94,7 @@ func TestModelDeletionAfterNodeDisappears(t *testing.T) {
 	}
 }
 
-func TestModelStatusCleansOrphanedNodeConfigMap(t *testing.T) {
+func TestModelStatus_ConfigMapWithoutNode_DeletedAndNotCounted(t *testing.T) {
 	for _, clusterScoped := range []bool{false, true} {
 		model, finalizer := orphanedNodeModel(clusterScoped)
 		t.Run(model.GetObjectKind().GroupVersionKind().Kind, func(t *testing.T) {
@@ -129,7 +128,7 @@ func TestModelStatusCleansOrphanedNodeConfigMap(t *testing.T) {
 func orphanedNodeModel(clusterScoped bool) (client.Object, string) {
 	spec := v1beta1.BaseModelSpec{
 		ModelFormat: v1beta1.ModelFormat{Name: "safetensors"},
-		Storage:     &v1beta1.StorageSpec{StorageUri: stringPtr("hf://test/model")},
+		Storage:     &v1beta1.StorageSpec{StorageUri: ptr.To("hf://test/model")},
 	}
 	meta := metav1.ObjectMeta{Name: "model", UID: types.UID("model-uid")}
 	if clusterScoped {
@@ -160,13 +159,8 @@ func orphanedNodeConfigMap(nodeName string, model client.Object, clusterScoped b
 
 func orphanedNodeClient(t *testing.T, objects ...client.Object) client.Client {
 	t.Helper()
-	g := gomega.NewGomegaWithT(t)
-	scheme := runtime.NewScheme()
-	g.Expect(v1beta1.AddToScheme(scheme)).To(gomega.Succeed())
-	g.Expect(corev1.AddToScheme(scheme)).To(gomega.Succeed())
-	g.Expect(batchv1.AddToScheme(scheme)).To(gomega.Succeed())
-	return ctrlclientfake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).
-		WithStatusSubresource(&v1beta1.BaseModel{}, &v1beta1.ClusterBaseModel{}).Build()
+	return fakeclient.New(t, fakeclient.WithObjects(objects...),
+		fakeclient.WithStatusSubresource(&v1beta1.BaseModel{}, &v1beta1.ClusterBaseModel{}))
 }
 
 func reconcileOrphanedNodeModel(ctx context.Context, c client.Client, model client.Object) (ctrl.Result, error) {

@@ -9,6 +9,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/validation"
 )
 
 func TestRuntimeSupportsModel(t *testing.T) {
@@ -990,11 +991,10 @@ func TestIsCompatible_DisabledAndAcceleratorErrors(t *testing.T) {
 	})
 }
 
-// TestCompareVersionsWithOperator drives the shared compareVersionsWithOperator
-// helper that backs both compareModelFormatVersions and
-// compareModelFrameworkVersions. Each table row is exercised through both
-// call sites (and the raw helper) to lock in identical semantics.
-func TestCompareVersionsWithOperator(t *testing.T) {
+// TestFormatAndFrameworkVersionsMatchByOneRule drives validation.VersionsMatch, the one rule
+// behind compareModelFormatVersions and compareModelFrameworkVersions, through the rule itself
+// and both wrappers, so every row reads the same on all three.
+func TestFormatAndFrameworkVersionsMatchByOneRule(t *testing.T) {
 	matcher := NewDefaultRuntimeMatcher(NewConfig(nil)).(*DefaultRuntimeMatcher)
 
 	tests := []struct {
@@ -1021,12 +1021,12 @@ func TestCompareVersionsWithOperator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotRaw := compareVersionsWithOperator(tt.modelVersion, tt.supportedVersion, tt.operator)
+			gotRaw := validation.VersionsMatch(tt.modelVersion, tt.supportedVersion, tt.operator)
 			gotFormat := matcher.compareModelFormatVersions(fmtVersion(tt.supportedVersion, tt.operator),
 				&v1beta1.ModelFormat{Name: "pytorch", Version: ptr(tt.modelVersion)})
 			gotFramework := matcher.compareModelFrameworkVersions(fwVersion(tt.supportedVersion, tt.operator),
 				&v1beta1.ModelFrameworkSpec{Name: "transformers", Version: ptr(tt.modelVersion)})
-			assert.Equal(t, tt.expected, gotRaw, "compareVersionsWithOperator")
+			assert.Equal(t, tt.expected, gotRaw, "validation.VersionsMatch")
 			assert.Equal(t, tt.expected, gotFormat, "compareModelFormatVersions")
 			assert.Equal(t, tt.expected, gotFramework, "compareModelFrameworkVersions")
 		})
@@ -1954,8 +1954,3 @@ func TestIsCompatible_SizeMismatchNoError(t *testing.T) {
 	assert.False(t, ok)
 	assert.NoError(t, err)
 }
-
-// TestCompareVersionsWithOperator drives the shared compareVersionsWithOperator
-// helper that backs both compareModelFormatVersions and
-// compareModelFrameworkVersions. Each table row is exercised through both
-// call sites (and the raw helper) to lock in identical semantics.

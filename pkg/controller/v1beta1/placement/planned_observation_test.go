@@ -69,15 +69,15 @@ func observationFixture(t *testing.T) plannedObservationFixture {
 	return plannedObservationFixture{source: source, member: member, resources: resources, components: []v1beta1.ComponentType{v1beta1.EngineComponent}}
 }
 
-func TestObservePlannedHome(t *testing.T) {
+func TestObservePlannedMember(t *testing.T) {
 	type result struct {
-		Home              allocation.Home
+		MemberState       allocation.MemberState
 		Reserved          int32
 		PauseAcknowledged bool
 		Applied           string
 		Ready, Admitted   int32
 	}
-	steady := result{Home: allocation.Home{Known: true, Applied: true, Occupied: 1, Ready: 1}, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}
+	steady := result{MemberState: allocation.MemberState{Known: true, Applied: true, Occupied: 1, Ready: 1}, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}
 	componentReads := func(obj client.Object) bool { _, ok := obj.(*v1beta1.InferenceReplica); return ok }
 	memberReads := func(obj client.Object) bool { _, ok := obj.(*v1beta1.InferenceService); return ok }
 	surgePod := func(f *plannedObservationFixture) *corev1.Pod {
@@ -98,21 +98,21 @@ func TestObservePlannedHome(t *testing.T) {
 		{name: "pruned demand cannot acknowledge pause", edit: func(f *plannedObservationFixture) {
 			f.attachContract(t)
 			f.resources.ir.Spec.PlacementExecution.Demand = nil
-		}, want: result{Home: allocation.Home{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
+		}, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
 		{name: "different component rendering cannot acknowledge pause", edit: func(f *plannedObservationFixture) {
 			f.attachContract(t)
 			f.resources.ir.Spec.PlacementExecution.Demand.Components[0].RenderingHash = strings.Repeat("c", 64)
-		}, want: result{Home: allocation.Home{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
+		}, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
 		{name: "different demand fingerprint cannot acknowledge pause", edit: func(f *plannedObservationFixture) {
 			f.attachContract(t)
 			f.resources.ir.Spec.PlacementExecution.Demand.Fingerprint = strings.Repeat("c", 64)
-		}, want: result{Home: allocation.Home{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
+		}, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
 		{name: "generic generation observation cannot acknowledge placement guards", edit: func(f *plannedObservationFixture) {
 			f.resources.ir.Status.PlacementObservedGeneration = 0
-		}, want: result{Home: allocation.Home{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
+		}, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
 		{name: "stale placement guard acknowledgement cannot grant authority", edit: func(f *plannedObservationFixture) {
 			f.resources.ir.Status.PlacementObservedGeneration--
-		}, want: result{Home: allocation.Home{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
+		}, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
 		{name: "gang width is verified through its PodGroup", edit: func(f *plannedObservationFixture) {
 			f.resources.addGang()
 			f.extraObjects = []client.Object{testMemberPodGroup(f.resources.ir)}
@@ -123,7 +123,7 @@ func TestObservePlannedHome(t *testing.T) {
 			f.resources.pods = f.resources.pods[:1]
 			f.resources.ir.Status.InstanceStatuses[0].PodCount = 1
 			f.resources.ir.Status.InstanceStatuses[0].ServingPodCount = 1
-		}, want: result{Home: allocation.Home{Known: true, Applied: true, Occupied: 1}, PauseAcknowledged: true, Applied: "plan-a"}},
+		}, want: result{MemberState: allocation.MemberState{Known: true, Applied: true, Occupied: 1}, PauseAcknowledged: true, Applied: "plan-a"}},
 		{name: "creating partial gang has no admitted replica", edit: func(f *plannedObservationFixture) {
 			f.resources.addGang()
 			f.extraObjects = []client.Object{testMemberPodGroup(f.resources.ir)}
@@ -132,9 +132,9 @@ func TestObservePlannedHome(t *testing.T) {
 			f.resources.ir.Status.InstanceStatuses[0].Phase = v1beta1.OMENativeInstanceCreating
 			f.resources.ir.Status.InstanceStatuses[0].PodCount = 1
 			f.resources.ir.Status.InstanceStatuses[0].ServingPodCount = 0
-		}, want: result{Home: allocation.Home{Known: true, Applied: true, Occupied: 1}, PauseAcknowledged: true, Applied: "plan-a"}},
+		}, want: result{MemberState: allocation.MemberState{Known: true, Applied: true, Occupied: 1}, PauseAcknowledged: true, Applied: "plan-a"}},
 		{name: "unresolved desired replicas are unknown", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.Replicas = nil }, wantErr: true},
-		{name: "router replicas remain a shared per home policy", edit: func(f *plannedObservationFixture) {
+		{name: "router replicas remain a shared per member policy", edit: func(f *plannedObservationFixture) {
 			ir := f.resources.ir.DeepCopy()
 			ir.UID, ir.Name, ir.Spec.Component = "router-uid", "service-router", v1beta1.RouterComponent
 			ir.Spec.Replicas = ptr.To[int32](8)
@@ -143,7 +143,7 @@ func TestObservePlannedHome(t *testing.T) {
 			f.extraObjects = []client.Object{ir, pod}
 			f.components = append(f.components, v1beta1.RouterComponent)
 		}, want: steady},
-		{name: "router must be admitted before the home serves", edit: func(f *plannedObservationFixture) { f.components = append(f.components, v1beta1.RouterComponent) }, want: result{Home: allocation.Home{Known: true, Occupied: 1}}},
+		{name: "router must be admitted before the member serves", edit: func(f *plannedObservationFixture) { f.components = append(f.components, v1beta1.RouterComponent) }, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1}}},
 		{name: "engine and decoder share whole replica accounting", edit: func(f *plannedObservationFixture) {
 			ir := f.resources.ir.DeepCopy()
 			ir.UID, ir.Name, ir.Spec.Component = "decoder-uid", "service-decoder", v1beta1.DecoderComponent
@@ -153,12 +153,12 @@ func TestObservePlannedHome(t *testing.T) {
 			pod.Name, pod.UID, pod.OwnerReferences[0].UID = "decoder-0", "decoder-pod", ir.UID
 			f.extraObjects = []client.Object{ir, pod}
 			f.components = append(f.components, v1beta1.DecoderComponent)
-		}, want: result{Home: allocation.Home{Known: true, Applied: true, Occupied: 2, Ready: 1}, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}},
+		}, want: result{MemberState: allocation.MemberState{Known: true, Applied: true, Occupied: 2, Ready: 1}, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}},
 		{name: "ratio floors count whole primary units", edit: func(f *plannedObservationFixture) {
 			f.source.Status.Placement.Plan.Mode = v1beta1.PlacementModeAll
-			home := &v1beta1.PlacementHomePolicy{InputDigest: "intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.DecoderComponent, Replicas: 2}, {Component: v1beta1.EngineComponent, Replicas: 1}}}
+			memberPolicy := &v1beta1.PlacementHomePolicy{InputDigest: "intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.DecoderComponent, Replicas: 2}, {Component: v1beta1.EngineComponent, Replicas: 1}}}
 			a := f.source.Status.Placement.Candidates[0].Allocation
-			a.CurrentHome, a.DesiredHome = home, home.DeepCopy()
+			a.CurrentHome, a.DesiredHome = memberPolicy, memberPolicy.DeepCopy()
 			policy := executionPolicy(f.source, a)
 			raw, err := protocol.Encode(policy)
 			if err != nil {
@@ -170,20 +170,20 @@ func TestObservePlannedHome(t *testing.T) {
 			f.components = append(f.components, v1beta1.DecoderComponent)
 		}, want: steady},
 		{name: "split decoder is held to its apportioned floor", edit: func(f *plannedObservationFixture) {
-			// Two fleet engines carry six decoders, so this one-engine home owes three.
+			// Two fleet engines carry six decoders, so this one-engine member owes three.
 			f.source.Spec.Decoder = &v1beta1.DecoderSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: ptr.To(6)}}
 			f.extraObjects = f.decoderTwin(f.resources.ir.Spec.PlacementExecution, 2)
 			f.components = append(f.components, v1beta1.DecoderComponent)
-		}, want: result{Home: allocation.Home{Known: true, Occupied: 1}}},
-		{name: "a restarting decoder leaves an admitted home ready", edit: func(f *plannedObservationFixture) {
-			// This one-engine home owes three decoders, has admitted all three,
+		}, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1}}},
+		{name: "a restarting decoder leaves an admitted member ready", edit: func(f *plannedObservationFixture) {
+			// This one-engine member owes three decoders, has admitted all three,
 			// and one of them is not ready yet.
 			f.source.Spec.Decoder = &v1beta1.DecoderSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: ptr.To(6)}}
 			decoder := f.decoderTwin(f.resources.ir.Spec.PlacementExecution, 3)
 			decoder[0].(*v1beta1.InferenceReplica).Status.ReadyReplicas = 2
 			f.extraObjects = decoder
 			f.components = append(f.components, v1beta1.DecoderComponent)
-		}, want: result{Home: allocation.Home{Known: true, Applied: true, Occupied: 1}, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}},
+		}, want: result{MemberState: allocation.MemberState{Known: true, Applied: true, Occupied: 1}, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}},
 		{name: "columnar component acknowledges pause", edit: func(f *plannedObservationFixture) {
 			f.resources.ir = columnarTwin(t, f.resources.ir)
 			f.decodeBound = 1
@@ -192,28 +192,28 @@ func TestObservePlannedHome(t *testing.T) {
 		{name: "autoscaler request reserves uncreated instances", edit: func(f *plannedObservationFixture) {
 			f.resources.ir.Spec.Replicas = ptr.To[int32](3)
 			f.resources.ir.Spec.PlacementReplicaLimit = ptr.To[int32](3)
-		}, want: result{Home: allocation.Home{Known: true, Applied: true, Occupied: 3, Ready: 1}, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}},
+		}, want: result{MemberState: allocation.MemberState{Known: true, Applied: true, Occupied: 3, Ready: 1}, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}},
 		{name: "deferred autoscaler growth does not expand authority", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.Replicas = ptr.To[int32](8) }, want: steady},
-		{name: "unused limit remains committed", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.PlacementReplicaLimit = ptr.To[int32](3) }, want: result{Home: allocation.Home{Known: true, Applied: true, Occupied: 3, Ready: 1}, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}},
-		{name: "pruned growth limit cannot acknowledge pause", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.PlacementReplicaLimit = nil }, want: result{Home: allocation.Home{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
+		{name: "unused limit remains committed", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.PlacementReplicaLimit = ptr.To[int32](3) }, want: result{MemberState: allocation.MemberState{Known: true, Applied: true, Occupied: 3, Ready: 1}, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}},
+		{name: "pruned growth limit cannot acknowledge pause", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.PlacementReplicaLimit = nil }, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
 		{name: "negative desired replicas are unknown", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.Replicas = ptr.To[int32](-1) }, wantErr: true},
 		{name: "replaced source cannot inherit observations", edit: func(f *plannedObservationFixture) { f.source.Status.Placement.Plan.SourceUID = "older-source" }, wantErr: true},
-		{name: "metadata annotation alone cannot acknowledge pause", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.PlacementExecution = nil }, want: result{Home: allocation.Home{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
-		{name: "stale component generation cannot acknowledge pause", edit: func(f *plannedObservationFixture) { f.resources.ir.Status.ObservedGeneration-- }, want: result{Home: allocation.Home{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
+		{name: "metadata annotation alone cannot acknowledge pause", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.PlacementExecution = nil }, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
+		{name: "stale component generation cannot acknowledge pause", edit: func(f *plannedObservationFixture) { f.resources.ir.Status.ObservedGeneration-- }, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
 		{name: "stale parent projection cannot acknowledge pause", edit: func(f *plannedObservationFixture) {
 			f.resources.ir.Annotations[constants.InferenceReplicaParentGenerationAnnotationKey] = "2"
-		}, want: result{Home: allocation.Home{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
-		{name: "source plan revision must reach every component", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.PlacementExecution.Revision-- }, want: result{Home: allocation.Home{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
-		{name: "scale floor must reach component", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.Replicas = ptr.To[int32](0) }, want: result{Home: allocation.Home{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
-		{name: "inherited decoder is required before acknowledgement", edit: func(f *plannedObservationFixture) { f.components = append(f.components, v1beta1.DecoderComponent) }, want: result{Home: allocation.Home{Known: true, Occupied: 1}}},
-		{name: "empty member is conclusively absent", edit: func(f *plannedObservationFixture) { f.member, f.resources.ir, f.resources.pods = nil, nil, nil }, want: result{Home: allocation.Home{Known: true, Absent: true}}},
-		{name: "deleted service retains occupied components", edit: func(f *plannedObservationFixture) { f.member = nil }, want: result{Home: allocation.Home{Known: true, Occupied: 1}}},
+		}, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
+		{name: "source plan revision must reach every component", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.PlacementExecution.Revision-- }, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
+		{name: "scale floor must reach component", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.Replicas = ptr.To[int32](0) }, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1, Ready: 1}, Ready: 1, Admitted: 1}},
+		{name: "inherited decoder is required before acknowledgement", edit: func(f *plannedObservationFixture) { f.components = append(f.components, v1beta1.DecoderComponent) }, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1}}},
+		{name: "empty member is conclusively absent", edit: func(f *plannedObservationFixture) { f.member, f.resources.ir, f.resources.pods = nil, nil, nil }, want: result{MemberState: allocation.MemberState{Known: true, Absent: true}}},
+		{name: "deleted service retains occupied components", edit: func(f *plannedObservationFixture) { f.member = nil }, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1}}},
 		{name: "terminating service retains occupied components", edit: func(f *plannedObservationFixture) {
 			now := metav1.Now()
 			f.member.DeletionTimestamp = &now
 			f.member.Finalizers = []string{"example.com/cleanup"}
-		}, want: result{Home: allocation.Home{Known: true, Occupied: 1}}},
-		{name: "ongoing surge preserves serving observation", edit: func(f *plannedObservationFixture) { f.resources.addSurge() }, want: result{Home: allocation.Home{Known: true, Applied: true, Occupied: 1}, Reserved: 1, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}},
+		}, want: result{MemberState: allocation.MemberState{Known: true, Occupied: 1}}},
+		{name: "ongoing surge preserves serving observation", edit: func(f *plannedObservationFixture) { f.resources.addSurge() }, want: result{MemberState: allocation.MemberState{Known: true, Applied: true, Occupied: 1}, Reserved: 1, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}},
 		{name: "ordinary local collision stays unverified", edit: func(f *plannedObservationFixture) { f.member.Annotations, f.member.Labels = nil, nil }, wantErr: true, errText: "member service ownership is unverified"},
 		{name: "orphan pod blocks absence proof", edit: func(f *plannedObservationFixture) { f.resources.ir, f.member = nil, nil }, wantErr: true, errText: "member pods remain without identified live components"},
 		{name: "pod of an unlisted component blocks observation", edit: func(f *plannedObservationFixture) {
@@ -276,13 +276,13 @@ func TestObservePlannedHome(t *testing.T) {
 		{name: "pod created after the component snapshot is charged to its owner", edit: func(f *plannedObservationFixture) {
 			created := surgePod(f)
 			f.afterFirstComponentRead(func(ctx context.Context, c client.WithWatch) error { return c.Create(ctx, created) })
-		}, want: result{Home: allocation.Home{Known: true, Applied: true, Occupied: 2}, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}},
+		}, want: result{MemberState: allocation.MemberState{Known: true, Applied: true, Occupied: 2}, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}},
 		{name: "pod gone before the list keeps the snapshot's committed count", edit: func(f *plannedObservationFixture) {
 			gone := client.ObjectKeyFromObject(&f.resources.pods[0])
 			f.afterFirstComponentRead(func(ctx context.Context, c client.WithWatch) error {
 				return c.Delete(ctx, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: gone.Name, Namespace: gone.Namespace}})
 			})
-		}, want: result{Home: allocation.Home{Known: true, Applied: true, Occupied: 1}, PauseAcknowledged: true, Applied: "plan-a"}},
+		}, want: result{MemberState: allocation.MemberState{Known: true, Applied: true, Occupied: 1}, PauseAcknowledged: true, Applied: "plan-a"}},
 		{name: "reserved pod gone before the list keeps its reservation", edit: func(f *plannedObservationFixture) {
 			f.resources.addSurge()
 			reserved := surgePod(f)
@@ -291,7 +291,7 @@ func TestObservePlannedHome(t *testing.T) {
 			f.afterFirstComponentRead(func(ctx context.Context, c client.WithWatch) error {
 				return c.Delete(ctx, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: gone.Name, Namespace: gone.Namespace}})
 			})
-		}, want: result{Home: allocation.Home{Known: true, Applied: true, Occupied: 1}, Reserved: 1, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}},
+		}, want: result{MemberState: allocation.MemberState{Known: true, Applied: true, Occupied: 1}, Reserved: 1, PauseAcknowledged: true, Applied: "plan-a", Ready: 1, Admitted: 1}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			fixture := observationFixture(t)
@@ -314,7 +314,7 @@ func TestObservePlannedHome(t *testing.T) {
 			clusters := identifiedTestClusters{fakeClusters: fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{"member-a": workloadcluster.NewNeverCachingClient(worker)}}, uid: "member-a-uid"}
 			r, _ := newPlacer(scheme, clusters, fixture.source, plannedTestRegistration())
 			r.InstanceStatusDecoder = irstatus.NewDecoder(fixture.decodeBound)
-			observation, err := r.observePlannedHome(context.Background(), fixture.source, fixture.source.Status.Placement.Candidates[0], fixture.components)
+			observation, err := r.observePlannedMember(context.Background(), fixture.source, fixture.source.Status.Placement.Candidates[0], fixture.components)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("observation error = %v, want error %t", err, tt.wantErr)
 			}
@@ -329,13 +329,13 @@ func TestObservePlannedHome(t *testing.T) {
 				}
 				// An unverified pass grants no credit and keeps the plan it last acknowledged.
 				want := evidence{AppliedPlan: fixture.source.Status.Placement.Candidates[0].AppliedPlanID}
-				got := evidence{observation.Home.Known, observation.Candidate.ObservationKnown, observation.Candidate.AppliedPlanID, observation.Candidate.ReadyReplicas}
+				got := evidence{observation.MemberState.Known, observation.Candidate.ObservationKnown, observation.Candidate.AppliedPlanID, observation.Candidate.ReadyReplicas}
 				if diff := cmp.Diff(want, got); diff != "" {
 					t.Errorf("unverified inventory evidence (-want +got):\n%s", diff)
 				}
 				return
 			}
-			got := result{Home: observation.Home, Reserved: observation.RolloutReserved, PauseAcknowledged: observation.PauseAcknowledged, Applied: observation.Candidate.AppliedPlanID, Ready: observation.Candidate.ReadyReplicas, Admitted: observation.Candidate.AdmittedReplicas}
+			got := result{MemberState: observation.MemberState, Reserved: observation.RolloutReserved, PauseAcknowledged: observation.PauseAcknowledged, Applied: observation.Candidate.AppliedPlanID, Ready: observation.Candidate.ReadyReplicas, Admitted: observation.Candidate.AdmittedReplicas}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("observation (-want +got):\n%s", diff)
 			}
@@ -425,7 +425,7 @@ func TestPlannedTrafficEvidence(t *testing.T) {
 		edit func(*v1beta1.TrafficMap, *v1beta1.CandidatePlacement)
 		want [3]bool
 	}{
-		{name: "published home", want: [3]bool{true, true, false}},
+		{name: "published member", want: [3]bool{true, true, false}},
 		{name: "published zero proves requested drain", edit: func(tm *v1beta1.TrafficMap, c *v1beta1.CandidatePlacement) {
 			c.Allocation.DrainRequested = true
 			tm.Spec.Entries[0].Weight = 0
@@ -482,7 +482,7 @@ func TestPlannedTrafficEvidence(t *testing.T) {
 	}
 }
 
-func TestFullHomeReadyRequiresEveryReplicaFloor(t *testing.T) {
+func TestFullPolicyReadyRequiresEveryReplicaFloor(t *testing.T) {
 	for _, tt := range []struct {
 		name                                   string
 		engine, router                         int32
@@ -536,11 +536,11 @@ func TestFullHomeReadyRequiresEveryReplicaFloor(t *testing.T) {
 			worker := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			clusters := identifiedTestClusters{fakeClusters: fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{"member-a": workloadcluster.NewNeverCachingClient(worker)}}, uid: "member-a-uid"}
 			r, _ := newPlacer(scheme, clusters, f.source, plannedTestRegistration())
-			got, err := r.observePlannedHome(t.Context(), f.source, f.source.Status.Placement.Candidates[0], f.components)
+			got, err := r.observePlannedMember(t.Context(), f.source, f.source.Status.Placement.Candidates[0], f.components)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if diff := cmp.Diff(tt.ready, got.FullHomeReady); diff != "" {
+			if diff := cmp.Diff(tt.ready, got.FullPolicyReady); diff != "" {
 				t.Fatal(diff)
 			}
 			if diff := cmp.Diff(tt.terminal, got.Terminal); diff != "" {

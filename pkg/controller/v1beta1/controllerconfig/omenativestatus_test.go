@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/irstatus"
 )
 
-func TestParseOMENativeStatusConfig(t *testing.T) {
+func TestParseOMENativeStatusConfig_BlockForms_MissingOrMalformedRejected(t *testing.T) {
 	bound := func(v uint64) *uint64 { return &v }
 	tests := []struct {
 		name     string
@@ -150,7 +150,7 @@ func TestParseOMENativeStatusConfig(t *testing.T) {
 	}
 }
 
-func TestNewOMENativeStatusConfigReadsTheConfigMap(t *testing.T) {
+func TestNewOMENativeStatusConfig_ConfigMapPresentOrNot_LoadsOrErrors(t *testing.T) {
 	clientset := fake.NewSimpleClientset(&v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: constants.InferenceServiceConfigMapName, Namespace: constants.OMENamespace},
 		Data:       map[string]string{OMENativeStatusConfigName: `{"instanceStatusEncoding":"DenseV1"}`},
@@ -168,7 +168,7 @@ func TestNewOMENativeStatusConfigReadsTheConfigMap(t *testing.T) {
 	}
 }
 
-func TestOMENativeStatusConfigDecodeBoundNil(t *testing.T) {
+func TestOMENativeStatusConfig_DecodeBound_NilConfigReportsZero(t *testing.T) {
 	var cfg *OMENativeStatusConfig
 	if cfg.DecodeBound() != 0 {
 		t.Fatal("nil config must report no bound")

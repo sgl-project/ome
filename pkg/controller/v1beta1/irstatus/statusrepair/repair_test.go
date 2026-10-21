@@ -11,14 +11,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/irstatus"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/irstatus/transitionpreflight"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 const (
@@ -73,15 +72,6 @@ func writeFile(t *testing.T, dir, name, content string) string {
 	return path
 }
 
-func testScheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
-	scheme := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(scheme); err != nil {
-		t.Fatalf("add scheme: %v", err)
-	}
-	return scheme
-}
-
 func statusConfigMap(block string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "ome", Name: "inferenceservice-config"},
@@ -117,7 +107,7 @@ func newFixture(t *testing.T, configBlock string) *fixture {
 	t.Helper()
 	dir := t.TempDir()
 	ir := storedIR(t)
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(ir).WithStatusSubresource(&v1beta1.InferenceReplica{}).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(ir), fakeclient.WithStatusSubresource(&v1beta1.InferenceReplica{}))
 	kube := kubefake.NewClientset(statusConfigMap(configBlock))
 	return &fixture{
 		opts: Options{

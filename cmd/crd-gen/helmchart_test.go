@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
+
+	"sigs.k8s.io/ome/pkg/digest"
 )
 
 var (
@@ -191,7 +193,7 @@ func TestBuildHelmChartSharesPartialsAcrossFiles(t *testing.T) {
 	// The pod, container and resources schemas repeat across both files and
 	// must be shared partials named by their content.
 	for _, schema := range []map[string]interface{}{podSchema(), containerSchema(), resourcesSchema()} {
-		assert.Contains(t, partials, "test.schema."+shortHash(canonical(schema)))
+		assert.Contains(t, partials, "test.schema."+digest.Short([]byte(canonical(schema)), partialHashLength))
 	}
 	for name := range partials {
 		assert.True(t, strings.HasPrefix(name, "test.schema."), name)

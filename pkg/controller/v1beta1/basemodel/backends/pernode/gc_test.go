@@ -13,17 +13,16 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel/shared"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func orphanConfigMap() *corev1.ConfigMap {
@@ -36,7 +35,7 @@ func orphanConfigMap() *corev1.ConfigMap {
 	}
 }
 
-func TestCleanupOrphanedNodeConfigMap(t *testing.T) {
+func TestCleanupNodeConfigMap_NodeGoneCachedOrUnreadable_DeletesOnlyWhenGone(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		nodeExists bool
@@ -58,16 +57,13 @@ func TestCleanupOrphanedNodeConfigMap(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := gomega.NewWithT(t)
 			ctx := context.Background()
-			scheme := runtime.NewScheme()
-			g.Expect(corev1.AddToScheme(scheme)).To(gomega.Succeed())
 			cm := orphanConfigMap()
-			live := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm).Build()
+			live := fakeclient.New(t, fakeclient.WithObjects(cm))
 			if tc.nodeExists {
 				g.Expect(live.Create(ctx, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: cm.Name}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionFalse}}}})).To(gomega.Succeed())
 			}
-			deletes := 0
-			liveReads := 0
-			cached := interceptor.NewClient(live, interceptor.Funcs{
+			deletes := fakeclient.CountingVerb(fakeclient.Delete)
+			cached := fakeclient.Wrap(t, live, deletes, fakeclient.WithInterceptors(interceptor.Funcs{
 				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 					if _, node := obj.(*corev1.Node); node {
 						if tc.cacheError != nil {
@@ -80,24 +76,13 @@ func TestCleanupOrphanedNodeConfigMap(t *testing.T) {
 					}
 					return c.Get(ctx, key, obj, opts...)
 				},
-				Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
-					deletes++
-					options := (&client.DeleteOptions{}).ApplyOptions(opts)
-					g.Expect(options.Preconditions).NotTo(gomega.BeNil())
-					g.Expect(options.Preconditions.UID).To(gomega.Equal(&cm.UID))
-					g.Expect(options.Preconditions.ResourceVersion).To(gomega.Equal(&cm.ResourceVersion))
-					return c.Delete(ctx, obj, opts...)
-				},
-			})
-			var reader client.Reader = interceptor.NewClient(live, interceptor.Funcs{
-				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-					liveReads++
-					if tc.readError != nil {
-						return tc.readError
-					}
-					return c.Get(ctx, key, obj, opts...)
-				},
-			})
+			}))
+			liveReads := fakeclient.CountingVerb(fakeclient.Get)
+			readerBehaviours := []fakeclient.Option{liveReads}
+			if tc.readError != nil {
+				readerBehaviours = append(readerBehaviours, fakeclient.FailingVerb(fakeclient.Get, fakeclient.EveryCall, tc.readError))
+			}
+			var reader client.Reader = fakeclient.Wrap(t, live, readerBehaviours...)
 			if tc.noReader {
 				reader = nil
 			}
@@ -112,28 +97,34 @@ func TestCleanupOrphanedNodeConfigMap(t *testing.T) {
 			}
 			wantOrphan := !tc.nodeExists && !tc.cachedNode && tc.readError == nil && tc.cacheError == nil && !tc.noReader
 			if tc.cachedNode || tc.noReader || tc.cacheError != nil {
-				g.Expect(liveReads).To(gomega.BeZero())
+				g.Expect(liveReads.Count()).To(gomega.BeZero())
 			} else {
-				g.Expect(liveReads).To(gomega.Equal(1))
+				g.Expect(liveReads.Count()).To(gomega.Equal(1))
 			}
 			g.Expect(orphaned).To(gomega.Equal(wantOrphan))
 			getErr := live.Get(ctx, client.ObjectKeyFromObject(cm), &corev1.ConfigMap{})
 			if wantOrphan {
 				g.Expect(apierrors.IsNotFound(getErr)).To(gomega.BeTrue())
-				g.Expect(deletes).To(gomega.Equal(1))
+				g.Expect(deletes.Count()).To(gomega.Equal(1))
 				// Retrying a stale cache entry after a successful deletion is harmless.
 				orphaned, err = cleanupOrphanedNodeConfigMap(ctx, cached, reader, cm)
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 				g.Expect(orphaned).To(gomega.BeTrue())
 			} else {
 				g.Expect(getErr).NotTo(gomega.HaveOccurred())
-				g.Expect(deletes).To(gomega.BeZero())
+				g.Expect(deletes.Count()).To(gomega.BeZero())
+			}
+			// Every delete names the ConfigMap it read, so a rewritten one is left alone.
+			for _, options := range fakeclient.OptionsOf[client.DeleteOptions](deletes) {
+				g.Expect(options.Preconditions).NotTo(gomega.BeNil())
+				g.Expect(options.Preconditions.UID).To(gomega.Equal(&cm.UID))
+				g.Expect(options.Preconditions.ResourceVersion).To(gomega.Equal(&cm.ResourceVersion))
 			}
 		})
 	}
 }
 
-func TestOrphanCleanupRejectsUnfencedOrUnrelatedConfigMaps(t *testing.T) {
+func TestCleanupNodeConfigMap_WrongNamespaceLabelUIDOrVersion_ErrorsWithoutDelete(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		mutate func(*corev1.ConfigMap)
@@ -146,16 +137,14 @@ func TestOrphanCleanupRejectsUnfencedOrUnrelatedConfigMaps(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			g := gomega.NewWithT(t)
-			scheme := runtime.NewScheme()
-			g.Expect(corev1.AddToScheme(scheme)).To(gomega.Succeed())
 			cm := orphanConfigMap()
-			live := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm.DeepCopy()).Build()
-			c := interceptor.NewClient(live, interceptor.Funcs{
+			live := fakeclient.New(t, fakeclient.WithObjects(cm.DeepCopy()))
+			c := fakeclient.Wrap(t, live, fakeclient.WithInterceptors(interceptor.Funcs{
 				Delete: func(context.Context, client.WithWatch, client.Object, ...client.DeleteOption) error {
 					t.Fatal("unsafe ConfigMap reached Delete")
 					return nil
 				},
-			})
+			}))
 			tc.mutate(cm)
 			orphaned, err := cleanupOrphanedNodeConfigMap(context.Background(), c, live, cm)
 			g.Expect(err).To(gomega.HaveOccurred())
@@ -164,7 +153,7 @@ func TestOrphanCleanupRejectsUnfencedOrUnrelatedConfigMaps(t *testing.T) {
 	}
 }
 
-func TestOrphanCleanupErrorsPreserveFinalizerAndStatus(t *testing.T) {
+func TestHandleModelDeletion_CleanupReadOrDeleteFails_KeepsFinalizerAndStatus(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		onRead bool
@@ -177,25 +166,17 @@ func TestOrphanCleanupErrorsPreserveFinalizerAndStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := gomega.NewWithT(t)
 			ctx := context.Background()
-			scheme := runtime.NewScheme()
-			g.Expect(corev1.AddToScheme(scheme)).To(gomega.Succeed())
-			g.Expect(v1beta1.AddToScheme(scheme)).To(gomega.Succeed())
 			cm := orphanConfigMap()
 			now := metav1.Now()
 			model := &v1beta1.BaseModel{ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "default", Finalizers: []string{constants.BaseModelFinalizer}, DeletionTimestamp: &now}}
-			live := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm, model).Build()
-			c := interceptor.NewClient(live, interceptor.Funcs{
-				Delete: func(context.Context, client.WithWatch, client.Object, ...client.DeleteOption) error { return tc.err },
-			})
-			reader := interceptor.NewClient(live, interceptor.Funcs{
-				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-					if tc.onRead {
-						return tc.err
-					}
-					return c.Get(ctx, key, obj, opts...)
-				},
-			})
-			_, err := HandleModelDeletion(ctx, c, reader, model, constants.BaseModelFinalizer)
+			live := fakeclient.New(t, fakeclient.WithObjects(cm, model))
+			c := fakeclient.Wrap(t, live, fakeclient.FailingVerb(fakeclient.Delete, fakeclient.EveryCall, tc.err))
+			var readerBehaviours []fakeclient.Option
+			if tc.onRead {
+				readerBehaviours = append(readerBehaviours, fakeclient.FailingVerb(fakeclient.Get, fakeclient.EveryCall, tc.err))
+			}
+			reader := fakeclient.Wrap(t, live, readerBehaviours...)
+			_, err := HandleModelDeletion(ctx, c, reader, model, false, constants.BaseModelFinalizer)
 			g.Expect(err).To(gomega.HaveOccurred())
 			g.Expect(live.Get(ctx, client.ObjectKeyFromObject(model), model)).To(gomega.Succeed())
 			g.Expect(controllerutil.ContainsFinalizer(model, constants.BaseModelFinalizer)).To(gomega.BeTrue())
@@ -210,34 +191,22 @@ func TestOrphanCleanupErrorsPreserveFinalizerAndStatus(t *testing.T) {
 	}
 }
 
-func TestDeletedAcknowledgementDoesNotRequireNodeLookup(t *testing.T) {
+func TestHandleModelDeletion_EntryMarkedDeleted_FinishesWithoutNodeLookup(t *testing.T) {
 	g := gomega.NewWithT(t)
 	ctx := context.Background()
-	scheme := runtime.NewScheme()
-	g.Expect(corev1.AddToScheme(scheme)).To(gomega.Succeed())
-	g.Expect(v1beta1.AddToScheme(scheme)).To(gomega.Succeed())
 	cm := orphanConfigMap()
 	cm.Data[constants.GetModelConfigMapKey("default", "model", false)] = `{"status":"Deleted"}`
 	now := metav1.Now()
 	model := &v1beta1.BaseModel{ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "default", Finalizers: []string{constants.BaseModelFinalizer}, DeletionTimestamp: &now}}
-	live := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm, model).Build()
-	nodeReads, deletes := 0, 0
-	c := interceptor.NewClient(live, interceptor.Funcs{
-		Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-			if _, node := obj.(*corev1.Node); node {
-				nodeReads++
-				return apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, key.Name, fmt.Errorf("denied"))
-			}
-			return c.Get(ctx, key, obj, opts...)
-		},
-		Delete: func(context.Context, client.WithWatch, client.Object, ...client.DeleteOption) error {
-			deletes++
-			return fmt.Errorf("acknowledged ConfigMap must not be deleted")
-		},
-	})
-	result, err := HandleModelDeletion(ctx, c, c, model, constants.BaseModelFinalizer)
-	g.Expect(nodeReads).To(gomega.BeZero())
-	g.Expect(deletes).To(gomega.BeZero())
+	live := fakeclient.New(t, fakeclient.WithObjects(cm, model))
+	nodeReads := fakeclient.CountingVerb(fakeclient.Get).OnKind(&corev1.Node{})
+	deletes := fakeclient.CountingVerb(fakeclient.Delete)
+	c := fakeclient.Wrap(t, live, nodeReads, deletes,
+		fakeclient.FailingVerb(fakeclient.Get, fakeclient.EveryCall, apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, cm.Name, fmt.Errorf("denied"))).OnKind(&corev1.Node{}),
+		fakeclient.FailingVerb(fakeclient.Delete, fakeclient.EveryCall, fmt.Errorf("acknowledged ConfigMap must not be deleted")))
+	result, err := HandleModelDeletion(ctx, c, c, model, false, constants.BaseModelFinalizer)
+	g.Expect(nodeReads.Count()).To(gomega.BeZero())
+	g.Expect(deletes.Count()).To(gomega.BeZero())
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(result).To(gomega.Equal(ctrl.Result{}))
 	g.Expect(apierrors.IsNotFound(live.Get(ctx, client.ObjectKeyFromObject(model), &v1beta1.BaseModel{}))).To(gomega.BeTrue())
@@ -247,19 +216,16 @@ func TestDeletedAcknowledgementDoesNotRequireNodeLookup(t *testing.T) {
 	g.Expect(current.DeletionTimestamp.IsZero()).To(gomega.BeTrue())
 }
 
-func TestModelDeletionWaitsForLiveNodeAfterOrphanCleanup(t *testing.T) {
+func TestHandleModelDeletion_OneNodeGoneOneLive_WaitsForTheLiveNodeOnly(t *testing.T) {
 	g := gomega.NewWithT(t)
 	ctx := context.Background()
-	scheme := runtime.NewScheme()
-	g.Expect(corev1.AddToScheme(scheme)).To(gomega.Succeed())
-	g.Expect(v1beta1.AddToScheme(scheme)).To(gomega.Succeed())
 	orphan, liveCM := orphanConfigMap(), orphanConfigMap()
 	liveCM.Name, liveCM.UID = "live-node", "live-configmap"
 	now := metav1.Now()
 	model := &v1beta1.BaseModel{ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "default", Finalizers: []string{constants.BaseModelFinalizer}, DeletionTimestamp: &now}}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(model, orphan, liveCM, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: liveCM.Name}}).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(model, orphan, liveCM, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: liveCM.Name}}))
 
-	result, err := HandleModelDeletion(ctx, c, c, model, constants.BaseModelFinalizer)
+	result, err := HandleModelDeletion(ctx, c, c, model, false, constants.BaseModelFinalizer)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(result.RequeueAfter).To(gomega.Equal(30 * time.Second))
 	g.Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKeyFromObject(orphan), &corev1.ConfigMap{}))).To(gomega.BeTrue())
@@ -271,28 +237,25 @@ func TestModelDeletionWaitsForLiveNodeAfterOrphanCleanup(t *testing.T) {
 	current.Data[constants.GetModelConfigMapKey("default", "model", false)] = `{"status":"Deleted"}`
 	g.Expect(c.Update(ctx, current)).To(gomega.Succeed())
 
-	result, err = HandleModelDeletion(ctx, c, c, model, constants.BaseModelFinalizer)
+	result, err = HandleModelDeletion(ctx, c, c, model, false, constants.BaseModelFinalizer)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(result).To(gomega.Equal(ctrl.Result{}))
 	g.Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKeyFromObject(model), &v1beta1.BaseModel{}))).To(gomega.BeTrue())
 	g.Expect(c.Get(ctx, client.ObjectKeyFromObject(liveCM), &corev1.ConfigMap{})).To(gomega.Succeed())
 }
 
-func TestPartialOrphanCleanupFailureConvergesOnRetry(t *testing.T) {
+func TestHandleModelDeletion_SecondCleanupDeleteFails_RetryFinishesTheRest(t *testing.T) {
 	g := gomega.NewWithT(t)
 	ctx := context.Background()
-	scheme := runtime.NewScheme()
-	g.Expect(corev1.AddToScheme(scheme)).To(gomega.Succeed())
-	g.Expect(v1beta1.AddToScheme(scheme)).To(gomega.Succeed())
 	first, second := orphanConfigMap(), orphanConfigMap()
 	first.Name, first.UID = "a-first", "first-configmap"
 	second.Name, second.UID = "b-second", "second-configmap"
 	now := metav1.Now()
 	model := &v1beta1.BaseModel{ObjectMeta: metav1.ObjectMeta{Name: "model", Namespace: "default", Finalizers: []string{constants.BaseModelFinalizer}, DeletionTimestamp: &now}}
-	live := fake.NewClientBuilder().WithScheme(scheme).WithObjects(model, first, second).Build()
+	live := fakeclient.New(t, fakeclient.WithObjects(model, first, second))
 	failOnce := true
-	var deletes []string
-	c := interceptor.NewClient(live, interceptor.Funcs{
+	deletes := fakeclient.CountingVerb(fakeclient.Delete)
+	c := fakeclient.Wrap(t, live, deletes, fakeclient.WithInterceptors(interceptor.Funcs{
 		List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
 			if err := c.List(ctx, list, opts...); err != nil {
 				return err
@@ -303,27 +266,27 @@ func TestPartialOrphanCleanupFailureConvergesOnRetry(t *testing.T) {
 			return nil
 		},
 		Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
-			deletes = append(deletes, obj.GetName())
 			if obj.GetName() == second.Name && failOnce {
 				failOnce = false
 				return apierrors.NewTimeoutError("second ConfigMap deletion failed", 1)
 			}
 			return c.Delete(ctx, obj, opts...)
 		},
-	})
+	}))
+	keyOf := client.ObjectKeyFromObject
 
-	_, err := HandleModelDeletion(ctx, c, live, model, constants.BaseModelFinalizer)
+	_, err := HandleModelDeletion(ctx, c, live, model, false, constants.BaseModelFinalizer)
 	g.Expect(apierrors.IsTimeout(err)).To(gomega.BeTrue())
-	g.Expect(deletes).To(gomega.Equal([]string{first.Name, second.Name}))
+	g.Expect(deletes.Keys()).To(gomega.Equal([]client.ObjectKey{keyOf(first), keyOf(second)}))
 	g.Expect(apierrors.IsNotFound(live.Get(ctx, client.ObjectKeyFromObject(first), &corev1.ConfigMap{}))).To(gomega.BeTrue())
 	g.Expect(live.Get(ctx, client.ObjectKeyFromObject(second), &corev1.ConfigMap{})).To(gomega.Succeed())
 	g.Expect(live.Get(ctx, client.ObjectKeyFromObject(model), model)).To(gomega.Succeed())
 	g.Expect(controllerutil.ContainsFinalizer(model, constants.BaseModelFinalizer)).To(gomega.BeTrue())
 
-	result, err := HandleModelDeletion(ctx, c, live, model, constants.BaseModelFinalizer)
+	result, err := HandleModelDeletion(ctx, c, live, model, false, constants.BaseModelFinalizer)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(result).To(gomega.Equal(ctrl.Result{}))
-	g.Expect(deletes).To(gomega.Equal([]string{first.Name, second.Name, second.Name}))
+	g.Expect(deletes.Keys()).To(gomega.Equal([]client.ObjectKey{keyOf(first), keyOf(second), keyOf(second)}))
 	g.Expect(apierrors.IsNotFound(live.Get(ctx, client.ObjectKeyFromObject(second), &corev1.ConfigMap{}))).To(gomega.BeTrue())
 	g.Expect(apierrors.IsNotFound(live.Get(ctx, client.ObjectKeyFromObject(model), &v1beta1.BaseModel{}))).To(gomega.BeTrue())
 }

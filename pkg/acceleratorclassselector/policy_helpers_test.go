@@ -5,14 +5,10 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
-
-// Helper function to create int64 pointer
-func int64Ptr(v int64) *int64 {
-	return &v
-}
 
 // TestScoreFromTFLOPS tests the scoreFromTFLOPS helper function
 func TestScoreFromTFLOPS(t *testing.T) {
@@ -80,10 +76,10 @@ func TestScoreFromTFLOPS(t *testing.T) {
 // TestGetTFLOPSForPrecision tests precision-based TFLOPS extraction
 func TestGetTFLOPSForPrecision(t *testing.T) {
 	perf := &v1beta1.AcceleratorPerformance{
-		Fp32Tflops: int64Ptr(100),
-		Fp16Tflops: int64Ptr(200),
-		Int8Tops:   int64Ptr(400),
-		Int4Tops:   int64Ptr(800),
+		Fp32Tflops: ptr.To[int64](100),
+		Fp16Tflops: ptr.To[int64](200),
+		Int8Tops:   ptr.To[int64](400),
+		Int4Tops:   ptr.To[int64](800),
 	}
 
 	tests := []struct {
@@ -137,7 +133,7 @@ func TestGetTFLOPSForPrecision(t *testing.T) {
 		{
 			name: "Missing FP16 field",
 			perf: &v1beta1.AcceleratorPerformance{
-				Fp32Tflops: int64Ptr(100),
+				Fp32Tflops: ptr.To[int64](100),
 			},
 			precision:      "fp16",
 			expectedTFLOPS: 0,
@@ -171,25 +167,25 @@ func TestGetMaxTFLOPS(t *testing.T) {
 		{
 			name: "INT4 is maximum",
 			perf: &v1beta1.AcceleratorPerformance{
-				Fp32Tflops: int64Ptr(100),
-				Fp16Tflops: int64Ptr(200),
-				Int8Tops:   int64Ptr(400),
-				Int4Tops:   int64Ptr(800),
+				Fp32Tflops: ptr.To[int64](100),
+				Fp16Tflops: ptr.To[int64](200),
+				Int8Tops:   ptr.To[int64](400),
+				Int4Tops:   ptr.To[int64](800),
 			},
 			expectedMax: 800,
 		},
 		{
 			name: "FP32 is maximum",
 			perf: &v1beta1.AcceleratorPerformance{
-				Fp32Tflops: int64Ptr(500),
-				Fp16Tflops: int64Ptr(200),
+				Fp32Tflops: ptr.To[int64](500),
+				Fp16Tflops: ptr.To[int64](200),
 			},
 			expectedMax: 500,
 		},
 		{
 			name: "Only FP16 available",
 			perf: &v1beta1.AcceleratorPerformance{
-				Fp16Tflops: int64Ptr(200),
+				Fp16Tflops: ptr.To[int64](200),
 			},
 			expectedMax: 200,
 		},
@@ -206,8 +202,8 @@ func TestGetMaxTFLOPS(t *testing.T) {
 		{
 			name: "All zero values",
 			perf: &v1beta1.AcceleratorPerformance{
-				Fp32Tflops: int64Ptr(0),
-				Fp16Tflops: int64Ptr(0),
+				Fp32Tflops: ptr.To[int64](0),
+				Fp16Tflops: ptr.To[int64](0),
 			},
 			expectedMax: 0,
 		},
@@ -242,35 +238,35 @@ func TestCalculateMemoryFitScore(t *testing.T) {
 		{
 			name:           "Exact match",
 			candidateMemGB: 40,
-			requiredMemGB:  int64Ptr(40),
+			requiredMemGB:  ptr.To[int64](40),
 			expectedScore:  1.0,
 			description:    "Exact match should score 1.0",
 		},
 		{
 			name:           "2x over-provisioned",
 			candidateMemGB: 80,
-			requiredMemGB:  int64Ptr(40),
+			requiredMemGB:  ptr.To[int64](40),
 			expectedScore:  0.5,
 			description:    "2x over = 0.5 score (1.0 / 2.0)",
 		},
 		{
 			name:           "10x over-provisioned",
 			candidateMemGB: 400,
-			requiredMemGB:  int64Ptr(40),
+			requiredMemGB:  ptr.To[int64](40),
 			expectedScore:  0.1,
 			description:    "10x over = 0.1 score (1.0 / 10.0), no cap",
 		},
 		{
 			name:           "4x over-provisioned",
 			candidateMemGB: 160,
-			requiredMemGB:  int64Ptr(40),
+			requiredMemGB:  ptr.To[int64](40),
 			expectedScore:  0.25,
 			description:    "4x over = 0.25 score",
 		},
 		{
 			name:           "Slightly over-provisioned (1.25x)",
 			candidateMemGB: 50,
-			requiredMemGB:  int64Ptr(40),
+			requiredMemGB:  ptr.To[int64](40),
 			expectedScore:  0.8,
 			description:    "1.25x over = 0.8 score",
 		},
@@ -320,7 +316,7 @@ func TestCalculateComputePerformanceTFLOPSScore(t *testing.T) {
 		{
 			name: "No requirement - perfect score",
 			performance: &v1beta1.AcceleratorPerformance{
-				Fp16Tflops: int64Ptr(100),
+				Fp16Tflops: ptr.To[int64](100),
 			},
 			requiredTFLOPS:      nil,
 			preferredPrecisions: []string{"fp16"},
@@ -330,9 +326,9 @@ func TestCalculateComputePerformanceTFLOPSScore(t *testing.T) {
 		{
 			name: "First precision exact match",
 			performance: &v1beta1.AcceleratorPerformance{
-				Fp16Tflops: int64Ptr(100),
+				Fp16Tflops: ptr.To[int64](100),
 			},
-			requiredTFLOPS:      int64Ptr(100),
+			requiredTFLOPS:      ptr.To[int64](100),
 			preferredPrecisions: []string{"fp16"},
 			expectedScore:       1.0,
 			description:         "First precision meeting requirement gets full score",
@@ -340,9 +336,9 @@ func TestCalculateComputePerformanceTFLOPSScore(t *testing.T) {
 		{
 			name: "First precision exceeds requirement",
 			performance: &v1beta1.AcceleratorPerformance{
-				Fp16Tflops: int64Ptr(200),
+				Fp16Tflops: ptr.To[int64](200),
 			},
-			requiredTFLOPS:      int64Ptr(100),
+			requiredTFLOPS:      ptr.To[int64](100),
 			preferredPrecisions: []string{"fp16"},
 			expectedScore:       1.0,
 			description:         "Exceeding requirement caps at 1.0",
@@ -350,9 +346,9 @@ func TestCalculateComputePerformanceTFLOPSScore(t *testing.T) {
 		{
 			name: "First precision half of requirement",
 			performance: &v1beta1.AcceleratorPerformance{
-				Fp16Tflops: int64Ptr(50),
+				Fp16Tflops: ptr.To[int64](50),
 			},
-			requiredTFLOPS:      int64Ptr(100),
+			requiredTFLOPS:      ptr.To[int64](100),
 			preferredPrecisions: []string{"fp16"},
 			expectedScore:       0.5,
 			description:         "50 TFLOPS / 100 required = 0.5 score",
@@ -360,9 +356,9 @@ func TestCalculateComputePerformanceTFLOPSScore(t *testing.T) {
 		{
 			name: "Second precision fallback with penalty",
 			performance: &v1beta1.AcceleratorPerformance{
-				Fp16Tflops: int64Ptr(100),
+				Fp16Tflops: ptr.To[int64](100),
 			},
-			requiredTFLOPS:      int64Ptr(100),
+			requiredTFLOPS:      ptr.To[int64](100),
 			preferredPrecisions: []string{"fp8", "fp16"},
 			expectedScore:       0.5,
 			description:         "Second precision gets 0.5 penalty (1.0 * 0.5)",
@@ -370,9 +366,9 @@ func TestCalculateComputePerformanceTFLOPSScore(t *testing.T) {
 		{
 			name: "Third precision fallback with penalty",
 			performance: &v1beta1.AcceleratorPerformance{
-				Fp16Tflops: int64Ptr(100),
+				Fp16Tflops: ptr.To[int64](100),
 			},
-			requiredTFLOPS:      int64Ptr(100),
+			requiredTFLOPS:      ptr.To[int64](100),
 			preferredPrecisions: []string{"int4", "int8", "fp16"},
 			expectedScore:       0.25,
 			description:         "Third precision gets 0.25 penalty (1.0 * 0.5 * 0.5)",
@@ -380,11 +376,11 @@ func TestCalculateComputePerformanceTFLOPSScore(t *testing.T) {
 		{
 			name: "No preferred precisions - use max",
 			performance: &v1beta1.AcceleratorPerformance{
-				Fp32Tflops: int64Ptr(50),
-				Fp16Tflops: int64Ptr(100),
-				Int8Tops:   int64Ptr(200),
+				Fp32Tflops: ptr.To[int64](50),
+				Fp16Tflops: ptr.To[int64](100),
+				Int8Tops:   ptr.To[int64](200),
 			},
-			requiredTFLOPS:      int64Ptr(200),
+			requiredTFLOPS:      ptr.To[int64](200),
 			preferredPrecisions: []string{},
 			expectedScore:       1.0,
 			description:         "No preference uses max TFLOPS (INT8 = 200)",
@@ -392,7 +388,7 @@ func TestCalculateComputePerformanceTFLOPSScore(t *testing.T) {
 		{
 			name:                "No precision has TFLOPS data",
 			performance:         &v1beta1.AcceleratorPerformance{},
-			requiredTFLOPS:      int64Ptr(100),
+			requiredTFLOPS:      ptr.To[int64](100),
 			preferredPrecisions: []string{"fp16"},
 			expectedScore:       0.0,
 			description:         "No TFLOPS data returns 0.0",
@@ -400,7 +396,7 @@ func TestCalculateComputePerformanceTFLOPSScore(t *testing.T) {
 		{
 			name:                "Nil performance struct",
 			performance:         nil,
-			requiredTFLOPS:      int64Ptr(100),
+			requiredTFLOPS:      ptr.To[int64](100),
 			preferredPrecisions: []string{"fp16"},
 			expectedScore:       0.0,
 			description:         "Nil performance returns 0.0",
@@ -450,7 +446,7 @@ func TestCalculateBestFitScore(t *testing.T) {
 			name:                "Perfect match on memory and precision",
 			candidateMemGB:      40,
 			candidateTFLOPS:     100,
-			requiredMemGB:       int64Ptr(40),
+			requiredMemGB:       ptr.To[int64](40),
 			precision:           "fp16",
 			preferredPrecisions: []string{"fp16"},
 			expectedScore:       1.0,
@@ -460,7 +456,7 @@ func TestCalculateBestFitScore(t *testing.T) {
 			name:                "Memory 2x over, precision exact",
 			candidateMemGB:      80,
 			candidateTFLOPS:     100,
-			requiredMemGB:       int64Ptr(40),
+			requiredMemGB:       ptr.To[int64](40),
 			precision:           "fp16",
 			preferredPrecisions: []string{"fp16"},
 			expectedScore:       0.65, // 0.7 * 0.5 (mem) + 0.3 * 1.0 (precision)
@@ -470,7 +466,7 @@ func TestCalculateBestFitScore(t *testing.T) {
 			name:                "Memory exact, precision match",
 			candidateMemGB:      40,
 			candidateTFLOPS:     100,
-			requiredMemGB:       int64Ptr(40),
+			requiredMemGB:       ptr.To[int64](40),
 			precision:           "fp16",
 			preferredPrecisions: []string{"fp16"},
 			expectedScore:       1.0, // 0.7 * 1.0 (mem) + 0.3 * 1.0 (precision)
@@ -480,7 +476,7 @@ func TestCalculateBestFitScore(t *testing.T) {
 			name:                "Memory exact, second precision match",
 			candidateMemGB:      40,
 			candidateTFLOPS:     100,
-			requiredMemGB:       int64Ptr(40),
+			requiredMemGB:       ptr.To[int64](40),
 			precision:           "fp16",
 			preferredPrecisions: []string{"fp8", "fp16"},
 			expectedScore:       0.85, // 0.7 * 1.0 (mem) + 0.3 * 0.5 (compute: fp16 with 0.5 penalty)
@@ -641,7 +637,7 @@ func TestCalculateCapabilityScore(t *testing.T) {
 		{
 			name: "High performance GPU",
 			performance: &v1beta1.AcceleratorPerformance{
-				Fp16Tflops: int64Ptr(1000),
+				Fp16Tflops: ptr.To[int64](1000),
 			},
 			memoryGB:            80,
 			bandwidthGBps:       2000,
@@ -652,7 +648,7 @@ func TestCalculateCapabilityScore(t *testing.T) {
 		{
 			name: "Low performance GPU",
 			performance: &v1beta1.AcceleratorPerformance{
-				Fp16Tflops: int64Ptr(100),
+				Fp16Tflops: ptr.To[int64](100),
 			},
 			memoryGB:            16,
 			bandwidthGBps:       500,
@@ -743,7 +739,7 @@ func TestMeetsRequirements(t *testing.T) {
 				},
 			},
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory: int64Ptr(32),
+				MinMemory: ptr.To[int64](32),
 			},
 			expectedEligible: false,
 			expectedReason:   "memory 16GB < required 32GB",
@@ -759,7 +755,7 @@ func TestMeetsRequirements(t *testing.T) {
 				},
 			},
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory: int64Ptr(32),
+				MinMemory: ptr.To[int64](32),
 			},
 			expectedEligible: true,
 			expectedReason:   "",
@@ -775,7 +771,7 @@ func TestMeetsRequirements(t *testing.T) {
 				},
 			},
 			constraints: &v1beta1.AcceleratorConstraints{
-				MaxMemory: int64Ptr(64),
+				MaxMemory: ptr.To[int64](64),
 			},
 			expectedEligible: false,
 			expectedReason:   "memory 80GB > max allowed 64GB",
@@ -851,7 +847,7 @@ func TestMeetsRequirements(t *testing.T) {
 				},
 			},
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory: int64Ptr(40),
+				MinMemory: ptr.To[int64](40),
 			},
 			expectedEligible: false,
 			expectedReason:   "missing memory specification for memory check",
@@ -865,7 +861,7 @@ func TestMeetsRequirements(t *testing.T) {
 				},
 			},
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinComputePerformanceTFLOPS: int64Ptr(100),
+				MinComputePerformanceTFLOPS: ptr.To[int64](100),
 			},
 			expectedEligible: true,
 			expectedReason:   "",

@@ -65,7 +65,7 @@ type Config struct {
 //
 // +kubebuilder:object:generate=false
 type GatewayBackendConfig struct {
-	// RewriteHostname replaces the request Host header with the selected home's
+	// RewriteHostname replaces the request Host header with the selected cluster's
 	// ingress hostname before forwarding.
 	RewriteHostname bool
 
@@ -78,7 +78,7 @@ type GatewayBackendConfig struct {
 	EndpointSlices GatewayBackendEndpointSliceConfig
 }
 
-// GatewayBackendTLSConfig configures a BackendTLSPolicy for every home.
+// GatewayBackendTLSConfig configures a BackendTLSPolicy for every cluster.
 //
 // +kubebuilder:object:generate=false
 type GatewayBackendTLSConfig struct {
@@ -90,7 +90,7 @@ type GatewayBackendTLSConfig struct {
 }
 
 // GatewayBackendEndpointSliceConfig configures direct Gateway address
-// publication for every home.
+// publication for every cluster.
 //
 // +kubebuilder:object:generate=false
 type GatewayBackendEndpointSliceConfig struct {

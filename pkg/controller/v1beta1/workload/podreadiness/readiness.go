@@ -661,3 +661,27 @@ func (l messageList) dump() string {
 	raw, _ := json.Marshal(l)
 	return string(raw)
 }
+
+// NodeNotReadyReason is the reason the node lifecycle controller writes on
+// a pod's Ready condition when it revokes it: the pod's node stopped
+// reporting, so the kubelet-owned container statuses and the serving gate
+// are stale and the pod is in no Service's endpoints.
+const NodeNotReadyReason = "NodeNotReady"
+
+// ReadyRevokedByNode reports whether the node lifecycle controller revoked
+// the pod's Ready condition: Ready is False under NodeNotReadyReason. The
+// kubelet is not reporting, so ContainersReady and the serving gate keep
+// their last values and prove nothing about the pod; a Ready condition
+// the kubelet has merely not folded the gate into yet carries no such
+// reason.
+func ReadyRevokedByNode(pod *corev1.Pod) bool {
+	if pod == nil {
+		return false
+	}
+	for _, c := range pod.Status.Conditions {
+		if c.Type == corev1.PodReady {
+			return c.Status == corev1.ConditionFalse && c.Reason == NodeNotReadyReason
+		}
+	}
+	return false
+}

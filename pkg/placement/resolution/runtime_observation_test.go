@@ -1,7 +1,6 @@
 package resolution
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -10,14 +9,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
-func fixtureClient(t *testing.T, f runtimeFixture) client.WithWatch {
+func fixtureClient(t *testing.T, f runtimeFixture, opts ...fakeclient.Option) client.WithWatch {
 	t.Helper()
 	objects := append([]client.Object{}, f.extra...)
 	if f.runtime != nil {
@@ -26,7 +24,7 @@ func fixtureClient(t *testing.T, f runtimeFixture) client.WithWatch {
 	if f.standing != nil {
 		objects = append(objects, f.standing)
 	}
-	return fake.NewClientBuilder().WithScheme(runtimeScheme(t)).WithObjects(objects...).Build()
+	return fakeclient.New(t, append([]fakeclient.Option{fakeclient.WithScheme(runtimeScheme(t)), fakeclient.WithObjects(objects...)}, opts...)...)
 }
 
 func TestResolveStandingIdentity(t *testing.T) {
@@ -221,43 +219,32 @@ func TestResolveReadErrors(t *testing.T) {
 	for _, target := range []string{"member", "model", "runtime", "catalog", "revision"} {
 		t.Run(target, func(t *testing.T) {
 			f := newRuntimeFixture()
+			var kinds []any
 			switch target {
+			case "member":
+				kinds = []any{&v1beta1.InferenceService{}}
 			case "model":
 				f.model()
+				kinds = []any{&v1beta1.BaseModel{}, &v1beta1.ClusterBaseModel{}}
 			case "runtime":
 				f.service.Spec.Runtime.AutoSync = ptr.To(false)
+				kinds = []any{&v1beta1.ServingRuntime{}, &v1beta1.ClusterServingRuntime{}}
 			case "catalog":
 				f.model()
 				f.service.Spec.Runtime = nil
 			case "revision":
 				f.pin(t, true)
+				kinds = []any{&appsv1.ControllerRevision{}}
 			}
 			want := errors.New("member read denied")
-			cl := interceptor.NewClient(fixtureClient(t, f), interceptor.Funcs{
-				Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, object client.Object, opts ...client.GetOption) error {
-					match := false
-					switch object.(type) {
-					case *v1beta1.InferenceService:
-						match = target == "member"
-					case *v1beta1.BaseModel, *v1beta1.ClusterBaseModel:
-						match = target == "model"
-					case *v1beta1.ServingRuntime, *v1beta1.ClusterServingRuntime:
-						match = target == "runtime"
-					case *appsv1.ControllerRevision:
-						match = target == "revision"
-					}
-					if match {
-						return want
-					}
-					return cl.Get(ctx, key, object, opts...)
-				},
-				List: func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
-					if target == "catalog" {
-						return want
-					}
-					return cl.List(ctx, list, opts...)
-				},
-			})
+			var denied []fakeclient.Option
+			for _, kind := range kinds {
+				denied = append(denied, fakeclient.FailingVerb(fakeclient.Get, fakeclient.EveryCall, want).OnKind(kind))
+			}
+			if target == "catalog" {
+				denied = append(denied, fakeclient.FailingVerb(fakeclient.List, fakeclient.EveryCall, want))
+			}
+			cl := fixtureClient(t, f, denied...)
 			got, err := (Resolver{Client: cl, OperatorNamespace: f.namespace}).Resolve(t.Context(), f.service, nil)
 			if diff := cmp.Diff(true, errors.Is(err, want)); diff != "" {
 				t.Errorf("API error lost:\n%s\n%v", diff, err)
@@ -280,18 +267,12 @@ func TestResolveInputChurn(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newRuntimeFixture()
 			calls := 0
-			cl := interceptor.NewClient(fixtureClient(t, f), interceptor.Funcs{Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, object client.Object, opts ...client.GetOption) error {
-				if err := cl.Get(ctx, key, object, opts...); err != nil {
-					return err
+			cl := fixtureClient(t, f, fakeclient.EditedRead(func(csr *v1beta1.ClusterServingRuntime) {
+				calls++
+				if calls >= tt.changeRead {
+					csr.SetResourceVersion("changed")
 				}
-				if _, ok := object.(*v1beta1.ClusterServingRuntime); ok {
-					calls++
-					if calls >= tt.changeRead {
-						object.SetResourceVersion("changed")
-					}
-				}
-				return nil
-			}})
+			}))
 			got, err := (Resolver{Client: cl}).Resolve(t.Context(), f.service, nil)
 			if diff := cmp.Diff(true, err != nil); diff != "" {
 				t.Error(diff)

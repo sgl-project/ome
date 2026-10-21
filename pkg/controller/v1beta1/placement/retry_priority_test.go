@@ -58,13 +58,12 @@ func TestRetryPriority_InitialListSourceIsServedBehindLiveWork(t *testing.T) {
 	request := func(name string) reconcile.Request {
 		return reconcile.Request{NamespacedName: types.NamespacedName{Namespace: "team", Name: name}}
 	}
-	waitForLength := func(n int) {
-		deadline := time.Now().Add(5 * time.Second)
-		for q.Len() < n {
-			if time.Now().After(deadline) {
-				t.Fatalf("queue length %d, want at least %d", q.Len(), n)
-			}
-			time.Sleep(time.Millisecond)
+	// Len flushes the queue's add buffer before it counts the ready items,
+	// so an item added without a delay is counted as soon as Add returns.
+	requireLength := func(n int) {
+		t.Helper()
+		if got := q.Len(); got != n {
+			t.Fatalf("queue length %d, want %d", got, n)
 		}
 	}
 	h := &handler.EnqueueRequestForObject{}
@@ -75,23 +74,25 @@ func TestRetryPriority_InitialListSourceIsServedBehindLiveWork(t *testing.T) {
 			IsInInitialList: true,
 		}, q)
 	}
-	waitForLength(2)
+	requireLength(2)
 	// The first pass of each cold source fails transiently; the retry keeps the
 	// priority the request entered with, as the controller does when the
-	// result names none.
+	// result names none. It re-enters at once: the queue orders its ready
+	// items by priority and then by arrival, so a retry that waited out a
+	// delay first would take the same place.
 	for range 2 {
 		item, priority, _ := q.GetWithPriority()
 		if priority != handler.LowPriority {
 			t.Fatalf("initial-list item entered at priority %d, want %d", priority, handler.LowPriority)
 		}
 		q.Done(item)
-		q.AddWithOpts(priorityqueue.AddOpts{After: 10 * time.Millisecond, Priority: ptr.To(priority)}, item)
+		q.AddWithOpts(priorityqueue.AddOpts{Priority: ptr.To(priority)}, item)
 	}
-	waitForLength(2)
+	requireLength(2)
 	for _, name := range []string{"busy-a", "busy-b", "busy-c"} {
 		q.Add(request(name))
 	}
-	waitForLength(5)
+	requireLength(5)
 	coldRuns := 0
 	for range 100 {
 		item, priority, _ := q.GetWithPriority()
@@ -100,22 +101,25 @@ func TestRetryPriority_InitialListSourceIsServedBehindLiveWork(t *testing.T) {
 		}
 		q.Done(item)
 		q.AddWithOpts(priorityqueue.AddOpts{Priority: ptr.To(priority)}, item)
-		waitForLength(5)
+		requireLength(5)
 	}
 	if coldRuns != 0 {
-		t.Fatalf("a preserved low priority let the cold sources run %d times behind live work; the failure mode this test pins is zero", coldRuns)
+		t.Fatalf("a preserved low priority let the cold sources run %d times behind live work; this test expects zero", coldRuns)
 	}
 	// With the controller's normalized retry result, the cold sources rejoin
-	// the normal-priority rotation and are served within a few turns.
+	// the normal-priority rotation and are served within a few turns while
+	// the live work keeps coming back.
 	retry := normalizeRetryPriority(ctrl.Result{RequeueAfter: time.Minute}, nil)
 	q.AddWithOpts(priorityqueue.AddOpts{Priority: retry.Priority}, request("cold-a"), request("cold-b"))
 	served := map[string]bool{}
 	for range 5 {
-		item, _, _ := q.GetWithPriority()
+		item, priority, _ := q.GetWithPriority()
+		q.Done(item)
 		if cold[item.Name] {
 			served[item.Name] = true
+			continue
 		}
-		q.Done(item)
+		q.AddWithOpts(priorityqueue.AddOpts{Priority: ptr.To(priority)}, item)
 	}
 	if len(served) != 2 {
 		t.Fatalf("cold sources served within five turns: %v, want both", served)

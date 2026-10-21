@@ -51,6 +51,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/v1beta1convert"
 	"sigs.k8s.io/ome/pkg/placement/protocol"
 	"sigs.k8s.io/ome/pkg/render"
 )
@@ -116,6 +117,13 @@ func notProjectedError(ir *v1beta1.InferenceReplica, isvc *v1beta1.InferenceServ
 type Params struct {
 	placementExecution    *v1beta1.PlacementExecutionPolicy
 	placementReplicaLimit *int32
+	// CoordinatorFollower gives the scaling coordinator ownership of this
+	// component's desired count. CoordinatorTarget is the count it resolved
+	// before this projection, written on create and on update so the count
+	// and the partition sized from it land in one write; nil keeps the live
+	// count on update and projects the declared minimum on create.
+	CoordinatorFollower bool
+	CoordinatorTarget   *int32
 
 	// ISVC is the parent InferenceService. The projector reads
 	// ISVC.Name / Namespace / UID for IR naming + owner-ref, and
@@ -175,14 +183,14 @@ type Params struct {
 	// TopologySpread; nil defaults to the co-location TopologyKey.
 	TopologySpreadKey *string
 
-	// PacingPartition is the rollout-control partition the ISVC
-	// controller's canary machine computed for this Component (the
-	// current step's hold, or the full plan-gate hold), projected onto
-	// ir.Spec.Pacing.Partition. It is kept out of ir.Spec.Lifecycle,
-	// which carries the component's update strategy. nil when no canary
-	// governs the Component; an explicit 0 releases every Instance for the
-	// duration of the plan.
-	PacingPartition *int32
+	// PacingPartition sizes the rollout-control partition the ISVC
+	// controller's canary machine projects for this Component (the current
+	// step's hold, or the full plan-gate hold) against the replica count
+	// this projection stamps, onto ir.Spec.Pacing.Partition. It is kept out
+	// of ir.Spec.Lifecycle, which carries the component's update strategy.
+	// nil when no canary governs the Component; a resolved 0 releases every
+	// Instance for the duration of the plan.
+	PacingPartition PartitionResolver
 
 	// ResolvedAutoscaler is the authoritative per-Component
 	// ComponentAutoscaler the autoscaler.ResolveComponentAutoscaler
@@ -532,27 +540,55 @@ func applyDesiredSpec(ir *v1beta1.InferenceReplica, p Params, name string) {
 	if !p.PreserveAutoscaler {
 		ir.Spec.Autoscaler = p.ResolvedAutoscaler.DeepCopy()
 	}
+
+	// Stamp the hash of the pod templates in the same write as the
+	// templates. The replica repeats it in status once its update revision
+	// was computed from them, so a reader can tell a status written for
+	// these templates from one that predates them without the generation,
+	// which also moves on writes the revision leaves out.
+	if hash := v1beta1convert.TemplateHash(ir, ir.Spec.Runners); hash != "" {
+		ir.Annotations[constants.InferenceReplicaTemplateHashAnnotationKey] = hash
+	} else {
+		delete(ir.Annotations, constants.InferenceReplicaTemplateHashAnnotationKey)
+	}
 }
 
-// projectedPacing returns the pacing block to stamp: the rollout-control
-// partition replaces whatever partition the live block carries, while the
-// rollback target the canary executor writes to the same block directly is
-// preserved. The partition is capped at the projected replica count —
-// admission rejects a larger value, and holding every Instance is the same
-// hold at either number. A block left with no fields projects as nil so an
-// IR outside any canary keeps a stable spec.
-func projectedPacing(live *v1beta1.InferenceReplicaPacing, partition *int32, replicas *int32) *v1beta1.InferenceReplicaPacing {
+// PartitionResolver sizes the rollout-control partition a canary projects
+// for a Component against the replica count the projection stamps, so the
+// partition and the count land on the same fleet in one write. nil projects
+// no partition.
+type PartitionResolver func(replicas int32) *int32
+
+// projectedPacing returns the pacing block to stamp. The rollout-control
+// partition is the canary's resolver evaluated at the projected replica
+// count and replaces whatever partition the live block carries; it is
+// capped at that count — admission rejects a larger value, and holding
+// every Instance is the same hold at either number. The rollback target the
+// canary executor writes to the same block directly is kept only while a
+// canary governs the Component (a resolver was handed in): a Component no
+// canary drives follows its own spec, and a target left behind by a
+// rollback would hold it on the old revision for good. A block left with no
+// fields projects as nil so an IR outside any canary keeps a stable spec.
+func projectedPacing(live *v1beta1.InferenceReplicaPacing, canary PartitionResolver, replicas *int32) *v1beta1.InferenceReplicaPacing {
 	out := &v1beta1.InferenceReplicaPacing{}
 	if live != nil {
 		out = live.DeepCopy()
 	}
 	out.Partition = nil
-	if partition != nil {
-		p := *partition
-		if replicas != nil && p > *replicas {
-			p = *replicas
+	if canary == nil {
+		out.RollbackToRevision = nil
+	} else {
+		var n int32
+		if replicas != nil {
+			n = *replicas
 		}
-		out.Partition = &p
+		if partition := canary(n); partition != nil {
+			p := *partition
+			if replicas != nil && p > *replicas {
+				p = *replicas
+			}
+			out.Partition = &p
+		}
 	}
 	if out.Partition == nil && out.MaxUnavailable == nil && out.RollbackToRevision == nil {
 		return nil
@@ -618,6 +654,10 @@ func boundPatchForLog(data []byte) string {
 //     means no autoscaler; the InferenceService controller owns the count,
 //     so stamp MinReplicas.
 //
+//   - A scaling follower (CoordinatorFollower) carries the coordinator's
+//     count: CoordinatorTarget when it resolved one this pass, on create
+//     and on update alike, else the live count it already carries.
+//
 // ir is the object applyDesiredSpec is mutating — on the Update path it is
 // the live IR fetched via Get (so ResourceVersion + the autoscaler-written
 // Spec.Replicas are populated); on the Create path it is a freshly built
@@ -633,12 +673,21 @@ func desiredReplicas(ir *v1beta1.InferenceReplica, p Params) *int32 {
 	if p.PreserveAutoscaler && !creating {
 		effective = ir.Spec.Autoscaler
 	}
+	// A follower's count is the coordinator's, on create and on update alike;
+	// the projection sizes the canary partition against the count written here.
+	if p.CoordinatorFollower && p.CoordinatorTarget != nil {
+		target := *p.CoordinatorTarget
+		return &target
+	}
 	if protocol.HasZeroReplicaFloor(p.placementExecution, p.Component) {
-		if !creating && isAutoscalerManaged(effective) && ir.Spec.Replicas != nil && *ir.Spec.Replicas >= 0 {
+		if !creating && (isAutoscalerManaged(effective) || p.CoordinatorFollower) && ir.Spec.Replicas != nil && *ir.Spec.Replicas >= 0 {
 			return ir.Spec.Replicas
 		}
 		floor := int32(*p.ComponentExt.MinReplicas)
 		return &floor
+	}
+	if !creating && p.CoordinatorFollower && ir.Spec.Replicas != nil && *ir.Spec.Replicas > 0 {
+		return ir.Spec.Replicas
 	}
 	if creating || !isAutoscalerManaged(effective) {
 		return replicasFromComponentExt(p.ComponentExt)

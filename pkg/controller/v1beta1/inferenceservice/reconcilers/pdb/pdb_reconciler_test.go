@@ -14,67 +14,32 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
-type countingClient struct {
-	client.Client
-	getCalls    int
-	createCalls int
-	updateCalls int
-	deleteCalls int
-
-	failGet    error
-	failCreate error
-	failUpdate error
-	failDelete error
+// verbCalls counts the calls of the four verbs the reconciler may issue.
+type verbCalls struct {
+	gets, creates, updates, deletes *fakeclient.Calls
 }
 
-func (c *countingClient) Get(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
-	c.getCalls++
-	if c.failGet != nil {
-		return c.failGet
+// countedClient layers one counter per verb over base, so a test reads the
+// store through base and counts what the reconciler did through the view.
+func countedClient(t *testing.T, base client.WithWatch) (client.WithWatch, verbCalls) {
+	t.Helper()
+	n := verbCalls{
+		gets:    fakeclient.CountingVerb(fakeclient.Get),
+		creates: fakeclient.CountingVerb(fakeclient.Create),
+		updates: fakeclient.CountingVerb(fakeclient.Update),
+		deletes: fakeclient.CountingVerb(fakeclient.Delete),
 	}
-	return c.Client.Get(ctx, key, obj, opts...)
-}
-
-func (c *countingClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-	c.createCalls++
-	if c.failCreate != nil {
-		return c.failCreate
-	}
-	return c.Client.Create(ctx, obj, opts...)
-}
-
-func (c *countingClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-	c.updateCalls++
-	if c.failUpdate != nil {
-		return c.failUpdate
-	}
-	return c.Client.Update(ctx, obj, opts...)
-}
-
-func (c *countingClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
-	c.deleteCalls++
-	if c.failDelete != nil {
-		return c.failDelete
-	}
-	return c.Client.Delete(ctx, obj, opts...)
+	return fakeclient.Wrap(t, base, n.gets, n.creates, n.updates, n.deletes), n
 }
 
 func intOrStringPtr(value intstr.IntOrString) *intstr.IntOrString {
 	return &value
-}
-
-func testScheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
-	scheme := runtime.NewScheme()
-	require.NoError(t, v1beta1.AddToScheme(scheme))
-	require.NoError(t, policyv1.AddToScheme(scheme))
-	return scheme
 }
 
 func testOwner() *v1beta1.InferenceService {
@@ -158,8 +123,8 @@ func TestPDBReconcilerCreateUsesExplicitRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			scheme := testScheme(t)
-			cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+			scheme := fakeclient.Scheme(t)
+			cl := fakeclient.New(t, fakeclient.WithScheme(scheme))
 			request := testRequest()
 			request.Selector = map[string]string{
 				"example.com/workload": "custom",
@@ -293,25 +258,25 @@ func TestPDBReconcilerRejectsInvalidRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			scheme := testScheme(t)
-			baseClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-			cl := &countingClient{Client: baseClient}
+			scheme := fakeclient.Scheme(t)
+			baseClient := fakeclient.New(t, fakeclient.WithScheme(scheme))
+			cl, calls := countedClient(t, baseClient)
 			request := testRequest()
 			tt.mutate(&request)
 
 			obj, err := NewPDBReconciler(cl, scheme).Reconcile(context.Background(), request)
 			assert.Nil(t, obj)
 			assert.ErrorContains(t, err, tt.message)
-			assert.Zero(t, cl.getCalls)
-			assert.Zero(t, cl.createCalls)
-			assert.Zero(t, cl.updateCalls)
-			assert.Zero(t, cl.deleteCalls)
+			assert.Zero(t, calls.gets.Count())
+			assert.Zero(t, calls.creates.Count())
+			assert.Zero(t, calls.updates.Count())
+			assert.Zero(t, calls.deletes.Count())
 		})
 	}
 }
 
 func TestPDBReconcilerCreateSanitizesMetadata(t *testing.T) {
-	scheme := testScheme(t)
+	scheme := fakeclient.Scheme(t)
 	request := testRequest()
 	now := metav1.Now()
 	gracePeriod := int64(30)
@@ -334,15 +299,14 @@ func TestPDBReconcilerCreateSanitizesMetadata(t *testing.T) {
 	}
 
 	var created *policyv1.PodDisruptionBudget
-	cl := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithInterceptorFuncs(interceptor.Funcs{
+	cl := fakeclient.New(t,
+		fakeclient.WithScheme(scheme),
+		fakeclient.WithInterceptors(interceptor.Funcs{
 			Create: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.CreateOption) error {
 				created = obj.(*policyv1.PodDisruptionBudget).DeepCopy()
 				return nil
 			},
-		}).
-		Build()
+		}))
 
 	obj, err := NewPDBReconciler(cl, scheme).Reconcile(context.Background(), request)
 	require.NoError(t, err)
@@ -358,7 +322,7 @@ func TestPDBReconcilerCreateSanitizesMetadata(t *testing.T) {
 }
 
 func TestPDBReconcilerOwnedEqualDoesNotWrite(t *testing.T) {
-	scheme := testScheme(t)
+	scheme := fakeclient.Scheme(t)
 	request := testRequest()
 	existing := pdbForRequest(request)
 	policy := policyv1.AlwaysAllow
@@ -367,15 +331,15 @@ func TestPDBReconcilerOwnedEqualDoesNotWrite(t *testing.T) {
 	existing.Finalizers = []string{"example.com/finalizer"}
 	existing.Status = policyv1.PodDisruptionBudgetStatus{CurrentHealthy: 3, DesiredHealthy: 2}
 
-	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	cl := &countingClient{Client: baseClient}
+	baseClient := fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(existing))
+	cl, calls := countedClient(t, baseClient)
 
 	obj, err := NewPDBReconciler(cl, scheme).Reconcile(context.Background(), request)
 	require.NoError(t, err)
 	require.NotNil(t, obj)
-	assert.Zero(t, cl.createCalls)
-	assert.Zero(t, cl.updateCalls)
-	assert.Zero(t, cl.deleteCalls)
+	assert.Zero(t, calls.creates.Count())
+	assert.Zero(t, calls.updates.Count())
+	assert.Zero(t, calls.deletes.Count())
 }
 
 func TestPDBReconcilerPreflightRejectsUnavailableObjectWithoutWrites(t *testing.T) {
@@ -410,44 +374,44 @@ func TestPDBReconcilerPreflightRejectsUnavailableObjectWithoutWrites(t *testing.
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			scheme := testScheme(t)
+			scheme := fakeclient.Scheme(t)
 			request := testRequest()
 			existing := pdbForRequest(request)
 			tt.mutate(existing)
-			baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-			cl := &countingClient{Client: baseClient}
+			baseClient := fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(existing))
+			cl, calls := countedClient(t, baseClient)
 
 			err := NewPDBReconciler(cl, scheme).Preflight(context.Background(), request)
 			tt.assertError(t, err)
-			assert.Equal(t, 1, cl.getCalls)
-			assert.Zero(t, cl.createCalls)
-			assert.Zero(t, cl.updateCalls)
-			assert.Zero(t, cl.deleteCalls)
+			assert.Equal(t, 1, calls.gets.Count())
+			assert.Zero(t, calls.creates.Count())
+			assert.Zero(t, calls.updates.Count())
+			assert.Zero(t, calls.deletes.Count())
 		})
 	}
 }
 
 func TestPDBReconcilerPreflightSkipsLookupWithoutDesiredBudget(t *testing.T) {
-	scheme := testScheme(t)
+	scheme := fakeclient.Scheme(t)
 	request := testRequest()
 	request.Budget = nil
 	request.Selector = nil
-	cl := &countingClient{Client: fake.NewClientBuilder().WithScheme(scheme).Build()}
+	cl, calls := countedClient(t, fakeclient.New(t, fakeclient.WithScheme(scheme)))
 
 	require.NoError(t, NewPDBReconciler(cl, scheme).Preflight(context.Background(), request))
-	assert.Zero(t, cl.getCalls)
-	assert.Zero(t, cl.createCalls)
-	assert.Zero(t, cl.updateCalls)
-	assert.Zero(t, cl.deleteCalls)
+	assert.Zero(t, calls.gets.Count())
+	assert.Zero(t, calls.creates.Count())
+	assert.Zero(t, calls.updates.Count())
+	assert.Zero(t, calls.deletes.Count())
 }
 
 func TestPDBReconcilerPreflightUsesLiveReader(t *testing.T) {
-	scheme := testScheme(t)
+	scheme := fakeclient.Scheme(t)
 	request := testRequest()
 	existing := pdbForRequest(request)
 	existing.OwnerReferences = []metav1.OwnerReference{foreignControllerRef()}
-	cachedClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	liveReader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
+	cachedClient := fakeclient.New(t, fakeclient.WithScheme(scheme))
+	liveReader := fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(existing))
 
 	err := NewPDBReconcilerWithReader(cachedClient, liveReader, scheme).Preflight(
 		context.Background(), request,
@@ -456,20 +420,20 @@ func TestPDBReconcilerPreflightUsesLiveReader(t *testing.T) {
 }
 
 func TestPDBReconcilerMutationUsesLiveReader(t *testing.T) {
-	scheme := testScheme(t)
+	scheme := fakeclient.Scheme(t)
 	request := testRequest()
 	existing := pdbForRequest(request)
 	existing.OwnerReferences = []metav1.OwnerReference{foreignControllerRef()}
-	cachedClient := &countingClient{Client: fake.NewClientBuilder().WithScheme(scheme).Build()}
-	liveReader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
+	cachedClient, calls := countedClient(t, fakeclient.New(t, fakeclient.WithScheme(scheme)))
+	liveReader := fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(existing))
 
 	_, err := NewPDBReconcilerWithReader(cachedClient, liveReader, scheme).Reconcile(
 		context.Background(), request,
 	)
 	assert.True(t, apierrors.IsConflict(err), "error = %v", err)
-	assert.Zero(t, cachedClient.createCalls)
-	assert.Zero(t, cachedClient.updateCalls)
-	assert.Zero(t, cachedClient.deleteCalls)
+	assert.Zero(t, calls.creates.Count())
+	assert.Zero(t, calls.updates.Count())
+	assert.Zero(t, calls.deletes.Count())
 }
 
 func TestPDBReconcilerDefersSelectorCutoverUntilTargetIsReady(t *testing.T) {
@@ -488,11 +452,11 @@ func TestPDBReconcilerDefersSelectorCutoverUntilTargetIsReady(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			scheme := testScheme(t)
+			scheme := fakeclient.Scheme(t)
 			originalRequest := testRequest()
 			existing := pdbForRequest(originalRequest)
-			baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-			cl := &countingClient{Client: baseClient}
+			baseClient := fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(existing))
+			cl, calls := countedClient(t, baseClient)
 			request := testRequest()
 			request.Selector = map[string]string{"example.com/component": "target"}
 			request.Budget = tt.budget
@@ -502,8 +466,8 @@ func TestPDBReconcilerDefersSelectorCutoverUntilTargetIsReady(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, obj)
 			assert.Equal(t, originalRequest.Selector, obj.Spec.Selector.MatchLabels)
-			assert.Zero(t, cl.updateCalls)
-			assert.Zero(t, cl.deleteCalls)
+			assert.Zero(t, calls.updates.Count())
+			assert.Zero(t, calls.deletes.Count())
 
 			request.SelectorCutoverReady = true
 			obj, err = NewPDBReconciler(cl, scheme).Reconcile(context.Background(), request)
@@ -516,45 +480,45 @@ func TestPDBReconcilerDefersSelectorCutoverUntilTargetIsReady(t *testing.T) {
 			}
 			require.NotNil(t, obj)
 			assert.Equal(t, request.Selector, obj.Spec.Selector.MatchLabels)
-			assert.Equal(t, 1, cl.updateCalls)
+			assert.Equal(t, 1, calls.updates.Count())
 		})
 	}
 }
 
 func TestPDBReconcilerRepairsUnexpectedSelectorDriftBeforeTargetReady(t *testing.T) {
-	scheme := testScheme(t)
+	scheme := fakeclient.Scheme(t)
 	request := testRequest()
 	request.CutoverFromSelector = map[string]string{"example.com/component": "source"}
 	request.Selector = map[string]string{"example.com/component": "target"}
 	existing := pdbForRequest(request)
 	existing.Spec.Selector = &metav1.LabelSelector{}
-	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	cl := &countingClient{Client: baseClient}
+	baseClient := fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(existing))
+	cl, calls := countedClient(t, baseClient)
 
 	obj, err := NewPDBReconciler(cl, scheme).Reconcile(context.Background(), request)
 	require.NoError(t, err)
 	require.NotNil(t, obj)
 	assert.Equal(t, request.Selector, obj.Spec.Selector.MatchLabels)
-	assert.Equal(t, 1, cl.updateCalls)
+	assert.Equal(t, 1, calls.updates.Count())
 }
 
 func TestPDBReconcilerDesiredPresentRejectsTerminatingOwnedPDB(t *testing.T) {
-	scheme := testScheme(t)
+	scheme := fakeclient.Scheme(t)
 	request := testRequest()
 	existing := pdbForRequest(request)
 	existing.Finalizers = []string{"example.com/finalizer"}
 	now := metav1.Now()
 	existing.DeletionTimestamp = &now
 
-	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	cl := &countingClient{Client: baseClient}
+	baseClient := fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(existing))
+	cl, calls := countedClient(t, baseClient)
 
 	obj, err := NewPDBReconciler(cl, scheme).Reconcile(context.Background(), request)
 	assert.Nil(t, obj)
 	assert.ErrorContains(t, err, "terminating")
-	assert.Zero(t, cl.createCalls)
-	assert.Zero(t, cl.updateCalls)
-	assert.Zero(t, cl.deleteCalls)
+	assert.Zero(t, calls.creates.Count())
+	assert.Zero(t, calls.updates.Count())
+	assert.Zero(t, calls.deletes.Count())
 
 	got := &policyv1.PodDisruptionBudget{}
 	require.NoError(t, baseClient.Get(context.Background(), types.NamespacedName{
@@ -566,7 +530,7 @@ func TestPDBReconcilerDesiredPresentRejectsTerminatingOwnedPDB(t *testing.T) {
 }
 
 func TestPDBReconcilerOwnedDriftPreservesUnmanagedFields(t *testing.T) {
-	scheme := testScheme(t)
+	scheme := fakeclient.Scheme(t)
 	request := testRequest()
 	existing := pdbForRequest(request)
 	existing.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"example.com/old": "selector"}}
@@ -588,13 +552,13 @@ func TestPDBReconcilerOwnedDriftPreservesUnmanagedFields(t *testing.T) {
 	request.ObjectMeta.Labels = map[string]string{"example.com/request": "ignored-on-update"}
 	request.ObjectMeta.Annotations = map[string]string{"example.com/request": "ignored-on-update"}
 
-	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	cl := &countingClient{Client: baseClient}
+	baseClient := fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(existing))
+	cl, calls := countedClient(t, baseClient)
 
 	obj, err := NewPDBReconciler(cl, scheme).Reconcile(context.Background(), request)
 	require.NoError(t, err)
 	require.NotNil(t, obj)
-	assert.Equal(t, 1, cl.updateCalls)
+	assert.Equal(t, 1, calls.updates.Count())
 
 	got := &policyv1.PodDisruptionBudget{}
 	require.NoError(t, baseClient.Get(context.Background(), types.NamespacedName{
@@ -613,7 +577,7 @@ func TestPDBReconcilerOwnedDriftPreservesUnmanagedFields(t *testing.T) {
 }
 
 func TestPDBReconcilerNormalizesSameUIDControllerReference(t *testing.T) {
-	scheme := testScheme(t)
+	scheme := fakeclient.Scheme(t)
 	request := testRequest()
 	existing := pdbForRequest(request)
 	driftedController := controllerRef(request.Owner)
@@ -623,13 +587,13 @@ func TestPDBReconcilerNormalizesSameUIDControllerReference(t *testing.T) {
 	driftedController.BlockOwnerDeletion = nil
 	existing.OwnerReferences = []metav1.OwnerReference{driftedController, observerRef()}
 
-	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	cl := &countingClient{Client: baseClient}
+	baseClient := fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(existing))
+	cl, calls := countedClient(t, baseClient)
 
 	obj, err := NewPDBReconciler(cl, scheme).Reconcile(context.Background(), request)
 	require.NoError(t, err)
 	require.NotNil(t, obj)
-	assert.Equal(t, 1, cl.updateCalls)
+	assert.Equal(t, 1, calls.updates.Count())
 
 	got := &policyv1.PodDisruptionBudget{}
 	require.NoError(t, baseClient.Get(context.Background(), types.NamespacedName{
@@ -653,20 +617,20 @@ func TestPDBReconcilerDesiredPresentRejectsForeignPDB(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			scheme := testScheme(t)
+			scheme := fakeclient.Scheme(t)
 			request := testRequest()
 			existing := pdbForRequest(request)
 			existing.OwnerReferences = tt.ownerRefs
 			existing.Spec.MaxUnavailable = intOrStringPtr(intstr.FromInt(3))
 			original := existing.DeepCopy()
-			baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-			cl := &countingClient{Client: baseClient}
+			baseClient := fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(existing))
+			cl, calls := countedClient(t, baseClient)
 
 			_, err := NewPDBReconciler(cl, scheme).Reconcile(context.Background(), request)
 			assert.True(t, apierrors.IsConflict(err), "error = %v", err)
-			assert.Zero(t, cl.createCalls)
-			assert.Zero(t, cl.updateCalls)
-			assert.Zero(t, cl.deleteCalls)
+			assert.Zero(t, calls.creates.Count())
+			assert.Zero(t, calls.updates.Count())
+			assert.Zero(t, calls.deletes.Count())
 
 			got := &policyv1.PodDisruptionBudget{}
 			require.NoError(t, baseClient.Get(context.Background(), types.NamespacedName{
@@ -690,28 +654,28 @@ func TestPDBReconcilerDesiredAbsentPreservesForeignPDB(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			scheme := testScheme(t)
+			scheme := fakeclient.Scheme(t)
 			request := testRequest()
 			request.Budget = nil
 			request.Selector = nil
 			existing := pdbForRequest(testRequest())
 			existing.OwnerReferences = tt.ownerRefs
-			baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-			cl := &countingClient{Client: baseClient}
+			baseClient := fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(existing))
+			cl, calls := countedClient(t, baseClient)
 
 			obj, err := NewPDBReconciler(cl, scheme).Reconcile(context.Background(), request)
 			require.NoError(t, err)
 			require.NotNil(t, obj)
 			assert.Equal(t, existing.UID, obj.UID)
-			assert.Zero(t, cl.deleteCalls)
+			assert.Zero(t, calls.deletes.Count())
 		})
 	}
 }
 
 func TestPDBReconcilerDesiredAbsentNotFoundIsNoOp(t *testing.T) {
-	scheme := testScheme(t)
-	baseClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	cl := &countingClient{Client: baseClient}
+	scheme := fakeclient.Scheme(t)
+	baseClient := fakeclient.New(t, fakeclient.WithScheme(scheme))
+	cl, calls := countedClient(t, baseClient)
 	request := testRequest()
 	request.Budget = nil
 	request.Selector = nil
@@ -719,23 +683,23 @@ func TestPDBReconcilerDesiredAbsentNotFoundIsNoOp(t *testing.T) {
 	obj, err := NewPDBReconciler(cl, scheme).Reconcile(context.Background(), request)
 	require.NoError(t, err)
 	assert.Nil(t, obj)
-	assert.Equal(t, 1, cl.getCalls)
-	assert.Zero(t, cl.createCalls)
-	assert.Zero(t, cl.updateCalls)
-	assert.Zero(t, cl.deleteCalls)
+	assert.Equal(t, 1, calls.gets.Count())
+	assert.Zero(t, calls.creates.Count())
+	assert.Zero(t, calls.updates.Count())
+	assert.Zero(t, calls.deletes.Count())
 }
 
 func TestPDBReconcilerDesiredAbsentDeletesOwnedWithPreconditions(t *testing.T) {
-	scheme := testScheme(t)
+	scheme := fakeclient.Scheme(t)
 	request := testRequest()
 	request.Budget = nil
 	existing := pdbForRequest(testRequest())
 
 	deleteCalls := 0
-	cl := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(existing).
-		WithInterceptorFuncs(interceptor.Funcs{
+	cl := fakeclient.New(t,
+		fakeclient.WithScheme(scheme),
+		fakeclient.WithObjects(existing),
+		fakeclient.WithInterceptors(interceptor.Funcs{
 			Delete: func(_ context.Context, _ client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
 				deleteCalls++
 				deleteOptions := &client.DeleteOptions{}
@@ -749,8 +713,7 @@ func TestPDBReconcilerDesiredAbsentDeletesOwnedWithPreconditions(t *testing.T) {
 				assert.Equal(t, obj.GetResourceVersion(), *deleteOptions.Preconditions.ResourceVersion)
 				return nil
 			},
-		}).
-		Build()
+		}))
 
 	obj, err := NewPDBReconciler(cl, scheme).Reconcile(context.Background(), request)
 	require.NoError(t, err)
@@ -761,57 +724,53 @@ func TestPDBReconcilerDesiredAbsentDeletesOwnedWithPreconditions(t *testing.T) {
 func TestPDBReconcilerOperationFailuresPropagate(t *testing.T) {
 	tests := []struct {
 		name    string
-		prepare func(*testing.T, *runtime.Scheme) (*countingClient, Request)
+		prepare func(*testing.T, *runtime.Scheme) (client.Client, Request)
 		marker  error
 	}{
 		{
 			name:   "get",
 			marker: errors.New("get failure"),
-			prepare: func(_ *testing.T, scheme *runtime.Scheme) (*countingClient, Request) {
-				baseClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+			prepare: func(t *testing.T, scheme *runtime.Scheme) (client.Client, Request) {
 				marker := errors.New("get failure")
-				return &countingClient{Client: baseClient, failGet: marker}, testRequest()
+				return fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.FailingVerb(fakeclient.Get, fakeclient.EveryCall, marker)), testRequest()
 			},
 		},
 		{
 			name:   "create",
 			marker: errors.New("create failure"),
-			prepare: func(_ *testing.T, scheme *runtime.Scheme) (*countingClient, Request) {
-				baseClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+			prepare: func(t *testing.T, scheme *runtime.Scheme) (client.Client, Request) {
 				marker := errors.New("create failure")
-				return &countingClient{Client: baseClient, failCreate: marker}, testRequest()
+				return fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.FailingVerb(fakeclient.Create, fakeclient.EveryCall, marker)), testRequest()
 			},
 		},
 		{
 			name:   "update",
 			marker: errors.New("update failure"),
-			prepare: func(_ *testing.T, scheme *runtime.Scheme) (*countingClient, Request) {
+			prepare: func(t *testing.T, scheme *runtime.Scheme) (client.Client, Request) {
 				request := testRequest()
 				existing := pdbForRequest(request)
 				existing.Spec.MaxUnavailable = intOrStringPtr(intstr.FromInt(3))
-				baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
 				marker := errors.New("update failure")
-				return &countingClient{Client: baseClient, failUpdate: marker}, request
+				return fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(existing), fakeclient.FailingVerb(fakeclient.Update, fakeclient.EveryCall, marker)), request
 			},
 		},
 		{
 			name:   "delete",
 			marker: errors.New("delete failure"),
-			prepare: func(_ *testing.T, scheme *runtime.Scheme) (*countingClient, Request) {
+			prepare: func(t *testing.T, scheme *runtime.Scheme) (client.Client, Request) {
 				request := testRequest()
 				existing := pdbForRequest(request)
 				request.Budget = nil
 				request.Selector = nil
-				baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
 				marker := errors.New("delete failure")
-				return &countingClient{Client: baseClient, failDelete: marker}, request
+				return fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(existing), fakeclient.FailingVerb(fakeclient.Delete, fakeclient.EveryCall, marker)), request
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			scheme := testScheme(t)
+			scheme := fakeclient.Scheme(t)
 			cl, request := tt.prepare(t, scheme)
 			_, err := NewPDBReconciler(cl, scheme).Reconcile(context.Background(), request)
 			assert.ErrorContains(t, err, tt.marker.Error())
@@ -820,16 +779,16 @@ func TestPDBReconcilerOperationFailuresPropagate(t *testing.T) {
 }
 
 func TestPDBReconcilerUpdateConflictPreservesConcurrentState(t *testing.T) {
-	scheme := testScheme(t)
+	scheme := fakeclient.Scheme(t)
 	request := testRequest()
 	existing := pdbForRequest(request)
 	existing.Spec.MaxUnavailable = intOrStringPtr(intstr.FromInt(3))
 	key := types.NamespacedName{Namespace: existing.Namespace, Name: existing.Name}
 
-	cl := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(existing).
-		WithInterceptorFuncs(interceptor.Funcs{
+	cl := fakeclient.New(t,
+		fakeclient.WithScheme(scheme),
+		fakeclient.WithObjects(existing),
+		fakeclient.WithInterceptors(interceptor.Funcs{
 			Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
 				fresh := &policyv1.PodDisruptionBudget{}
 				require.NoError(t, c.Get(ctx, key, fresh))
@@ -837,8 +796,7 @@ func TestPDBReconcilerUpdateConflictPreservesConcurrentState(t *testing.T) {
 				require.NoError(t, c.Update(ctx, fresh))
 				return c.Update(ctx, obj, opts...)
 			},
-		}).
-		Build()
+		}))
 
 	_, err := NewPDBReconciler(cl, scheme).Reconcile(context.Background(), request)
 	assert.True(t, apierrors.IsConflict(err), "error = %v", err)
@@ -850,17 +808,17 @@ func TestPDBReconcilerUpdateConflictPreservesConcurrentState(t *testing.T) {
 }
 
 func TestPDBReconcilerDeleteConflictPreservesOwnerHandoff(t *testing.T) {
-	scheme := testScheme(t)
+	scheme := fakeclient.Scheme(t)
 	request := testRequest()
 	existing := pdbForRequest(request)
 	request.Budget = nil
 	request.Selector = nil
 	key := types.NamespacedName{Namespace: existing.Namespace, Name: existing.Name}
 
-	cl := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(existing).
-		WithInterceptorFuncs(interceptor.Funcs{
+	cl := fakeclient.New(t,
+		fakeclient.WithScheme(scheme),
+		fakeclient.WithObjects(existing),
+		fakeclient.WithInterceptors(interceptor.Funcs{
 			Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
 				fresh := &policyv1.PodDisruptionBudget{}
 				require.NoError(t, c.Get(ctx, key, fresh))
@@ -868,8 +826,7 @@ func TestPDBReconcilerDeleteConflictPreservesOwnerHandoff(t *testing.T) {
 				require.NoError(t, c.Update(ctx, fresh))
 				return c.Delete(ctx, obj, opts...)
 			},
-		}).
-		Build()
+		}))
 
 	_, err := NewPDBReconciler(cl, scheme).Reconcile(context.Background(), request)
 	assert.True(t, apierrors.IsConflict(err), "error = %v", err)

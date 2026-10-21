@@ -650,6 +650,55 @@ type LifecycleConfig struct {
 	// inferenceservice-config ConfigMap (Helm chart / GitOps). Absent
 	// means unconfigured: every historical block is kept.
 	RetryBlockHistoryLimit *int32 `json:"retryBlockHistoryLimit,omitempty"`
+	// PrefillDecodeRoll switches the pacing rules of a rollout group that
+	// lists both the engine (prefill) and the decoder. Absence keeps each
+	// side on its own budget, with no ratio rule between them.
+	PrefillDecodeRoll *PrefillDecodeRollConfig `json:"prefillDecodeRoll,omitempty"`
+}
+
+// PrefillDecodeRollConfig holds the pacing rules of a rollout group that
+// lists both the engine (prefill) and the decoder. An omitted field reads
+// as off; there are intentionally NO in-code defaults.
+//
+// +kubebuilder:object:generate=false
+type PrefillDecodeRollConfig struct {
+	// KeepRatio sizes every batch of such a roll so that the share of each
+	// side already moving to the new version stays within the group's
+	// maintainRatio tolerance of the other side's share (the configured
+	// default tolerance when the group names none), on the drain-first and
+	// the surge path alike. A move counts from the moment it starts.
+	KeepRatio bool `json:"keepRatio,omitempty"`
+	// FirstSide names the side that moves first inside every batch, "engine"
+	// or "decoder": the other side's moves of the batch are admitted once the
+	// named side's new Instances of that batch serve. Operators name the side
+	// that takes longer to come back, so one side is down at a time and both
+	// return close together. Empty lets both sides start a batch together.
+	FirstSide string `json:"firstSide,omitempty"`
+}
+
+// The two sides a prefillDecodeRoll.firstSide may name.
+const (
+	PrefillDecodeFirstSideEngine  = "engine"
+	PrefillDecodeFirstSideDecoder = "decoder"
+)
+
+// ToPrefillDecodeRoll validates the configured prefill/decode rules. A nil
+// config or an absent block reads as both rules off. A firstSide other
+// than "engine", "decoder" or empty is invalid: the error names it and the
+// returned firstSide is empty, so callers that treat invalid config as
+// unconfigured let both sides start a batch together while keepRatio
+// stands as written.
+func (c *LifecycleConfig) ToPrefillDecodeRoll() (keepRatio bool, firstSide string, err error) {
+	if c == nil || c.PrefillDecodeRoll == nil {
+		return false, "", nil
+	}
+	rules := c.PrefillDecodeRoll
+	switch rules.FirstSide {
+	case "", PrefillDecodeFirstSideEngine, PrefillDecodeFirstSideDecoder:
+		return rules.KeepRatio, rules.FirstSide, nil
+	}
+	return rules.KeepRatio, "", fmt.Errorf("invalid lifecycle.prefillDecodeRoll.firstSide: must be %q or %q, got %q",
+		PrefillDecodeFirstSideEngine, PrefillDecodeFirstSideDecoder, rules.FirstSide)
 }
 
 // PodBatchSizes contains the process-scoped OMENative scale settings loaded

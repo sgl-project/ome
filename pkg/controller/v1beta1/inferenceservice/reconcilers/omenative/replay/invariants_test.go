@@ -3,6 +3,7 @@ package replay
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -174,5 +175,108 @@ func TestCheckRunOpensOnChange(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			expectClasses(t, CheckRunOpensOnChange(tc.view), tc.want)
 		})
+	}
+}
+
+// TestClosedRunWatch holds R: once a run closed Completed with its pinned
+// Component Stable, a run toward the same revision or a traffic move with
+// the service at the same generation is a finding; a spec change or a run
+// toward another revision releases the watch.
+func TestClosedRunWatch(t *testing.T) {
+	const stable, latest, other = "aaaa1111", "bbbb2222", "cccc3333"
+	stamp := func(minute int) *metav1.Time {
+		ts := metav1.NewTime(time.Date(2024, 1, 1, 0, minute, 0, 0, time.UTC))
+		return &ts
+	}
+	closed := func(openedMin, closedMin int, outcome v1beta1.RolloutRunOutcome, revision string) *v1beta1.RolloutRunRecord {
+		return &v1beta1.RolloutRunRecord{Outcome: outcome, OpenedAt: stamp(openedMin), ClosedAt: stamp(closedMin),
+			TargetRevisions: []v1beta1.RolloutRunTarget{{Component: v1beta1.EngineComponent, Revision: revision, StableRevision: stable}}}
+	}
+	open := func(revision string) *v1beta1.RolloutRun {
+		return &v1beta1.RolloutRun{RunID: "r2", OpenedAt: *stamp(12),
+			TargetRevisions: []v1beta1.RolloutRunTarget{{Component: v1beta1.EngineComponent, Revision: revision, StableRevision: latest}}}
+	}
+	view := func(generation int64, active *v1beta1.RolloutRun, last *v1beta1.RolloutRunRecord, phase v1beta1.RolloutPhase, traffic ...v1beta1.ComponentTrafficTarget) TickView {
+		isvc := &v1beta1.InferenceService{}
+		isvc.Generation = generation
+		isvc.Status.Rollout = &v1beta1.RolloutStatus{ActiveRun: active, LastRun: last}
+		isvc.Status.Components = map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
+			v1beta1.EngineComponent: {RolloutPhase: phase, Traffic: traffic},
+		}
+		return TickView{Service: isvc}
+	}
+	all := v1beta1.ComponentTrafficTarget{RevisionName: "svc-a-engine-rev-" + latest, Percent: 100, LatestRevision: true}
+	split := []v1beta1.ComponentTrafficTarget{
+		{RevisionName: "svc-a-engine-rev-" + stable, Percent: 10},
+		{RevisionName: "svc-a-engine-rev-" + latest, Percent: 90, LatestRevision: true},
+	}
+	settled := view(2, nil, closed(0, 11, v1beta1.RolloutRunCompleted, latest), v1beta1.RolloutPhaseStable, all)
+	cases := []struct {
+		name  string
+		ticks []TickView
+		want  []string
+	}{
+		{
+			name:  "a run toward the same revision after the close, the spec unchanged",
+			ticks: []TickView{settled, view(2, open(latest), nil, v1beta1.RolloutPhasePending, all)},
+			want:  []string{"R/run-reopens-after-completed-close[open]"},
+		},
+		{
+			name:  "a run that opened and closed between two ticks",
+			ticks: []TickView{settled, view(2, nil, closed(12, 13, v1beta1.RolloutRunCompleted, latest), v1beta1.RolloutPhaseStable, all)},
+			want:  []string{"R/run-reopens-after-completed-close[closed]"},
+		},
+		{
+			name:  "a run after a spec change is the next operation",
+			ticks: []TickView{settled, view(3, open(latest), nil, v1beta1.RolloutPhasePending, all)},
+		},
+		{
+			name:  "a run toward another revision is the next operation",
+			ticks: []TickView{settled, view(2, open(other), nil, v1beta1.RolloutPhasePending, all)},
+		},
+		{
+			name:  "traffic that moves after the close with no run open",
+			ticks: []TickView{settled, view(2, nil, closed(0, 11, v1beta1.RolloutRunCompleted, latest), v1beta1.RolloutPhaseStable, split...)},
+			want:  []string{"R/traffic-moves-after-completed-close"},
+		},
+		{
+			name: "an entry at zero percent is no move",
+			ticks: []TickView{settled, view(2, nil, closed(0, 11, v1beta1.RolloutRunCompleted, latest), v1beta1.RolloutPhaseStable, all,
+				v1beta1.ComponentTrafficTarget{RevisionName: "svc-a-engine-rev-" + stable, Percent: 0})},
+		},
+		{
+			name:  "a record that is not a Completed close with a Stable unit arms nothing",
+			ticks: []TickView{view(2, nil, closed(0, 11, v1beta1.RolloutRunRolledBack, latest), v1beta1.RolloutPhaseRolledBack, all), view(2, open(latest), nil, v1beta1.RolloutPhasePending, all)},
+		},
+		{
+			name:  "a unit still Paused at the close arms nothing",
+			ticks: []TickView{view(2, nil, closed(0, 11, v1beta1.RolloutRunCompleted, latest), v1beta1.RolloutPhasePaused, all), view(2, open(latest), nil, v1beta1.RolloutPhasePending, all)},
+		},
+		{
+			name:  "a service with no rollout status makes no observation",
+			ticks: []TickView{{Service: &v1beta1.InferenceService{}}, {}},
+		},
+		{
+			name:  "the reopen is reported once and the next close arms the watch again",
+			ticks: []TickView{settled, view(2, open(latest), nil, v1beta1.RolloutPhasePending, all), view(2, open(latest), nil, v1beta1.RolloutPhasePending, all), view(2, nil, closed(12, 14, v1beta1.RolloutRunCompleted, latest), v1beta1.RolloutPhaseStable, all), view(2, open(latest), nil, v1beta1.RolloutPhasePending, all)},
+			want:  []string{"R/run-reopens-after-completed-close[open]", "R/run-reopens-after-completed-close[open]"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			watch := &ClosedRunWatch{}
+			var got []Finding
+			for _, tick := range tc.ticks {
+				got = append(got, watch.Observe(tick)...)
+			}
+			expectClasses(t, got, tc.want)
+		})
+	}
+	// The detail carries the revisions, the close and the generation.
+	watch := &ClosedRunWatch{}
+	watch.Observe(settled)
+	got := watch.Observe(view(2, open(latest), nil, v1beta1.RolloutPhasePending, all))
+	if len(got) != 1 || got[0].Detail != "a run opened toward [engine=bbbb2222] after the run that closed Completed on the same revisions at 2024-01-01T00:11:00Z, with the service still at generation 2" {
+		t.Fatalf("detail: %+v", got)
 	}
 }

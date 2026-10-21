@@ -27,13 +27,26 @@ import (
 // pod and the pass after it finds the pod on its way out.
 
 // pdPodLoss is the PD canary at its first split with the pod identities
-// the passes read through the client.
+// the passes read through the client: the canary pod the walk loses, on
+// the engine unless a walk names the decoder.
 type pdPodLoss struct {
 	*pdCanary
-	enginePod types.NamespacedName
+	lostPod       types.NamespacedName
+	lostComponent string
+	lostHash      string
 }
 
 func newPDPodLoss(t *testing.T, name string) *pdPodLoss {
+	return newPDPodLossOf(t, name, "engine", "engnew")
+}
+
+// newPDDecoderPodLoss is the same split with the decoder's canary pod as the
+// one the walk loses.
+func newPDDecoderPodLoss(t *testing.T, name string) *pdPodLoss {
+	return newPDPodLossOf(t, name, "decoder", "decnew")
+}
+
+func newPDPodLossOf(t *testing.T, name, component, hash string) *pdPodLoss {
 	t.Helper()
 	f := newPDCanary(t, name, true)
 	f.deps.Now = time.Unix(1000, 0)
@@ -42,7 +55,7 @@ func newPDPodLoss(t *testing.T, name string) *pdPodLoss {
 	if f.phase() != v1beta1.RolloutPhasePaused {
 		t.Fatalf("the split must serve under the manual hold, got %q", f.phase())
 	}
-	p := &pdPodLoss{pdCanary: f, enginePod: types.NamespacedName{Namespace: f.ns, Name: name + "-engine-1"}}
+	p := &pdPodLoss{pdCanary: f, lostPod: types.NamespacedName{Namespace: f.ns, Name: name + "-" + component + "-1"}, lostComponent: component, lostHash: hash}
 	p.expectSplit()
 	return p
 }
@@ -66,21 +79,21 @@ func (p *pdPodLoss) partition(comp v1beta1.ComponentType) int32 {
 	case v1beta1.DecoderComponent:
 		ext = &p.isvc.Spec.Decoder.ComponentExtensionSpec
 	}
-	got := StepPartition(p.isvc, rollout.Policies{}, comp, ext)
+	got := StepPartition(p.isvc, rollout.Policies{}, comp, DesiredReplicas(nil, ext))
 	if got == nil {
 		p.t.Fatalf("%s projects no canary partition", comp)
 	}
 	return *got
 }
 
-// startDeleting marks the canary engine pod under deletion: the deletion
+// startDeleting marks the lost canary pod under deletion: the deletion
 // reached the controller while the kubelet still reports the pod Running
 // and Ready, the shape a hand deletion has inside its grace period.
 func (p *pdPodLoss) startDeleting() {
 	p.t.Helper()
 	ctx := context.Background()
 	pod := &corev1.Pod{}
-	if err := p.c.Get(ctx, p.enginePod, pod); err != nil {
+	if err := p.c.Get(ctx, p.lostPod, pod); err != nil {
 		p.t.Fatal(err)
 	}
 	pod.Finalizers = []string{"test/grace"}
@@ -90,7 +103,7 @@ func (p *pdPodLoss) startDeleting() {
 	if err := p.c.Delete(ctx, pod); err != nil {
 		p.t.Fatal(err)
 	}
-	if err := p.c.Get(ctx, p.enginePod, pod); err != nil || pod.DeletionTimestamp == nil {
+	if err := p.c.Get(ctx, p.lostPod, pod); err != nil || pod.DeletionTimestamp == nil {
 		p.t.Fatalf("the pod must stay readable under deletion, got err=%v pod=%+v", err, pod.ObjectMeta)
 	}
 }
@@ -100,23 +113,23 @@ func (p *pdPodLoss) finishDeleting() {
 	p.t.Helper()
 	ctx := context.Background()
 	pod := &corev1.Pod{}
-	if err := p.c.Get(ctx, p.enginePod, pod); err != nil {
+	if err := p.c.Get(ctx, p.lostPod, pod); err != nil {
 		p.t.Fatal(err)
 	}
 	pod.Finalizers = nil
 	if err := p.c.Update(ctx, pod); err != nil {
 		p.t.Fatal(err)
 	}
-	if err := p.c.Get(ctx, p.enginePod, pod); !apierrors.IsNotFound(err) {
+	if err := p.c.Get(ctx, p.lostPod, pod); !apierrors.IsNotFound(err) {
 		p.t.Fatalf("the pod must be gone, got err=%v", err)
 	}
 }
 
-// rebuild is the workload's repair: the engine Instance is rebuilt on the
+// rebuild is the workload's repair: the lost Instance is rebuilt on its
 // canary revision and serves.
 func (p *pdPodLoss) rebuild() {
 	p.t.Helper()
-	if err := p.c.Create(context.Background(), canaryPod(p.ns, p.name, "engine", "engnew", p.enginePod.Name)); err != nil {
+	if err := p.c.Create(context.Background(), canaryPod(p.ns, p.name, p.lostComponent, p.lostHash, p.lostPod.Name)); err != nil {
 		p.t.Fatal(err)
 	}
 }
@@ -254,6 +267,41 @@ func TestDispatch_PDManualHoldKeepsItsEngineThroughACanaryPodDeletion(t *testing
 	cs := p.status()
 	if cs.CurrentStep != 0 || p.phase() != v1beta1.RolloutPhasePaused || cs.CapacityWaitSince != nil {
 		t.Fatalf("the rebuilt pod serves the split again under the hold, got %+v phase=%q", cs, p.phase())
+	}
+	p.expectSplit()
+
+	annotate(p.isvc, constants.RolloutPromoteAnnotation, "engnew")
+	p.tick("promote")
+	delete(p.isvc.Annotations, constants.RolloutPromoteAnnotation)
+	if cs.CurrentStep != 1 || p.phase() != v1beta1.RolloutPhasePending {
+		t.Fatalf("the promote stages the final step, got %+v phase=%q", cs, p.phase())
+	}
+	p.finish()
+}
+
+// The decoder's canary pod is deleted while the manual hold stands. The
+// dispatch reads the decoder's capacity off its own replica, so the step
+// holds on the secondary exactly as it holds on the primary: the step and
+// its recorded share stand, the wait is clocked, the stable Instances of
+// both members stay held, both members' splits rest on the stable revisions
+// while the decoder's canary revision has no serving pod, and the rebuilt
+// decoder serves the split again.
+func TestDispatch_PDManualHoldKeepsItsDecoderThroughACanaryPodDeletion(t *testing.T) {
+	p := newPDDecoderPodLoss(t, "pddec")
+
+	p.startDeleting()
+	p.tick("deletion seen")
+	p.expectHeld(0, v1beta1.RolloutPhasePaused, "decoder pod under deletion")
+
+	p.finishDeleting()
+	p.tick("pod gone")
+	p.expectHeld(0, v1beta1.RolloutPhasePaused, "decoder pod gone")
+
+	p.rebuild()
+	p.tick("rebuilt")
+	cs := p.status()
+	if cs.CurrentStep != 0 || p.phase() != v1beta1.RolloutPhasePaused || cs.CapacityWaitSince != nil {
+		t.Fatalf("the rebuilt decoder serves the split again under the hold, got %+v phase=%q", cs, p.phase())
 	}
 	p.expectSplit()
 

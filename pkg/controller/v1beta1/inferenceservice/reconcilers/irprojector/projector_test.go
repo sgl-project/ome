@@ -11,31 +11,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
-
-// testScheme returns a runtime.Scheme with v1beta1 registered. Bare
-// scheme (no status subresource wiring) is enough: the projector only
-// writes Spec — the IR controller writes Status.
-func testScheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
-	s := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(s); err != nil {
-		t.Fatalf("AddToScheme: %v", err)
-	}
-	if err := corev1.AddToScheme(s); err != nil {
-		t.Fatalf("AddToScheme corev1: %v", err)
-	}
-	return s
-}
 
 // baselineISVC returns a controller-write-ready ISVC carrying an
 // EngineSpec with MinReplicas=2 and a Lifecycle block. The default
@@ -141,7 +124,7 @@ func TestIsIRManagedComponent_NonOMENativeMode_False(t *testing.T) {
 func TestEnsureInferenceReplica_Create_NewIR(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	ir, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -198,7 +181,7 @@ func TestEnsureInferenceReplica_ProjectsPauseAnnotationAndClearsOnRemoval(t *tes
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
 	isvc.Annotations = map[string]string{constants.PausedRolloutAnnotation: "true"}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -247,7 +230,7 @@ func TestEnsureInferenceReplica_ProjectsRevisionHistoryLimit(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
 	isvc.Annotations = map[string]string{constants.RevisionHistoryLimitAnnotation: "3"}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -283,7 +266,7 @@ func TestEnsureInferenceReplica_ProjectsRevisionHistoryLimit(t *testing.T) {
 func TestEnsureInferenceReplica_Update_PreservesGeneration(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -320,33 +303,22 @@ func TestEnsureInferenceReplica_NoChange_IssuesNoWrite(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
 
-	var writes int
-	count := interceptor.Funcs{
-		Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
-			writes++
-			return c.Create(ctx, obj, opts...)
-		},
-		Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
-			writes++
-			return c.Update(ctx, obj, opts...)
-		},
-		Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-			writes++
-			return c.Patch(ctx, obj, patch, opts...)
-		},
-	}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).WithInterceptorFuncs(count).Build()
+	creates := fakeclient.CountingVerb(fakeclient.Create)
+	updates := fakeclient.CountingVerb(fakeclient.Update)
+	patches := fakeclient.CountingVerb(fakeclient.Patch)
+	writes := func() int { return creates.Count() + updates.Count() + patches.Count() }
+	c := fakeclient.New(t, creates, updates, patches)
 
 	// First call creates the IR (one write).
 	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	g.Expect(writes).To(gomega.Equal(1), "first projection should Create once")
+	g.Expect(writes()).To(gomega.Equal(1), "first projection should Create once")
 
 	// Second call with identical params must not write at all.
-	writes = 0
+	before := writes()
 	_, err = EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	g.Expect(writes).To(gomega.Equal(0), "identical re-projection must issue no writes")
+	g.Expect(writes()-before).To(gomega.Equal(0), "identical re-projection must issue no writes")
 }
 
 // TestEnsureInferenceReplica_StampsParentGeneration pins the parent-
@@ -360,7 +332,7 @@ func TestEnsureInferenceReplica_StampsParentGeneration(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
 	isvc.Generation = 3
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -391,30 +363,21 @@ func TestEnsureInferenceReplica_SpecChange_IssuesMergePatch(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
 
-	var patches, updates int
-	count := interceptor.Funcs{
-		Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
-			updates++
-			return c.Update(ctx, obj, opts...)
-		},
-		Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-			patches++
-			return c.Patch(ctx, obj, patch, opts...)
-		},
-	}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).WithInterceptorFuncs(count).Build()
+	updates := fakeclient.CountingVerb(fakeclient.Update)
+	patches := fakeclient.CountingVerb(fakeclient.Patch)
+	c := fakeclient.New(t, updates, patches)
 
 	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// Change the desired replica count, re-project.
-	patches, updates = 0, 0
+	patchesBefore, updatesBefore := patches.Count(), updates.Count()
 	changed := minimalParams(t, isvc, c)
 	changed.ComponentExt = &v1beta1.ComponentExtensionSpec{MinReplicas: ptr.To(7)}
 	_, err = EnsureInferenceReplica(context.Background(), changed)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	g.Expect(updates).To(gomega.Equal(0), "projector must not use Update")
-	g.Expect(patches).To(gomega.Equal(1), "a real spec change must issue exactly one merge Patch")
+	g.Expect(updates.Count()-updatesBefore).To(gomega.Equal(0), "projector must not use Update")
+	g.Expect(patches.Count()-patchesBefore).To(gomega.Equal(1), "a real spec change must issue exactly one merge Patch")
 
 	got := &v1beta1.InferenceReplica{}
 	g.Expect(c.Get(context.Background(),
@@ -430,7 +393,7 @@ func TestEnsureInferenceReplica_SpecChange_IssuesMergePatch(t *testing.T) {
 func TestEnsureInferenceReplica_MultiPod_LeaderAndWorker(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	p := minimalParams(t, isvc, c)
 	p.MultiPod = true
 	p.WorkerSize = 3
@@ -465,7 +428,7 @@ func TestEnsureInferenceReplica_MultiPod_LeaderAndWorker(t *testing.T) {
 func TestEnsureInferenceReplica_MultiPod_RejectsNilWorkerSpec(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	p := minimalParams(t, isvc, c)
 	p.MultiPod = true
 	p.WorkerSize = 3
@@ -482,7 +445,7 @@ func TestEnsureInferenceReplica_MultiPod_RejectsNilWorkerSpec(t *testing.T) {
 func TestEnsureInferenceReplica_NilPodSpec_Rejected(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	p := minimalParams(t, isvc, c)
 	p.PodSpec = nil
 
@@ -498,7 +461,7 @@ func TestEnsureInferenceReplica_NilPodSpec_Rejected(t *testing.T) {
 func TestEnsureInferenceReplica_NilComponentExt_Rejected(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	p := minimalParams(t, isvc, c)
 	p.ComponentExt = nil
 
@@ -527,7 +490,7 @@ func TestEnsureInferenceReplica_DefaultsReplicasToOne(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
 	isvc.Spec.Engine.MinReplicas = nil
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	p := minimalParams(t, isvc, c)
 	p.ComponentExt = &isvc.Spec.Engine.ComponentExtensionSpec
 
@@ -574,7 +537,7 @@ func TestEnsureInferenceReplica_AlreadyExists_PropagatedAsUpdate(t *testing.T) {
 			Component: v1beta1.EngineComponent,
 		},
 	}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(preExisting).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(preExisting))
 
 	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred(),
@@ -615,7 +578,7 @@ func TestEnsureInferenceReplica_PropagatesComponentAnnotations(t *testing.T) {
 		"test.ome.io/rollout-trigger": "2026-05-29T01:02:03.456789Z",
 		"linkerd.io/inject":           "enabled",
 	}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	p := minimalParams(t, isvc, c)
 	// Deliberately leave p.ObjectMeta.Annotations as the minimal fixture
 	// value to prove the projector pulls from p.ComponentExt directly —
@@ -657,7 +620,7 @@ func TestEnsureInferenceReplica_PropagatesComponentLabels(t *testing.T) {
 		"team":        "ml-platform",
 		"cost-center": "1234",
 	}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	p := minimalParams(t, isvc, c)
 
 	_, err := EnsureInferenceReplica(context.Background(), p)
@@ -691,7 +654,7 @@ func TestEnsureInferenceReplica_NilComponentAnnotationsAndLabels_NoRegression(t 
 		"sanity: baseline fixture has no per-Component annotations")
 	g.Expect(isvc.Spec.Engine.Labels).To(gomega.BeNil(),
 		"sanity: baseline fixture has no per-Component labels")
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -725,7 +688,7 @@ func TestEnsureInferenceReplica_ComponentExt_PropagatesToBothRunners(t *testing.
 	isvc.Spec.Engine.Labels = map[string]string{
 		"team": "ml-platform",
 	}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	p := minimalParams(t, isvc, c)
 	p.MultiPod = true
 	p.WorkerSize = 3
@@ -764,7 +727,7 @@ func TestEnsureInferenceReplica_ComponentExt_OverridesObjectMetaOnCollision(t *t
 	isvc.Spec.Engine.Annotations = map[string]string{
 		"ome.io/some-annotation": "from-component-ext",
 	}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	p := minimalParams(t, isvc, c)
 	// p.ObjectMeta.Annotations["ome.io/some-annotation"] == "value" (from minimalParams).
 
@@ -793,7 +756,7 @@ func TestEnsureInferenceReplica_ComponentAnnotationUpdate_RepatchesTemplate(t *t
 	isvc.Spec.Engine.Annotations = map[string]string{
 		"test.ome.io/rollout-trigger": "initial",
 	}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -872,7 +835,7 @@ func autoscalerBlockB() *v1beta1.ComponentAutoscaler {
 func TestEnsureInferenceReplica_PropagatesResolvedAutoscaler(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	p := minimalParams(t, isvc, c)
 	p.ResolvedAutoscaler = autoscalerBlockA()
 
@@ -903,7 +866,7 @@ func TestEnsureInferenceReplica_PropagatesResolvedAutoscaler(t *testing.T) {
 func TestEnsureInferenceReplica_UpdateAutoscalerRepatchesIR(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	// First projection: block A (KEDA, Triggers set, HPA nil).
 	p := minimalParams(t, isvc, c)
@@ -951,7 +914,7 @@ func TestEnsureInferenceReplica_UpdateAutoscalerRepatchesIR(t *testing.T) {
 func TestEnsureInferenceReplica_NilResolvedAutoscaler_NoRegression(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	p := minimalParams(t, isvc, c)
 	// p.ResolvedAutoscaler intentionally nil.
 
@@ -992,7 +955,7 @@ func hpaAutoscalerBlock() *v1beta1.ComponentAutoscaler {
 func TestEnsureInferenceReplica_AutoscalerManaged_PreservesLiveReplicas(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod") // MinReplicas = 2
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	// First projection (create) -- HPA-managed, so MinReplicas=2 lands as
 	// the initial desired count.
@@ -1039,7 +1002,7 @@ func TestEnsureInferenceReplica_AutoscalerManaged_PreservesLiveReplicas(t *testi
 func TestEnsureInferenceReplica_AutoscalingOff_AppliesMinReplicas(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod") // MinReplicas = 2
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	// First projection (create) -- autoscaling OFF.
 	p := minimalParams(t, isvc, c)
@@ -1079,7 +1042,7 @@ func TestEnsureInferenceReplica_AutoscalingOff_AppliesMinReplicas(t *testing.T) 
 func TestEnsureInferenceReplica_NilResolvedAutoscaler_AppliesMinReplicasOnUpdate(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod") // MinReplicas = 2
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	// Create with nil ResolvedAutoscaler.
 	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
@@ -1110,7 +1073,7 @@ func TestEnsureInferenceReplica_NilResolvedAutoscaler_AppliesMinReplicasOnUpdate
 func TestEnsureInferenceReplica_AutoscalerManaged_CreateStampsMinReplicas(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod") // MinReplicas = 2
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	p := minimalParams(t, isvc, c)
 	p.ResolvedAutoscaler = hpaAutoscalerBlock()
 
@@ -1133,7 +1096,7 @@ func TestEnsureInferenceReplica_AutoscalerManaged_CreateStampsMinReplicas(t *tes
 func TestEnsureInferenceReplica_AutoscalerProjection_DeepCopies(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	p := minimalParams(t, isvc, c)
 	original := autoscalerBlockA()
 	p.ResolvedAutoscaler = autoscalerBlockA() // separate instance, deep-equal to `original`
@@ -1199,7 +1162,7 @@ func TestEnsureInferenceReplica_StampsRevisionExcludedAnnotations(t *testing.T) 
 	isvc.Spec.Engine.Annotations = map[string]string{
 		"ome.io/rollout-nonce": "7",
 	}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -1219,7 +1182,7 @@ func TestEnsureInferenceReplica_PreservesReleaseHeldRevisionAnnotation(t *testin
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
 	isvc.Annotations = map[string]string{"editor.example.com/resource-version": "v1beta1"}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	p := minimalParams(t, isvc, c)
 
 	_, err := EnsureInferenceReplica(context.Background(), p)
@@ -1247,7 +1210,7 @@ func TestEnsureInferenceReplica_NoISVCAnnotations_NoExcludeStamp(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
 	isvc.Annotations = nil
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -1267,7 +1230,7 @@ func TestEnsureInferenceReplica_NoISVCAnnotations_NoExcludeStamp(t *testing.T) {
 func TestEnsureInferenceReplica_ProjectsMinReadySeconds(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -1306,7 +1269,7 @@ func TestEnsureInferenceReplica_ProjectsPacingPartition(t *testing.T) {
 	isvc.Spec.Engine.Lifecycle.UpdateStrategy = &v1beta1.UpdateStrategy{
 		RollingUpdate: &v1beta1.RollingUpdate{Partition: ptr.To(int32(1))},
 	}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	// Create with no canary: no pacing block, user partition verbatim.
 	_, err := EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
@@ -1319,7 +1282,7 @@ func TestEnsureInferenceReplica_ProjectsPacingPartition(t *testing.T) {
 
 	// A canary step: partition 2 (of MinReplicas=2 the step holds both).
 	step := minimalParams(t, isvc, c)
-	step.PacingPartition = ptr.To(int32(2))
+	step.PacingPartition = fixedPartition(2)
 	_, err = EnsureInferenceReplica(context.Background(), step)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(c.Get(context.Background(), key, got)).To(gomega.Succeed())
@@ -1331,7 +1294,7 @@ func TestEnsureInferenceReplica_ProjectsPacingPartition(t *testing.T) {
 
 	// The final step releases with an explicit 0, still on the pacing block.
 	release := minimalParams(t, isvc, c)
-	release.PacingPartition = ptr.To(int32(0))
+	release.PacingPartition = fixedPartition(0)
 	_, err = EnsureInferenceReplica(context.Background(), release)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(c.Get(context.Background(), key, got)).To(gomega.Succeed())
@@ -1347,18 +1310,21 @@ func TestEnsureInferenceReplica_ProjectsPacingPartition(t *testing.T) {
 	g.Expect(got.Spec.Lifecycle.UpdateStrategy.RollingUpdate.Partition).To(gomega.HaveValue(gomega.Equal(int32(1))))
 }
 
-// TestEnsureInferenceReplica_PacingPartitionPreservesRollbackTarget pins
-// that re-stamping the partition never clobbers the rollback target the
-// canary executor writes to the same block directly, and that clearing the
-// partition keeps the block while the target is still set.
-func TestEnsureInferenceReplica_PacingPartitionPreservesRollbackTarget(t *testing.T) {
+// TestEnsureInferenceReplica_RollbackTargetLivesWhileACanaryGoverns pins
+// the lifetime of the rollback target the canary executor writes to the
+// pacing block directly: re-stamping the partition never clobbers it while
+// a canary governs the Component, a partition of 0 (the rollback releasing
+// its hold) keeps it, and a projection with no canary at all drops it, so a
+// Component whose canary group was removed after a rollback follows its own
+// spec again instead of rolling back for good.
+func TestEnsureInferenceReplica_RollbackTargetLivesWhileACanaryGoverns(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	key := types.NamespacedName{Name: "llama-engine", Namespace: "prod"}
 
 	step := minimalParams(t, isvc, c)
-	step.PacingPartition = ptr.To(int32(1))
+	step.PacingPartition = fixedPartition(1)
 	_, err := EnsureInferenceReplica(context.Background(), step)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -1370,22 +1336,22 @@ func TestEnsureInferenceReplica_PacingPartitionPreservesRollbackTarget(t *testin
 
 	// Rollback releases the hold (partition 0); the target must remain.
 	release := minimalParams(t, isvc, c)
-	release.PacingPartition = ptr.To(int32(0))
+	release.PacingPartition = fixedPartition(0)
 	_, err = EnsureInferenceReplica(context.Background(), release)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	got := &v1beta1.InferenceReplica{}
 	g.Expect(c.Get(context.Background(), key, got)).To(gomega.Succeed())
 	g.Expect(got.Spec.Pacing.Partition).To(gomega.HaveValue(gomega.Equal(int32(0))))
 	g.Expect(got.Spec.Pacing.RollbackToRevision).To(gomega.HaveValue(gomega.Equal("llama-engine-stable")),
-		"the projector owns only the partition; the rollback target is the executor's")
+		"while a canary governs the Component the rollback target is the executor's to clear")
 
-	// No canary partition at all: the block stays because the target is set.
+	// No canary at all: the target goes with the partition and the block
+	// collapses, so the Component follows its own spec.
 	_, err = EnsureInferenceReplica(context.Background(), minimalParams(t, isvc, c))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(c.Get(context.Background(), key, got)).To(gomega.Succeed())
-	g.Expect(got.Spec.Pacing).NotTo(gomega.BeNil())
-	g.Expect(got.Spec.Pacing.Partition).To(gomega.BeNil())
-	g.Expect(got.Spec.Pacing.RollbackToRevision).To(gomega.HaveValue(gomega.Equal("llama-engine-stable")))
+	g.Expect(got.Spec.Pacing).To(gomega.BeNil(),
+		"a Component no canary governs must not keep a rollback target left behind by one")
 }
 
 // TestEnsureInferenceReplica_PacingPartitionCappedAtReplicas pins the
@@ -1395,10 +1361,10 @@ func TestEnsureInferenceReplica_PacingPartitionPreservesRollbackTarget(t *testin
 func TestEnsureInferenceReplica_PacingPartitionCappedAtReplicas(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod") // MinReplicas=2
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	p := minimalParams(t, isvc, c)
-	p.PacingPartition = ptr.To(int32(5))
+	p.PacingPartition = fixedPartition(5)
 	_, err := EnsureInferenceReplica(context.Background(), p)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -1415,26 +1381,20 @@ func TestEnsureInferenceReplica_PacingPartitionCappedAtReplicas(t *testing.T) {
 func TestEnsureInferenceReplica_UnchangedPacingPartition_NoWrite(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
-	var patches int
-	count := interceptor.Funcs{
-		Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-			patches++
-			return c.Patch(ctx, obj, patch, opts...)
-		},
-	}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).WithInterceptorFuncs(count).Build()
+	patches := fakeclient.CountingVerb(fakeclient.Patch)
+	c := fakeclient.New(t, patches)
 
 	p := minimalParams(t, isvc, c)
-	p.PacingPartition = ptr.To(int32(1))
+	p.PacingPartition = fixedPartition(1)
 	_, err := EnsureInferenceReplica(context.Background(), p)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	patches = 0
+	before := patches.Count()
 	again := minimalParams(t, isvc, c)
-	again.PacingPartition = ptr.To(int32(1))
+	again.PacingPartition = fixedPartition(1)
 	_, err = EnsureInferenceReplica(context.Background(), again)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	g.Expect(patches).To(gomega.Equal(0), "an unchanged pacing partition must not write")
+	g.Expect(patches.Count()-before).To(gomega.Equal(0), "an unchanged pacing partition must not write")
 }
 
 // TestProjectedReplicaCarriesItsParentRef pins that a projected replica
@@ -1460,7 +1420,7 @@ func TestEnsureInferenceReplicaRefusesAForeignReplica(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "svc-engine", Namespace: "team-a", UID: "replica-uid"},
 		Spec:       v1beta1.InferenceReplicaSpec{Component: v1beta1.EngineComponent},
 	}
-	p := minimalParams(t, isvc, fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(standalone).Build())
+	p := minimalParams(t, isvc, fakeclient.New(t, fakeclient.WithObjects(standalone)))
 	_, err := EnsureInferenceReplica(context.Background(), p)
 	if err == nil || !strings.Contains(err.Error(), "not projected by InferenceService") {
 		t.Fatalf("expected a foreign-replica error, got %v", err)
@@ -1541,7 +1501,7 @@ func TestEnsureInferenceReplicaWaitsForAPreviousIncarnation(t *testing.T) {
 		},
 		Spec: v1beta1.InferenceReplicaSpec{ParentRef: &v1beta1.ParentReference{Name: "svc"}, Component: v1beta1.EngineComponent},
 	}
-	p := minimalParams(t, isvc, fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(previous).Build())
+	p := minimalParams(t, isvc, fakeclient.New(t, fakeclient.WithObjects(previous)))
 	before := &v1beta1.InferenceReplica{}
 	if gerr := p.Client.Get(context.Background(), client.ObjectKeyFromObject(previous), before); gerr != nil {
 		t.Fatalf("get: %v", gerr)
@@ -1578,7 +1538,7 @@ func TestEnsureInferenceReplicaWaitsForADeletingReplica(t *testing.T) {
 		},
 		Spec: v1beta1.InferenceReplicaSpec{Component: v1beta1.EngineComponent},
 	}
-	p := minimalParams(t, isvc, fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(deleting).Build())
+	p := minimalParams(t, isvc, fakeclient.New(t, fakeclient.WithObjects(deleting)))
 	before := &v1beta1.InferenceReplica{}
 	if gerr := p.Client.Get(context.Background(), client.ObjectKeyFromObject(deleting), before); gerr != nil {
 		t.Fatalf("get: %v", gerr)
@@ -1596,4 +1556,10 @@ func TestEnsureInferenceReplicaWaitsForADeletingReplica(t *testing.T) {
 	if fresh.ResourceVersion != before.ResourceVersion {
 		t.Fatalf("the deleting replica must be left untouched, got resourceVersion %s (was %s)", fresh.ResourceVersion, before.ResourceVersion)
 	}
+}
+
+// fixedPartition is a partition resolver that projects n whatever replica
+// count the projection stamps.
+func fixedPartition(n int32) PartitionResolver {
+	return func(int32) *int32 { return ptr.To(n) }
 }

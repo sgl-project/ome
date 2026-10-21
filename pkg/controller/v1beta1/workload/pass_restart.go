@@ -43,9 +43,9 @@ func executeRestartPass(ctx context.Context, deps types.Deps, input types.Reconc
 	// batchFull marks a selection left for the next pass.
 	opened := int32(0)
 	batchFull := false
-	// Revisions whose retry ladder admitted a rebuild this pass: the
-	// ladder authorizes one attempt at a revision at a time.
-	ladderOpened := map[string]struct{}{}
+	// Revisions whose retry schedule admitted a rebuild this pass: a
+	// retry schedule authorizes one attempt at a revision at a time.
+	retryAttemptOpened := map[string]struct{}{}
 	restartBatch := workloadops.NewRestartBatch(deps, input)
 	for _, selection := range restarts {
 		if selection.OpensRepair && input.RepairBatchSize != nil && opened >= *input.RepairBatchSize {
@@ -54,14 +54,14 @@ func executeRestartPass(ctx context.Context, deps types.Deps, input types.Reconc
 			batchFull = true
 			continue
 		}
-		if rev := selection.LadderRevision; rev != "" {
-			if _, taken := ladderOpened[rev]; taken {
+		if rev := selection.RetryScheduleRevision; rev != "" {
+			if _, taken := retryAttemptOpened[rev]; taken {
 				logf.FromContext(ctx).V(1).Info("crash-loop repair waits for the next pass: the revision's retry ladder admits one attempt at a time",
 					"component", plan.Component, "instance", selection.Instance.Index, "revision", rev)
 				batchFull = true
 				continue
 			}
-			ladderOpened[rev] = struct{}{}
+			retryAttemptOpened[rev] = struct{}{}
 		}
 		if selection.OpensUnavailability {
 			allowed, denial := admission.admit(ctx, plan, selection.Instance.Index)

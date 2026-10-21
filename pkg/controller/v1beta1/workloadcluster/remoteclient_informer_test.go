@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 // The API serves LIST/WATCH but rejects individual GETs. Informer reads must
@@ -35,7 +36,7 @@ func TestMemberInformersReadAndObserveChanges(t *testing.T) {
 				{Name: "servingruntimes", Kind: "ServingRuntime", Namespaced: true, Verbs: []string{"get", "list", "watch"}},
 				{Name: "clusterservingruntimes", Kind: "ClusterServingRuntime", Verbs: []string{"get", "list", "watch"}},
 			}
-			s := omeScheme(t)
+			s := fakeclient.Scheme(t)
 			kinds := sets.New[schema.GroupKind]()
 			objects := make(map[string]client.Object)
 			events := make(map[string]chan watch.Event)
@@ -114,7 +115,7 @@ func TestMemberInformersReadAndObserveChanges(t *testing.T) {
 			config := &rest.Config{Host: server.URL, Timeout: 250 * time.Millisecond}
 			apiClient, err := client.NewWithWatch(config, client.Options{Scheme: s})
 			require.NoError(t, err)
-			direct := &recordingClient{WithWatch: apiClient}
+			direct, directReads := recordingClient(t, apiClient)
 			syncTimeout := 10 * time.Second
 			if blocked {
 				syncTimeout = time.Second
@@ -153,7 +154,7 @@ func TestMemberInformersReadAndObserveChanges(t *testing.T) {
 			cancel()
 			require.ErrorIs(t, c.Get(t.Context(), client.ObjectKey{}, &v1beta1.InferenceService{}), ErrMemberCacheUnavailable)
 			require.Zero(t, individualGets.Load())
-			require.Zero(t, direct.getCalls+direct.listCalls)
+			require.Zero(t, directReads.gets.Count()+directReads.lists.Count())
 
 		})
 	}

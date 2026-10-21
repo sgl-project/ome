@@ -2,6 +2,7 @@ package validation
 
 import (
 	"fmt"
+	"strings"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
@@ -32,13 +33,22 @@ type RatioDrainDefaults struct {
 // held before its first step and the rollout parks for good, so admission
 // refuses the spec instead.
 //
-// A group whose members all roll drain-first is paced by the batch step
-// instead of the ratio check: each member's drains are counted in batches of
-// its maxUnavailable and no member opens its next batch until every member's
-// previous batch serves, which keeps the ratio at every batch boundary. The
-// ratio check is never consulted for such a group, so nothing here refuses it
-// (batchStepGoverns). The refusal stays for a group that mixes a drain-first
-// member with one that surges or leaves its strategy unset.
+// A group whose engine and decoder both step is paced by the batch step
+// instead of the ratio check: a drain-first member counts its drains in
+// batches of its maxUnavailable, a SurgeThenDrain member its surges in
+// batches of its maxSurge, and none opens its next batch until every one's
+// previous batch serves, which keeps the ratio at every batch boundary. A
+// router does not decide that. The ratio check is never consulted for a
+// drain of such a group, so nothing here refuses it (batchStepGoverns). The
+// refusal stays for a group whose engine or decoder patches single pods in
+// place or leaves its strategy unset beside a drain-first member, and for a
+// group that lacks one of the two.
+//
+// The operator's prefillDecodeRoll.keepRatio setting widens the batch step to
+// every path of a group that lists both the engine and the decoder, counts a
+// pairing member that patches single pods in place, and never parks a roll;
+// admission does not read that setting, so the refusal below stays as the
+// reading of the engine without it.
 //
 // A member rolls drain-first when its update strategy is RecreatePod, or an
 // in-place strategy on a Component whose Instances are multi-node gangs (an
@@ -84,26 +94,76 @@ func ValidateRatioDrainFeasibility(spec *v1beta1.InferenceServiceSpec, defaults 
 }
 
 // ratioMember is one group member as the feasibility rule sees it: its
-// replica count, the unit a drain removes, and why it rolls drain-first
-// (empty when it does not).
+// replica count, the unit a drain removes, why it rolls drain-first (empty
+// when it does not), and whether it declares SurgeThenDrain.
 type ratioMember struct {
 	component  v1beta1.ComponentType
 	replicas   int32
 	unit       string
 	drainFirst string
+	surges     bool
 }
 
+// steps reports whether the batch step counts the member's starts: it rolls
+// drain-first or surges. A member with no declared strategy, or one that
+// patches single pods in place, does not step at admission.
+func (m ratioMember) steps() bool { return m.drainFirst != "" || m.surges }
+
 // batchStepGoverns reports whether the rollout paces the group by the batch
-// step rather than the ratio check: two or more members, every one of them
-// rolling drain-first. It is the admission reading of the engine's rule, taken
-// from the declared strategies and shapes rather than the replicas.
+// step rather than the ratio check: the group lists both the engine and the
+// decoder, and each of them steps; a router does not decide it. It is the
+// admission reading of the engine's rule, taken from the declared strategies
+// and shapes rather than the replicas; a group that lists both is never the
+// Sequential chain, which the engine also leaves out.
 func batchStepGoverns(members []ratioMember) bool {
+	var engine, decoder bool
 	for _, m := range members {
-		if m.drainFirst == "" {
-			return false
+		switch m.component {
+		case v1beta1.EngineComponent:
+			engine = m.steps()
+		case v1beta1.DecoderComponent:
+			decoder = m.steps()
 		}
 	}
-	return len(members) >= 2
+	return engine && decoder
+}
+
+// batchStepWayOut is the way out a refusal offers through the batch step,
+// for a group that lists both the engine and the decoder: giving each
+// pairing member that does not step a strategy that does hands the pacing
+// to the step. Empty for any other group.
+func batchStepWayOut(members []ratioMember) string {
+	var engine, decoder bool
+	var still []string
+	for _, m := range members {
+		if m.component != v1beta1.EngineComponent && m.component != v1beta1.DecoderComponent {
+			continue
+		}
+		engine = engine || m.component == v1beta1.EngineComponent
+		decoder = decoder || m.component == v1beta1.DecoderComponent
+		if !m.steps() {
+			still = append(still, string(m.component))
+		}
+	}
+	if !engine || !decoder || len(still) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("give the %s a SurgeThenDrain or RecreatePod update strategy, which hands the pacing to the batch step", strings.Join(still, " and the "))
+}
+
+// waysOut words the refusal's alternatives as one list, empty ones left out:
+// every one but the last after a comma, the last after "or".
+func waysOut(ways ...string) string {
+	kept := make([]string, 0, len(ways))
+	for _, w := range ways {
+		if w != "" {
+			kept = append(kept, w)
+		}
+	}
+	if len(kept) <= 1 {
+		return strings.Join(kept, "")
+	}
+	return strings.Join(kept[:len(kept)-1], ", ") + ", or " + kept[len(kept)-1]
 }
 
 // ratioGroupMembers lists the group's distinct declared Components, in
@@ -121,7 +181,7 @@ func ratioGroupMembers(spec *v1beta1.InferenceServiceSpec, components []v1beta1.
 			continue
 		}
 		strategy, gang := componentUpdateShape(spec, c)
-		m := ratioMember{component: c, replicas: replicas, unit: "pod"}
+		m := ratioMember{component: c, replicas: replicas, unit: "pod", surges: strategy == v1beta1.UpdateStrategySurgeThenDrain}
 		if gang {
 			m.unit = "gang"
 		}
@@ -143,8 +203,10 @@ func ratioGroupMembers(spec *v1beta1.InferenceServiceSpec, components []v1beta1.
 // member of one has no admissible drain at all.
 func ratioDrainFeasible(groupIdx int, m ratioMember, members []ratioMember, tolerancePercent int32) error {
 	if m.replicas == 1 {
-		return fmt.Errorf("spec.rollout.groups[%d]: the %s rolls drain-first (%s) in a maintainRatio group with a single replica, so its only drain leaves it with nothing serving, which the ratio check refuses, and the rollout would park for good; give the %s the SurgeThenDrain update strategy, add %s replicas, or roll every member of the group drain-first, which hands the pacing to the batch step (%s)",
-			groupIdx, m.component, m.drainFirst, m.component, m.component, ReasonRatioDrainInfeasible)
+		return fmt.Errorf("spec.rollout.groups[%d]: the %s rolls drain-first (%s) in a maintainRatio group with a single replica, so its only drain leaves it with nothing serving, which the ratio check refuses, and the rollout would park for good; %s (%s)",
+			groupIdx, m.component, m.drainFirst,
+			waysOut(fmt.Sprintf("give the %s the SurgeThenDrain update strategy", m.component), fmt.Sprintf("add %s replicas", m.component), batchStepWayOut(members)),
+			ReasonRatioDrainInfeasible)
 	}
 	band := 2 * float64(tolerancePercent) / 100.0
 	projected := m.replicas - 1
@@ -156,11 +218,13 @@ func ratioDrainFeasible(groupIdx int, m ratioMember, members []ratioMember, tole
 			continue
 		}
 		offPoints := ratioOffPoints(m.replicas, p.replicas, projected, p.replicas)
-		return fmt.Errorf("spec.rollout.groups[%d]: the %s rolls drain-first (%s) in a maintainRatio group, and its first step could never be admitted: with %s %d and %s %d, one %s %s out reads %s %d : %s %d, %d points off the starting ratio, and the ratio check lets a single drain go at most %d points (twice the tolerance of %d), so the rollout would park for good; widen maintainRatio.tolerance to at least %d, give the %s the SurgeThenDrain update strategy, add %s replicas, or roll every member of the group drain-first, which hands the pacing to the batch step (%s)",
+		return fmt.Errorf("spec.rollout.groups[%d]: the %s rolls drain-first (%s) in a maintainRatio group, and its first step could never be admitted: with %s %d and %s %d, one %s %s out reads %s %d : %s %d, %d points off the starting ratio, and the ratio check lets a single drain go at most %d points (twice the tolerance of %d), so the rollout would park for good; %s (%s)",
 			groupIdx, m.component, m.drainFirst, m.component, m.replicas, p.component, p.replicas,
 			m.component, m.unit, m.component, projected, p.component, p.replicas, offPoints,
-			2*tolerancePercent, tolerancePercent, ratioToleranceNeeded(m.replicas, p.replicas, projected, p.replicas),
-			m.component, m.component, ReasonRatioDrainInfeasible)
+			2*tolerancePercent, tolerancePercent,
+			waysOut(fmt.Sprintf("widen maintainRatio.tolerance to at least %d", ratioToleranceNeeded(m.replicas, p.replicas, projected, p.replicas)),
+				fmt.Sprintf("give the %s the SurgeThenDrain update strategy", m.component), fmt.Sprintf("add %s replicas", m.component), batchStepWayOut(members)),
+			ReasonRatioDrainInfeasible)
 	}
 	return nil
 }

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -380,6 +382,15 @@ func (d *driver) interceptors() interceptor.Funcs {
 			return nil
 		},
 		Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+			// The apiserver writes creationTimestamp on every object it
+			// admits and the fake client writes none. The engine reads the
+			// target revision's creation time to place a failure record
+			// before or after the revision being rolled, so a revision
+			// minted without one would hold every fresh set behind the
+			// record of a set an older revision lost.
+			if rev, ok := obj.(*appsv1.ControllerRevision); ok && rev.CreationTimestamp.IsZero() {
+				rev.CreationTimestamp = metav1.NewTime(d.clock.Now())
+			}
 			if pod, ok := obj.(*corev1.Pod); ok {
 				// Pod names are stable and reused, so a successor starts
 				// from no teardown of its own.
@@ -416,6 +427,9 @@ func (d *driver) interceptors() interceptor.Funcs {
 			}
 			if d.traced(obj) {
 				d.trace.object(kindOf(obj), "create", obj.GetName(), d.createDetail(obj))
+				if pod, ok := obj.(*corev1.Pod); ok {
+					d.tickPodWrites = append(d.tickPodWrites, PodWrite{Verb: "create", Pod: pod.DeepCopy()})
+				}
 			}
 			if pod, ok := obj.(*corev1.Pod); ok {
 				// The pod watch confirms a create as soon as the object
@@ -500,6 +514,9 @@ func (d *driver) recordWrite(ctx context.Context, obj client.Object, verb, baseV
 	}
 	after := d.snapshotPod(ctx, obj)
 	d.trace.object(kindOf(obj), verb, obj.GetName(), d.podWriteDiff(before, after))
+	if after != nil {
+		d.tickPodWrites = append(d.tickPodWrites, PodWrite{Verb: verb, Pod: after})
+	}
 	return nil
 }
 

@@ -16,6 +16,16 @@ import (
 // byte-stable across reconciles.
 const DrainOverdueReason = "DrainOverdue"
 
+// RunnerExitUnobservedReason is the LastFailure.Reason of a promoted pod
+// set whose runner restarted after the Instance entered Ready while the
+// kubelet showed no termination for the run that ended: the exit is
+// known from the new run's start alone, so no exit code or kubelet
+// reason is recorded with it.
+const RunnerExitUnobservedReason = "RunnerExitUnobserved"
+
+// RunnerExitUnobservedMessage is the message that record carries.
+const RunnerExitUnobservedMessage = "the runner restarted after the Instance entered Ready; the kubelet showed no termination for the run that ended"
+
 // PodTermination extracts the most operator-relevant container failure
 // diagnostics from pod into an *InstanceTermination. Returns nil only when
 // pod is nil.
@@ -199,6 +209,8 @@ func (t *InstanceTermination) ShortString() string {
 		b += fmt.Sprintf(" failed (%s, exit %d)", reasonOrUnknown(t.Reason), *t.ExitCode)
 	case t.Reason == "PodFailed":
 		b += " failed (PodFailed)"
+	case t.Reason == RunnerExitUnobservedReason:
+		b += " restarted (exit unobserved)"
 	default:
 		b += fmt.Sprintf(" stuck (%s)", reasonOrUnknown(t.Reason))
 	}

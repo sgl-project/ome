@@ -2,6 +2,7 @@ package canary
 
 import (
 	"context"
+	"sort"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -71,19 +72,63 @@ func (r resumeRequest) addressesAnyUnit(isvc *v1beta1.InferenceService, policies
 	return false
 }
 
+// memberTarget is one member of the canary unit with the revision its
+// InferenceReplica reports as its target. A replica told to roll back keeps
+// reporting the spec's revision as its target, so under a standing rollback
+// hold the target is still the rejected revision; it moves only when the
+// spec moves.
+type memberTarget struct {
+	component v1beta1.ComponentType
+	revision  string
+}
+
+// memberTargets lists the unit's members with their observed targets, the
+// primary first and the secondaries in name order, so a message reads the
+// same on every pass.
+type memberTargets []memberTarget
+
+func observedMemberTargets(in ReconcileInputs) memberTargets {
+	out := memberTargets{{component: in.Component, revision: in.CanaryRevisionHash}}
+	secondaries := make([]v1beta1.ComponentType, 0, len(in.Secondaries))
+	for c := range in.Secondaries {
+		secondaries = append(secondaries, c)
+	}
+	sort.Slice(secondaries, func(i, j int) bool { return secondaries[i] < secondaries[j] })
+	for _, c := range secondaries {
+		out = append(out, memberTarget{component: c, revision: in.Secondaries[c].CanaryRevisionHash})
+	}
+	return out
+}
+
+// names reports whether some member targets the revision.
+func (m memberTargets) names(hash string) bool {
+	for _, t := range m {
+		if t.revision != "" && t.revision == hash {
+			return true
+		}
+	}
+	return false
+}
+
+// String reads "engine targets abc, decoder targets def".
+func (m memberTargets) String() string {
+	parts := make([]string, 0, len(m))
+	for _, t := range m {
+		parts = append(parts, string(t.component)+" targets "+t.revision)
+	}
+	return strings.Join(parts, ", ")
+}
+
 // handleResume applies the one-shot ome.io/rollout-resume verb: clear this
 // Component's terminal RolloutPhase and re-enter the step machine at step 0
 // against the revision that is already parked, without minting a revision.
 //
 // It reports whether it resumed. A resume does NOT fall through to the step
-// machine on the same pass. Resuming a completed rollback clears the IR's
-// rollback target, and until the IR republishes its status the observed
-// target still names the STABLE revision — running the ladder against that
-// would program the stable revision as its own canary. Returning here lets
-// the dispatch layer clear the rollback signal and the IR's freshness gate
-// hold the next passes until the target flips back. The Failed path has no
-// such inversion, but takes the same one-requeue detour so the verb has a
-// single behaviour.
+// machine on the same pass: the pass ends with the re-armed record, the
+// dispatch drops the replica's rollback target once the executor stops
+// reporting the revert, and the next pass runs the steps from the record it
+// reads back. The Failed path takes the same one-requeue detour so the verb
+// has a single behaviour.
 //
 // The verb itself is handed back through take and removed by the controller
 // after the status flush that carries the re-arm: a lost flush then leaves
@@ -149,6 +194,16 @@ func handleResume(ctx context.Context, in ReconcileInputs, cs *v1beta1.CanarySta
 			"resume rejected for %s: %q is not the parked canary revision %q", in.Component, req.hash, cs.CanaryRevisionHash)
 		return false, consume()
 	}
+	// A resume re-enters the steps toward the parked revision, so a member of
+	// the unit must still target it. Once the spec went back to the stable
+	// revision nothing is left to roll: a re-entry would record the stable
+	// revision as its own canary and wait for a promote that moves nothing.
+	if targets := observedMemberTargets(in); !targets.names(req.hash) {
+		recordResume(in.ISVC, in.Component, resumeRejected)
+		emit(in.Recorder, in.ISVC, corev1.EventTypeWarning, EventReasonRolloutResumeRejected,
+			"resume rejected for %s: no member of the unit targets revision %q any more (%s); the request is removed", in.Component, req.hash, targets)
+		return false, consume()
+	}
 
 	// A live rollback verb would re-arm the hold on the very next pass, so the
 	// resume takes it with the phase it is clearing. This one is removed
@@ -157,9 +212,8 @@ func handleResume(ctx context.Context, in ReconcileInputs, cs *v1beta1.CanarySta
 	if err := consumeAnnotation(ctx, in.Client, in.ISVC, constants.RolloutRollbackAnnotation); err != nil {
 		return false, err
 	}
-	// Re-arm toward the PARKED revision, not the observed target: a completed
-	// rollback has already pointed the IR back at stable, so the observation
-	// names the wrong revision until the rollback signal clears.
+	// The record re-arms toward the parked revision the value named; the
+	// member check above is what makes it a revision the unit still targets.
 	resetCanaryStatus(in.ISVC, in.Component, cs, in.TargetID, cs.CanaryRevisionHash, in.Now)
 	recordResume(in.ISVC, in.Component, resumeApplied)
 	emit(in.Recorder, in.ISVC, corev1.EventTypeNormal, EventReasonRolloutResumed,

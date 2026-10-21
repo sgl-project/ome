@@ -150,7 +150,7 @@ func busyMemberReads(obj client.Object) bool {
 	return false
 }
 
-func TestObserveHomeWholeGangAdmission(t *testing.T) {
+func TestObserveMemberWholeGangAdmission(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
 		edit     func(*plannedObservationFixture)
@@ -225,8 +225,8 @@ func TestObserveHomeWholeGangAdmission(t *testing.T) {
 			worker := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).WithInterceptorFuncs(f.intercept).Build()
 			clusters := identifiedTestClusters{fakeClusters: fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{"member-a": workloadcluster.NewNeverCachingClient(worker)}}, uid: "member-a-uid"}
 			r, _ := newPlacer(scheme, clusters, f.source, plannedTestRegistration())
-			got := r.observeHome(t.Context(), f.source, f.source.Status.Placement.Candidates[0], true)
-			if diff := cmp.Diff(tt.unknown, got.state == homeUnknown); diff != "" {
+			got := r.observeMember(t.Context(), f.source, f.source.Status.Placement.Candidates[0], true)
+			if diff := cmp.Diff(tt.unknown, got.state == memberUnknown); diff != "" {
 				t.Fatalf("observation (-want +got):\n%s; %v", diff, got.err)
 			}
 			if tt.errText != "" && (got.err == nil || !strings.Contains(got.err.Error(), tt.errText)) {
@@ -278,7 +278,7 @@ func TestComponentIRStatusesListsPodsAfterEveryComponentRead(t *testing.T) {
 
 // TestStandingObservationOfBusyMembers runs the standing pass over members
 // whose service and every component are rewritten between any two reads of
-// them. Every home is present and admitted, and the source renders Ready.
+// them. Every member is present and admitted, and the source renders Ready.
 func TestStandingObservationOfBusyMembers(t *testing.T) {
 	f := observationFixture(t)
 	container := corev1.Container{Name: "ome-container", Image: "img"}
@@ -317,16 +317,16 @@ func TestStandingObservationOfBusyMembers(t *testing.T) {
 		registrations = append(registrations, *registration)
 	}
 	r, root := newPlacer(scheme, connections, controlPlane...)
-	observations := r.observeStandingHomes(t.Context(), f.source, registrations)
+	observations := r.observeStandingMembers(t.Context(), f.source, registrations)
 	for _, name := range members {
-		type home struct {
+		type member struct {
 			Present, Serving bool
 			Phase            v1beta1.CandidatePlacementPhase
 			Admitted, Ready  int32
 		}
-		observed := observations.homes[name]
-		got := home{observed.state == homePresent, observed.serving, observed.candidate.Phase, observed.candidate.AdmittedReplicas, observed.candidate.ReadyReplicas}
-		if diff := cmp.Diff(home{Present: true, Serving: true, Phase: v1beta1.CandidatePhaseAdmitted, Admitted: 1, Ready: 1}, got); diff != "" {
+		observed := observations.members[name]
+		got := member{observed.state == memberPresent, observed.serving, observed.candidate.Phase, observed.candidate.AdmittedReplicas, observed.candidate.ReadyReplicas}
+		if diff := cmp.Diff(member{Present: true, Serving: true, Phase: v1beta1.CandidatePhaseAdmitted, Admitted: 1, Ready: 1}, got); diff != "" {
 			t.Errorf("%s (-want +got):\n%s; %v", name, diff, observed.err)
 		}
 	}
@@ -398,7 +398,7 @@ func TestSingleAdmissionLossRetainsWinner(t *testing.T) {
 				t.Fatalf("admission gap recreated the member:\n%s", diff)
 			}
 			if err := f.workers["member-b"].Get(t.Context(), client.ObjectKeyFromObject(f.source), &v1beta1.InferenceService{}); !apierrors.IsNotFound(err) {
-				t.Fatalf("admission gap reopened the losing home: %v", err)
+				t.Fatalf("admission gap reopened the losing member: %v", err)
 			}
 		})
 	}

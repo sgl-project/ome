@@ -3,7 +3,6 @@ package pernode
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -12,40 +11,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel/shared"
 )
 
 // HandleModelDeletion waits for model-agent deletion acknowledgements, cleaning
 // up status ConfigMaps for confirmed-absent Nodes before dropping the finalizer.
-func HandleModelDeletion(ctx context.Context, kubeClient client.Client, nodeReader client.Reader, obj client.Object, finalizer string) (ctrl.Result, error) {
+func HandleModelDeletion(ctx context.Context, kubeClient client.Client, nodeReader client.Reader, obj client.Object, isClusterScoped bool, finalizer string) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	if controllerutil.ContainsFinalizer(obj, finalizer) {
 		// Before removing the finalizer, make sure all entries are cleared from ConfigMaps
 		// This prevents orphaned models when nodes are down or agents aren't running
-
-		// Determine model name, namespace and if it's cluster-scoped
 		modelName := obj.GetName()
 		var modelNamespace string
-		var isClusterScope bool
-
-		// Set namespace and scope based on object type
-		switch typedObj := obj.(type) {
-		case *v1beta1.BaseModel:
-			modelNamespace = typedObj.Namespace
-			isClusterScope = false
-		case *v1beta1.ClusterBaseModel:
-			modelNamespace = ""
-			isClusterScope = true
-		default:
-			log.Error(fmt.Errorf("unknown model type"), "Invalid model type for deletion handler")
-			return ctrl.Result{}, fmt.Errorf("unknown model type for deletion")
+		if !isClusterScoped {
+			modelNamespace = obj.GetNamespace()
 		}
-
-		// Get the model's ConfigMap key
-		modelKey := constants.GetModelConfigMapKey(modelNamespace, modelName, isClusterScope)
+		modelKey := constants.GetModelConfigMapKey(modelNamespace, modelName, isClusterScoped)
 
 		// List all ConfigMaps with model status label in the ome namespace
 		configMaps := &corev1.ConfigMapList{}
@@ -90,7 +73,7 @@ func HandleModelDeletion(ctx context.Context, kubeClient client.Client, nodeRead
 		}
 
 		modelInfo := modelName
-		if !isClusterScope {
+		if !isClusterScoped {
 			modelInfo = modelNamespace + "/" + modelName
 		}
 

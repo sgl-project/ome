@@ -51,6 +51,19 @@ func unschedulablePod(name string, since time.Time) *corev1.Pod {
 	}
 }
 
+// unroutedPod builds a running pod a surge's drain step has taken out of
+// rotation: ContainersReady, the serving gate off and PodReady False.
+func unroutedPod(name string) *corev1.Pod {
+	pod := servingPod(name)
+	for i := range pod.Status.Conditions {
+		switch pod.Status.Conditions[i].Type {
+		case "ome.io/serving", corev1.PodReady:
+			pod.Status.Conditions[i].Status = corev1.ConditionFalse
+		}
+	}
+	return pod
+}
+
 // creatingInstance is a single-pod Create attempt with a live deadline —
 // the shape a first rollout presents while its pod waits for placement.
 func creatingInstance(deadline time.Time) []types.InstanceStatus {
@@ -564,6 +577,157 @@ func TestEscalation_UnschedulableGangPastGraceKeepsItsOperation(t *testing.T) {
 	}
 	if len(rec.warns) != 1 {
 		t.Errorf("WarnInstanceFailed: got %v want one call", rec.warns)
+	}
+}
+
+// TestEscalation_UnschedulableGangPastGraceEndsTheSourceSurgeToo: the
+// hold stands on the replacement gang's row, but the attempt it ends is
+// the source's surge, which the update pass retires only once the source
+// reads Failed. So the grace writes Failed, with the operation kept and
+// the scheduler's record, on both rows of the pair in one pass, raises
+// one InstanceFailed per row and charges no revision. The source's own
+// pods keep serving throughout.
+func TestEscalation_UnschedulableGangPastGraceEndsTheSourceSurgeToo(t *testing.T) {
+	now := time.Now()
+	surgeIdx := int32(2)
+	insts := []types.InstanceStatus{
+		{
+			Index:           0,
+			Phase:           types.InstancePhaseUpdating,
+			PodCount:        2,
+			RunningRevision: "own-engine-oldhash",
+			TargetRevision:  "own-engine-newhash",
+			Operation: &types.InstanceOperation{
+				Type:           types.InstanceOperationUpdate,
+				Step:           types.UpdateStepSurge,
+				SurgeIndex:     &surgeIdx,
+				TargetRevision: "own-engine-newhash",
+			},
+		},
+		{
+			Index:          2,
+			Phase:          types.InstancePhaseCreating,
+			PodCount:       2,
+			TargetRevision: "own-engine-newhash",
+			Operation: &types.InstanceOperation{
+				Type:           types.InstanceOperationUpdate,
+				Step:           types.UpdateStepGangSurgeTarget,
+				TargetRevision: "own-engine-newhash",
+			},
+		},
+	}
+	input, rec := escalationFixture(insts)
+	input.UnschedulableGrace = 10 * time.Minute
+	input.ObservedState.UpdateRevision = "own-engine-newhash"
+	plan := types.ComponentPlan{Instances: []types.InstancePlan{
+		{Index: 0, Runners: []types.RunnerPlan{{Name: "default", Size: 2}}},
+		{Index: 2, Runners: []types.RunnerPlan{{Name: "default", Size: 2}}},
+	}}
+
+	if err := runEscalationPass(t, types.Deps{}, input, plan, map[int32][]*corev1.Pod{
+		0: {servingPod("engine-0-leader-0"), servingPod("engine-0-worker-0")},
+		2: {
+			unschedulablePod("engine-2-leader-0", now.Add(-time.Hour)),
+			unschedulablePod("engine-2-worker-0", now.Add(-time.Hour)),
+		},
+	}); err != nil {
+		t.Fatalf("escalation pass: %v", err)
+	}
+
+	for _, row := range rec.store {
+		if row.Phase != types.InstancePhaseFailed {
+			t.Errorf("Instance %d Phase: got %q want Failed", row.Index, row.Phase)
+		}
+		if row.Operation == nil {
+			t.Errorf("Instance %d Operation: got nil want kept (the update pass ends the pair from it)", row.Index)
+		}
+		if row.LastFailure == nil || row.LastFailure.Reason != types.WaitingReasonUnschedulable || row.LastFailure.PodName != "engine-2-leader-0" {
+			t.Errorf("Instance %d LastFailure: got %+v want the scheduler's record naming engine-2-leader-0", row.Index, row.LastFailure)
+		}
+	}
+	if op := rec.store[0].Operation; op != nil && (op.Step != types.UpdateStepSurge || op.SurgeIndex == nil || *op.SurgeIndex != surgeIdx) {
+		t.Errorf("source Operation: got %+v want the surge kept with its surge index", op)
+	}
+	if len(rec.blocks) != 0 {
+		t.Errorf("RetryBlock: got %v want none (environment-caused)", rec.blocks)
+	}
+	if len(rec.warns) != 2 {
+		t.Errorf("WarnInstanceFailed: got %v want one call per row of the pair", rec.warns)
+	}
+}
+
+// TestEscalation_UnschedulableMemberPastGraceEndsTheDrainingSourceAlone:
+// once the replacement gang has taken over serving, the source stands at
+// its drain step and a member rebuilt after a loss carries the hold on
+// the replacement's row. Past the grace the attempt is ended on the
+// source alone: Failed with its surge kept and the scheduler's record
+// naming the member, one InstanceFailed for the source and no revision
+// charged. The replacement's row is left as it was, so the hold pass
+// keeps reading it and releases the token once the member is retired.
+func TestEscalation_UnschedulableMemberPastGraceEndsTheDrainingSourceAlone(t *testing.T) {
+	now := time.Now()
+	surgeIdx := int32(2)
+	insts := []types.InstanceStatus{
+		{
+			Index:           0,
+			Phase:           types.InstancePhaseUpdating,
+			PodCount:        2,
+			RunningRevision: "own-engine-oldhash",
+			TargetRevision:  "own-engine-newhash",
+			Operation: &types.InstanceOperation{
+				Type:           types.InstanceOperationUpdate,
+				Step:           types.UpdateStepSurgeDrain,
+				SurgeIndex:     &surgeIdx,
+				TargetRevision: "own-engine-newhash",
+				RetryCount:     1,
+			},
+		},
+		{
+			Index:          2,
+			Phase:          types.InstancePhaseCreating,
+			PodCount:       2,
+			TargetRevision: "own-engine-newhash",
+			Operation: &types.InstanceOperation{
+				Type:           types.InstanceOperationUpdate,
+				Step:           types.UpdateStepGangSurgeTarget,
+				TargetRevision: "own-engine-newhash",
+			},
+		},
+	}
+	input, rec := escalationFixture(insts)
+	input.UnschedulableGrace = 10 * time.Minute
+	input.ObservedState.UpdateRevision = "own-engine-newhash"
+	plan := types.ComponentPlan{Instances: []types.InstancePlan{
+		{Index: 0, Runners: []types.RunnerPlan{{Name: "default", Size: 2}}},
+		{Index: 2, Runners: []types.RunnerPlan{{Name: "default", Size: 2}}},
+	}}
+
+	if err := runEscalationPass(t, types.Deps{}, input, plan, map[int32][]*corev1.Pod{
+		0: {unroutedPod("engine-0-leader-0"), unroutedPod("engine-0-worker-0")},
+		2: {servingPod("engine-2-leader-0"), unschedulablePod("engine-2-worker-0", now.Add(-time.Hour))},
+	}); err != nil {
+		t.Fatalf("escalation pass: %v", err)
+	}
+
+	source := rec.store[0]
+	if source.Phase != types.InstancePhaseFailed {
+		t.Errorf("source Phase: got %q want Failed", source.Phase)
+	}
+	if op := source.Operation; op == nil || op.Step != types.UpdateStepSurgeDrain || op.SurgeIndex == nil || *op.SurgeIndex != surgeIdx {
+		t.Errorf("source Operation: got %+v want the drain-step surge kept with its surge index", op)
+	}
+	if source.LastFailure == nil || source.LastFailure.Reason != types.WaitingReasonUnschedulable || source.LastFailure.PodName != "engine-2-worker-0" {
+		t.Errorf("source LastFailure: got %+v want the scheduler's record naming engine-2-worker-0", source.LastFailure)
+	}
+	replacement := rec.store[1]
+	if replacement.Phase != types.InstancePhaseCreating {
+		t.Errorf("replacement Phase: got %q want Creating (the row stays live so its hold is released with the member)", replacement.Phase)
+	}
+	if len(rec.blocks) != 0 {
+		t.Errorf("RetryBlock: got %v want none (environment-caused)", rec.blocks)
+	}
+	if len(rec.warns) != 1 {
+		t.Errorf("WarnInstanceFailed: got %v want one call, for the source", rec.warns)
 	}
 }
 

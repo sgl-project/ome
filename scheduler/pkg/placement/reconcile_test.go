@@ -7,7 +7,7 @@ import (
 )
 
 // TestReconcileReclaimsLeakedReservation is the reservation-leak invariant. A
-// reservation drains per-Place only when a member is assumed, but a group can pin
+// reservation drains per-Place only when a member is assumed, but a group can take
 // a domain (reserving gangSize) and then fail its scheduling cycle before any
 // member is assumed — Filter rejects every candidate, so no Reserve/Unreserve runs
 // and the reservation is never returned. It then subtracts capacity forever,
@@ -15,7 +15,7 @@ import (
 // the reservation the group can still justify against ground truth (gangSize minus
 // its placed members), returns the leaked slots.
 //
-// Group A pins "a" reserving 3 but places none of its members (its cycle keeps
+// Group A takes "a" reserving 3 but places none of its members (its cycle keeps
 // failing), so a fresh group of 3 sees eff = 3 - 3 = 0 and cannot fit. Reconcile
 // with A's true need of 0 (nothing placed, and the caller has decided the
 // reservation is stale) returns the capacity, so the fresh group fits.
@@ -34,10 +34,10 @@ func TestReconcileReclaimsLeakedReservation(t *testing.T) {
 	if d, ok := p.Choose("B", topology.FreeByDomain{"a": 3}, 3); !ok || d != "a" {
 		t.Fatalf("B Choose after reconcile = %q,%v want a,true (leaked reservation reclaimed)", d, ok)
 	}
-	// The reservation aggregate is truly gone, not merely masked: A holds no pin-time
+	// The reservation aggregate is truly gone, not merely masked: A holds no assignment-time
 	// reservation, so a third group also fits the (now smaller) free view.
-	if _, pinned := p.Get("A"); !pinned {
-		t.Fatal("Reconcile must not drop the pin itself, only shrink its reservation")
+	if _, assigned := p.Get("A"); !assigned {
+		t.Fatal("Reconcile must not drop the assignment itself, only shrink its reservation")
 	}
 }
 
@@ -87,7 +87,7 @@ func TestReconcileSkipsUnknownGroup(t *testing.T) {
 	}
 }
 
-// TestDomainsSnapshot: Domains reflects exactly the pinned groups and their
+// TestDomainsSnapshot: Domains reflects exactly the assigned groups and their
 // domains, and drops a released group.
 func TestDomainsSnapshot(t *testing.T) {
 	p := New()

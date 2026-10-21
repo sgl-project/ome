@@ -83,7 +83,7 @@ func expectHeldAtFinalStep(t *testing.T, isvc *v1beta1.InferenceService, res *Re
 		t.Fatalf("phase %q, want %q", phaseOf(isvc), phase)
 	}
 	ext := &v1beta1.ComponentExtensionSpec{MinReplicas: intPtr(2)}
-	if p := StepPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, ext); p == nil || *p != 1 {
+	if p := StepPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, DesiredReplicas(nil, ext)); p == nil || *p != 1 {
 		t.Fatalf("the projected partition must keep the stable instance, got %v", fmtPartition(p))
 	}
 }
@@ -233,7 +233,7 @@ func TestDispatch_ADeletedPodStillInTheCacheIsNotCapacity(t *testing.T) {
 	}
 	expectTargets(t, isvc, v1beta1.EngineComponent, map[string]trafficWant{"old": {percent: 100}})
 	ext := &isvc.Spec.Engine.ComponentExtensionSpec
-	if p := StepPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, ext); p == nil || *p != 1 {
+	if p := StepPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, DesiredReplicas(nil, ext)); p == nil || *p != 1 {
 		t.Fatalf("the stable instance stays held, got partition %v", fmtPartition(p))
 	}
 	if out.RequeueAfter == 0 && !out.Requeue {
@@ -345,8 +345,8 @@ func TestReconcile_HeldFinalStepParksOnACrashLoop(t *testing.T) {
 		if cs.Failed == nil || cs.Failed.Reason != v1beta1.CanaryFailureCapacityTimeout || phaseOf(isvc) != v1beta1.RolloutPhaseFailed || cs.CurrentStep != 1 {
 			t.Fatalf("a crash loop parks the held final step, got phase=%q status=%+v", phaseOf(isvc), cs)
 		}
-		if !res.Active || res.Partition != 1 || res.RequeueAfter != failedRequeue {
-			t.Fatalf("the park keeps the stable instance held at the parked cadence, got %+v", res)
+		if !res.Active || res.Partition != in.DesiredReplicas || res.RequeueAfter != failedRequeue {
+			t.Fatalf("the stop holds every Instance where it stands at the parked cadence, got %+v", res)
 		}
 		expectSoleTarget(t, isvc, v1beta1.EngineComponent, "old")
 		select {
@@ -379,8 +379,8 @@ func expectParkKeepsItsExits(t *testing.T, parked func(t *testing.T) (*v1beta1.I
 			t.Fatalf("the park holds at its cadence, got %+v", res)
 		}
 		ext := &v1beta1.ComponentExtensionSpec{MinReplicas: intPtr(2)}
-		if p := StepPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, ext); p == nil || *p != 1 {
-			t.Fatalf("the park keeps the stable instance held, got %v", fmtPartition(p))
+		if p := StepPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, DesiredReplicas(nil, ext)); p == nil || *p != 2 {
+			t.Fatalf("the stop holds every Instance where it stands (partition 2), got %v", fmtPartition(p))
 		}
 		expectSoleTarget(t, isvc, v1beta1.EngineComponent, "old")
 	})
@@ -446,8 +446,8 @@ func TestReconcile_HeldFinalStepTimesOutIntoThePark(t *testing.T) {
 	if cs.Failed == nil || cs.Failed.Reason != v1beta1.CanaryFailureCapacityTimeout || !cs.Failed.Time.Time.Equal(in.Now) || phaseOf(isvc) != v1beta1.RolloutPhaseFailed || cs.CurrentStep != 1 {
 		t.Fatalf("the hold must park at the final step on the ready timeout, got phase=%q status=%+v", phaseOf(isvc), cs)
 	}
-	if !res.Active || res.Partition != 1 || res.RequeueAfter != failedRequeue {
-		t.Fatalf("the park keeps the stable instance held at the parked cadence, got %+v", res)
+	if !res.Active || res.Partition != in.DesiredReplicas || res.RequeueAfter != failedRequeue {
+		t.Fatalf("the stop holds every Instance where it stands at the parked cadence, got %+v", res)
 	}
 	expectSoleTarget(t, isvc, v1beta1.EngineComponent, "old")
 
@@ -460,8 +460,8 @@ func TestReconcile_HeldFinalStepTimesOutIntoThePark(t *testing.T) {
 		t.Fatalf("a park is not re-evaluated, got res=%+v status=%+v", res, cs)
 	}
 	ext := &v1beta1.ComponentExtensionSpec{MinReplicas: intPtr(2)}
-	if p := StepPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, ext); p == nil || *p != 1 {
-		t.Fatalf("the park keeps the stable instance held, got %v", fmtPartition(p))
+	if p := StepPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, DesiredReplicas(nil, ext)); p == nil || *p != 2 {
+		t.Fatalf("the stop holds every Instance where it stands (partition 2), got %v", fmtPartition(p))
 	}
 	expectSoleTarget(t, isvc, v1beta1.EngineComponent, "old")
 }
@@ -628,8 +628,8 @@ func TestReconcile_HeldFinalGateTimesOutIntoThePark(t *testing.T) {
 	if cs.Failed == nil || cs.Failed.Reason != v1beta1.CanaryFailureCapacityTimeout || phaseOf(isvc) != v1beta1.RolloutPhaseFailed || cs.CurrentStep != 1 {
 		t.Fatalf("the held gate must park on the ready timeout of its capacity wait, got phase=%q status=%+v", phaseOf(isvc), cs)
 	}
-	if !res.Active || res.Partition != 1 || res.RequeueAfter != failedRequeue {
-		t.Fatalf("the park keeps the stable instance held at the parked cadence, got %+v", res)
+	if !res.Active || res.Partition != in.DesiredReplicas || res.RequeueAfter != failedRequeue {
+		t.Fatalf("the stop holds every Instance where it stands at the parked cadence, got %+v", res)
 	}
 	expectSoleTarget(t, isvc, v1beta1.EngineComponent, "old")
 }

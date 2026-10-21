@@ -170,6 +170,9 @@ type BackendArgs struct {
 	Kind            string
 }
 
+// ModelSpecAndStatus returns the spec and the status of a BaseModel or a
+// ClusterBaseModel. It is the one place that tells the two kinds apart by
+// type; the reconciler and every backend read a model through it.
 func ModelSpecAndStatus(obj client.Object) (*v1beta1.BaseModelSpec, *v1beta1.ModelStatusSpec, error) {
 	switch model := obj.(type) {
 	case *v1beta1.BaseModel:

@@ -6,7 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-func TestPtrIntOrStringFromString(t *testing.T) {
+func TestPtrIntOrStringFromString_CalledTwice_StringValueAndDistinctPointers(t *testing.T) {
 	p := PtrIntOrStringFromString("25%")
 	if p == nil {
 		t.Fatal("PtrIntOrStringFromString returned nil")
@@ -74,7 +74,7 @@ func legacyMaxSurgeBudget(v intstr.IntOrString, replicas int32) int32 {
 	return legacySurgeFromPercent(legacyStrPercent(v.StrVal), replicas)
 }
 
-func TestScaledCountFromIntOrString_Table(t *testing.T) {
+func TestScaledCountFromIntOrString_IntPercentOrBadString_ScalesOnlyPercents(t *testing.T) {
 	tests := []struct {
 		name    string
 		v       *intstr.IntOrString
@@ -125,11 +125,9 @@ func TestScaledCountFromIntOrString_Table(t *testing.T) {
 	}
 }
 
-// TestScaledCountFromIntOrString_MatchesLegacy exhaustively compares the
-// new helper (roundUp=true) against the deleted hand-rolled
-// MaxSurgeBudget/ceilPercent oracle across every int and percent value an
-// operator could plausibly write, proving the budget math is unchanged.
-func TestScaledCountFromIntOrString_MatchesLegacy(t *testing.T) {
+// Every int from -2 to 20 and every percent from 0 to 200, over totals 0 to 16,
+// must round up to the count the reference rounding above gives.
+func TestScaledCountFromIntOrString_RoundUpTotalsUpTo16_MatchesReferenceRounding(t *testing.T) {
 	for total := int32(0); total <= 16; total++ {
 		// Integer budgets, including negatives and over-total values.
 		for n := int32(-2); n <= 20; n++ {
@@ -167,7 +165,7 @@ func itoaPct(n int) string {
 	return string(digits) + "%"
 }
 
-func TestAvailabilityFloor_Table(t *testing.T) {
+func TestAvailabilityFloor_MinMaxOrFallbackBudget_TakesTheFirstSetInThatOrder(t *testing.T) {
 	tests := []struct {
 		name           string
 		total          int32

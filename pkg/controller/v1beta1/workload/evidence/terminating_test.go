@@ -1,4 +1,4 @@
-package evidence_test
+package evidence
 
 // The force-delete predicate, branch by branch. Only three classes are
 // actionable, and each of the refusals is a distinct reason the cluster
@@ -17,12 +17,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/evidence"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
-
-var tNow = time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC)
 
 // TestAttemptSuspectNode: the suspect node is read off the attempt's own
 // pods. A single-pod surge shares its bucket with the serving source, so
@@ -66,7 +63,7 @@ func TestAttemptSuspectNode(t *testing.T) {
 			if tc.name == "no target revision leaves every pod in scope" {
 				rev = ""
 			}
-			if got := evidence.AttemptSuspectNode(tc.pods, rev); got != tc.want {
+			if got := AttemptSuspectNode(tc.pods, rev); got != tc.want {
 				t.Errorf("AttemptSuspectNode: got %q want %q", got, tc.want)
 			}
 		})
@@ -134,26 +131,26 @@ func TestStuckTerminating_Branches(t *testing.T) {
 		name       string
 		pod        *corev1.Pod
 		policy     *types.ForceDeletePolicy
-		want       evidence.TerminatingClass
+		want       TerminatingClass
 		actionable bool
 	}{
 		{
 			name:   "no policy: the escalation does not exist",
 			pod:    tTerminatingPod("gone-node", overdue),
 			policy: nil,
-			want:   evidence.NotConfigured,
+			want:   NotConfigured,
 		},
 		{
 			name:   "inside the pod's own grace plus the slack",
 			pod:    tTerminatingPod("gone-node", tNow.Add(9*time.Minute)),
 			policy: tPolicy(),
-			want:   evidence.WithinGrace,
+			want:   WithinGrace,
 		},
 		{
 			name:   "exactly at the slack boundary is still within grace",
 			pod:    tTerminatingPod("gone-node", tNow.Add(-2*time.Minute)),
 			policy: tPolicy(),
-			want:   evidence.WithinGrace,
+			want:   WithinGrace,
 		},
 		{
 			name: "overdue but pinned by a foreign finalizer: report only",
@@ -163,20 +160,20 @@ func TestStuckTerminating_Branches(t *testing.T) {
 				return p
 			}(),
 			policy: tPolicy(),
-			want:   evidence.ForeignFinalizers,
+			want:   ForeignFinalizers,
 		},
 		{
 			name:       "overdue with no node object: the node is gone",
 			pod:        tTerminatingPod("gone-node", overdue),
 			policy:     tPolicy(),
-			want:       evidence.NodeGone,
+			want:       NodeGone,
 			actionable: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// No node seeded: every branch above either stops before the
 			// node read or expects the NotFound one.
-			got := evidence.StuckTerminating(context.Background(), tReader(t), tc.pod, tc.policy, tNow)
+			got := StuckTerminating(context.Background(), tReader(t), tc.pod, tc.policy, tNow)
 			if got.Kind != tc.want {
 				t.Fatalf("kind: got %s want %s", got.Kind, tc.want)
 			}
@@ -210,7 +207,7 @@ func TestAllPodsTerminatingOverdue(t *testing.T) {
 		{name: "a nil entry", pods: []*corev1.Pod{overdue, nil}, want: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := evidence.AllPodsTerminatingOverdue(tc.pods, tNow); got != tc.want {
+			if got := AllPodsTerminatingOverdue(tc.pods, tNow); got != tc.want {
 				t.Fatalf("AllPodsTerminatingOverdue = %v, want %v", got, tc.want)
 			}
 		})
@@ -226,44 +223,44 @@ func TestNodeDeath_Branches(t *testing.T) {
 		name       string
 		node       *corev1.Node
 		nodeName   string
-		want       evidence.TerminatingClass
+		want       TerminatingClass
 		actionable bool
 	}{
 		{
 			name:     "unscheduled pod has no node whose death could be proven",
 			nodeName: "",
-			want:     evidence.Unscheduled,
+			want:     Unscheduled,
 		},
 		{
 			name:     "Ready=True is the kubelet-slow case",
 			node:     tNode("live", corev1.ConditionTrue, 10*time.Second, false),
 			nodeName: "live",
-			want:     evidence.NodeHealthy,
+			want:     NodeHealthy,
 		},
 		{
 			name:     "Ready=True vetoes a stale unreachable taint",
 			node:     tNode("recovered", corev1.ConditionTrue, 10*time.Minute, true),
 			nodeName: "recovered",
-			want:     evidence.NodeHealthy,
+			want:     NodeHealthy,
 		},
 		{
 			name:     "NotReady younger than the threshold is a blip",
 			node:     tNode("dying", corev1.ConditionFalse, 2*time.Minute, false),
 			nodeName: "dying",
-			want:     evidence.NodeNotDeadLongEnough,
+			want:     NodeNotDeadLongEnough,
 		},
 		{
 			name:       "unreachable taint older than the threshold",
 			node:       tNode("dead", corev1.ConditionUnknown, 10*time.Minute, true),
 			nodeName:   "dead",
-			want:       evidence.NodeUnreachableTaint,
+			want:       NodeUnreachableTaint,
 			actionable: true,
 		},
 		{
 			name:       "NotReady older than the threshold",
 			node:       tNode("dead", corev1.ConditionFalse, 10*time.Minute, false),
 			nodeName:   "dead",
-			want:       evidence.NodeNotReady,
+			want:       NodeNotReady,
 			actionable: true,
 		},
 	} {
@@ -273,7 +270,7 @@ func TestNodeDeath_Branches(t *testing.T) {
 				objs = append(objs, tc.node)
 			}
 			pod := tTerminatingPod(tc.nodeName, tNow.Add(-10*time.Minute))
-			got := evidence.NodeDeath(context.Background(), tReader(t, objs...), pod, tPolicy(), tNow, 0)
+			got := NodeDeath(context.Background(), tReader(t, objs...), pod, tPolicy(), tNow, 0)
 			if got.Kind != tc.want {
 				t.Fatalf("kind: got %s want %s", got.Kind, tc.want)
 			}
@@ -308,7 +305,7 @@ func TestSingleLiveNode(t *testing.T) {
 		{name: "a nil pod", pods: []*corev1.Pod{nil}, want: ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := evidence.SingleLiveNode(tc.pods); got != tc.want {
+			if got := SingleLiveNode(tc.pods); got != tc.want {
 				t.Errorf("SingleLiveNode: got %q want %q", got, tc.want)
 			}
 		})
@@ -340,28 +337,28 @@ func TestReadSilentPod(t *testing.T) {
 		name   string
 		pod    *corev1.Pod
 		policy *types.ForceDeletePolicy
-		want   evidence.TerminatingClass
+		want   TerminatingClass
 		held   bool
 	}{
-		{"no policy", quiet(corev1.PodUnknown, "gone", nil), nil, evidence.NotConfigured, true},
-		{"node gone", quiet(corev1.PodUnknown, "gone", nil), policy, evidence.NodeGone, false},
-		{"node live, phase Unknown", quiet(corev1.PodUnknown, "live", nil), policy, evidence.NodeHealthy, true},
-		{"node live, Ready withdrawn", quiet(corev1.PodRunning, "live", nil), policy, evidence.NodeHealthy, false},
-		{"node dying, Ready withdrawn", quiet(corev1.PodRunning, "dying", nil), policy, evidence.NodeNotDeadLongEnough, true},
-		{"unscheduled, Ready withdrawn", quiet(corev1.PodRunning, "", nil), policy, evidence.Unscheduled, false},
-		{"terminating, node gone, overdue", quiet(corev1.PodUnknown, "gone", &overdue), policy, evidence.NodeGone, false},
-		{"terminating, node gone, pinned", quiet(corev1.PodUnknown, "gone", &overdue, "example.com/keep"), policy, evidence.ForeignFinalizers, true},
-		{"terminating, node gone, within grace", quiet(corev1.PodRunning, "gone", ptrTime(tNow)), policy, evidence.WithinGrace, true},
+		{"no policy", quiet(corev1.PodUnknown, "gone", nil), nil, NotConfigured, true},
+		{"node gone", quiet(corev1.PodUnknown, "gone", nil), policy, NodeGone, false},
+		{"node live, phase Unknown", quiet(corev1.PodUnknown, "live", nil), policy, NodeHealthy, true},
+		{"node live, Ready withdrawn", quiet(corev1.PodRunning, "live", nil), policy, NodeHealthy, false},
+		{"node dying, Ready withdrawn", quiet(corev1.PodRunning, "dying", nil), policy, NodeNotDeadLongEnough, true},
+		{"unscheduled, Ready withdrawn", quiet(corev1.PodRunning, "", nil), policy, Unscheduled, false},
+		{"terminating, node gone, overdue", quiet(corev1.PodUnknown, "gone", &overdue), policy, NodeGone, false},
+		{"terminating, node gone, pinned", quiet(corev1.PodUnknown, "gone", &overdue, "example.com/keep"), policy, ForeignFinalizers, true},
+		{"terminating, node gone, within grace", quiet(corev1.PodRunning, "gone", ptrTime(tNow)), policy, WithinGrace, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := evidence.ReadSilentPod(context.Background(), reader, tc.pod, tc.policy, tNow)
+			got, err := ReadSilentPod(context.Background(), reader, tc.pod, tc.policy, tNow)
 			if err != nil {
 				t.Fatalf("ReadSilentPod: %v", err)
 			}
 			if got != tc.want {
 				t.Errorf("ReadSilentPod = %s, want %s", got, tc.want)
 			}
-			if held := evidence.SilentPodHeld(tc.pod, got); held != tc.held {
+			if held := SilentPodHeld(tc.pod, got); held != tc.held {
 				t.Errorf("SilentPodHeld = %v, want %v", held, tc.held)
 			}
 		})
@@ -412,7 +409,7 @@ func TestSilentKubeletTargetPods(t *testing.T) {
 		}
 		return set
 	}
-	got := evidence.SilentKubeletTargetPods(
+	got := SilentKubeletTargetPods(
 		[]*corev1.Pod{
 			pod("c", corev1.PodUnknown),
 			pod("a", corev1.PodUnknown),
@@ -424,10 +421,10 @@ func TestSilentKubeletTargetPods(t *testing.T) {
 	if len(got) != 2 || got[0].Name != "a" || got[1].Name != "c" {
 		t.Fatalf("want the Unknown targets in name order [a c], got %v", got)
 	}
-	if evidence.SilentKubeletTargetPods(nil, names("a"), nil) != nil {
+	if SilentKubeletTargetPods(nil, names("a"), nil) != nil {
 		t.Error("no pods: want nil")
 	}
-	if evidence.SilentKubeletTargetPods([]*corev1.Pod{pod("a", corev1.PodUnknown)}, nil, nil) != nil {
+	if SilentKubeletTargetPods([]*corev1.Pod{pod("a", corev1.PodUnknown)}, nil, nil) != nil {
 		t.Error("no targets: want nil")
 	}
 
@@ -438,10 +435,10 @@ func TestSilentKubeletTargetPods(t *testing.T) {
 		withdrawn("ready", true, true, true),
 	}
 	all := names("withdrawn", "draining", "probe-failing", "ready")
-	if got := evidence.SilentKubeletTargetPods(shapes, all, nil); got != nil {
+	if got := SilentKubeletTargetPods(shapes, all, nil); got != nil {
 		t.Errorf("without a policy no Running pod is read as silent, got %v", got)
 	}
-	got = evidence.SilentKubeletTargetPods(shapes, all, policy)
+	got = SilentKubeletTargetPods(shapes, all, policy)
 	if len(got) != 1 || got[0].Name != "withdrawn" {
 		t.Fatalf("under a policy only the withdrawn-Ready shape is silent, got %v", got)
 	}

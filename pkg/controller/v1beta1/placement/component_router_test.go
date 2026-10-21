@@ -12,18 +12,23 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/placement/allocation"
 )
 
-// dividedRouterSource adds a router with its own terms to a per-component
-// Split source, which divides router.minReplicas across the homes.
+// dividedRouterSource adds a router with router weights to a Split source,
+// which divides router.minReplicas across the members. A member missing from
+// routerWeights gets no router weight on its term.
 func dividedRouterSource(routers int, routerWeights map[string]int32) *v1beta1.InferenceService {
-	twoToOne := map[string]int32{"member-a": 3, "member-b": 1}
-	source := componentSplitSource(4, 12, twoToOne, twoToOne)
+	threeToOne := map[string]int32{"member-a": 3, "member-b": 1}
+	source := componentSplitSource(4, 12, threeToOne, threeToOne)
 	source.Spec.Router = &v1beta1.RouterSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: ptr.To(routers), MaxReplicas: 8}}
-	source.Spec.Placement.ComponentAffinity.Router = weightedAffinity(routerWeights)
+	for i, name := range []string{"member-a", "member-b"} {
+		if weight, set := routerWeights[name]; set {
+			source.Spec.Placement.ClusterAffinity[i].Weights.Router = ptr.To(weight)
+		}
+	}
 	return source
 }
 
-// routerFloors plans the source over both members, settles every home, and
-// returns each home's router floor; a home without one reports -1.
+// routerFloors plans the source over both members, settles every member, and
+// returns each member's router floor; a member without one reports -1.
 func routerFloors(t *testing.T, source *v1beta1.InferenceService) (map[string]int32, error) {
 	t.Helper()
 	proposal, err := desiredSplitPlan(source, twoMembers(), nil)
@@ -33,7 +38,7 @@ func routerFloors(t *testing.T, source *v1beta1.InferenceService) (map[string]in
 	candidates := settledCandidates(proposal.Assignments)
 	out := map[string]int32{}
 	for _, candidate := range candidates {
-		floors, err := splitHomeFloors(source, candidates, candidate)
+		floors, err := splitMemberFloors(source, candidates, candidate)
 		if err != nil {
 			t.Fatalf("%s: %v", candidate.Cluster, err)
 		}
@@ -59,13 +64,14 @@ func TestDividedRouterFloors(t *testing.T) {
 		{name: "routers with their own weights split by them", source: func() *v1beta1.InferenceService {
 			return dividedRouterSource(4, map[string]int32{"member-a": 1, "member-b": 1})
 		}, want: map[string]int32{"member-a": 2, "member-b": 2}},
-		{name: "fewer routers than engine homes holds the plan", source: func() *v1beta1.InferenceService {
+		{name: "fewer routers than engine members holds the plan", source: func() *v1beta1.InferenceService {
 			return dividedRouterSource(1, map[string]int32{"member-a": 3, "member-b": 1})
 		}, wantErr: "router minimum 1 cannot give each of the 2 homes"},
-		{name: "without router terms every home runs the full router policy", source: func() *v1beta1.InferenceService {
-			source := dividedRouterSource(3, map[string]int32{"member-a": 3, "member-b": 1})
-			source.Spec.Placement.ComponentAffinity.Router = nil
-			return source
+		{name: "a term without a router weight contributes the engine's", source: func() *v1beta1.InferenceService {
+			return dividedRouterSource(4, map[string]int32{"member-a": 1})
+		}, want: map[string]int32{"member-a": 2, "member-b": 2}},
+		{name: "without a router weight every member runs the full router policy", source: func() *v1beta1.InferenceService {
+			return dividedRouterSource(3, nil)
 		}, want: map[string]int32{"member-a": -1, "member-b": -1}},
 		{name: "split replicas scale the router minimum in the declared ratio", source: func() *v1beta1.InferenceService {
 			source := dividedRouterSource(4, map[string]int32{"member-a": 3, "member-b": 1})
@@ -141,9 +147,9 @@ func TestDividedRouterHoldsUntilReplacementsAreReady(t *testing.T) {
 		copied.Spec.Router.MinReplicas = ptr.To(routers)
 		return copied
 	}
-	observations := map[string]plannedHomeObservation{
-		"member-a": {Member: member(2), ComponentReady: map[v1beta1.ComponentType]int32{v1beta1.RouterComponent: 2}, Home: allocation.Home{Known: true, Routable: true}},
-		"member-b": {Member: member(2), ComponentReady: map[v1beta1.ComponentType]int32{v1beta1.RouterComponent: 2}, Home: allocation.Home{Known: true, Routable: true}},
+	observations := map[string]plannedMemberObservation{
+		"member-a": {Member: member(2), ComponentReady: map[v1beta1.ComponentType]int32{v1beta1.RouterComponent: 2}, MemberState: allocation.MemberState{Known: true, Routable: true}},
+		"member-b": {Member: member(2), ComponentReady: map[v1beta1.ComponentType]int32{v1beta1.RouterComponent: 2}, MemberState: allocation.MemberState{Known: true, Routable: true}},
 	}
 	got, err := splitSecondaryHolds(source, observations)
 	if err != nil {
@@ -153,16 +159,8 @@ func TestDividedRouterHoldsUntilReplacementsAreReady(t *testing.T) {
 	if diff := cmp.Diff(want, got, cmpopts.EquateEmpty()); diff != "" {
 		t.Errorf("holds (-want +got):\n%s", diff)
 	}
-	observations["member-a"] = plannedHomeObservation{Member: member(3), ComponentReady: map[v1beta1.ComponentType]int32{v1beta1.RouterComponent: 3}, Home: allocation.Home{Known: true, Routable: true}}
+	observations["member-a"] = plannedMemberObservation{Member: member(3), ComponentReady: map[v1beta1.ComponentType]int32{v1beta1.RouterComponent: 3}, MemberState: allocation.MemberState{Known: true, Routable: true}}
 	if got, err = splitSecondaryHolds(source, observations); err != nil || len(got) > 0 {
 		t.Errorf("holds after the replacement is ready = %v, %v; want none", got, err)
-	}
-}
-
-func TestDividedRouterTermsMustMatchTheSameClusters(t *testing.T) {
-	source := dividedRouterSource(3, map[string]int32{"member-a": 3, "member-b": 1})
-	source.Spec.Placement.ComponentAffinity.Router = testAffinity("metadata.name in (member-a)")
-	if err := componentClustersDiffer(source, twoMembers()); err == nil || !strings.Contains(err.Error(), "member-b matches engine and decoder but not router") {
-		t.Fatalf("error = %v, want member-b named", err)
 	}
 }

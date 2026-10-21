@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-func TestResolveConfigEnabled(t *testing.T) {
+func TestResolveConfig_GlobalAndInlineEnabled_InlineCanOnlyOptOut(t *testing.T) {
 	trueValue, falseValue := true, false
 	tests := []struct {
 		name          string
@@ -45,7 +45,7 @@ func TestResolveConfigEnabled(t *testing.T) {
 	}
 }
 
-func TestResolveConfigValidationFollowsEffectiveEnablement(t *testing.T) {
+func TestResolveConfig_RoutingDisabled_SkipsObserverAndPublisherValidation(t *testing.T) {
 	trueValue, falseValue := true, false
 	stagedCapacity := func() *v1beta1.RoutingCapacitySpec {
 		capacity := validRoutingCapacitySpec()
@@ -152,7 +152,7 @@ func TestResolveConfigValidationFollowsEffectiveEnablement(t *testing.T) {
 	}
 }
 
-func TestResolveConfigObserverBlocks(t *testing.T) {
+func TestResolveConfig_InlineProbeAndCapacityBlocks_ReplaceWholeOrInherit(t *testing.T) {
 	global := testGlobalRoutingConfig()
 
 	t.Run("nil blocks inherit", func(t *testing.T) {
@@ -236,7 +236,7 @@ func TestResolveConfigObserverBlocks(t *testing.T) {
 	})
 }
 
-func TestResolveConfigPublisherOptions(t *testing.T) {
+func TestResolveConfig_InlinePublisherOptions_MergedThroughResolverCopies(t *testing.T) {
 	global := testGlobalRoutingConfig()
 	routingSpec := &v1beta1.RoutingSpec{
 		Publisher: &v1beta1.RoutingPublisherSpec{Options: map[string]string{
@@ -292,7 +292,7 @@ func TestResolveConfigPublisherOptions(t *testing.T) {
 		"spec.routing.publisher.options: serviceAlias is outside the permitted scope")
 }
 
-func TestResolveConfigRunsSharedRoutingValidation(t *testing.T) {
+func TestResolveConfig_InvalidProbeOrOptionShape_FailsBeforeThePublisher(t *testing.T) {
 	validProbe := func() *v1beta1.RoutingProbeSpec {
 		return &v1beta1.RoutingProbeSpec{
 			Path:             "/ready",
@@ -362,7 +362,7 @@ func TestResolveConfigRunsSharedRoutingValidation(t *testing.T) {
 	}
 }
 
-func TestResolveConfigMutationIsolation(t *testing.T) {
+func TestResolveConfig_ResultMutated_GlobalAndOtherResultsUnchanged(t *testing.T) {
 	global := testGlobalRoutingConfig()
 	global.Capacity = CapacityConfig{Options: map[string]string{"source": "global"}}
 	routingSpec := &v1beta1.RoutingSpec{
@@ -403,7 +403,7 @@ func TestResolveConfigMutationIsolation(t *testing.T) {
 	}, second.Publisher.Options)
 }
 
-func TestResolveProbePolicyEnablementAndInheritance(t *testing.T) {
+func TestResolveProbePolicy_GlobalAndInlineEnabled_InheritsProbeAndDigest(t *testing.T) {
 	trueValue, falseValue := true, false
 	global := testGlobalRoutingConfig()
 	tests := []struct {
@@ -471,7 +471,7 @@ func TestResolveProbePolicyEnablementAndInheritance(t *testing.T) {
 	}
 }
 
-func TestResolveProbePolicyInlineReplacementAndDisable(t *testing.T) {
+func TestResolveProbePolicy_InlineBlockOrDisabled_ReplacesOrClears(t *testing.T) {
 	global := testGlobalRoutingConfig()
 	inline := validRoutingProbeSpec()
 	inline.Path = "/deep-ready"
@@ -509,7 +509,7 @@ func TestResolveProbePolicyInlineReplacementAndDisable(t *testing.T) {
 	assert.Empty(t, disabled.PolicyDigest)
 }
 
-func TestResolveProbePolicyIgnoresUnrelatedInlineBlocks(t *testing.T) {
+func TestResolveProbePolicy_InvalidCapacityAndPublisherBlocks_IgnoresThem(t *testing.T) {
 	global := testGlobalRoutingConfig()
 	wantGlobal := cloneConfig(global)
 	inline := validRoutingProbeSpec()
@@ -533,7 +533,7 @@ func TestResolveProbePolicyIgnoresUnrelatedInlineBlocks(t *testing.T) {
 	assert.Equal(t, wantGlobal, global)
 }
 
-func TestResolveProbePolicyValidationScope(t *testing.T) {
+func TestResolveProbePolicy_PartialConflictingOrBadGlobal_NamesTheField(t *testing.T) {
 	global := testGlobalRoutingConfig()
 
 	_, err := ResolveProbePolicy(global, routingISVCSpec(&v1beta1.RoutingSpec{
@@ -560,7 +560,7 @@ func TestResolveProbePolicyValidationScope(t *testing.T) {
 	assert.Empty(t, got.PolicyDigest)
 }
 
-func TestResolveProbePolicyEnforcesObserverMinimumPeriod(t *testing.T) {
+func TestResolveProbePolicy_PeriodBelowObserverMinimum_FailsNamingBoth(t *testing.T) {
 	global := testGlobalRoutingConfig()
 	global.Observer.MinPeriod = 2 * time.Minute
 
@@ -581,7 +581,7 @@ func TestResolveProbePolicyEnforcesObserverMinimumPeriod(t *testing.T) {
 	assert.True(t, got.IsEnabled())
 }
 
-func TestResolveProbePolicyDigestIsCanonicalAndComplete(t *testing.T) {
+func TestResolveProbePolicy_StatusSetsReordered_SameDigestAnyFieldChangesIt(t *testing.T) {
 	base := testGlobalRoutingConfig()
 	base.Probe.AcceptStatuses = []int{204, 200}
 	base.Probe.GateStatuses = []int{503, 500}
@@ -645,7 +645,7 @@ func TestResolveProbePolicyDigestIsCanonicalAndComplete(t *testing.T) {
 	}
 }
 
-func TestResolveCapacityPolicyEnablementAndInheritance(t *testing.T) {
+func TestResolveCapacityPolicy_GlobalAndInlineEnabled_InheritsCapacityAndDigest(t *testing.T) {
 	trueValue, falseValue := true, false
 	global := testGlobalRoutingConfig()
 	tests := []struct {
@@ -713,7 +713,7 @@ func TestResolveCapacityPolicyEnablementAndInheritance(t *testing.T) {
 	}
 }
 
-func TestResolveCapacityPolicyInlineReplacementAndDisable(t *testing.T) {
+func TestResolveCapacityPolicy_InlineBlockOrDisabled_ReplacesOrClears(t *testing.T) {
 	global := testGlobalRoutingConfig()
 	inline := validRoutingCapacitySpec()
 	inline.Path = "/deep-capacity"
@@ -748,7 +748,7 @@ func TestResolveCapacityPolicyInlineReplacementAndDisable(t *testing.T) {
 	assert.Empty(t, disabled.PolicyDigest)
 }
 
-func TestResolveCapacityPolicyIgnoresUnrelatedInlineBlocks(t *testing.T) {
+func TestResolveCapacityPolicy_InvalidProbeAndPublisherBlocks_IgnoresThem(t *testing.T) {
 	global := testGlobalRoutingConfig()
 	global.Probe.Method = "DELETE"
 	wantGlobal := cloneConfig(global)
@@ -773,7 +773,7 @@ func TestResolveCapacityPolicyIgnoresUnrelatedInlineBlocks(t *testing.T) {
 	assert.Equal(t, wantGlobal, global)
 }
 
-func TestResolveCapacityPolicyValidationScopeAndAttribution(t *testing.T) {
+func TestResolveCapacityPolicy_PartialConflictingOrBadFormat_NamesTheField(t *testing.T) {
 	global := testGlobalRoutingConfig()
 
 	_, err := ResolveCapacityPolicy(global, routingISVCSpec(&v1beta1.RoutingSpec{
@@ -821,7 +821,7 @@ func TestResolveCapacityPolicyValidationScopeAndAttribution(t *testing.T) {
 	assert.Empty(t, got.PolicyDigest)
 }
 
-func TestResolveCapacityPolicyEnforcesObserverBounds(t *testing.T) {
+func TestResolveCapacityPolicy_PeriodOrSamplesOutsideObserverBounds_Fails(t *testing.T) {
 	t.Run("global minimum period", func(t *testing.T) {
 		global := testGlobalRoutingConfig()
 		global.Observer.MinPeriod = 3 * time.Minute
@@ -872,7 +872,7 @@ func TestResolveCapacityPolicyEnforcesObserverBounds(t *testing.T) {
 	})
 }
 
-func TestCapacityPolicyDigestIsCanonicalAndComplete(t *testing.T) {
+func TestCapacityPolicyDigest_SamePolicyWrittenDifferently_SameDigestElseNew(t *testing.T) {
 	base := CapacityConfig{
 		Path:    "/capacity",
 		Method:  "POST",
@@ -965,7 +965,7 @@ func TestCapacityPolicyDigestIsCanonicalAndComplete(t *testing.T) {
 	}
 }
 
-func TestResolveCapacityPolicyMutationIsolation(t *testing.T) {
+func TestResolveCapacityPolicy_ResultMutated_GlobalAndInlineUnchanged(t *testing.T) {
 	global := testGlobalRoutingConfig()
 	global.Enabled = false
 	global.Capacity.Format = "Global"

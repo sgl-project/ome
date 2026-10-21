@@ -687,10 +687,9 @@ func TestProjectExplainProjectsDefaultedBudgetsRatioAndGatePrecedence(t *testing
 	})
 }
 
-func TestProjectExplainReportsIgnoredFinalSoakAndSingleComponentRatio(t *testing.T) {
+func TestProjectExplainReportsIgnoredFinalSoak(t *testing.T) {
 	isvc := baseInferenceService()
 	isvc.Spec.Decoder = &omev1beta1.DecoderSpec{}
-	tolerance := int32(7)
 	isvc.Spec.Rollout = &omev1beta1.RolloutSpec{Groups: []omev1beta1.RolloutGroup{
 		{
 			Components: []omev1beta1.ComponentType{omev1beta1.DecoderComponent},
@@ -698,10 +697,9 @@ func TestProjectExplainReportsIgnoredFinalSoakAndSingleComponentRatio(t *testing
 			Soak:       &metav1.Duration{Duration: time.Minute},
 		},
 		{
-			Components:    []omev1beta1.ComponentType{omev1beta1.EngineComponent},
-			BlueGreen:     &omev1beta1.GroupBlueGreen{},
-			Soak:          &metav1.Duration{Duration: 2 * time.Minute},
-			MaintainRatio: &omev1beta1.MaintainRatio{Tolerance: &tolerance},
+			Components: []omev1beta1.ComponentType{omev1beta1.EngineComponent},
+			BlueGreen:  &omev1beta1.GroupBlueGreen{},
+			Soak:       &metav1.Duration{Duration: 2 * time.Minute},
 		},
 	}}
 
@@ -712,8 +710,36 @@ func TestProjectExplainReportsIgnoredFinalSoakAndSingleComponentRatio(t *testing
 	assert.Equal(t, reportv1alpha1.RolloutSettingEffectApplied, got.Content.EffectiveGroups[0].Soak.Effect)
 	require.NotNil(t, got.Content.EffectiveGroups[1].Soak)
 	assert.Equal(t, reportv1alpha1.RolloutSettingEffectIgnoredFinalGroup, got.Content.EffectiveGroups[1].Soak.Effect)
+}
+
+// A maintainRatio on a group with one Component is refused at admission: the
+// ratio needs two Components to keep a ratio between. The projection reports
+// the group as malformed and leaves its settings' effects unknown.
+func TestProjectExplainReportsSingleComponentRatioAsMalformed(t *testing.T) {
+	isvc := baseInferenceService()
+	isvc.Spec.Decoder = &omev1beta1.DecoderSpec{}
+	tolerance := int32(7)
+	isvc.Spec.Rollout = &omev1beta1.RolloutSpec{Groups: []omev1beta1.RolloutGroup{
+		{
+			Components: []omev1beta1.ComponentType{omev1beta1.DecoderComponent},
+			BlueGreen:  &omev1beta1.GroupBlueGreen{},
+		},
+		{
+			Components:    []omev1beta1.ComponentType{omev1beta1.EngineComponent},
+			BlueGreen:     &omev1beta1.GroupBlueGreen{},
+			MaintainRatio: &omev1beta1.MaintainRatio{Tolerance: &tolerance},
+		},
+	}}
+
+	got, err := rolloutprojection.ProjectExplain(isvc, fixedClock())
+	require.NoError(t, err)
+	require.Len(t, got.Content.EffectiveGroups, 2)
+	assert.Contains(t, got.Content.Issues, reportv1alpha1.RolloutExplainIssue{
+		Code: reportv1alpha1.RolloutExplainIssueDeclaredPlanMalformed,
+		View: reportv1alpha1.RolloutPlanViewDeclared, Group: ptrInt(1),
+	})
 	require.NotNil(t, got.Content.EffectiveGroups[1].MaintainRatio)
-	assert.Equal(t, reportv1alpha1.RolloutSettingEffectIgnoredSingleComponent, got.Content.EffectiveGroups[1].MaintainRatio.Tolerance.Effect)
+	assert.Equal(t, reportv1alpha1.RolloutSettingEffectUnknown, got.Content.EffectiveGroups[1].MaintainRatio.Tolerance.Effect)
 }
 
 func TestProjectExplainSoakApplicabilityMatchesResolutionAndInlinePrecedence(t *testing.T) {
@@ -917,7 +943,6 @@ func TestProjectExplainDoesNotUseLivePolicyDigestAsBodyEvidence(t *testing.T) {
 		t.Run(reason, func(t *testing.T) {
 			isvc := baseInferenceService()
 			isvc.Spec.Decoder = &omev1beta1.DecoderSpec{}
-			tolerance := int32(5)
 			isvc.Spec.Rollout = &omev1beta1.RolloutSpec{Groups: []omev1beta1.RolloutGroup{
 				{
 					Components: []omev1beta1.ComponentType{omev1beta1.DecoderComponent},
@@ -925,10 +950,9 @@ func TestProjectExplainDoesNotUseLivePolicyDigestAsBodyEvidence(t *testing.T) {
 					Soak:       &metav1.Duration{Duration: time.Minute},
 				},
 				{
-					Components:    []omev1beta1.ComponentType{omev1beta1.EngineComponent},
-					PolicyRef:     &omev1beta1.RolloutPolicyRef{Name: "second", Progression: omev1beta1.RolloutProgressionBlueGreen},
-					Soak:          &metav1.Duration{Duration: 2 * time.Minute},
-					MaintainRatio: &omev1beta1.MaintainRatio{Tolerance: &tolerance},
+					Components: []omev1beta1.ComponentType{omev1beta1.EngineComponent},
+					PolicyRef:  &omev1beta1.RolloutPolicyRef{Name: "second", Progression: omev1beta1.RolloutProgressionBlueGreen},
+					Soak:       &metav1.Duration{Duration: 2 * time.Minute},
 				},
 			}}
 			isvc.Status.Rollout = &omev1beta1.RolloutStatus{Groups: []omev1beta1.RolloutGroupResolution{
@@ -945,8 +969,6 @@ func TestProjectExplainDoesNotUseLivePolicyDigestAsBodyEvidence(t *testing.T) {
 			require.Len(t, got.Content.EffectiveGroups, 2)
 			require.NotNil(t, got.Content.EffectiveGroups[0].Soak)
 			assert.Equal(t, reportv1alpha1.RolloutSettingEffectUnknown, got.Content.EffectiveGroups[0].Soak.Effect)
-			require.NotNil(t, got.Content.EffectiveGroups[1].MaintainRatio)
-			assert.Equal(t, reportv1alpha1.RolloutSettingEffectUnknown, got.Content.EffectiveGroups[1].MaintainRatio.Tolerance.Effect)
 			require.NotNil(t, got.Content.EffectiveGroups[1].Soak)
 			assert.Equal(t, reportv1alpha1.RolloutSettingEffectIgnoredFinalGroup, got.Content.EffectiveGroups[1].Soak.Effect)
 		})

@@ -72,13 +72,14 @@ func newLadderWorld(t *testing.T, f executorForm) *ladderWorld {
 	w := &ladderWorld{t: t, ctx: context.Background(), isvc: isvc, now: time.Unix(1000, 0)}
 
 	// The revert completed: every instance is back on stable and the IR is
-	// still overridden onto the stable revision.
+	// still overridden onto the stable revision, while its update revision
+	// keeps reporting the spec's revision, as the replica controller does.
 	stable := w.revisionName("old")
 	ir := &v1beta1.InferenceReplica{ObjectMeta: metav1.ObjectMeta{Namespace: isvc.Namespace, Name: isvc.Name + "-engine", Generation: 1}}
 	ir.Spec.Runners = []v1beta1.Runner{{Name: v1beta1.RunnerNameDefault, Size: 1}}
 	ir.Spec.Pacing = &v1beta1.InferenceReplicaPacing{RollbackToRevision: &stable}
-	ir.Status.CurrentRevision, ir.Status.UpdateRevision = stable, stable
-	ir.Status.Replicas, ir.Status.UpdatedReplicas = ladderInstances, ladderInstances
+	ir.Status.CurrentRevision, ir.Status.UpdateRevision = stable, w.revisionName("new")
+	ir.Status.Replicas, ir.Status.UpdatedReplicas = ladderInstances, 0
 	ir.Status.ObservedGeneration = 1
 
 	builder := fake.NewClientBuilder().WithScheme(canaryScheme(t)).WithStatusSubresource(&v1beta1.InferenceReplica{}).
@@ -114,6 +115,7 @@ func (w *ladderWorld) pass() ladderTransition {
 		}
 	}
 	for _, g := range groups {
+		syncInstanceRows(t, w.c, w.isvc, v1beta1.RouterComponent, v1beta1.EngineComponent, v1beta1.DecoderComponent)
 		out, err := Dispatch(w.ctx, DispatchDeps{Client: w.c, Reader: w.c, ISVC: w.isvc, Now: w.now, ComponentRunnerPorts: canaryRunnerPorts(), Group: g})
 		if err != nil {
 			t.Fatalf("dispatch: %v", err)
@@ -142,8 +144,10 @@ func (w *ladderWorld) pass() ladderTransition {
 	return tr
 }
 
-// react is the cluster's response to the pass: the IR controller's target and
-// counters, and the pods the rollout engine moves.
+// react is the cluster's response to the pass: the IR controller's counters
+// and the pods the rollout engine moves. The pods move toward the rollback
+// target while one is set; the update revision keeps reporting the spec's
+// revision either way, as the replica controller publishes it.
 func (w *ladderWorld) react() {
 	t := w.t
 	ir := &v1beta1.InferenceReplica{}
@@ -175,14 +179,14 @@ func (w *ladderWorld) react() {
 	}
 	updated := int32(0)
 	for _, rev := range w.instances {
-		if rev == target {
+		if rev == "new" {
 			updated++
 		}
 	}
-	ir.Status.UpdateRevision = w.revisionName(target)
+	ir.Status.UpdateRevision = w.revisionName("new")
 	ir.Status.Replicas, ir.Status.UpdatedReplicas = ladderInstances, updated
 	if updated == ladderInstances {
-		ir.Status.CurrentRevision = w.revisionName(target)
+		ir.Status.CurrentRevision = w.revisionName("new")
 	}
 	ir.Status.ObservedGeneration = ir.Generation
 	if err := w.c.Status().Update(w.ctx, ir); err != nil {

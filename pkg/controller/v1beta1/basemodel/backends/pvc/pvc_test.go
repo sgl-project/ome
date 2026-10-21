@@ -8,20 +8,18 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel/shared"
 	"sigs.k8s.io/ome/pkg/utils/storage"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func testMetadataJobConfig() MetadataJobConfig {
@@ -31,7 +29,7 @@ func testMetadataJobConfig() MetadataJobConfig {
 	}
 }
 
-func TestIsPVCStorage(t *testing.T) {
+func TestIsPVCStorage_PVCOtherOrMissingURI_TrueOnlyForPVCScheme(t *testing.T) {
 	tests := []struct {
 		name string
 		spec *v1beta1.BaseModelSpec
@@ -76,7 +74,7 @@ func TestIsPVCStorage(t *testing.T) {
 	}
 }
 
-func TestResolvePVCNamespace(t *testing.T) {
+func TestResolvePVCNamespace_ScopeAndURIPrefix_PrefixOnlyForClusterScope(t *testing.T) {
 	tests := []struct {
 		name            string
 		modelNamespace  string
@@ -135,28 +133,6 @@ func TestResolvePVCNamespace(t *testing.T) {
 	}
 }
 
-func newPVCTestScheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
-	scheme := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(scheme); err != nil {
-		t.Fatalf("AddToScheme: %v", err)
-	}
-	if err := corev1.AddToScheme(scheme); err != nil {
-		t.Fatalf("corev1 AddToScheme: %v", err)
-	}
-	if err := batchv1.AddToScheme(scheme); err != nil {
-		t.Fatalf("batchv1 AddToScheme: %v", err)
-	}
-	// rbacv1: ensureMetadataJobRBAC creates a RoleBinding in the OME
-	// namespace before the Job is submitted (covers PVC-backed BMs in
-	// non-OME namespaces). The reconcile path's fake client needs the
-	// kind registered or the create errors out.
-	if err := rbacv1.AddToScheme(scheme); err != nil {
-		t.Fatalf("rbacv1 AddToScheme: %v", err)
-	}
-	return scheme
-}
-
 func newBoundPVC(ns, name string) *corev1.PersistentVolumeClaim {
 	return &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
@@ -176,7 +152,7 @@ func newPendingPVC(ns, name string) *corev1.PersistentVolumeClaim {
 // Job-watcher-driven re-reconciles in tests.
 func jobWithCondition(t *testing.T, obj client.Object, isClusterScoped bool, components *storage.PVCStorageComponents, pvcNamespace string, condType batchv1.JobConditionType, message string) *batchv1.Job {
 	t.Helper()
-	scheme := newPVCTestScheme(t)
+	scheme := fakeclient.Scheme(t)
 	job, err := buildMetadataJob(obj, isClusterScoped, components, pvcNamespace, testMetadataJobConfig(), scheme)
 	if err != nil {
 		t.Fatalf("buildMetadataJob: %v", err)
@@ -190,7 +166,7 @@ func jobWithCondition(t *testing.T, obj client.Object, isClusterScoped bool, com
 }
 
 func TestReconcilePVCStorage_BaseModel(t *testing.T) {
-	scheme := newPVCTestScheme(t)
+	scheme := fakeclient.Scheme(t)
 	ctx := context.Background()
 	log := logf.Log.WithName("test")
 
@@ -294,11 +270,10 @@ func TestReconcilePVCStorage_BaseModel(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			objs := append([]client.Object{tc.bm}, tc.seed...)
-			c := ctrlclientfake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(objs...).
-				WithStatusSubresource(&v1beta1.BaseModel{}).
-				Build()
+			c := fakeclient.New(t,
+				fakeclient.WithScheme(scheme),
+				fakeclient.WithObjects(objs...),
+				fakeclient.WithStatusSubresource(&v1beta1.BaseModel{}))
 
 			if _, err := Reconcile(ctx, c, scheme, log, tc.bm, &tc.bm.Spec, false, tc.cfg); err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -341,11 +316,11 @@ func TestReconcilePVCStorage_BaseModel(t *testing.T) {
 	}
 }
 
-// TestApplyPVCStatusFromConfigMap covers the new direct-Get path. PVC
+// TestApplyPVCStatusFromConfigMap_ReadyFailedOrMissing_StateFollowsTheEntry covers the new direct-Get path. PVC
 // status flows from a single ConfigMap (not the per-node List), and
 // Status.NodesReady stays empty because there is no node concept here.
-func TestApplyPVCStatusFromConfigMap(t *testing.T) {
-	scheme := newPVCTestScheme(t)
+func TestApplyPVCStatusFromConfigMap_ReadyFailedOrMissing_StateFollowsTheEntry(t *testing.T) {
+	scheme := fakeclient.Scheme(t)
 	ctx := context.Background()
 	log := logf.Log.WithName("test")
 
@@ -385,10 +360,10 @@ func TestApplyPVCStatusFromConfigMap(t *testing.T) {
 		cm := makeCM("llama-7b", "models", false, shared.ModelStatusReady, &shared.ModelConfig{
 			ModelType: "llama", ModelArchitecture: "LlamaForCausalLM", MaxTokens: 4096,
 		}, "")
-		c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).
-			WithObjects(bm, cm).
-			WithStatusSubresource(&v1beta1.BaseModel{}).
-			Build()
+		c := fakeclient.New(t,
+			fakeclient.WithScheme(scheme),
+			fakeclient.WithObjects(bm, cm),
+			fakeclient.WithStatusSubresource(&v1beta1.BaseModel{}))
 
 		_, err := applyPVCStatusFromConfigMap(ctx, c, log, bm, false, nil)
 		if err != nil {
@@ -415,10 +390,10 @@ func TestApplyPVCStatusFromConfigMap(t *testing.T) {
 			Spec:       v1beta1.BaseModelSpec{Storage: &v1beta1.StorageSpec{StorageUri: ptr.To("pvc://my-pvc/p")}},
 		}
 		cm := makeCM("llama-7b", "models", false, shared.ModelStatusFailed, nil, "config.json missing")
-		c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).
-			WithObjects(bm, cm).
-			WithStatusSubresource(&v1beta1.BaseModel{}).
-			Build()
+		c := fakeclient.New(t,
+			fakeclient.WithScheme(scheme),
+			fakeclient.WithObjects(bm, cm),
+			fakeclient.WithStatusSubresource(&v1beta1.BaseModel{}))
 
 		_, err := applyPVCStatusFromConfigMap(ctx, c, log, bm, false, nil)
 		if err != nil {
@@ -442,10 +417,7 @@ func TestApplyPVCStatusFromConfigMap(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "llama-7b", Namespace: "models"},
 			Spec:       v1beta1.BaseModelSpec{Storage: &v1beta1.StorageSpec{StorageUri: ptr.To("pvc://my-pvc/p")}},
 		}
-		c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).
-			WithObjects(bm).
-			WithStatusSubresource(&v1beta1.BaseModel{}).
-			Build()
+		c := fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(bm), fakeclient.WithStatusSubresource(&v1beta1.BaseModel{}))
 		// Pass a still-running Job (no JobFailed condition) so the
 		// new JobFailed branch in applyPVCStatusFromConfigMap is NOT taken.
 		runningJob := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "j", Namespace: "models"}}
@@ -468,10 +440,7 @@ func TestApplyPVCStatusFromConfigMap(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "llama-7b", Namespace: "models"},
 			Spec:       v1beta1.BaseModelSpec{Storage: &v1beta1.StorageSpec{StorageUri: ptr.To("pvc://my-pvc/p")}},
 		}
-		c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).
-			WithObjects(bm).
-			WithStatusSubresource(&v1beta1.BaseModel{}).
-			Build()
+		c := fakeclient.New(t, fakeclient.WithScheme(scheme), fakeclient.WithObjects(bm), fakeclient.WithStatusSubresource(&v1beta1.BaseModel{}))
 
 		// Simulate a Job that exhausted its BackoffLimit. The agent
 		// pod was OOM-killed before its SIGTERM handler could run, so
@@ -506,10 +475,10 @@ func TestApplyPVCStatusFromConfigMap(t *testing.T) {
 	})
 }
 
-// TestJobFailedConditionMessage exhaustively covers the JobFailed
+// TestJobFailedConditionMessage_JobConditions_FailedOnlyWhenJobFailedIsTrue exhaustively covers the JobFailed
 // detection helper. Catches regressions in either the predicate
 // (wrong condition type / wrong status) or the message assembly.
-func TestJobFailedConditionMessage(t *testing.T) {
+func TestJobFailedConditionMessage_JobConditions_FailedOnlyWhenJobFailedIsTrue(t *testing.T) {
 	cases := []struct {
 		name    string
 		job     *batchv1.Job
@@ -562,7 +531,7 @@ func TestJobFailedConditionMessage(t *testing.T) {
 }
 
 func TestReconcilePVCStorage_ClusterBaseModel(t *testing.T) {
-	scheme := newPVCTestScheme(t)
+	scheme := fakeclient.Scheme(t)
 	ctx := context.Background()
 	log := logf.Log.WithName("test")
 
@@ -576,11 +545,10 @@ func TestReconcilePVCStorage_ClusterBaseModel(t *testing.T) {
 	}
 
 	t.Run("valid bound PVC → creates Job in PVC namespace", func(t *testing.T) {
-		c := ctrlclientfake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(cbm(), newBoundPVC("shared", "my-pvc")).
-			WithStatusSubresource(&v1beta1.ClusterBaseModel{}).
-			Build()
+		c := fakeclient.New(t,
+			fakeclient.WithScheme(scheme),
+			fakeclient.WithObjects(cbm(), newBoundPVC("shared", "my-pvc")),
+			fakeclient.WithStatusSubresource(&v1beta1.ClusterBaseModel{}))
 
 		_, err := Reconcile(ctx, c, scheme, log, cbm(), &cbm().Spec, true, testMetadataJobConfig())
 		if err != nil {
@@ -606,11 +574,10 @@ func TestReconcilePVCStorage_ClusterBaseModel(t *testing.T) {
 	t.Run("missing namespace prefix is rejected", func(t *testing.T) {
 		bad := cbm()
 		bad.Spec.Storage.StorageUri = ptr.To("pvc://my-pvc/models/llama")
-		c := ctrlclientfake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(bad).
-			WithStatusSubresource(&v1beta1.ClusterBaseModel{}).
-			Build()
+		c := fakeclient.New(t,
+			fakeclient.WithScheme(scheme),
+			fakeclient.WithObjects(bad),
+			fakeclient.WithStatusSubresource(&v1beta1.ClusterBaseModel{}))
 
 		if _, err := Reconcile(ctx, c, scheme, log, bad, &bad.Spec, true, testMetadataJobConfig()); err != nil {
 			t.Fatalf("unexpected error: %v", err)

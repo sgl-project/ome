@@ -923,3 +923,50 @@ timeline:
 		t.Fatalf("a refused edit must leave the template as it was: workers=%d", s.spec.Workers)
 	}
 }
+
+// TestApplyGateDenyStagesOnlyThePairingVerdict keeps the staged gate an
+// honest drain-time answer: the Pairing hold is the one verdict the engine
+// asks for mid-operation, it names a pod, and it carries the reason the
+// gate would give; a verdict of another gate, or a hold with no reason,
+// fails the run.
+func TestApplyGateDenyStagesOnlyThePairingVerdict(t *testing.T) {
+	d := &driver{opts: DefaultOptions()}
+	pod := &PodRef{Index: 0, Ordinal: 1}
+	if _, err := applyGateDeny(context.Background(), d, TimelineEvent{ID: "gate.deny", Variant: "Budget", Args: EventArgs{Pod: pod, Message: "x"}}); err == nil || !strings.Contains(err.Error(), "only the Pairing verdict") {
+		t.Fatalf("expected the Pairing-only error, got %v", err)
+	}
+	if _, err := applyGateDeny(context.Background(), d, TimelineEvent{ID: "gate.deny", Variant: "Pairing", Args: EventArgs{Message: "x"}}); err == nil || !strings.Contains(err.Error(), "needs a pod reference") {
+		t.Fatalf("expected the missing-pod error, got %v", err)
+	}
+	if _, err := applyGateDeny(context.Background(), d, TimelineEvent{ID: "gate.deny", Variant: "Pairing", Args: EventArgs{Pod: pod}}); err == nil || !strings.Contains(err.Error(), "needs the reason") {
+		t.Fatalf("expected the missing-reason error, got %v", err)
+	}
+	detail, err := applyGateDeny(context.Background(), d, TimelineEvent{ID: "gate.deny", Variant: "Pairing", Args: EventArgs{Pod: pod, Message: "the other side still pairs with it"}})
+	if err != nil {
+		t.Fatalf("stage a Pairing hold: %v", err)
+	}
+	name := d.podName(*pod)
+	if detail != "pod="+name || d.pairingHolds[name] != "the other side still pairs with it" {
+		t.Fatalf("the hold must be recorded under the pod's name with its reason, got detail=%q holds=%v", detail, d.pairingHolds)
+	}
+}
+
+// TestApplyGateAllowLiftsAStagedHoldOnly keeps gate.allow an answer about a
+// hold that exists: lifting a hold no pod carries fails the run, and
+// lifting a staged one removes it.
+func TestApplyGateAllowLiftsAStagedHoldOnly(t *testing.T) {
+	d := &driver{opts: DefaultOptions()}
+	pod := &PodRef{Index: 0}
+	if _, err := applyGateAllow(context.Background(), d, TimelineEvent{ID: "gate.allow", Args: EventArgs{Pod: pod}}); err == nil || !strings.Contains(err.Error(), "no Pairing hold to lift") {
+		t.Fatalf("expected the no-hold error, got %v", err)
+	}
+	if _, err := applyGateDeny(context.Background(), d, TimelineEvent{ID: "gate.deny", Variant: "Pairing", Args: EventArgs{Pod: pod, Message: "held"}}); err != nil {
+		t.Fatalf("stage a Pairing hold: %v", err)
+	}
+	if _, err := applyGateAllow(context.Background(), d, TimelineEvent{ID: "gate.allow", Args: EventArgs{Pod: pod}}); err != nil {
+		t.Fatalf("lift the hold: %v", err)
+	}
+	if len(d.pairingHolds) != 0 {
+		t.Fatalf("the hold must be gone, got %v", d.pairingHolds)
+	}
+}

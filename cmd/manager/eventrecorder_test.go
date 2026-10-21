@@ -7,26 +7,33 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 )
 
 // deliveredEvents stands in for the API server: it counts, per involved
-// object, every event the broadcaster lets through its spam filter.
+// object, every event the broadcaster lets through its spam filter, and
+// closes the channel a test registered for an object's first delivery.
 type deliveredEvents struct {
-	mu     sync.Mutex
-	counts map[string]int
+	mu       sync.Mutex
+	counts   map[string]int
+	arrivals map[string]chan struct{}
 }
 
 func (d *deliveredEvents) accept(event *corev1.Event) (*corev1.Event, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.counts[event.InvolvedObject.Name]++
+	name := event.InvolvedObject.Name
+	d.counts[name]++
+	if arrived, ok := d.arrivals[name]; ok {
+		close(arrived)
+		delete(d.arrivals, name)
+	}
 	return event, nil
 }
 
@@ -42,6 +49,16 @@ func (d *deliveredEvents) count(name string) int {
 	return d.counts[name]
 }
 
+// arrival returns a channel the sink closes when the first event about the
+// named object is delivered. Register it before emitting that event.
+func (d *deliveredEvents) arrival(name string) <-chan struct{} {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	arrived := make(chan struct{})
+	d.arrivals[name] = arrived
+	return arrived
+}
+
 // eventHarness drives a broadcaster built the way the manager builds its
 // own, with a counting sink in place of the API server.
 type eventHarness struct {
@@ -52,9 +69,24 @@ type eventHarness struct {
 
 func startEventHarness(t *testing.T, settings controllerconfig.EventRecorderSettings) *eventHarness {
 	t.Helper()
-	broadcaster := newEventBroadcaster(settings)
+	return attachEventHarness(t, newEventBroadcaster(settings))
+}
+
+// startEventHarnessOnClock builds the broadcaster from the same correlator
+// options newEventBroadcaster uses, with the spam filter's token bucket
+// reading the given clock instead of the wall clock: a test steps the
+// refill instead of waiting for it.
+func startEventHarnessOnClock(t *testing.T, settings controllerconfig.EventRecorderSettings, clock *clocktesting.FakeClock) *eventHarness {
+	t.Helper()
+	options := settings.CorrelatorOptions()
+	options.Clock = clock
+	return attachEventHarness(t, record.NewBroadcasterWithCorrelatorOptions(options))
+}
+
+func attachEventHarness(t *testing.T, broadcaster record.EventBroadcaster) *eventHarness {
+	t.Helper()
 	t.Cleanup(broadcaster.Shutdown)
-	sink := &deliveredEvents{counts: map[string]int{}}
+	sink := &deliveredEvents{counts: map[string]int{}, arrivals: map[string]chan struct{}{}}
 	broadcaster.StartRecordingToSink(sink)
 	return &eventHarness{
 		recorder: broadcaster.NewRecorder(runtime.NewScheme(), corev1.EventSource{Component: "v1beta1Controllers"}),
@@ -72,31 +104,36 @@ func (h *eventHarness) emitStateChanges(object string, count int) {
 	}
 }
 
-// settle emits a marker about a fresh object and waits for it. The
-// broadcaster delivers in emission order, so once the marker arrives every
-// earlier event has been delivered or dropped.
+// settle emits one event about a fresh object and waits for the sink to
+// receive it. The broadcaster delivers in emission order, so once that
+// event arrives every earlier event has been delivered or dropped.
 func (h *eventHarness) settle(t *testing.T) {
 	t.Helper()
 	h.sequence++
-	marker := fmt.Sprintf("marker-%d", h.sequence)
-	h.emitStateChanges(marker, 1)
-	require.Eventually(t, func() bool { return h.sink.count(marker) == 1 }, 10*time.Second, 5*time.Millisecond)
+	closing := fmt.Sprintf("closing-%d", h.sequence)
+	arrived := h.sink.arrival(closing)
+	h.emitStateChanges(closing, 1)
+	select {
+	case <-arrived:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("the event about %s did not reach the sink within 10s", closing)
+	}
 }
 
-// TestNewEventBroadcasterUnconfiguredKeepsClientGoBudget is the loss the
+// TestNewEventBroadcaster_Unconfigured_KeepsClientGoBudget is the loss the
 // configuration exists to fix: with nothing configured, one object receives
 // client-go's default of 25 events and every later one is dropped silently.
-func TestNewEventBroadcasterUnconfiguredKeepsClientGoBudget(t *testing.T) {
+func TestNewEventBroadcaster_Unconfigured_KeepsClientGoBudget(t *testing.T) {
 	harness := startEventHarness(t, controllerconfig.EventRecorderSettings{})
 	harness.emitStateChanges("fleet-engine", 40)
 	harness.settle(t)
 	assert.Equal(t, 25, harness.sink.count("fleet-engine"))
 }
 
-// TestNewEventBroadcasterConfiguredBurstIsTheBound: a configured burst of 64
+// TestNewEventBroadcaster_ConfiguredBurst_IsTheBound: a configured burst of 64
 // lets one object emit 64 events back to back without a drop, and the 65th
 // is the first one dropped — the bound is the configured one.
-func TestNewEventBroadcasterConfiguredBurstIsTheBound(t *testing.T) {
+func TestNewEventBroadcaster_ConfiguredBurst_IsTheBound(t *testing.T) {
 	settings := controllerconfig.EventRecorderSettings{BurstSize: 64}
 
 	withinBurst := startEventHarness(t, settings)
@@ -110,19 +147,22 @@ func TestNewEventBroadcasterConfiguredBurstIsTheBound(t *testing.T) {
 	assert.Equal(t, 64, pastBurst.sink.count("fleet-engine"))
 }
 
-// TestNewEventBroadcasterRefillAdmitsEventsPastTheBurst: with a configured
+// TestNewEventBroadcaster_ConfiguredRefill_AdmitsEventsPastTheBurst: with a configured
 // refill, an object that spent its burst keeps emitting without drops as
-// long as it stays under the refill rate — here burst plus a few more inside
-// one second. The gaps are several refill intervals wide so scheduling
-// delay cannot starve the bucket.
-func TestNewEventBroadcasterRefillAdmitsEventsPastTheBurst(t *testing.T) {
-	harness := startEventHarness(t, controllerconfig.EventRecorderSettings{
+// long as it stays under the refill rate. The bucket reads a fake clock;
+// each settle lets the filter see the events emitted so far, and each step
+// of five refill intervals regains room for the next event with margin.
+func TestNewEventBroadcaster_ConfiguredRefill_AdmitsEventsPastTheBurst(t *testing.T) {
+	const refill = 20 * time.Millisecond
+	clock := clocktesting.NewFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	harness := startEventHarnessOnClock(t, controllerconfig.EventRecorderSettings{
 		BurstSize:      8,
-		RefillInterval: 20 * time.Millisecond,
-	})
+		RefillInterval: refill,
+	}, clock)
 	harness.emitStateChanges("fleet-engine", 8)
 	for i := 0; i < 3; i++ {
-		time.Sleep(100 * time.Millisecond)
+		harness.settle(t)
+		clock.Step(5 * refill)
 		harness.emitStateChanges("fleet-engine", 1)
 	}
 	harness.settle(t)

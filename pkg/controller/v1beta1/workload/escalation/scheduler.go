@@ -42,20 +42,27 @@ func unschedulableFailureMessage(message string) string {
 // operator's placement grace. ENVIRONMENT-CAUSED: the evidence names the
 // scheduler's message and the revision's retry ladder is left alone,
 // because an unplaceable pod proves nothing about the pod template. The
-// route mirrors the deadline backstop — a disposable attempt is
-// classified and cleared, a gang keeps its Operation so the abandon path
-// can consume the continuation.
+// route mirrors the deadline backstop: an attempt that takes the deadline
+// decision is classified and cleared, a gang keeps its Operation so the
+// abandon path can consume the continuation. The hold stands on the
+// replacement gang's row, but the attempt it ends is the source's surge,
+// which the update pass retires only once the source reads Failed: both
+// rows of the pair are ended in the same write, as the deadline ends them.
+// Once the replacement has taken over serving, the attempt is the
+// source's continuation at the drain step, which retires the refused
+// member and rebuilds it as the next attempt: the ending lands on the
+// source alone, and the replacement's row stays live so its hold is
+// released once the member is gone.
 //
-// This escalation owns its operator event on BOTH routes. The
-// disposition suppresses a warning whose reason repeats the one already
-// on LastFailure, which is exactly what the hold wrote while it waited,
-// so leaving the announcement to it would let the row go Failed in
-// silence. Its callback is withheld for that call and fired here
-// instead — but only when the disposition actually wrote something. It
-// declines outright for a superseded leftover and withholds its end from
-// a row that moved on, and announcing a transition that did not happen
-// would re-fire every pass.
-func escalateSchedulerHold(ctx context.Context, deps types.Deps, input types.ReconcileInput, disposition types.DispositionDeps, stamps *failureStampBuffer, row types.InstanceStatus, pods []*corev1.Pod, desired int32, rowEvidence InstanceEvidence, now time.Time) error {
+// This escalation owns its operator event on BOTH routes. The deadline
+// decision suppresses a warning whose reason repeats the one already on
+// LastFailure, which is exactly what the hold wrote while it waited, so
+// leaving the announcement to it would let the row go Failed with no
+// event. Its callback is left out of that call and fired here instead,
+// but only when the decision wrote something: it writes nothing for a
+// replaced revision's leftover pod or for a row that moved on, and
+// announcing a transition that did not happen would re-fire every pass.
+func escalateSchedulerHold(ctx context.Context, deps types.Deps, input types.ReconcileInput, deadlineDeps types.DispositionDeps, stamps *failureStampBuffer, row types.InstanceStatus, pods []*corev1.Pod, desired int32, rowEvidence InstanceEvidence, now time.Time) error {
 	reason := unschedulableFailureMessage(rowEvidence.UnschedulableMessage)
 	idx, podName := row.Index, rowEvidence.Unschedulable.Name
 	warn := func() {
@@ -63,29 +70,65 @@ func escalateSchedulerHold(ctx context.Context, deps types.Deps, input types.Rec
 			input.WarnInstanceFailed(idx, podName, reason)
 		}
 	}
-	if disposableAttempt(&row) {
-		// The disposition's writes are write-ahead-ordered; land the
-		// pending plain stamps first.
+	if takesDeadlineDecision(&row) {
+		// The deadline decision's writes are write-ahead-ordered; land the
+		// pending plain writes first.
 		if err := stamps.flush(ctx); err != nil {
 			return err
 		}
 		silent := input
 		silent.WarnInstanceFailed = nil
-		outcome, err := DisposeExpiredAttempt(ctx, deps, silent, disposition, row, blamedForHold(&row, pods, desired, rowEvidence), reason)
+		decision, err := DecideExpiredAttempt(ctx, deps, silent, deadlineDeps, row, blamedForHold(&row, pods, desired, rowEvidence), reason)
 		if err != nil {
 			return err
 		}
-		if outcome != DispositionSkippedSuperseded && outcome != DispositionWithheld {
+		if decision != DeadlineDecisionSkippedTargetReplaced && decision != DeadlineDecisionHeldBack {
 			warn()
 		}
 		return nil
 	}
 	termination := types.UnschedulableTermination(rowEvidence.Unschedulable, reason, metav1.NewTime(now))
-	stamps.add(idx, status.StampFailedKeepingOperation(termination), warn)
+	ended := status.StampFailedKeepingOperation(termination)
+	warnSource := func(sourceIdx int32) func() {
+		return func() {
+			if input.WarnInstanceFailed != nil {
+				input.WarnInstanceFailed(sourceIdx, podName, reason)
+			}
+		}
+	}
+	if source := gangSurgeSourceOf(input.ObservedState.InstanceStatuses, row, types.UpdateStepSurgeDrain); source != nil {
+		stamps.add(source.Index, ended, warnSource(source.Index))
+		return nil
+	}
+	stamps.add(idx, ended, warn)
+	if source := gangSurgeSourceOf(input.ObservedState.InstanceStatuses, row, types.UpdateStepSurge); source != nil {
+		stamps.add(source.Index, ended, warnSource(source.Index))
+	}
 	return nil
 }
 
-// blamedForHold narrows the pod set the disposition judges. A single-pod
+// gangSurgeSourceOf returns the source row at the named surge step whose
+// surge built the replacement gang at replacement's index, or nil when
+// replacement is not a live replacement gang's row or no such source
+// claims it. At the Surge step the source still serves and the pair is
+// ended together; at the drain step the replacement has taken over and
+// the source's continuation rebuilds the member that has no placement.
+func gangSurgeSourceOf(statuses []types.InstanceStatus, replacement types.InstanceStatus, sourceStep string) *types.InstanceStatus {
+	if replacement.Operation == nil || replacement.Operation.Type != types.InstanceOperationUpdate ||
+		replacement.Operation.Step != types.UpdateStepGangSurgeTarget {
+		return nil
+	}
+	for i := range statuses {
+		op := statuses[i].Operation
+		if op != nil && op.Type == types.InstanceOperationUpdate && op.Step == sourceStep &&
+			op.SurgeIndex != nil && *op.SurgeIndex == replacement.Index {
+			return &statuses[i]
+		}
+	}
+	return nil
+}
+
+// blamedForHold narrows the pod set the deadline decision reads. A single-pod
 // surge shares its Instance index with the source it is replacing, so
 // the blamed set holds both; the hold is about the pod with no placement
 // and nothing else. Reading the source's own container failure there

@@ -158,15 +158,6 @@ func normalizeComponentMatches(assignment *v1beta1.CandidateAllocationStatus) er
 		if match.Weight != nil && (*match.Weight < 0 || assignment.Capacity != nil) {
 			return fmt.Errorf("component %q requires a nonnegative static weight, and none beside capacity", match.Component)
 		}
-		slices.Sort(match.MatchingTerms)
-		for j, term := range match.MatchingTerms {
-			if term < 0 || (j > 0 && term == match.MatchingTerms[j-1]) {
-				return fmt.Errorf("component %q matching terms must be distinct nonnegative indexes", match.Component)
-			}
-		}
-		if len(match.MatchingTerms) == 0 {
-			match.MatchingTerms = nil
-		}
 	}
 	if len(assignment.ComponentMatches) == 0 {
 		assignment.ComponentMatches = nil

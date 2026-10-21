@@ -31,10 +31,10 @@ func (f pairFloor) String() string {
 // resolvePairFloor reads the floor off the Component's replica and the
 // resolved group pacing.
 func resolvePairFloor(ir *v1beta1.InferenceReplica, pacing v1beta1.CoordinationPacing) pairFloor {
-	if ir == nil || ir.Spec.Replicas == nil || *ir.Spec.Replicas <= 0 {
+	desired := effectiveDesiredReplicas(ir)
+	if desired <= 0 {
 		return pairFloor{}
 	}
-	desired := *ir.Spec.Replicas
 	budget := MaxUnavailableBudget(pacing, desired)
 	if lc := ir.Spec.Lifecycle; lc != nil && lc.UpdateStrategy != nil && lc.UpdateStrategy.RollingUpdate != nil && lc.UpdateStrategy.RollingUpdate.MaxUnavailable != nil {
 		if own := utils.ScaledCountFromIntOrString(lc.UpdateStrategy.RollingUpdate.MaxUnavailable, desired, true); own < budget {

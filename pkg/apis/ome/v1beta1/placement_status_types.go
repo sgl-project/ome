@@ -126,10 +126,10 @@ type CandidateAllocationStatus struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	Weight *int64 `json:"weight,omitempty"`
-	// ComponentMatches records, under the ComponentAffinity policy, how each
-	// component other than the primary one matched this cluster. MatchingTerms
-	// and Weight hold the primary component's match. The accepted plan keeps
-	// them so that member floors never follow unaccepted label changes.
+	// ComponentMatches records the Split weight of the other components when
+	// the affinity terms set weights: the decoder's, and the router's when
+	// routers are divided. Weight holds the primary component's. The accepted
+	// plan keeps them so that member floors never follow unaccepted label changes.
 	// +optional
 	// +listType=map
 	// +listMapKey=component
@@ -215,15 +215,11 @@ type PlacementExecutionPolicy struct {
 	ReplicaFloors []PlacementComponentFloor `json:"replicaFloors,omitempty"`
 }
 
-// ComponentAffinityMatch records how one component's own affinity terms
-// matched a cluster.
+// ComponentAffinityMatch records the weight the affinity terms give one
+// component on a cluster.
 type ComponentAffinityMatch struct {
 	// +kubebuilder:validation:Enum=engine;decoder;router
 	Component ComponentType `json:"component"`
-	// MatchingTerms contains zero-based indexes into the component's terms.
-	// +optional
-	// +listType=set
-	MatchingTerms []int32 `json:"matchingTerms,omitempty"`
 	// Weight is the component's effective static weight, when applicable.
 	// +optional
 	// +kubebuilder:validation:Minimum=0

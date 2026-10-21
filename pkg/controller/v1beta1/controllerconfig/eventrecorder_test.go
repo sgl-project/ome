@@ -16,10 +16,10 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 )
 
-// TestNewEventRecorderConfig pins the load contract for the "eventRecorder"
+// TestNewEventRecorderConfig_KeyForms_AbsentIsNilMalformedRejected pins the load contract for the "eventRecorder"
 // ConfigMap key: present and valid parses; absent or empty yields (nil, nil),
 // never an error and never a fabricated default.
-func TestNewEventRecorderConfig(t *testing.T) {
+func TestNewEventRecorderConfig_KeyForms_AbsentIsNilMalformedRejected(t *testing.T) {
 	tests := []struct {
 		name          string
 		configMapData map[string]string
@@ -85,7 +85,7 @@ func TestNewEventRecorderConfig(t *testing.T) {
 	}
 }
 
-func TestEventRecorderConfig_ToBurstSize(t *testing.T) {
+func TestEventRecorderConfig_ToBurstSize_UnsetIsZeroNonPositiveRejected(t *testing.T) {
 	t.Run("nil config is unconfigured", func(t *testing.T) {
 		var cfg *EventRecorderConfig
 		burst, err := cfg.ToBurstSize()
@@ -114,7 +114,7 @@ func TestEventRecorderConfig_ToBurstSize(t *testing.T) {
 	}
 }
 
-func TestEventRecorderConfig_ToRefillInterval(t *testing.T) {
+func TestEventRecorderConfig_ToRefillInterval_UnsetIsZeroNonPositiveRejected(t *testing.T) {
 	t.Run("nil config is unconfigured", func(t *testing.T) {
 		var cfg *EventRecorderConfig
 		interval, err := cfg.ToRefillInterval()
@@ -143,11 +143,11 @@ func TestEventRecorderConfig_ToRefillInterval(t *testing.T) {
 	}
 }
 
-// TestLoadEventRecorderSettings pins the startup contract: every configured
+// TestLoadEventRecorderSettings_FieldForms_UnsetStaysZeroBadValueIsAnError pins the startup contract: every configured
 // field is validated from one ConfigMap read, an absent field or key stays
 // zero so client-go's own default applies to it, and a bad value is an error
 // the manager refuses to start on.
-func TestLoadEventRecorderSettings(t *testing.T) {
+func TestLoadEventRecorderSettings_FieldForms_UnsetStaysZeroBadValueIsAnError(t *testing.T) {
 	tests := []struct {
 		name          string
 		configMapData map[string]string
@@ -237,11 +237,11 @@ func TestLoadEventRecorderSettings(t *testing.T) {
 	}
 }
 
-// TestEventRecorderSettings_CorrelatorOptions pins the translation client-go
+// TestEventRecorderSettings_CorrelatorOptions_RefillBecomesQPSUnsetStaysZero pins the translation client-go
 // receives: the burst passes through and the refill interval becomes a fill
 // rate in events per second, while an unconfigured side stays zero so
 // client-go substitutes its own default for it.
-func TestEventRecorderSettings_CorrelatorOptions(t *testing.T) {
+func TestEventRecorderSettings_CorrelatorOptions_RefillBecomesQPSUnsetStaysZero(t *testing.T) {
 	unconfigured := EventRecorderSettings{}.CorrelatorOptions()
 	assert.Zero(t, unconfigured.BurstSize)
 	assert.Zero(t, unconfigured.QPS)

@@ -36,6 +36,9 @@ func BuildPlan(component types.ComponentType, desired types.WorkloadDesiredSpec,
 	// migration; scale-down logic is responsible for picking the right
 	// deletion target after that surge resolves.
 	indices := instancePlanIndices(observed.InstanceStatuses, replicas, observed.RetryBlocks, observed.CordonedInstances)
+	// The rows are indexed once here, so each planned Instance finds its
+	// row in one read whatever the fleet's size.
+	observed.IndexRows()
 	instances := make([]types.InstancePlan, len(indices))
 	runners := runnersForInstance(desired.MultiPod, workerSize)
 	layout := types.ComponentPlan{Runners: runners, WorkerSizeByRevision: observed.WorkerSizeByRevision}
@@ -44,8 +47,8 @@ func BuildPlan(component types.ComponentType, desired types.WorkloadDesiredSpec,
 		// settled on an older revision keeps its layout until the roll takes it.
 		instances[i] = types.InstancePlan{
 			Index:       idx,
-			Incarnation: incarnationForIndex(observed.InstanceStatuses, idx),
-			Runners:     layout.RunnersFor(types.InstancePlan{Runners: runners}, renderedRevision(observed, idx)),
+			Incarnation: incarnationForIndex(&observed, idx),
+			Runners:     layout.RunnersFor(types.InstancePlan{Runners: runners}, renderedRevision(&observed, idx)),
 			// Relocation-directive memory: the adapter projects the
 			// per-instance node-exclusion list from the audit ledger;
 			// Render turns it into a required NotIn hostname term so
@@ -85,7 +88,7 @@ func BuildPlan(component types.ComponentType, desired types.WorkloadDesiredSpec,
 // at: the revision it runs, else the one it converges to, else the one its
 // attempt pinned; a migration's surge marker renders its source's. Empty
 // when no row records one, which renders the roll target.
-func renderedRevision(observed types.WorkloadObservedState, idx int32) string {
+func renderedRevision(observed *types.WorkloadObservedState, idx int32) string {
 	row := observed.Instance(idx)
 	if row == nil {
 		return ""
@@ -112,9 +115,8 @@ func renderedRevision(observed types.WorkloadObservedState, idx int32) string {
 // runnersForInstance returns the Runner layout for one Instance based
 // on the Component's multi-pod flag and worker size. The "worker"
 // runner is emitted even when workerSize=0 so the layout shape is
-// consistent (downstream code keys on Runner.Name). Admission rejects
-// Worker.Size <= 0 at the webhook so workerSize=0 multi-pod requests
-// never reach this function in production.
+// consistent (downstream code keys on Runner.Name); a zero-size worker
+// runner contributes no pod.
 func runnersForInstance(multiPod bool, workerSize int32) []types.RunnerPlan {
 	if !multiPod {
 		return []types.RunnerPlan{{Name: types.RunnerDefault, Size: 1}}
@@ -352,7 +354,10 @@ func instancePlanIndices(instances []types.InstanceStatus, replicas int32, block
 		fill(rank)
 	}
 
-	// Pass 3: allocate new slots for scale-up.
+	// Pass 3: allocate new slots for scale-up, lowest unused index first.
+	// Every index below a slot just taken is in use, so the search for the
+	// next slot resumes at that slot, and a scale-up of any size pays one
+	// pass over the indexes in all.
 	taken := make(map[int32]struct{}, len(used)+len(indices))
 	for k, v := range used {
 		taken[k] = v
@@ -360,10 +365,11 @@ func instancePlanIndices(instances []types.InstanceStatus, replicas int32, block
 	for _, idx := range indices {
 		taken[idx] = struct{}{}
 	}
+	slot := int32(0)
 	for steadyCount < replicas {
-		next := lowestUnusedIndex(taken)
-		indices = append(indices, next)
-		taken[next] = struct{}{}
+		slot = lowestUnusedIndex(taken, slot)
+		indices = append(indices, slot)
+		taken[slot] = struct{}{}
 		steadyCount++
 	}
 
@@ -372,15 +378,21 @@ func instancePlanIndices(instances []types.InstanceStatus, replicas int32, block
 }
 
 // scaleDownRank orders the steady rows a scale-down keeps, lowest kept
-// first. A row with a pod on a cordoned node ranks below every row
-// without one: its node is being emptied, so keeping it means moving it
-// later, while dropping it frees the node now. Within each half: a
-// serving row on a sound revision, any other row on a sound revision, a
-// serving row on a failing revision, then the rest. A row on a failing
-// revision ranks below every row on a sound one: its Ready is the pause
-// between crashes of a revision the ladder reads as failed, not capacity
-// the Component can keep.
+// first. A row left Creating with no operation ranks below every other
+// row: nothing drives it and it has never served, so keeping it would
+// retire an Instance whose pod still runs. Among the rest, a row with a
+// pod on a cordoned node ranks below every row without one: its node is
+// being emptied, so keeping it means moving it later, while dropping it
+// frees the node now. Within each half: a serving row on a sound
+// revision, any other row on a sound revision, a serving row on a
+// failing revision, then the rest. A row on a failing revision ranks
+// below every row on a sound one: its Ready is the pause between crashes
+// of a revision the ladder reads as failed, not capacity the Component
+// can keep.
 func scaleDownRank(s types.InstanceStatus, blocks []types.RetryBlock, onCordonedNode bool) int {
+	if creatingWithNoOperation(s) {
+		return lowestScaleDownRank
+	}
 	rank := 0
 	if !keepsPreference(s) {
 		rank++
@@ -394,8 +406,18 @@ func scaleDownRank(s types.InstanceStatus, blocks []types.RetryBlock, onCordoned
 	return rank
 }
 
-// lowestScaleDownRank is the last rank scaleDownRank assigns.
-const lowestScaleDownRank = 7
+// lowestScaleDownRank is the last rank scaleDownRank assigns, the one a
+// row nothing drives takes.
+const lowestScaleDownRank = 8
+
+// creatingWithNoOperation reports a row left in phase Creating with no
+// operation: a move's replacement the record's expiry released, or a
+// status write applied in part. No pass owns the shape and no deadline
+// runs on it; it fills the count only when no other row can, and a
+// scale-down retires it first.
+func creatingWithNoOperation(s types.InstanceStatus) bool {
+	return s.Phase == types.InstancePhaseCreating && s.Operation == nil
+}
 
 // keepsPreference reports whether a row is a stable replica the plan keeps
 // ahead of the rest: Ready, with every pod its published counts hold in
@@ -631,25 +653,24 @@ func existingInstanceIndices(instances []types.InstanceStatus) map[int32]struct{
 	return out
 }
 
-// lowestUnusedIndex returns the smallest non-negative int32 not
-// present in used. Pigeonhole-bounded: for any set of size N at least
-// one of {0,..,N} must be unused.
-func lowestUnusedIndex(used map[int32]struct{}) int32 {
-	for i := int32(0); i <= int32(len(used)); i++ {
+// lowestUnusedIndex returns the smallest int32 at or above from that is
+// not present in used. Pigeonhole-bounded: of the len(used)+1 indexes
+// that start at from, at least one is unused.
+func lowestUnusedIndex(used map[int32]struct{}, from int32) int32 {
+	last := from + int32(len(used))
+	for i := from; i <= last; i++ {
 		if _, taken := used[i]; !taken {
 			return i
 		}
 	}
-	return int32(len(used)) // unreachable; keep function total.
+	return last // unreachable; keep function total.
 }
 
 // incarnationForIndex returns the current Incarnation for idx, or 1
 // when no matching entry exists yet (first reconcile or after delete).
-func incarnationForIndex(instances []types.InstanceStatus, idx int32) int64 {
-	for _, s := range instances {
-		if s.Index == idx && s.Incarnation > 0 {
-			return s.Incarnation
-		}
+func incarnationForIndex(observed *types.WorkloadObservedState, idx int32) int64 {
+	if row := observed.Instance(idx); row != nil && row.Incarnation > 0 {
+		return row.Incarnation
 	}
 	return 1
 }

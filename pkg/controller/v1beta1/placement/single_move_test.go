@@ -13,23 +13,23 @@ import (
 	"sigs.k8s.io/ome/pkg/placement/plan"
 )
 
-func replacementRaceFixture() (*v1beta1.InferenceService, plan.Proposal, map[string]plannedHomeObservation) {
+func replacementRaceFixture() (*v1beta1.InferenceService, plan.Proposal, map[string]plannedMemberObservation) {
 	source := srcISVCMode(v1beta1.PlacementModeSingle, "")
-	home := &v1beta1.PlacementHomePolicy{InputDigest: "intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.EngineComponent, Replicas: 3}}}
+	policy := &v1beta1.PlacementHomePolicy{InputDigest: "intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.EngineComponent, Replicas: 3}}}
 	p := plan.Proposal{Mode: v1beta1.PlacementModeSingle, Winner: "member-a", PauseSurge: true, SingleMove: &v1beta1.PlacementSingleMoveStatus{}, InputDigest: "intent", Assignments: map[string]v1beta1.CandidateAllocationStatus{
-		"member-a": {ClusterUID: "member-a-uid", OriginalReplicas: 3, CurrentReplicas: 3, CurrentHome: home.DeepCopy()},
-		"member-b": {ClusterUID: "member-b-uid", DesiredReplicas: 3, DesiredHome: home.DeepCopy(), RaceCandidate: true},
-		"member-c": {ClusterUID: "member-c-uid", DesiredReplicas: 3, DesiredHome: home.DeepCopy(), RaceCandidate: true},
+		"member-a": {ClusterUID: "member-a-uid", OriginalReplicas: 3, CurrentReplicas: 3, CurrentHome: policy.DeepCopy()},
+		"member-b": {ClusterUID: "member-b-uid", DesiredReplicas: 3, DesiredHome: policy.DeepCopy(), RaceCandidate: true},
+		"member-c": {ClusterUID: "member-c-uid", DesiredReplicas: 3, DesiredHome: policy.DeepCopy(), RaceCandidate: true},
 	}}
-	o := map[string]plannedHomeObservation{
-		"member-a": {Home: allocation.Home{Known: true, Applied: true, Ready: 3, Occupied: 3, Routable: true}, PauseAcknowledged: true, FullHomeReady: true},
-		"member-b": {Home: allocation.Home{Known: true, Absent: true, Eligible: true}},
-		"member-c": {Home: allocation.Home{Known: true, Absent: true, Eligible: true}},
+	o := map[string]plannedMemberObservation{
+		"member-a": {MemberState: allocation.MemberState{Known: true, Applied: true, Ready: 3, Occupied: 3, Routable: true}, PauseAcknowledged: true, FullPolicyReady: true},
+		"member-b": {MemberState: allocation.MemberState{Known: true, Absent: true, Eligible: true}},
+		"member-c": {MemberState: allocation.MemberState{Known: true, Absent: true, Eligible: true}},
 	}
 	return source, p, o
 }
 
-func activeReplacement(p *plan.Proposal, o map[string]plannedHomeObservation, name string, admitted bool) {
+func activeReplacement(p *plan.Proposal, o map[string]plannedMemberObservation, name string, admitted bool) {
 	a := p.Assignments[name]
 	a.CurrentReplicas, a.CurrentHome = a.DesiredReplicas, a.DesiredHome.DeepCopy()
 	p.Assignments[name] = a
@@ -37,63 +37,63 @@ func activeReplacement(p *plan.Proposal, o map[string]plannedHomeObservation, na
 	if admitted {
 		phase = v1beta1.CandidatePhaseAdmitted
 	}
-	o[name] = plannedHomeObservation{Candidate: v1beta1.CandidatePlacement{Cluster: name, Phase: phase}, Home: allocation.Home{Known: true, Applied: true, Eligible: true, Occupied: a.CurrentReplicas}, PauseAcknowledged: true}
+	o[name] = plannedMemberObservation{Candidate: v1beta1.CandidatePlacement{Cluster: name, Phase: phase}, MemberState: allocation.MemberState{Known: true, Applied: true, Eligible: true, Occupied: a.CurrentReplicas}, PauseAcknowledged: true}
 }
 
 func TestBoundedReplacementRace(t *testing.T) {
 	for _, tt := range []struct {
 		name             string
-		edit             func(*v1beta1.InferenceService, *plan.Proposal, map[string]plannedHomeObservation)
+		edit             func(*v1beta1.InferenceService, *plan.Proposal, map[string]plannedMemberObservation)
 		b, c             int32
 		selected, reason string
 	}{
-		{name: "terminal replacement cannot win", b: 3, reason: "SurgeBudgetExhausted", edit: func(_ *v1beta1.InferenceService, p *plan.Proposal, o map[string]plannedHomeObservation) {
+		{name: "terminal replacement cannot win", b: 3, reason: "SurgeBudgetExhausted", edit: func(_ *v1beta1.InferenceService, p *plan.Proposal, o map[string]plannedMemberObservation) {
 			activeReplacement(p, o, "member-b", true)
 			h := o["member-b"]
 			h.Terminal = true
 			o["member-b"] = h
 		}},
-		{name: "unverified policy cannot win", b: 3, reason: "SurgeBudgetExhausted", edit: func(_ *v1beta1.InferenceService, p *plan.Proposal, o map[string]plannedHomeObservation) {
+		{name: "unverified policy cannot win", b: 3, reason: "SurgeBudgetExhausted", edit: func(_ *v1beta1.InferenceService, p *plan.Proposal, o map[string]plannedMemberObservation) {
 			activeReplacement(p, o, "member-b", true)
 			a := p.Assignments["member-b"]
 			a.HomeInputsPending = true
 			p.Assignments["member-b"] = a
 		}},
-		{name: "changed probe policy drains before another grant", reason: "AwaitingMemberCleanup", edit: func(_ *v1beta1.InferenceService, p *plan.Proposal, o map[string]plannedHomeObservation) {
+		{name: "changed probe policy drains before another grant", reason: "AwaitingMemberCleanup", edit: func(_ *v1beta1.InferenceService, p *plan.Proposal, o map[string]plannedMemberObservation) {
 			activeReplacement(p, o, "member-b", false)
 			p.Assignments["member-b"].DesiredHome.InputDigest = "changed-intent"
 		}},
-		{name: "selection does not require growth from unknown peers", b: 3, selected: "member-b", reason: "ReplacementNotReady", edit: func(_ *v1beta1.InferenceService, p *plan.Proposal, o map[string]plannedHomeObservation) {
+		{name: "selection does not require growth from unknown peers", b: 3, selected: "member-b", reason: "ReplacementNotReady", edit: func(_ *v1beta1.InferenceService, p *plan.Proposal, o map[string]plannedMemberObservation) {
 			activeReplacement(p, o, "member-b", true)
-			o["member-c"] = plannedHomeObservation{}
+			o["member-c"] = plannedMemberObservation{}
 		}},
-		{name: "whole home fits shared allowance", b: 3, reason: "SurgeBudgetExhausted"},
-		{name: "rollout reservation consumes allowance", reason: "SurgeBudgetExhausted", edit: func(_ *v1beta1.InferenceService, _ *plan.Proposal, o map[string]plannedHomeObservation) {
+		{name: "whole member fits shared allowance", b: 3, reason: "SurgeBudgetExhausted"},
+		{name: "rollout reservation consumes allowance", reason: "SurgeBudgetExhausted", edit: func(_ *v1beta1.InferenceService, _ *plan.Proposal, o map[string]plannedMemberObservation) {
 			a := o["member-a"]
 			a.RolloutReserved = 1
 			o["member-a"] = a
 		}},
-		{name: "autoscaled occupancy consumes allowance", reason: "SurgeBudgetExhausted", edit: func(_ *v1beta1.InferenceService, _ *plan.Proposal, o map[string]plannedHomeObservation) {
+		{name: "autoscaled occupancy consumes allowance", reason: "SurgeBudgetExhausted", edit: func(_ *v1beta1.InferenceService, _ *plan.Proposal, o map[string]plannedMemberObservation) {
 			a := o["member-a"]
-			a.Home.Occupied = 4
+			a.MemberState.Occupied = 4
 			o["member-a"] = a
 		}},
-		{name: "unknown empty ledger entry can still contain resources", reason: "ObservationUnknown", edit: func(_ *v1beta1.InferenceService, _ *plan.Proposal, o map[string]plannedHomeObservation) {
-			o["member-c"] = plannedHomeObservation{}
+		{name: "unknown empty ledger entry can still contain resources", reason: "ObservationUnknown", edit: func(_ *v1beta1.InferenceService, _ *plan.Proposal, o map[string]plannedMemberObservation) {
+			o["member-c"] = plannedMemberObservation{}
 		}},
-		{name: "pause acknowledgement precedes growth", reason: "AwaitingSurgePause", edit: func(_ *v1beta1.InferenceService, _ *plan.Proposal, o map[string]plannedHomeObservation) {
+		{name: "pause acknowledgement precedes growth", reason: "AwaitingSurgePause", edit: func(_ *v1beta1.InferenceService, _ *plan.Proposal, o map[string]plannedMemberObservation) {
 			a := o["member-a"]
 			a.PauseAcknowledged = false
 			o["member-a"] = a
 		}},
-		{name: "admission selects before full readiness", b: 3, selected: "member-b", reason: "ReplacementNotReady", edit: func(_ *v1beta1.InferenceService, p *plan.Proposal, o map[string]plannedHomeObservation) {
+		{name: "admission selects before full readiness", b: 3, selected: "member-b", reason: "ReplacementNotReady", edit: func(_ *v1beta1.InferenceService, p *plan.Proposal, o map[string]plannedMemberObservation) {
 			activeReplacement(p, o, "member-b", true)
 		}},
-		{name: "simultaneous admissions use lexical order", b: 3, c: 3, selected: "member-b", reason: "ReplacementNotReady", edit: func(_ *v1beta1.InferenceService, p *plan.Proposal, o map[string]plannedHomeObservation) {
+		{name: "simultaneous admissions use lexical order", b: 3, c: 3, selected: "member-b", reason: "ReplacementNotReady", edit: func(_ *v1beta1.InferenceService, p *plan.Proposal, o map[string]plannedMemberObservation) {
 			activeReplacement(p, o, "member-b", true)
 			activeReplacement(p, o, "member-c", true)
 		}},
-		{name: "cursor advances to the next candidate", c: 3, reason: "SurgeBudgetExhausted", edit: func(_ *v1beta1.InferenceService, p *plan.Proposal, _ map[string]plannedHomeObservation) {
+		{name: "cursor advances to the next candidate", c: 3, reason: "SurgeBudgetExhausted", edit: func(_ *v1beta1.InferenceService, p *plan.Proposal, _ map[string]plannedMemberObservation) {
 			p.SingleMove.Cursor = "member-b"
 		}},
 	} {
@@ -177,7 +177,7 @@ func TestReplacementTimeoutKeepsOccupancyCharged(t *testing.T) {
 			if diff := cmp.Diff(int32(0), step.Targets["member-c"]); diff != "" {
 				t.Fatalf("unreaped probe funded new growth: %s", diff)
 			}
-			o["member-b"] = plannedHomeObservation{Home: allocation.Home{Known: true, Absent: true, Eligible: true}}
+			o["member-b"] = plannedMemberObservation{MemberState: allocation.MemberState{Known: true, Absent: true, Eligible: true}}
 			step, err = advanceSingleRace(s, o, &p, start.Add(2*time.Minute))
 			if err != nil {
 				t.Fatal(err)
@@ -204,14 +204,14 @@ func TestReplacementBudgetForDifferentFloors(t *testing.T) {
 			s, p, o := replacementRaceFixture()
 			for name, floor := range map[string]int32{"member-a": tt.original, "member-b": tt.b, "member-c": tt.c} {
 				a := p.Assignments[name]
-				home := &v1beta1.PlacementHomePolicy{InputDigest: "intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.EngineComponent, Replicas: floor}}}
+				policy := &v1beta1.PlacementHomePolicy{InputDigest: "intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.EngineComponent, Replicas: floor}}}
 				if name == "member-a" {
-					a.OriginalReplicas, a.CurrentReplicas, a.CurrentHome = floor, floor, home
+					a.OriginalReplicas, a.CurrentReplicas, a.CurrentHome = floor, floor, policy
 					h := o[name]
-					h.Home.Ready, h.Home.Occupied = floor, floor
+					h.MemberState.Ready, h.MemberState.Occupied = floor, floor
 					o[name] = h
 				} else {
-					a.DesiredReplicas, a.DesiredHome = floor, home
+					a.DesiredReplicas, a.DesiredHome = floor, policy
 				}
 				p.Assignments[name] = a
 			}
@@ -251,7 +251,7 @@ func TestCancellationRetainsReplacementServingCredit(t *testing.T) {
 		drain         []string
 	}{
 		{name: "original lost readiness", originalReady: 0},
-		{name: "partial original cannot replace whole home", originalReady: 2},
+		{name: "partial original cannot replace whole member", originalReady: 2},
 		{name: "router floor must also recover", originalReady: 3},
 		{name: "recovered original permits replacement drain", originalReady: 3, fullReady: true, drain: []string{"member-b"}},
 	} {
@@ -267,11 +267,11 @@ func TestCancellationRetainsReplacementServingCredit(t *testing.T) {
 				p.Assignments[name] = a
 			}
 			a := observations["member-a"]
-			a.Home.Ready = tt.originalReady
-			a.FullHomeReady = tt.fullReady
+			a.MemberState.Ready = tt.originalReady
+			a.FullPolicyReady = tt.fullReady
 			observations["member-a"] = a
 			b := observations["member-b"]
-			b.Home.Ready, b.Home.Routable = 3, true
+			b.MemberState.Ready, b.MemberState.Routable = 3, true
 			observations["member-b"] = b
 			source.Status.Placement = &v1beta1.PlacementStatus{Plan: &v1beta1.PlacementPlanStatus{Mode: v1beta1.PlacementModeSingle, Winner: "member-a", PauseSurge: true, AssignedReplicas: 3, SingleMove: &v1beta1.PlacementSingleMoveStatus{Selected: "member-a"}}}
 			for _, name := range []string{"member-a", "member-b", "member-c"} {
@@ -295,16 +295,16 @@ func TestCancellationRetainsReplacementServingCredit(t *testing.T) {
 func TestReplacementRaceReleasesOnlyAbsentOriginal(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
-		home    allocation.Home
+		member  allocation.MemberState
 		release bool
 	}{
-		{name: "verified absence releases current authority", home: allocation.Home{Known: true, Absent: true}, release: true},
+		{name: "verified absence releases current authority", member: allocation.MemberState{Known: true, Absent: true}, release: true},
 		{name: "disconnected original retains authority"},
-		{name: "remaining resources retain authority", home: allocation.Home{Known: true, Occupied: 1}},
+		{name: "remaining resources retain authority", member: allocation.MemberState{Known: true, Occupied: 1}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			source, proposal, observations := replacementRaceFixture()
-			observations["member-a"] = plannedHomeObservation{Home: tt.home}
+			observations["member-a"] = plannedMemberObservation{MemberState: tt.member}
 			original := proposal.Assignments["member-a"].OriginalReplicas
 			step, err := advanceSingleRace(source, observations, &proposal, time.Unix(100, 0))
 			if err != nil {
@@ -328,7 +328,7 @@ func TestReplacementRaceReleasesOnlyAbsentOriginal(t *testing.T) {
 				t.Fatal(err)
 			}
 			if diff := cmp.Diff(map[string]int32{"member-a": 0, "member-b": 3, "member-c": 3}, step.Targets); diff != "" {
-				t.Fatalf("released baseline plus one extra home must fund two complete probes: %s", diff)
+				t.Fatalf("released baseline plus one extra member must fund two complete probes: %s", diff)
 			}
 			if diff := cmp.Diff(original, proposal.Assignments["member-a"].OriginalReplicas); diff != "" {
 				t.Fatalf("original budget changed: %s", diff)

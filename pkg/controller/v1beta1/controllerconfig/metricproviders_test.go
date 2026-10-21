@@ -9,12 +9,12 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// TestParseMetricProvidersConfig verifies the precedence invariant of the
+// TestParseMetricProvidersConfig_TopLevelAndNestedKeys_TopLevelWinsWhenPresent verifies the precedence invariant of the
 // shared provider-binding loader: the top-level "metricProviders" key is
 // authoritative whenever present (even as an empty object), and the nested
 // autoscalerPolicy.metricProviders alias is honored only when the top-level
 // key is absent.
-func TestParseMetricProvidersConfig(t *testing.T) {
+func TestParseMetricProvidersConfig_TopLevelAndNestedKeys_TopLevelWinsWhenPresent(t *testing.T) {
 	topLevel := `{
 		"cluster-prometheus": {
 			"serverAddress": "http://prometheus.monitoring.svc:9090",
@@ -95,10 +95,10 @@ func TestParseMetricProvidersConfig(t *testing.T) {
 	}
 }
 
-// TestParseMetricProvidersConfigErrors verifies that a binding with no
+// TestParseMetricProvidersConfig_NoServerAddressOrBadJson_LoadError verifies that a binding with no
 // serverAddress is a load error from either location (provider addresses have
 // no in-code default), and that malformed JSON is a load error.
-func TestParseMetricProvidersConfigErrors(t *testing.T) {
+func TestParseMetricProvidersConfig_NoServerAddressOrBadJson_LoadError(t *testing.T) {
 	tests := []struct {
 		name    string
 		data    map[string]string
@@ -134,11 +134,11 @@ func TestParseMetricProvidersConfigErrors(t *testing.T) {
 	}
 }
 
-// TestAutoscalerPolicyConfigSharesProviderBindings verifies the autoscaler
+// TestParseAutoscalerPolicyConfig_ProviderKeys_TopLevelWinsNestedAloneResolves verifies the autoscaler
 // block resolves its MetricProviders through the shared loader: the top-level
 // key is visible to autoscaler consumers and wins over the nested alias, and
 // the preflight operational fallbacks are unaffected.
-func TestAutoscalerPolicyConfigSharesProviderBindings(t *testing.T) {
+func TestParseAutoscalerPolicyConfig_ProviderKeys_TopLevelWinsNestedAloneResolves(t *testing.T) {
 	t.Run("top-level bindings visible without a nested block", func(t *testing.T) {
 		cfg, err := parseAutoscalerPolicyConfig(&v1.ConfigMap{Data: map[string]string{
 			MetricProvidersConfigName: `{"p": {"serverAddress": "http://prometheus.monitoring.svc:9090"}}`,
@@ -174,9 +174,9 @@ func TestAutoscalerPolicyConfigSharesProviderBindings(t *testing.T) {
 	})
 }
 
-// TestNewMetricProvidersConfigLoaders verifies the clientset-backed loaders
+// TestNewMetricProvidersConfig_PlainAndCachedLoaders_ReadTheConfigMap verifies the clientset-backed loaders
 // resolve through the shared ConfigMap fetch (uncached and TTL-cached paths).
-func TestNewMetricProvidersConfigLoaders(t *testing.T) {
+func TestNewMetricProvidersConfig_PlainAndCachedLoaders_ReadTheConfigMap(t *testing.T) {
 	clientset, gets := countingClientset(t, map[string]string{
 		MetricProvidersConfigName: `{"p": {"serverAddress": "http://prometheus.monitoring.svc:9090"}}`,
 	})

@@ -4,7 +4,7 @@
 // Exactly one of them may advance a given row's phase and operation in a
 // pass, and which one is a property of the row alone: its phase, the type
 // of the operation it carries, and that operation's step. This file is
-// the single answer, so a pass, a hold authority and the escalation arm
+// the single answer, so a pass, a hold authority and the escalation pass
 // cannot disagree about a row they all meet.
 //
 // The table below is keyed by the state ids of the Instance state machine
@@ -16,7 +16,7 @@ package types
 // operation this reconcile. The values are the verb packages under ops/,
 // plus OwnerNone for a row no verb pass drives — a settled row whose next
 // move belongs to a trigger, or a Failed row whose next move belongs to
-// the escalation arm and the operator.
+// the escalation pass and the operator.
 type RowOwner string
 
 const (
@@ -52,10 +52,10 @@ const (
 	StateUpdateGangSurgeTargetCleanup RowState = "Update/GangSurgeTargetCleanup"
 	StateUpdateInPlace                RowState = "Update/InPlace"
 	StateUpdateDrain                  RowState = "Update/Drain"
-	// StateUpdateParked is an Update attempt parked after its disposition
-	// whose pod set serves: the row reads Updating, but the attempt is
-	// spent and no pass drives it. The same attempt with its set down is
-	// the Failed state, since the phase decides a Failed row.
+	// StateUpdateParked is an Update attempt the escalation stopped (step
+	// Parked) whose pod set serves: the row reads Updating, but the
+	// attempt is over and no pass drives it. The same attempt with its set
+	// down is the Failed state, since the phase decides a Failed row.
 	StateUpdateParked RowState = "Update/Parked"
 
 	StateRestartDrain RowState = "Restart/Drain"
@@ -71,7 +71,7 @@ const (
 // such as "pod.unschedulable[target]" when only one variant is meant. The
 // events named here are the ones that are not a verb and mean the same
 // thing in most states: the six external holds and the two clocks the
-// escalation arm runs. They are the events whose effect on a row's owner
+// escalation pass runs. They are the events whose effect on a row's owner
 // every pass would otherwise decide for itself.
 type Event string
 
@@ -86,7 +86,7 @@ const (
 	EventPauseTrue           Event = "spec.pauseTrue"
 	EventPauseFreeze         Event = "spec.pauseFreeze"
 
-	// The two clocks the escalation arm runs against an in-flight step.
+	// The two clocks the escalation pass runs against an in-flight step.
 	EventOperationDeadline Event = "timer.operationDeadline"
 	EventStuckPodGrace     Event = "timer.stuckPodGrace"
 )
@@ -108,9 +108,9 @@ type ownership struct {
 // one row per state.
 //
 // The interrupts sets say the same thing in every in-flight state: the
-// two clocks end a step, and none of the six holds does — a hold parks
+// two clocks end a step, and none of the six holds does — a hold suspends
 // the deadline and the owner keeps its row. The exceptions are the states
-// whose owner is not the escalation arm's to end: a migration pair is the
+// whose owner is not the escalation pass's to end: a migration pair is the
 // migration record's, which fails fast through itself, and a teardown is
 // DeleteBatch's, which paces its own removal past any grace. A settled
 // row (Empty, Ready, Pending) has no step to interrupt, and the stuck-pod
@@ -175,8 +175,8 @@ func StateOf(s *InstanceStatus) RowState {
 		case InstancePhaseReady:
 			return StateReady
 		case InstancePhaseMigrating:
-			// The pin is the migration record's claim on the row; the
-			// phase outlives any one write of it.
+			// The Migrating phase is the migration record's claim on the
+			// row; it outlives any one write of the operation.
 			return StateMigrateCreateSurge
 		}
 		return StateUnknown
@@ -243,12 +243,13 @@ func OwnerOfOperation(op *InstanceOperation) RowOwner {
 // ClaimOf is the second question a row answers, beside Owner: not who
 // may advance it this reconcile, but which verb the operation it carries
 // still belongs to, whatever the phase says. The two differ on a Failed
-// row. Its preserved operation is a spent attempt no pass drives, so
-// Owner is OwnerNone; but the pinned revision, the surge index and the
+// row. Its preserved operation is an ended attempt no pass drives, so
+// Owner is OwnerNone; but the revision it holds, the surge index and the
 // migration pair it names are still that verb's, and a trigger deciding
 // whether to start something new on the row asks this question. A row
-// with no operation claims nothing, and neither does a parked attempt:
-// it pins nothing the roll must finish, and the roll starts over it.
+// with no operation claims nothing, and neither does a stopped attempt
+// (step Parked): it holds nothing the roll must finish, and the roll
+// starts over it.
 func ClaimOf(s *InstanceStatus) RowOwner {
 	if s == nil || s.Operation == nil || OperationParked(s.Operation) {
 		return OwnerNone
@@ -273,10 +274,10 @@ func ClaimOf(s *InstanceStatus) RowOwner {
 // or a Failed row whose preserved operation still claims the update verb.
 // The in-flight pod of either already counts against the unavailability
 // budget, so a continuation is never admitted or charged again — the
-// exemption and the charge cover the same set. A parked attempt is
-// settled and claims nothing, so the roll starts fresh over it; every
-// other Updating row, an operation the ownership table does not name included, is
-// re-derived by the update pass rather than left.
+// exemption and the charge cover the same set. A stopped attempt (step
+// Parked) is settled and claims nothing, so the roll starts fresh over
+// it; every other Updating row, an operation the ownership table does not
+// name included, is re-derived by the update pass rather than left.
 func UpdateContinuation(s *InstanceStatus) bool {
 	if s == nil {
 		return false
@@ -289,33 +290,34 @@ func UpdateContinuation(s *InstanceStatus) bool {
 
 // InFlight reports whether the row carries a step its owner advances: a
 // settled row — none, waiting to be materialized, serving, Failed, or an
-// attempt parked after its disposition — has no clock to run and no
-// attempt for a hold or a verdict to end.
+// attempt the escalation stopped (step Parked) — has no clock to run and
+// no attempt for a hold or an escalation to end.
 func InFlight(s *InstanceStatus) bool {
 	return !settledState(StateOf(s))
 }
 
-// RecreateOfDarkRow reports a fresh update start that takes nothing
+// RecreateOfUnservingRow reports a fresh update start that takes nothing
 // further offline: a Failed row with no serving pod, recreated in place
 // on a non-surge strategy. A gang whose leader is gone publishes no
 // serving pod however many workers keep the gate, since an Instance with
 // no routable serving pod serves nothing. The coordination gate already
 // counts its outage in its serving-based unavailability, so this start
 // skips the gate consult; a surge strategy keeps it, because its gate
-// counts surge pods and the recreate genuinely adds one. A Ready row is
-// dark on pod evidence rather than on the published counter
+// counts surge pods and the recreate adds one. A Ready row is read as
+// unserving from its pods rather than from the published counter
 // (evidence.PodSetServesNothing), because the counter trails the pods by
 // a pass.
-func RecreateOfDarkRow(s *InstanceStatus, strategy UpdateStrategyType) bool {
+func RecreateOfUnservingRow(s *InstanceStatus, strategy UpdateStrategyType) bool {
 	return s != nil && !UpdateContinuation(s) &&
 		strategy != UpdateStrategySurgeThenDrain &&
 		s.Phase == InstancePhaseFailed && s.ServingPodCount == 0
 }
 
-// EndedByOwnershipVerdict reports whether the row keeps an attempt the gang
-// verdict ended: Failed, operation kept, the ownership conflict recorded. No
-// pass re-drives it at the pinned revision; it resumes through the reset
-// mailbox or another revision. A gang surge's rows are the surge machine's.
+// EndedByOwnershipVerdict reports whether the row keeps an attempt the
+// PodGroup ownership conflict ended: Failed, operation kept, the conflict
+// recorded. No pass drives it again at the revision it recorded; it
+// resumes through the reset request annotation or another revision. A
+// gang surge's rows are the surge machine's.
 func EndedByOwnershipVerdict(s *InstanceStatus) bool {
 	if s == nil || s.Phase != InstancePhaseFailed || s.Operation == nil ||
 		s.LastFailure == nil || s.LastFailure.Reason != PodGroupOwnershipConflictReason {
@@ -401,9 +403,9 @@ func PublishedReadyKeepingSurgeOffRunningRevision(s *InstanceStatus) bool {
 
 // surgeKeptOffRunningRevision is the shape the two readings above share:
 // an Update attempt still at its Surge step, single-pod or gang, beside a
-// revision the row runs and a target revision other than it. A surge past
-// its drain hand-over has moved the Instance onto the replacement, so its
-// row is not read this way.
+// revision the row runs and a target revision other than it. A surge
+// whose replacement has taken over serving has moved the Instance onto
+// it, so its row is not read this way.
 func surgeKeptOffRunningRevision(s *InstanceStatus) bool {
 	return s.Operation != nil && s.Operation.Type == InstanceOperationUpdate &&
 		s.Operation.Step == UpdateStepSurge && offRunningRevision(s)
@@ -471,7 +473,7 @@ func RowsByOwner(statuses []InstanceStatus) OwnedRows {
 
 // settledState reports whether a state carries no step for an owner to
 // advance: no row, a row waiting to be materialized, a serving row, or a
-// spent attempt.
+// stopped attempt.
 func settledState(state RowState) bool {
 	switch state {
 	case StateEmpty, StatePending, StateReady, StateFailed, StateUpdateParked, StateUnknown:
@@ -484,8 +486,9 @@ func settledState(state RowState) bool {
 func (o OwnedRows) Any(owner RowOwner) bool { return len(o.rows[owner]) > 0 }
 
 // AnyInFlight reports whether the owner has an open step on any row
-// other than except. A caller re-arming one row must not count that
-// row's own attempt; pass a negative index to ask about every row.
+// other than except. A caller starting a new attempt on one row must not
+// count that row's own attempt; pass a negative index to ask about every
+// row.
 func (o OwnedRows) AnyInFlight(owner RowOwner, except int32) bool {
 	for _, idx := range o.inFlight[owner] {
 		if idx != except {

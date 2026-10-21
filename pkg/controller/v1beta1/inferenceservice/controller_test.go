@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	policyv1 "k8s.io/api/policy/v1"
 
+	"github.com/go-logr/logr"
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	"github.com/onsi/gomega"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -1538,4 +1540,298 @@ func TestUpdateStatusKeepsTheLiveCanaryRecordOverAStalePass(t *testing.T) {
 		g.Expect(engine(got).Canary.PromotedThrough).To(gomega.Equal("new"))
 		g.Expect(got.Annotations).NotTo(gomega.HaveKey(constants.RolloutPromoteAnnotation))
 	})
+}
+
+// The rolled-out revision fields of a coordination-owned Component have no
+// guard at the flush: a pass that read the copy of the service from before
+// the Component's first record write, with no Ready pod to derive the record
+// from again, writes the copy's empty fields over the live record. The run's
+// recorded plan is kept by its own rule, so a run recorded in that pass
+// survives beside the cleared record. The pass after reads the copy the
+// clearing pass found, which still carries the record, and writes it back
+// the same way.
+func TestUpdateStatusWritesAnEmptyCopyOverACoordinationOwnedRecord(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(v1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	nn := types.NamespacedName{Name: "first-record-isvc", Namespace: "default"}
+	recorded := v1beta1.ComponentStatusSpec{
+		LatestReadyRevision:     nn.Name + "-engine-rev-a",
+		LatestRolledoutRevision: nn.Name + "-engine-rev-a",
+	}
+	recordedRun := func(stable string) *v1beta1.RolloutStatus {
+		return &v1beta1.RolloutStatus{ActiveRun: &v1beta1.RolloutRun{
+			RunID: "run-1", OpenedAt: metav1.Now(), PinnedAt: metav1.Now(),
+			TargetRevisions: []v1beta1.RolloutRunTarget{{Component: v1beta1.EngineComponent, Revision: "b", StableRevision: stable}},
+		}}
+	}
+	for name, tc := range map[string]struct {
+		run        *v1beta1.RolloutStatus
+		live, copy v1beta1.ComponentStatusSpec
+	}{
+		"Settled":                             {live: recorded},
+		"under a run with a stable revision":  {run: recordedRun("a"), live: recorded},
+		"under a run with no stable revision": {run: recordedRun(""), live: recorded},
+		// The pass after the clearing one: its copy carries the record the
+		// live object lost.
+		"Empty": {copy: recorded},
+	} {
+		t.Run(name, func(t *testing.T) {
+			g := gomega.NewGomegaWithT(t)
+			isvc := &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{Name: nn.Name, Namespace: nn.Namespace},
+				Spec:       v1beta1.InferenceServiceSpec{Model: &v1beta1.ModelRef{Name: "base-model", Kind: stringPtr("BaseModel")}, Engine: &v1beta1.EngineSpec{}},
+				Status: v1beta1.InferenceServiceStatus{
+					Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{v1beta1.EngineComponent: tc.live},
+					Rollout:    tc.run.DeepCopy(),
+				},
+			}
+			live := ctrlclientfake.NewClientBuilder().WithScheme(scheme).WithObjects(isvc).WithStatusSubresource(isvc).Build()
+			reconciler := &InferenceServiceReconciler{Client: live, APIReader: live, Scheme: scheme, Log: ctrl.Log.WithName("test"), Recorder: record.NewFakeRecorder(10)}
+
+			// The pass read a copy whose revision fields differ from the
+			// live ones; it carries the run as the pass left it.
+			working := &v1beta1.InferenceService{}
+			g.Expect(live.Get(context.TODO(), nn, working)).NotTo(gomega.HaveOccurred())
+			working.Status.Components = map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{v1beta1.EngineComponent: tc.copy}
+			base := canary.NewBase(working)
+
+			g.Expect(reconciler.updateStatus(working, constants.OMENative, base)).NotTo(gomega.HaveOccurred())
+			g.Expect(base.Stale()).To(gomega.BeFalse(), "no canary unit owns the record, so the base keeps nothing")
+			got := &v1beta1.InferenceService{}
+			g.Expect(live.Get(context.TODO(), nn, got)).NotTo(gomega.HaveOccurred())
+			engine := got.Status.Components[v1beta1.EngineComponent]
+			g.Expect(engine.LatestRolledoutRevision).To(gomega.Equal(tc.copy.LatestRolledoutRevision), "the copy's record is written over the live one")
+			g.Expect(engine.LatestReadyRevision).To(gomega.Equal(tc.copy.LatestReadyRevision))
+			run := tc.run
+			if run == nil {
+				g.Expect(got.Status.Rollout).To(gomega.BeNil())
+				return
+			}
+			g.Expect(got.Status.Rollout).NotTo(gomega.BeNil())
+			g.Expect(got.Status.Rollout.ActiveRun).NotTo(gomega.BeNil(), "the run's recorded plan is kept by its own rule")
+			g.Expect(got.Status.Rollout.ActiveRun.RunID).To(gomega.Equal("run-1"))
+			g.Expect(got.Status.Rollout.ActiveRun.TargetRevisions[0].StableRevision).To(gomega.Equal(run.ActiveRun.TargetRevisions[0].StableRevision))
+		})
+	}
+}
+
+// shutdownCutMessage is the text client-go's rate limiter returns for a read
+// the manager's own shutdown stopped. It wraps no error a caller can unwrap.
+const shutdownCutMessage = "client rate limiter Wait returned an error: context canceled"
+
+// messageSink keeps the message of every log line by level, so a test can
+// tell an error-level line from an informational one.
+type messageSink struct {
+	errors, infos []string
+}
+
+func (s *messageSink) Init(logr.RuntimeInfo)               {}
+func (s *messageSink) Enabled(int) bool                    { return true }
+func (s *messageSink) Info(_ int, msg string, _ ...any)    { s.infos = append(s.infos, msg) }
+func (s *messageSink) Error(_ error, msg string, _ ...any) { s.errors = append(s.errors, msg) }
+func (s *messageSink) WithValues(...any) logr.LogSink      { return s }
+func (s *messageSink) WithName(string) logr.LogSink        { return s }
+
+// errorLines is the number of error-level lines that carry msg.
+func (s *messageSink) errorLines(msg string) int {
+	n := 0
+	for _, line := range s.errors {
+		if line == msg {
+			n++
+		}
+	}
+	return n
+}
+
+// shutdownCutFixture is an engine-only RawDeployment service whose pass
+// completes against a fake client: the service, its model and its runtime.
+func shutdownCutFixture() (*v1beta1.InferenceService, []client.Object) {
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "service", Namespace: "team-a", UID: "service-uid", Finalizers: []string{inferenceServiceFinalizer}},
+		Spec: v1beta1.InferenceServiceSpec{
+			Model: &v1beta1.ModelRef{Name: "model-a", Kind: stringPtr("BaseModel")},
+			Engine: &v1beta1.EngineSpec{
+				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: intPtr(1), MaxReplicas: 3},
+				PodSpec:                v1beta1.PodSpec{Containers: []v1.Container{{Name: "engine", Image: "engine:latest"}}},
+			},
+		},
+	}
+	model := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{Name: "model-a", Namespace: "team-a"},
+		Spec: v1beta1.BaseModelSpec{
+			ModelFormat: v1beta1.ModelFormat{Name: "safetensors", Version: stringPtr("1.0.0")},
+			Storage:     &v1beta1.StorageSpec{Path: stringPtr("/mnt/models/base")},
+		},
+	}
+	servingRuntime := &v1beta1.ServingRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "runtime-a", Namespace: "team-a"},
+		Spec: v1beta1.ServingRuntimeSpec{
+			SupportedModelFormats: []v1beta1.SupportedModelFormat{{
+				Name:        "safetensors",
+				Version:     stringPtr("*"),
+				AutoSelect:  boolPtr(true),
+				ModelFormat: &v1beta1.ModelFormat{Name: "safetensors", Version: stringPtr("1.0.0"), Weight: 1},
+			}},
+			ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{Containers: []v1.Container{{Name: "runtime", Image: "runtime:v1"}}},
+		},
+	}
+	return isvc, []client.Object{isvc, model, servingRuntime}
+}
+
+// TestErrorOfAPassTheShutdownCutShort pins what an operator sees of an error
+// from a reconcile pass the manager's own shutdown stopped. The next manager
+// re-queues the service and finishes the work, so the pass records no warning
+// event and no error-level log line for it, whether the error came from a
+// component or from the replaced-backend cleanup. The error itself is still
+// returned. The same error under a live context is reported both ways.
+func TestErrorOfAPassTheShutdownCutShort(t *testing.T) {
+	plain := errors.New(shutdownCutMessage)
+	wrapped := fmt.Errorf("read cutover readiness: %w", context.Canceled)
+	// failComponent fails the engine's Deployment write; failCleanup fails
+	// the InferenceReplica list only the replaced-backend cleanup issues.
+	failComponent := func(err error) interceptor.Funcs {
+		return interceptor.Funcs{Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+			if _, ok := obj.(*appsv1.Deployment); ok {
+				return err
+			}
+			return c.Create(ctx, obj, opts...)
+		}}
+	}
+	failCleanup := func(err error) interceptor.Funcs {
+		return interceptor.Funcs{List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+			if _, ok := list.(*v1beta1.InferenceReplicaList); ok {
+				return err
+			}
+			return c.List(ctx, list, opts...)
+		}}
+	}
+	for _, tt := range []struct {
+		name       string
+		canceled   bool
+		err        error
+		fail       func(error) interceptor.Funcs
+		reason     string
+		logged     string
+		wantReport bool
+	}{
+		{name: "healthy pass"},
+		{name: "component error under a live context is reported", err: plain, fail: failComponent,
+			reason: "ComponentReconcileError", logged: "Failed to reconcile component", wantReport: true},
+		{name: "component error after the shutdown is not reported", canceled: true, err: plain, fail: failComponent,
+			reason: "ComponentReconcileError", logged: "Failed to reconcile component"},
+		{name: "component error that wraps the cancellation is not reported", err: wrapped, fail: failComponent,
+			reason: "ComponentReconcileError", logged: "Failed to reconcile component"},
+		{name: "cleanup error under a live context is reported", err: plain, fail: failCleanup,
+			reason: "DeploymentModeChangeError", logged: "Failed to remove the objects of a replaced backend", wantReport: true},
+		{name: "cleanup error after the shutdown is not reported", canceled: true, err: plain, fail: failCleanup,
+			reason: "DeploymentModeChangeError", logged: "Failed to remove the objects of a replaced backend"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			for _, add := range []func(*runtime.Scheme) error{v1beta1.AddToScheme, v1.AddToScheme, appsv1.AddToScheme, lws.AddToScheme,
+				kedav1.AddToScheme, autoscalingv2.AddToScheme, policyv1.AddToScheme, monitoringv1.AddToScheme} {
+				if err := add(scheme); err != nil {
+					t.Fatal(err)
+				}
+			}
+			isvc, objects := shutdownCutFixture()
+			builder := ctrlclientfake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).WithStatusSubresource(isvc)
+			if tt.fail != nil {
+				builder = builder.WithInterceptorFuncs(tt.fail(tt.err))
+			}
+			c := builder.Build()
+			sink := &messageSink{}
+			recorder := record.NewFakeRecorder(64)
+			r := &InferenceServiceReconciler{
+				Client:                   c,
+				APIReader:                c,
+				Clientset:                fake.NewClientset(&v1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: constants.InferenceServiceConfigMapName, Namespace: constants.OMENamespace}, Data: map[string]string{"deploy": `{"defaultDeploymentMode":"RawDeployment"}`}}),
+				Log:                      logr.New(sink),
+				Scheme:                   scheme,
+				Recorder:                 recorder,
+				RuntimeSelector:          runtimeselector.New(c),
+				AcceleratorClassSelector: acceleratorclassselector.New(c),
+			}
+			ctx := t.Context()
+			if tt.canceled {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel()
+			}
+			result, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(isvc)})
+			if tt.err == nil && err != nil {
+				t.Fatalf("healthy pass: %v", err)
+			}
+			if tt.err != nil && !errors.Is(err, tt.err) {
+				t.Fatalf("error = %v, want the injected %v", err, tt.err)
+			}
+			if result != (ctrl.Result{}) {
+				t.Fatalf("result = %+v, want none", result)
+			}
+			warnings := 0
+			for _, event := range drainEvents(recorder) {
+				if tt.reason != "" && strings.Contains(event, tt.reason) {
+					warnings++
+				} else if strings.HasPrefix(event, v1.EventTypeWarning) && strings.Contains(event, "Error") {
+					t.Errorf("unexpected warning: %s", event)
+				}
+			}
+			wantWarnings, wantLogs := 0, 0
+			if tt.wantReport {
+				wantWarnings, wantLogs = 1, 1
+			}
+			if warnings != wantWarnings {
+				t.Errorf("%s warnings = %d, want %d", tt.reason, warnings, wantWarnings)
+			}
+			if got := sink.errorLines(tt.logged); got != wantLogs {
+				t.Errorf("error-level %q lines = %d, want %d (all error lines: %q)", tt.logged, got, wantLogs, sink.errors)
+			}
+		})
+	}
+}
+
+// TestRunPassSteps_StopsAtTheFirstStepThatEndsThePass holds the step runner
+// to the order of a pass: every step runs while each lets the pass go on,
+// and the first step that ends the pass, or fails, is the last one run. A
+// step that ends the pass leaves the result the pass returns on the record.
+func TestRunPassSteps_StopsAtTheFirstStepThatEndsThePass(t *testing.T) {
+	var ran []string
+	step := func(name string, next bool, err error) passStep {
+		return func(context.Context) (bool, error) {
+			ran = append(ran, name)
+			return next, err
+		}
+	}
+	run := func(steps ...passStep) (done bool, order string, err error) {
+		ran = nil
+		done, err = runPassSteps(context.Background(), steps)
+		return done, strings.Join(ran, ","), err
+	}
+
+	done, order, err := run(step("first", true, nil), step("second", true, nil))
+	if err != nil || !done || order != "first,second" {
+		t.Fatalf("every step went on: done=%v err=%v ran=%q, want done=true err=nil ran=first,second", done, err, order)
+	}
+	done, order, err = run(step("first", true, nil), step("ends", false, nil), step("never", true, nil))
+	if err != nil || done || order != "first,ends" {
+		t.Fatalf("a step ended the pass: done=%v err=%v ran=%q, want done=false err=nil ran=first,ends", done, err, order)
+	}
+	writeFailed := errors.New("write the status")
+	done, order, err = run(step("fails", true, writeFailed), step("never", true, nil))
+	if !errors.Is(err, writeFailed) || done || order != "fails" {
+		t.Fatalf("a step failed: done=%v err=%v ran=%q, want done=false the step's error ran=fails", done, err, order)
+	}
+
+	pass := &servicePass{}
+	requeue := ctrl.Result{Requeue: true}
+	done, order, err = run(step("first", true, nil), func(context.Context) (bool, error) {
+		ran = append(ran, "ends")
+		return pass.end(requeue, nil)
+	}, step("never", true, nil))
+	if err != nil || done || order != "first,ends" || pass.result != requeue {
+		t.Fatalf("a step ended the pass with a result: done=%v err=%v ran=%q result=%+v, want done=false err=nil ran=first,ends result=%+v", done, err, order, pass.result, requeue)
+	}
 }

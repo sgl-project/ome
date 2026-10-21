@@ -191,7 +191,7 @@ func TestUnknownCandidateKeepsReadyWithinTheGrace(t *testing.T) {
 		{name: "grace has passed", grace: 5 * time.Minute, since: since(5 * time.Minute), ready: 4, wantSince: since(5 * time.Minute)},
 		{name: "no ready count stays at zero", grace: 5 * time.Minute, since: since(time.Minute), wantSince: since(time.Minute)},
 		{name: "grace unset withdraws at once", ready: 4, wantSince: since(0)},
-		// A hold or a plan merge can carry a home forward as unknown without a
+		// A hold or a plan merge can carry a member forward as unknown without a
 		// failure start; its first failed read still starts a grace.
 		{name: "carried forward as unknown without a start", grace: 5 * time.Minute, wasUnknown: true, ready: 4, wantSince: since(0), wantReady: 4},
 		// A stored CRD that drops the start would restart the grace on every
@@ -313,14 +313,14 @@ func ingressObservation(t *testing.T, ingressReady, replicaReadsFail bool) (*Rec
 	return r, f
 }
 
-func TestStandingReadMarksAReachedHomeKnown(t *testing.T) {
+func TestStandingReadMarksAReachedMemberKnown(t *testing.T) {
 	r, f := ingressObservation(t, true, false)
 	previous := *f.source.Status.Placement.Candidates[0].DeepCopy()
 	previous.ObservationKnown = false
-	home := r.observeHome(t.Context(), f.source, previous, true)
-	require.NoError(t, home.err)
-	assert.Equal(t, homePresent, home.state)
-	assert.True(t, home.candidate.ObservationKnown, "every path that writes a reached home, a hold included, must record it as known")
+	member := r.observeMember(t.Context(), f.source, previous, true)
+	require.NoError(t, member.err)
+	assert.Equal(t, memberPresent, member.state)
+	assert.True(t, member.candidate.ObservationKnown, "every path that writes a reached member, a hold included, must record it as known")
 }
 
 func TestUnreadableReplicasWithIngressNotReadyKeepNoCount(t *testing.T) {
@@ -335,15 +335,15 @@ func TestUnreadableReplicasWithIngressNotReadyKeepNoCount(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Run("standing read", func(t *testing.T) {
 				r, f := ingressObservation(t, tt.ingressReady, true)
-				home := r.observeHome(t.Context(), f.source, f.source.Status.Placement.Candidates[0], true)
-				require.Error(t, home.err)
-				assert.Equal(t, homeUnknown, home.state)
-				assert.Equal(t, tt.wantReady, home.candidate.ReadyReplicas)
-				assert.NotNil(t, home.candidate.ObservationFailingSince)
+				member := r.observeMember(t.Context(), f.source, f.source.Status.Placement.Candidates[0], true)
+				require.Error(t, member.err)
+				assert.Equal(t, memberUnknown, member.state)
+				assert.Equal(t, tt.wantReady, member.candidate.ReadyReplicas)
+				assert.NotNil(t, member.candidate.ObservationFailingSince)
 			})
 			t.Run("planned read", func(t *testing.T) {
 				r, f := ingressObservation(t, tt.ingressReady, true)
-				got, err := r.observePlannedHome(t.Context(), f.source, f.source.Status.Placement.Candidates[0], f.components)
+				got, err := r.observePlannedMember(t.Context(), f.source, f.source.Status.Placement.Candidates[0], f.components)
 				require.Error(t, err)
 				assert.False(t, got.Candidate.ObservationKnown)
 				assert.Equal(t, tt.wantReady, got.Candidate.ReadyReplicas)
@@ -378,7 +378,7 @@ func TestAllTransientMemberReadFailureKeepsReadyWhenRetried(t *testing.T) {
 	transient := &url.Error{Op: "Get", URL: "https://member-a.example", Err: context.DeadlineExceeded}
 
 	t.Run("one failed read is retried", func(t *testing.T) {
-		f, _ := settleAllServingHomes(t, replicas)
+		f, _ := settleAllServingMembers(t, replicas)
 		f.reconciler.MemberReadRetry = MemberReadRetry{MaxAttempts: 2, InitialBackoff: time.Millisecond, MaxBackoff: time.Millisecond}
 		f.connections.m["member-a"] = failingAllMember(f, "member-a", 1, transient)
 		_, got := reconcileResult(t, f)
@@ -389,7 +389,7 @@ func TestAllTransientMemberReadFailureKeepsReadyWhenRetried(t *testing.T) {
 	})
 
 	t.Run("without retries the failed read withdraws the count", func(t *testing.T) {
-		f, _ := settleAllServingHomes(t, replicas)
+		f, _ := settleAllServingMembers(t, replicas)
 		f.connections.m["member-a"] = failingAllMember(f, "member-a", 1, transient)
 		_, got := reconcileResult(t, f)
 		candidate := candidateOf(t, got, "member-a")
@@ -404,7 +404,7 @@ func TestAllUnreadableHomeKeepsReadyUntilTheGraceEnds(t *testing.T) {
 		t.Run(fmt.Sprintf("informer=%t", informerFailure), func(t *testing.T) {
 
 			const replicas = 3
-			f, settled := settleAllServingHomes(t, replicas)
+			f, settled := settleAllServingMembers(t, replicas)
 			clock := clocktesting.NewFakePassiveClock(graceTestNow)
 			f.reconciler.ObservationClock = clock
 			f.reconciler.ObservationGrace = 10 * time.Second
@@ -439,7 +439,7 @@ func TestAllUnreadableHomeKeepsReadyUntilTheGraceEnds(t *testing.T) {
 				wantReason = "AwaitingHomeInputs"
 			}
 			if condition := got.Status.GetCondition(v1beta1.PlacementConverged); condition == nil || condition.Reason != wantReason {
-				t.Fatalf("an unreadable home must still hold the allocation: %+v", condition)
+				t.Fatalf("an unreadable member must still hold the allocation: %+v", condition)
 			}
 
 			// The grace is measured from the recorded first failure, not restarted.
@@ -454,7 +454,7 @@ func TestAllUnreadableHomeKeepsReadyUntilTheGraceEnds(t *testing.T) {
 			clock.SetTime(graceTestNow.Add(10 * time.Second))
 			res, got = reconcileResult(t, f)
 			candidate = candidateOf(t, got, "member-a")
-			assert.Zero(t, candidate.ReadyReplicas, "a home still unreadable after the grace stops receiving traffic")
+			assert.Zero(t, candidate.ReadyReplicas, "a member still unreadable after the grace stops receiving traffic")
 			assert.True(t, candidate.ObservationFailingSince.Time.Equal(graceTestNow))
 			assert.Equal(t, time.Minute, res.RequeueAfter, "no grace is left to wake for")
 			assertCandidateObservationMetrics(t, got, "member-a", 0, 0, float64(graceTestNow.Unix()))
@@ -498,7 +498,7 @@ func TestReconcile_SplitUnreadableHomeKeepsReadyWithinTheGrace(t *testing.T) {
 	zc, ok := candidatesByCluster(p.Candidates)["z"]
 	require.True(t, ok)
 	assert.False(t, zc.ObservationKnown)
-	assert.Equal(t, int32(1), zc.ReadyReplicas, "an unreadable home keeps its routed count within the grace")
+	assert.Equal(t, int32(1), zc.ReadyReplicas, "an unreadable member keeps its routed count within the grace")
 	require.NotNil(t, zc.ObservationFailingSince)
 	assert.True(t, zc.ObservationFailingSince.Time.Equal(graceTestNow))
 }
@@ -590,7 +590,7 @@ func TestPlannedReadRetriesAPendingFirstConnection(t *testing.T) {
 	for _, tt := range pendingConnectionCases {
 		t.Run(tt.name, func(t *testing.T) {
 			r, clusters, f := connectingObservation(t, tt.pending, tt.retry)
-			got, err := r.observePlannedHome(t.Context(), f.source, f.source.Status.Placement.Candidates[0], f.components)
+			got, err := r.observePlannedMember(t.Context(), f.source, f.source.Status.Placement.Candidates[0], f.components)
 			assert.Equal(t, 1, clusters.asked, "the first read found no connection and asked whether it was pending")
 			if tt.wantReread {
 				require.NoError(t, err)
@@ -613,15 +613,15 @@ func TestStandingReadRetriesAPendingFirstConnection(t *testing.T) {
 			// Without an allocation the read finds its connection by cluster name.
 			previous := *f.source.Status.Placement.Candidates[0].DeepCopy()
 			previous.Allocation = nil
-			got := r.observeHome(t.Context(), f.source, previous, true)
+			got := r.observeMember(t.Context(), f.source, previous, true)
 			assert.Equal(t, 1, clusters.asked, "the first read found no connection and asked whether it was pending")
 			if tt.wantReread {
 				assert.Equal(t, 2, clusters.lookups)
-				assert.NotEqual(t, homeUnknown, got.state, "error: %v", got.err)
+				assert.NotEqual(t, memberUnknown, got.state, "error: %v", got.err)
 				return
 			}
 			assert.Equal(t, 1, clusters.lookups, "the member is read once")
-			assert.Equal(t, homeUnknown, got.state)
+			assert.Equal(t, memberUnknown, got.state)
 			assert.Equal(t, tt.wantPending, errors.Is(got.err, errMemberConnectionPending), "error: %v", got.err)
 		})
 	}

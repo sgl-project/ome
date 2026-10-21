@@ -6,6 +6,7 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -121,7 +122,7 @@ func TestGangLandsInOneDomain(t *testing.T) {
 // strand the workload half-scheduled.
 //
 // Two nodes in one domain, a 2-member PodGroup. Creating just one pod, it best-
-// fits, pins, and gates — but stays unbound. Adding the second opens the gate and
+// fits, takes a domain, and gates — but stays unbound. Adding the second opens the gate and
 // both bind. The PodGroup's gate timeout is set well above the hold window so the
 // test never races the timeout unwind.
 func TestGangGateHoldsUntilComplete(t *testing.T) {
@@ -399,13 +400,13 @@ func TestIncompleteGangTimesOutThenRecovers(t *testing.T) {
 
 // TestTwoGangsDoNotOverCommitDomain is the capacity-claim guarantee: two gangs
 // whose best-fit both prefers the same tight domain must not both pile into it
-// and over-commit. When one gang pins a domain it reserves its whole-node
+// and over-commit. When one gang takes a domain it reserves its whole-node
 // capacity there, so the other best-fits into what's left.
 //
 // Domain "a" has 3 nodes, domain "b" has 4. Both gangs need 3, and "a" is the
-// tightest fit for 3 — so without the reservation both would pin "a", leaving 6
+// tightest fit for 3 — so without the reservation both would take "a", leaving 6
 // pods to fight over 3 nodes and stranding the loser. With it, whichever gang
-// pins "a" first reserves all of it; the other lands wholly in "b". The invariant
+// takes "a" first reserves all of it; the other lands wholly in "b". The invariant
 // asserted (robust to arrival order): every pod binds, each gang sits in a single
 // domain, and the two gangs occupy different domains.
 func TestTwoGangsDoNotOverCommitDomain(t *testing.T) {
@@ -472,7 +473,7 @@ func TestTwoGangsDoNotOverCommitDomain(t *testing.T) {
 }
 
 // TestGangRecoversAfterSchedulerRestart is the failover guarantee: after a
-// scheduler restart the in-memory pins are gone, but a gang that was already
+// scheduler restart the in-memory assignments are gone, but a gang that was already
 // partially placed must still complete — its straggler adopts the domain its
 // bound siblings sit in (not a fresh best-fit that could strand them), and the
 // rebuilt reservation accounts for those already-bound members at the gate.
@@ -489,7 +490,7 @@ func TestGangRecoversAfterSchedulerRestart(t *testing.T) {
 	schedSetup := schedclientset.NewForConfigOrDie(globalKubeConfig)
 	ctx := context.Background()
 
-	if _, err := setup.CoreV1().Namespaces().Create(ctx, namespaceObj(ns), metav1.CreateOptions{}); err != nil {
+	if _, err := setup.CoreV1().Namespaces().Create(ctx, namespaceObj(ns), metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
 		t.Fatalf("create namespace: %v", err)
 	}
 	// Domain "a" with 3 gpu nodes.
@@ -515,7 +516,7 @@ func TestGangRecoversAfterSchedulerRestart(t *testing.T) {
 		}
 	}
 
-	// Now bring up a fresh scheduler (fresh, empty pins) — its informer sync sees
+	// Now bring up a fresh scheduler (fresh, empty assignments) — its informer sync sees
 	// the two bound members, exactly as a restarted scheduler would.
 	tc := startScheduler(t, globalKubeConfig, gangPackOptions(t)...)
 	defer tc.teardown(t)
@@ -593,7 +594,7 @@ func TestNoFitGangReschedulesWhenCapacityFrees(t *testing.T) {
 	schedSetup := schedclientset.NewForConfigOrDie(globalKubeConfig)
 	ctx := context.Background()
 
-	if _, err := setup.CoreV1().Namespaces().Create(ctx, namespaceObj(ns), metav1.CreateOptions{}); err != nil {
+	if _, err := setup.CoreV1().Namespaces().Create(ctx, namespaceObj(ns), metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
 		t.Fatalf("create namespace: %v", err)
 	}
 	// One domain, two gpu nodes, both occupied by non-gang blockers -> a 2-member

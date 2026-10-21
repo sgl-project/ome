@@ -2,7 +2,6 @@ package status
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,22 +41,14 @@ func FinalizeAndRemove(
 		deps.ExpectationsCache().Forget(input.Key.Namespace, input.Key.OwnerName, input.Key.Component, index)
 		return true, nil
 	}
-	if err := RequireOwner(input); err != nil {
+	write, err := newGuardedWrite(input)
+	if err != nil {
 		return false, err
 	}
 
 	if input.FinalizeInstanceResources != nil {
 		guard, state := Guard(input, index, expected)
-		preflight := types.InstanceMutation{
-			Index:             index,
-			Mutate:            func(*types.InstanceStatus) bool { return false },
-			BatchPrecondition: guard,
-		}
-		err := Apply(ctx, input, []types.InstanceMutation{preflight})
-		if errors.Is(err, types.ErrStatusMutationPrecondition) || errors.Is(err, types.ErrStatusOwnerGone) {
-			return false, nil
-		}
-		if err != nil {
+		if held, err := guardHolds(ctx, input, index, guard); !held {
 			return false, err
 		}
 		if state.Absent && expected != nil {
@@ -77,28 +68,30 @@ func FinalizeAndRemove(
 	}
 
 	guard, state := Guard(input, index, expected)
-	committed := false
 	mutation := types.InstanceMutation{
-		Index:             index,
-		Remove:            true,
-		BatchPrecondition: guard,
+		Index:  index,
+		Remove: true,
+		// A row that is already gone is the removal already in place.
+		BatchPrecondition: write.guard(func(rows types.InstanceMutationSnapshot) bool {
+			if !guard(rows) {
+				return false
+			}
+			write.confirmed = state.Absent
+			return true
+		}),
 		OnCommit: func(_, _ *types.InstanceStatus) {
-			committed = true
+			write.committed = true
 			deps.ExpectationsCache().Forget(input.Key.Namespace, input.Key.OwnerName, input.Key.Component, index)
 		},
 	}
-
-	err := Apply(ctx, input, []types.InstanceMutation{mutation})
-	if errors.Is(err, types.ErrStatusMutationPrecondition) || errors.Is(err, types.ErrStatusOwnerGone) {
-		return false, nil
-	}
-	if err != nil {
+	done, err := write.commit(ctx, input, []types.InstanceMutation{mutation}, "", nil)
+	if err != nil || !done {
 		return false, err
 	}
 	if state.Absent {
 		deps.ExpectationsCache().Forget(input.Key.Namespace, input.Key.OwnerName, input.Key.Component, index)
 	}
-	return committed || state.Absent, nil
+	return true, nil
 }
 
 // RecordRecycleAttempt is the bookkeeping a terminal-pod recycle leaves

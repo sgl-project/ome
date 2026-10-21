@@ -23,10 +23,10 @@ const roleLabel = "testing.example/role"
 func twoMemberGang(members ...*v1.Pod) (*GangPack, *fakeHandle, []framework.NodeInfo) {
 	h := &fakeHandle{}
 	g := &GangPack{
-		handle:    h,
-		pins:      placement.New(),
-		pgReader:  fakeReader{"team/pf": {min: 2, topo: testKey, to: time.Minute}},
-		podLister: fakeGangPodLister{pods: members},
+		handle:      h,
+		assignments: placement.New(),
+		pgReader:    fakeReader{"team/pf": {min: 2, topo: testKey, to: time.Minute}},
+		podLister:   fakeGangPodLister{pods: members},
 	}
 	nodes := []framework.NodeInfo{nodeInfo(gpuNode("a1", "a", "4")), nodeInfo(gpuNode("a2", "a", "4"))}
 	return g, h, nodes
@@ -62,12 +62,12 @@ func requiredAffinityTo(matchLabels map[string]string) *v1.Affinity {
 	}}
 }
 
-// TestTemplatesCompleteActivatesParkedMembersOnce: a member parked because the
+// TestPreFilter_MemberSetBecomesComplete_ActivatesHeldMembersOnce: a member parked because the
 // live set was short of minMember is activated by the first PreFilter that sees
 // the set complete, and only by that one. The observing member is in flight and
 // is left out of the activation. Later PreFilters of the same complete gang
 // activate nobody.
-func TestTemplatesCompleteActivatesParkedMembersOnce(t *testing.T) {
+func TestPreFilter_MemberSetBecomesComplete_ActivatesHeldMembersOnce(t *testing.T) {
 	ctx := context.Background()
 	leader, worker := namedMember("leader"), namedMember("worker")
 	g, h, nodes := twoMemberGang(leader)
@@ -111,10 +111,10 @@ func TestTemplatesCompleteActivatesParkedMembersOnce(t *testing.T) {
 	}
 }
 
-// TestTemplatesIncompleteAgainRearmsActivation: once the set is complete the
+// TestPreFilter_MemberSetCompletesAgain_ActivatesOnceMore: once the set is complete the
 // wake-up is spent; a member leaving (set incomplete again) re-arms it, and the
 // next completion fires exactly one more activation.
-func TestTemplatesIncompleteAgainRearmsActivation(t *testing.T) {
+func TestPreFilter_MemberSetCompletesAgain_ActivatesOnceMore(t *testing.T) {
 	ctx := context.Background()
 	leader, worker := namedMember("leader"), namedMember("worker")
 	g, h, nodes := twoMemberGang(leader, worker)
@@ -153,13 +153,13 @@ func TestTemplatesIncompleteAgainRearmsActivation(t *testing.T) {
 	}
 }
 
-// TestCapacityFailuresDoNotActivateSiblings: members that keep failing for lack
+// TestActivation_RepeatedCapacityFailures_ActivatesNoSibling: members that keep failing for lack
 // of capacity, whether in PreFilter (no domain fits) or after PreFilter (every
 // candidate rejected, unwound by PostFilter), never activate each other. The
 // wake-up is tied to the set-completion transition alone, so two failing
 // members cannot ping-pong through the backoff-bypassing Activate; a veto in
 // the only fitting domain parks the member without an activation of its own.
-func TestCapacityFailuresDoNotActivateSiblings(t *testing.T) {
+func TestActivation_RepeatedCapacityFailures_ActivatesNoSibling(t *testing.T) {
 	ctx := context.Background()
 	leader, worker := namedMember("leader"), namedMember("worker")
 
@@ -201,10 +201,10 @@ func TestCapacityFailuresDoNotActivateSiblings(t *testing.T) {
 	})
 }
 
-// TestTemplatesCompleteActivationIsOneShotUnderNoFit: the completion wake-up
+// TestActivation_SetCompletesButNoDomainFits_FiresOnce: the completion wake-up
 // fires once even when the completing member's own attempt then finds no room,
 // and the members' subsequent no-fit failures do not fire it again.
-func TestTemplatesCompleteActivationIsOneShotUnderNoFit(t *testing.T) {
+func TestActivation_SetCompletesButNoDomainFits_FiresOnce(t *testing.T) {
 	ctx := context.Background()
 	leader, worker := namedMember("leader"), namedMember("worker")
 	g, h, nodes := twoMemberGang(leader)
@@ -241,13 +241,13 @@ func TestTemplatesCompleteActivationIsOneShotUnderNoFit(t *testing.T) {
 	}
 }
 
-// TestAffinityToUnplacedSiblingYieldsWithoutPinning: a member whose required
+// TestPreFilter_AffinityToUnplacedSibling_YieldsWithoutAssignment: a member whose required
 // affinity can only be satisfied by a sibling that is neither bound nor assumed
-// yields in PreFilter, without planning a domain: no pin is written, no domain
+// yields in PreFilter, without planning a domain: no assignment is written, no domain
 // is recorded as failed, and the completion wake-up still fires exactly once.
 // The yield does not depend on the wake-up record, and ends as soon as the
 // sibling is placed.
-func TestAffinityToUnplacedSiblingYieldsWithoutPinning(t *testing.T) {
+func TestPreFilter_AffinityToUnplacedSibling_YieldsWithoutAssignment(t *testing.T) {
 	ctx := context.Background()
 	leader, worker := leaderMember("leader"), workerMember("worker")
 	g, h, nodes := twoMemberGang(leader)
@@ -264,11 +264,11 @@ func TestAffinityToUnplacedSiblingYieldsWithoutPinning(t *testing.T) {
 		if st.Code() != framework.Unschedulable || !strings.Contains(st.Message(), "waiting for gang sibling team/leader to be placed") {
 			t.Fatalf("worker PreFilter attempt %d = %v, want Unschedulable waiting for the leader", attempt, st)
 		}
-		if readPin(state) != nil {
-			t.Fatalf("attempt %d wrote a cycle pin %+v while yielding", attempt, readPin(state))
+		if readAssignment(state) != nil {
+			t.Fatalf("attempt %d wrote a cycle assignment %+v while yielding", attempt, readAssignment(state))
 		}
-		if _, pinned := g.pins.Get("team/pf"); pinned {
-			t.Fatalf("attempt %d pinned the gang while yielding", attempt)
+		if _, assigned := g.assignments.Get("team/pf"); assigned {
+			t.Fatalf("attempt %d assigned the gang while yielding", attempt)
 		}
 		if _, hadFailed := g.withoutFailedDomains(gang, topology.FreeByDomain{"a": 2}); hadFailed {
 			t.Fatalf("attempt %d recorded a failed domain while yielding", attempt)
@@ -294,8 +294,8 @@ func TestAffinityToUnplacedSiblingYieldsWithoutPinning(t *testing.T) {
 	if !st.IsSuccess() {
 		t.Fatalf("worker PreFilter with leader assumed = %v, want Success", st)
 	}
-	if pin := readPin(state); pin == nil || pin.domain != "a" {
-		t.Fatalf("pin = %+v, want the leader's domain a", pin)
+	if assignment := readAssignment(state); assignment == nil || assignment.domain != "a" {
+		t.Fatalf("assignment = %+v, want the leader's domain a", assignment)
 	}
 	if result == nil || !result.NodeNames.Has("a2") || result.NodeNames.Has("a1") {
 		t.Fatalf("candidates = %v, want the node the leader does not occupy", result)
@@ -305,11 +305,11 @@ func TestAffinityToUnplacedSiblingYieldsWithoutPinning(t *testing.T) {
 	}
 }
 
-// TestAffinityYieldScope: only a required term that some unplaced sibling of the
+// TestPreFilter_AffinityTermNotOnUnplacedSibling_PlansDomain: only a required term that some unplaced sibling of the
 // same gang satisfies causes a yield. A term the member satisfies itself may pass
 // the framework's first-pod rule, and a term aimed at pods outside the gang is
-// not this plugin's concern; both plan and pin as before.
-func TestAffinityYieldScope(t *testing.T) {
+// not this plugin's concern; both plan and take a domain as before.
+func TestPreFilter_AffinityTermNotOnUnplacedSibling_PlansDomain(t *testing.T) {
 	ctx := context.Background()
 	cases := []struct {
 		name   string
@@ -327,29 +327,31 @@ func TestAffinityYieldScope(t *testing.T) {
 			if _, st := g.PreFilter(ctx, state, worker, nodes); !st.IsSuccess() {
 				t.Fatalf("worker PreFilter = %v, want Success (no sibling wait)", st)
 			}
-			if pin := readPin(state); pin == nil || pin.domain != "a" {
-				t.Fatalf("pin = %+v, want domain a", pin)
+			if assignment := readAssignment(state); assignment == nil || assignment.domain != "a" {
+				t.Fatalf("assignment = %+v, want domain a", assignment)
 			}
 		})
 	}
 }
 
-// TestPermitActivatesGangMembers: every member reaching Permit activates the
-// gang's live members, itself included, and counts it under the permit trigger.
-// A sibling whose Filter depends on this member being assumed has no cluster
-// event to react to otherwise.
-func TestPermitActivatesGangMembers(t *testing.T) {
-	pins := placement.New()
-	_, token, ok := pins.ChooseInTopologyOnNodes("team/pf", testKey,
-		topology.FreeByDomain{"a": 2}, map[string][]string{"a": {"a1", "a2"}}, 2)
+// TestPermit_IncompleteGang_ActivatesOnlyHeldSiblings: a member reaching Permit wakes the gang's
+// parked siblings and counts it under the permit trigger. A sibling whose
+// Filter depends on this member being assumed has no cluster event to react to
+// otherwise. The member itself and siblings already waiting at the gate are
+// left out: they are placed, and a wake-up would only make a later gate
+// rejection retry at once instead of parking.
+func TestPermit_IncompleteGang_ActivatesOnlyHeldSiblings(t *testing.T) {
+	assignments := placement.New()
+	_, token, ok := assignments.ChooseInTopologyOnNodes("team/pf", testKey,
+		topology.FreeByDomain{"a": 3}, map[string][]string{"a": {"a1", "a2", "a3"}}, 3)
 	if !ok {
 		t.Fatal("failed to reserve gang")
 	}
-	leader, worker := namedMember("leader"), namedMember("worker")
-	h := &fakeHandle{}
-	g := &GangPack{handle: h, pins: pins, podLister: fakeGangPodLister{pods: []*v1.Pod{leader, worker}}}
+	leader, gated, parked := namedMember("leader"), namedMember("gated"), namedMember("parked")
+	h := &fakeHandle{waiting: []framework.WaitingPod{&fakeWaitingPod{pod: gated}}}
+	g := &GangPack{handle: h, assignments: assignments, podLister: fakeGangPodLister{pods: []*v1.Pod{leader, gated, parked}}}
 	state := newCycleState()
-	writePin(state, "a", gangInfo{key: "team/pf", minMember: 2, topologyKey: testKey, timeout: time.Minute}, token)
+	writeAssignment(state, "a", gangInfo{key: "team/pf", minMember: 3, topologyKey: testKey, timeout: time.Minute}, token)
 
 	before := counterValue(t, gangActivationTotal.WithLabelValues(activationTriggerPermit))
 	status, _ := g.Permit(context.Background(), state, leader, "a1")
@@ -359,25 +361,36 @@ func TestPermitActivatesGangMembers(t *testing.T) {
 	if h.activateCalls != 1 {
 		t.Fatalf("activate calls from Permit = %d, want 1", h.activateCalls)
 	}
-	for _, key := range []string{"team/leader", "team/worker"} {
-		if _, ok := h.activated[key]; !ok {
-			t.Fatalf("activated = %v, want %s included", h.activated, key)
-		}
+	if _, ok := h.activated["team/parked"]; !ok || len(h.activated) != 1 {
+		t.Fatalf("woken pods = %v, want only the parked sibling", wokenPods(h))
 	}
 	if d := counterValue(t, gangActivationTotal.WithLabelValues(activationTriggerPermit)) - before; d != 1 {
 		t.Fatalf("permit activation counter delta = %v, want 1", d)
 	}
+
+	// With every other member placed, the gate has nobody to wake.
+	h.activated, h.activateCalls = nil, 0
+	g.podLister = fakeGangPodLister{pods: []*v1.Pod{leader, gated}}
+	if status, _ := g.Permit(context.Background(), state, leader, "a1"); !status.IsWait() {
+		t.Fatalf("Permit = %v, want Wait for the incomplete gang", status)
+	}
+	if h.activateCalls != 0 {
+		t.Fatalf("activate calls with only placed members = %d, want 0", h.activateCalls)
+	}
+	if d := counterValue(t, gangActivationTotal.WithLabelValues(activationTriggerPermit)) - before; d != 1 {
+		t.Fatalf("permit activation counter delta after an empty wake-up = %v, want still 1", d)
+	}
 }
 
-// TestGCPrunesTemplatesIncomplete: the incomplete-set record of a gang whose
-// pods are all gone is dropped by the pin garbage collector; a live gang's
+// TestGC_GangWithNoPods_DropsIncompleteSetRecord: the incomplete-set record of a gang whose
+// pods are all gone is dropped by the assignment garbage collector; a live gang's
 // record survives.
-func TestGCPrunesTemplatesIncomplete(t *testing.T) {
-	g := &GangPack{pins: placement.New(), podLister: fakeGangPodLister{pods: []*v1.Pod{gangPod("team", "live")}}}
+func TestGC_GangWithNoPods_DropsIncompleteSetRecord(t *testing.T) {
+	g := &GangPack{assignments: placement.New(), podLister: fakeGangPodLister{pods: []*v1.Pod{gangPod("team", "live")}}}
 	g.markTemplatesIncomplete(gangInfo{key: "team/live"})
 	g.markTemplatesIncomplete(gangInfo{key: "team/gone"})
 
-	g.gcPins()
+	g.gcAssignments()
 
 	if !g.clearTemplatesIncomplete(gangInfo{key: "team/live"}) {
 		t.Fatal("record for a gang with live pods must survive GC")
@@ -387,13 +400,13 @@ func TestGCPrunesTemplatesIncomplete(t *testing.T) {
 	}
 }
 
-// TestPodGroupChangeActivatesParkedMembers: a PodGroup change stored by the
+// TestPodGroupChange_MinMemberShrinks_ActivatesHeldMembers: a PodGroup change stored by the
 // plugin's own informer wakes the gang's parked members, and the retry it
 // triggers reads the changed PodGroup. The scheduler requeues members on its own
 // PodGroup watch, which can run ahead of this informer; a member retried against
 // the older PodGroup parks again, so this is the wake-up tied to the cache
 // PreFilter actually reads.
-func TestPodGroupChangeActivatesParkedMembers(t *testing.T) {
+func TestPodGroupChange_MinMemberShrinks_ActivatesHeldMembers(t *testing.T) {
 	ctx := context.Background()
 	leader := namedMember("leader")
 	g, h, nodes := twoMemberGang(leader)
@@ -430,9 +443,9 @@ func TestPodGroupChangeActivatesParkedMembers(t *testing.T) {
 	}
 }
 
-// TestPodGroupChangeWithoutMembersActivatesNobody: a PodGroup change for a gang
+// TestPodGroupChange_GangWithNoPods_ActivatesNobody: a PodGroup change for a gang
 // with no live pods is a no-op wake-up.
-func TestPodGroupChangeWithoutMembersActivatesNobody(t *testing.T) {
+func TestPodGroupChange_GangWithNoPods_ActivatesNobody(t *testing.T) {
 	g, h, _ := twoMemberGang()
 	g.podGroupChanged("team", "pf")
 	if h.activateCalls != 0 {

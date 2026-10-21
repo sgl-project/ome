@@ -40,7 +40,7 @@ const (
 	ReaderPodSetServesNothing    = "evidence.PodSetServesNothing"
 	ReaderPodSetOutOfRotation    = "evidence.PodSetOutOfRotation"
 	ReaderUnavailableOnParked    = "evidence.PodSetUnavailableOnParkedMember"
-	ReaderRecreateOfDarkRow      = "types.RecreateOfDarkRow"
+	ReaderRecreateOfUnservingRow = "types.RecreateOfUnservingRow"
 	ReaderPersistedServingPods   = "InstanceStatus.ServingPodCount"
 	ReaderPersistedAvailablePods = "InstanceStatus.AvailablePodCount"
 	ReaderPodReadyAndServing     = "coordination.PodReadyAndServing"
@@ -53,8 +53,8 @@ const (
 	// ReaderLivePods is the presence count the restart trigger and the
 	// refill read: the pods not in a terminal phase.
 	ReaderLivePods = "query.ExcludeTerminalPods"
-	// ReaderRolledInstanceDark is the roll's dark-Instance rule, which
-	// frees a budget slot.
+	// ReaderRolledInstanceDark is the roll's rule for a rolled Instance
+	// that serves nothing, which frees a budget slot.
 	ReaderRolledInstanceDark = "ops.RolledInstanceDark"
 	// ReaderPodSetIsCapacity is the escalation's exemption for an
 	// Instance that is capacity.
@@ -111,13 +111,13 @@ func appendSetReaders(out []Disagreement, pods []*corev1.Pod, desired, minReadyS
 			Detail: fmt.Sprintf("status counts %d ready pods, the reading %d runtime-ready", got, r.Counts.RuntimeReady),
 		})
 	}
-	out = appendVerdict(out, ReaderPodSetFullyServing, "fullyServing", "query",
+	out = appendBoolReader(out, ReaderPodSetFullyServing, "fullyServing", "query",
 		query.PodSetFullyServing(pods, desired), r.FullyServing())
-	out = appendVerdict(out, ReaderPodSetServesNothing, "servesNothing", "evidence",
+	out = appendBoolReader(out, ReaderPodSetServesNothing, "servesNothing", "evidence",
 		evidence.PodSetServesNothing(pods, ctx.Now, ctx.UnreadyGrace), r.ServesNothing())
-	out = appendVerdict(out, ReaderPodSetOutOfRotation, "outOfRotation", "evidence",
+	out = appendBoolReader(out, ReaderPodSetOutOfRotation, "outOfRotation", "evidence",
 		evidence.PodSetOutOfRotation(pods), r.OutOfRotation())
-	out = appendVerdict(out, ReaderUnavailableOnParked, "unavailableOnParkedMember", "evidence",
+	out = appendBoolReader(out, ReaderUnavailableOnParked, "unavailableOnParkedMember", "evidence",
 		evidence.PodSetUnavailableOnParkedMember(pods, desired, ctx.Now, ctx.UnreadyGrace), r.UnavailableOnParkedMember())
 
 	// The publication's pod count is every pod listed, a pod being
@@ -125,7 +125,7 @@ func appendSetReaders(out []Disagreement, pods []*corev1.Pod, desired, minReadyS
 	// for presence (a Ready row with no pod is demoted, a rebuild waits
 	// for a name still held) see such a pod as present. The reading's
 	// Live count is the pods that exist and can still run. The class says
-	// which kind of dead pod made the difference.
+	// whether a terminal or a terminating pod made the difference.
 	if got := int32(len(pods)); got != r.Counts.Live {
 		why := "terminating"
 		if anyPod(r, func(p reading.PodReading) bool { return p.Terminal }) {
@@ -141,9 +141,9 @@ func appendSetReaders(out []Disagreement, pods []*corev1.Pod, desired, minReadyS
 	// (ContainersReady on every pod listed) reaches the desired count,
 	// and the top-level Ready condition reads "all Instances Ready" from
 	// it. The reading's answer is the same roll-up on the Serving level.
-	// The class says whether a dead pod still answering its probe made
-	// the difference, or a live pod whose containers are ready while it
-	// is not in rotation.
+	// The class says whether a pod on its way out still answering its
+	// probe made the difference, or a live pod whose containers are ready
+	// while it is not in rotation.
 	readyPods := status.CountReadyPods(pods)
 	readyToCounter := status.InstanceMeetsThreshold(int32(len(pods)), readyPods, desired)
 	servingToReading := status.InstanceMeetsThreshold(r.Counts.Pods, r.Counts.Serving, desired)
@@ -178,7 +178,7 @@ func appendSetReaders(out []Disagreement, pods []*corev1.Pod, desired, minReadyS
 	// is live with ContainersReady True; the reading's RuntimeReady level
 	// is the same reading on live pods.
 	runtimeReadySet := r.Counts.Pods > 0 && r.Counts.RuntimeReady == r.Counts.Pods
-	out = appendVerdict(out, ReaderAllPodsRuntimeReady, "gateAdmission", "query",
+	out = appendBoolReader(out, ReaderAllPodsRuntimeReady, "gateAdmission", "query",
 		query.AllPodsRuntimeReady(pods), runtimeReadySet)
 	// Every Ready stamp but adoption waits for the set to be promotable:
 	// every pod live, ContainersReady, and PodReady held for the window,
@@ -205,23 +205,23 @@ func appendSetReaders(out []Disagreement, pods []*corev1.Pod, desired, minReadyS
 
 // appendRowReaders compares the readers that take the row beside the pods.
 func appendRowReaders(out []Disagreement, pods []*corev1.Pod, desired int32, row *types.InstanceStatus, minReadySeconds int32, r reading.InstanceReading, ctx reading.Context) []Disagreement {
-	// A row is dark when none of its pods serves, whatever its phase
-	// says: a Failed row whose source pod still serves is not dark,
-	// and publishes Ready. A pod serves when its PodReady condition
-	// and the serving gate are both True, so its Service can publish
-	// it; a gang worker is never published and does not count.
-	// RecreateOfDarkRow reads this from the persisted serving count,
-	// one pass old, on a Failed row that is not an update
+	// A row is unserving when none of its pods serves, whatever its
+	// phase says: a Failed row whose source pod still serves is not
+	// unserving, and publishes Ready. A pod serves when its PodReady
+	// condition and the serving gate are both True, so its Service can
+	// publish it; a gang worker is never published and does not count.
+	// RecreateOfUnservingRow reads this from the persisted serving
+	// count, one pass old, on a Failed row that is not an update
 	// continuation, so the comparison is made there alone, under a
 	// non-surge strategy so the counter decides; the reading reads it
 	// from this pass's pods (OutOfRotation), with no grace and no
 	// phase.
 	if types.StateOf(row) == types.StateFailed && !types.UpdateContinuation(row) {
-		dark := types.RecreateOfDarkRow(row, types.UpdateStrategyRecreatePod)
-		if dark != r.OutOfRotation() {
+		unserving := types.RecreateOfUnservingRow(row, types.UpdateStrategyRecreatePod)
+		if unserving != r.OutOfRotation() {
 			out = append(out, Disagreement{
-				Reader: ReaderRecreateOfDarkRow,
-				Class:  fmt.Sprintf("recreateOfDarkRow/row=%t/reading=%t", dark, r.OutOfRotation()),
+				Reader: ReaderRecreateOfUnservingRow,
+				Class:  fmt.Sprintf("recreateOfDarkRow/row=%t/reading=%t", unserving, r.OutOfRotation()),
 				Detail: fmt.Sprintf("the Failed row persisted %d serving pods one pass ago; this pass the pods read outOfRotation=%t",
 					row.ServingPodCount, r.OutOfRotation()),
 			})
@@ -255,12 +255,13 @@ func appendRowReaders(out []Disagreement, pods []*corev1.Pod, desired int32, row
 		})
 	}
 	// The escalation exempts an Instance that is capacity from every
-	// stuck verdict: its pod set fully serving at the rotation bar (every
-	// live pod PodReady with the gate, which is the reading's FullyServing
-	// by the same membership rule), unless the operation reports that the
-	// source it replaces has left the rotation. For a row whose operation
-	// names a surge index, the escalation reads the replacement's pods,
-	// which this comparison does not hold, so such a row is left out.
+	// escalation of a pod held past its grace: its pod set fully serving
+	// at the rotation bar (every live pod PodReady with the gate, which is
+	// the reading's FullyServing by the same membership rule), unless the
+	// operation reports that the source it replaces has left the rotation.
+	// For a row whose operation names a surge index, the escalation reads
+	// the replacement's pods, which this comparison does not hold, so such
+	// a row is left out.
 	if row.Operation == nil || row.Operation.SurgeIndex == nil {
 		capacity := query.PodSetReadyAndServing(pods, desired) && !types.OperationSourceUnrouted(row.Operation)
 		if capacity != r.FullyServing() {
@@ -275,25 +276,26 @@ func appendRowReaders(out []Disagreement, pods []*corev1.Pod, desired int32, row
 			})
 		}
 	}
-	// The roll reads an Instance it moved onto the target as dark, so it
-	// holds no budget slot, when its pods on that revision number at
-	// least the desired count and each one serves or has served and then
-	// failed its readiness for the grace with its container still
-	// running: none is parked, exited, terminal or still coming up, no
-	// runner restarted since the row entered Ready, and the row is no
-	// update continuation and no migration's. The comparison asks it of
-	// every row on its own running revision, as the roll asks it of a row
-	// on the target, with no revision birth time, as the replay hands the
-	// engine none. The reading's answer is the same rule composed from
-	// its per-pod levels (darkOnly). The class names the exclusion the
-	// roll applied that the composition does not read.
+	// The roll reads an Instance it moved onto the target as unserving,
+	// so it holds no budget slot, when its pods on that revision number
+	// at least the desired count and each one serves or has served and
+	// then failed its readiness for the grace with its container still
+	// running: none is held in a waiting state, exited, terminal or still
+	// coming up, no runner restarted since the row entered Ready, and the
+	// row is no update continuation and no migration's. The comparison
+	// asks it of every row on its own running revision, as the roll asks
+	// it of a row on the target, with no revision birth time, as the
+	// replay hands the engine none. The reading's answer is the same rule
+	// composed from its per-pod levels (rolledInstanceUnserving). The
+	// class names the exclusion the roll applied that the composition
+	// does not read.
 	if row.RunningRevision != "" {
 		window := ops.ProvenWindowSeconds(minReadySeconds, ctx.UnreadyGrace)
-		dark, _ := ops.RolledInstanceDark(row, row.RunningRevision, time.Time{}, pods, desired, window, ctx.UnreadyGrace, ctx.Now)
-		if composed := darkOnly(r, row.RunningRevision, desired); dark != composed {
-			class := fmt.Sprintf("rolledInstanceDark/ops=%t/reading=%t", dark, composed)
+		unserving, _ := ops.RolledInstanceDark(row, row.RunningRevision, time.Time{}, pods, desired, window, ctx.UnreadyGrace, ctx.Now)
+		if composed := rolledInstanceUnserving(r, row.RunningRevision, desired); unserving != composed {
+			class := fmt.Sprintf("rolledInstanceDark/ops=%t/reading=%t", unserving, composed)
 			switch {
-			case dark:
+			case unserving:
 			case types.UpdateContinuation(row) || row.Phase == types.InstancePhaseMigrating || types.ClaimOf(row) == types.OwnerMigrate:
 				class += "[continuation]"
 			case ops.RolledInstanceCrashed(row, row.RunningRevision, time.Time{}, pods, window):
@@ -304,7 +306,7 @@ func appendRowReaders(out []Disagreement, pods []*corev1.Pod, desired int32, row
 			out = append(out, Disagreement{
 				Reader: ReaderRolledInstanceDark,
 				Class:  class,
-				Detail: fmt.Sprintf("the roll reads the Instance on %s as dark=%t, the reading composes dark=%t from %d serving pods", row.RunningRevision, dark, composed, r.Counts.Serving),
+				Detail: fmt.Sprintf("the roll reads the Instance on %s as dark=%t, the reading composes dark=%t from %d serving pods", row.RunningRevision, unserving, composed, r.Counts.Serving),
 			})
 		}
 	}
@@ -401,8 +403,9 @@ func appendPodReaders(out []Disagreement, pods []*corev1.Pod, row *types.Instanc
 		// its runner container carries a run or a termination dated after
 		// the row entered Ready, on a pod created before that; it keeps
 		// reading so until the row enters Ready again. The reading has no
-		// memory: it reads the pod out of service when it is parked or
-		// served and then failed its readiness past the grace. The class
+		// memory: it reads the pod out of service when it is held in a
+		// waiting state or served and then failed its readiness past the
+		// grace. The class
 		// says what the reading sees of a restarted pod, or why a pod the
 		// reading sees out of service is not restarted to the detector.
 		if row != nil && row.Phase == types.InstancePhaseReady {
@@ -439,15 +442,16 @@ func appendPodReaders(out []Disagreement, pods []*corev1.Pod, row *types.Instanc
 	return out
 }
 
-// darkOnly is the roll's dark-Instance rule composed from the reading:
-// the pods on revision, or on no revision, that are not being deleted
-// number at least desired, every one of them is Serving or served and
-// then failed its readiness past the grace, none is terminal or parked,
-// and at least one is past the grace.
-func darkOnly(r reading.InstanceReading, revision string, desired int32) bool {
+// rolledInstanceUnserving is the roll's rule for a rolled Instance that
+// serves nothing, composed from the reading: the pods on revision, or on
+// no revision, that are not being deleted number at least desired, every
+// one of them is Serving or served and then failed its readiness past
+// the grace, none is terminal or held in a waiting state, and at least
+// one is past the grace.
+func rolledInstanceUnserving(r reading.InstanceReading, revision string, desired int32) bool {
 	rev := query.RevisionFromName(revision)
 	var own int32
-	dark := false
+	unserving := false
 	for _, p := range r.Pods {
 		if p.Terminating {
 			continue
@@ -461,10 +465,10 @@ func darkOnly(r reading.InstanceReading, revision string, desired int32) bool {
 		case p.Terminal, p.ParkedIn != "", !p.UnreadyPastGrace:
 			return false
 		default:
-			dark = true
+			unserving = true
 		}
 	}
-	return own >= desired && dark
+	return own >= desired && unserving
 }
 
 // anyUnreadyContainerNotRunning reports whether a pod the reading reads as
@@ -486,11 +490,11 @@ func anyUnreadyContainerNotRunning(pods []*corev1.Pod, r reading.InstanceReading
 }
 
 // adoptionAsked reports whether the update trigger asks adoption of the
-// row, by what the row alone says: a Ready row, a Failed row or a parked
-// attempt that is not a migration's, not the marker of a gang surge
-// replacement and not an attempt the gang verdict ended. The target
-// revision's retry ladder can still hold such a row, which this
-// comparison does not read.
+// row, by what the row alone says: a Ready row, a Failed row or a stopped
+// attempt (step Parked) that is not a migration's, not the target row of
+// a gang surge replacement and not an attempt the PodGroup ownership
+// conflict ended. The target revision's retry schedule can still hold
+// such a row, which this comparison does not read.
 func adoptionAsked(row *types.InstanceStatus) bool {
 	if row.Phase == types.InstancePhaseMigrating || types.ClaimOf(row) == types.OwnerMigrate || types.EndedByOwnershipVerdict(row) {
 		return false
@@ -513,15 +517,15 @@ func anyPod(r reading.InstanceReading, predicate func(reading.PodReading) bool) 
 	return false
 }
 
-// appendVerdict appends a disagreement when a boolean reader and the
-// matching verdict differ.
-func appendVerdict(out []Disagreement, reader, verdict, side string, theirs, ours bool) []Disagreement {
+// appendBoolReader appends a disagreement when a boolean reader and the
+// reading's matching answer differ; class is the key's first segment.
+func appendBoolReader(out []Disagreement, reader, class, side string, theirs, ours bool) []Disagreement {
 	if theirs == ours {
 		return out
 	}
 	return append(out, Disagreement{
 		Reader: reader,
-		Class:  fmt.Sprintf("%s/%s=%t/reading=%t", verdict, side, theirs, ours),
+		Class:  fmt.Sprintf("%s/%s=%t/reading=%t", class, side, theirs, ours),
 		Detail: fmt.Sprintf("%s reads %t, the reading %t", reader, theirs, ours),
 	})
 }

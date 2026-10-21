@@ -66,7 +66,7 @@ func TestSinglePlanAuthority(t *testing.T) {
 			}
 			source := sourceFixture()
 			source.Spec.Placement.Mode = p.Mode
-			store := storeFixture(t, source, interceptor.Funcs{})
+			store := storeFixture(t, source)
 			got, err := store.Persist(t.Context(), source, p)
 			if diff := cmp.Diff(tt.wantErr, err != nil); diff != "" {
 				t.Fatalf("error %v: %s", err, diff)
@@ -101,7 +101,7 @@ func TestSingleWinnerPersistenceReadback(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			source := sourceFixture()
 			source.Spec.Placement.Mode = v1beta1.PlacementModeSingle
-			store := storeFixture(t, source, interceptor.Funcs{})
+			store := storeFixture(t, source)
 			p := singleProposalFixture()
 			race := mustPersist(t, store, source, p)
 			chooseSingleWinner(&p, "member-a")
@@ -187,7 +187,7 @@ func TestZeroFloorSingleAuthority(t *testing.T) {
 			}
 			source := sourceFixture()
 			source.Spec.Placement.Mode = v1beta1.PlacementModeSingle
-			store := storeFixture(t, source, interceptor.Funcs{})
+			store := storeFixture(t, source)
 			got, err := store.Persist(t.Context(), source, p)
 			if diff := cmp.Diff(tt.wantErr, err != nil); diff != "" {
 				t.Fatalf("%s: %v", diff, err)
@@ -272,7 +272,7 @@ func TestSingleMoveAuthority(t *testing.T) {
 			}
 			source := sourceFixture()
 			source.Spec.Placement.Mode = p.Mode
-			store := storeFixture(t, source, interceptor.Funcs{})
+			store := storeFixture(t, source)
 			got, err := store.Persist(t.Context(), source, p)
 			if diff := cmp.Diff(tt.wantErr, err != nil); diff != "" {
 				t.Fatalf("error %v: %s", err, diff)

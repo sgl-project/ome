@@ -19,7 +19,7 @@ import (
 )
 
 func TestCacheStreamFailureAndRecovery(t *testing.T) {
-	c, direct, cached := newCachedTestClient(t, t.Context())
+	c, directReads, cached := newCachedTestClient(t, t.Context())
 	stream := &cacheStream{}
 	c.streams = &sync.Map{}
 	c.streams.Store(isvcGK(), stream)
@@ -54,7 +54,7 @@ func TestCacheStreamFailureAndRecovery(t *testing.T) {
 	require.False(t, open)
 	require.ErrorIs(t, read(), ErrMemberCacheUnavailable)
 	require.Equal(t, 2, cached.getCalls)
-	require.Zero(t, direct.getCalls, "watch failure must not trigger live GETs")
+	require.Zero(t, directReads.gets.Count(), "watch failure must not trigger live GETs")
 }
 
 func TestCacheStreamRejectsFailedListAndWatch(t *testing.T) {

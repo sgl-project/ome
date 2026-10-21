@@ -941,8 +941,9 @@ func TestCheckPairing_SurgeSourceKeepsItsCohortBesideItsReplacement(t *testing.T
 // A gang surge's replacement is its own row, running nothing yet. While it
 // serves it counts for the cohort its surge is pinned to, so the lone
 // drain-first decoder's hop is admitted through the last-hop escape; a
-// replacement gang not yet serving leaves the 1x1 mutual wall, which admits
-// the hop as well.
+// replacement gang not yet serving leaves the 1x1 mutual wall, where the
+// hop waits for it: the engine's surge keeps its old gang in rotation, so
+// the decoder loses nothing by waiting and rebuilds with a partner.
 func TestCheckPairing_GangSurgeReplacementCountsForItsPinnedCohort(t *testing.T) {
 	isvc := pairingISVC("proto-b")
 	crs := []client.Object{
@@ -969,17 +970,19 @@ func TestCheckPairing_GangSurgeReplacementCountsForItsPinnedCohort(t *testing.T)
 	}
 	gate = pairingGate(t, isvc, v1beta1.DecoderComponent, append(crs, engines(0), decoders)...)
 	ok, reason = gate.CheckPairing("llama-decoder-da", workloadtypes.UpdateStrategyRecreatePod, 0, 0)
-	if !ok || !strings.Contains(reason, "deadlocking") {
-		t.Fatalf("with the replacement gang not serving the 1x1 wall admits the hop: ok=%v %s", ok, reason)
+	if ok || !strings.Contains(reason, "the engine surges") {
+		t.Fatalf("with the replacement gang not serving the decoder's hop waits for it: ok=%v %s", ok, reason)
 	}
 }
 
-// One surging engine beside one drain-first decoder: the decoder's hop is
-// admitted whether or not the engine's replacement serves yet, through the
-// last-hop escape once it does and through the mutual wall before, so the
-// engine's drain, which waits on the decoder's new pod, never waits on a
-// step that waits on it.
-func TestCheckPairing_OneByOneSurgeBesideDrainFirst_PeerStepAdmittedEitherWay(t *testing.T) {
+// One surging engine beside one drain-first decoder, no side named first:
+// the decoder's hop is admitted through the last-hop escape once the
+// engine's replacement serves, and waits for that replacement before, since
+// the engine's surge keeps its old pod in rotation while the hop would
+// leave no pair at all. The engine's drain waits on the decoder's new pod,
+// which waits on nothing of the engine's but a replacement that is already
+// on its way, so neither step waits on a step that waits on it.
+func TestCheckPairing_OneByOneSurgeBesideDrainFirst_PeerStepWaitsForTheServingReplacement(t *testing.T) {
 	isvc := pairingISVC("proto-b")
 	crs := []client.Object{
 		pairingCR("prod", "llama", v1beta1.EngineComponent, "ea", "proto-a"),
@@ -989,15 +992,16 @@ func TestCheckPairing_OneByOneSurgeBesideDrainFirst_PeerStepAdmittedEitherWay(t 
 	decoders := pairingIR("prod", "llama", v1beta1.DecoderComponent, servingInstances("llama", v1beta1.DecoderComponent, "da"))
 	for _, tc := range []struct {
 		serving int32
-		escape  string
-	}{{2, "last serving instance"}, {1, "deadlocking"}} {
+		allowed bool
+		reason  string
+	}{{2, true, "last serving instance"}, {1, false, "the engine surges"}} {
 		engines := pairingIR("prod", "llama", v1beta1.EngineComponent, []v1beta1.OMENativeInstanceStatus{
 			surgingRow("llama", v1beta1.EngineComponent, 0, "ea", "eb", workloadtypes.UpdateStepSurge, tc.serving),
 		})
 		gate := pairingGate(t, isvc, v1beta1.DecoderComponent, append(crs, engines, decoders)...)
 		ok, reason := gate.CheckPairing("llama-decoder-da", workloadtypes.UpdateStrategyRecreatePod, 0, 0)
-		if !ok || !strings.Contains(reason, tc.escape) {
-			t.Fatalf("serving=%d: the decoder's hop must be admitted (%s): ok=%v %s", tc.serving, tc.escape, ok, reason)
+		if ok != tc.allowed || !strings.Contains(reason, tc.reason) {
+			t.Fatalf("serving=%d: the decoder's hop must read allowed=%v (%s): ok=%v %s", tc.serving, tc.allowed, tc.reason, ok, reason)
 		}
 	}
 }

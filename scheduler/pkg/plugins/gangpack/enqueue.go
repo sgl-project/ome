@@ -44,8 +44,8 @@ func (g *GangPack) EventsToRegister(_ context.Context) ([]framework.ClusterEvent
 		// A new node, or one that gains allocatable / sheds a taint / turns Ready,
 		// may let a gang that fit no domain now fit.
 		{Event: framework.ClusterEvent{Resource: framework.Node, ActionType: framework.Add | framework.UpdateNodeAllocatable | framework.UpdateNodeTaint | framework.UpdateNodeCondition | framework.UpdateNodeLabel}, QueueingHintFn: g.isSchedulableAfterNodeChange},
-		// Losing a node from a pinned domain may make the pin stale and force a
-		// safe re-plan onto another domain.
+		// Losing a node from an assigned domain may make the assignment stale and
+		// force a safe re-plan onto another domain.
 		{Event: framework.ClusterEvent{Resource: framework.Node, ActionType: framework.Delete}, QueueingHintFn: g.isSchedulableAfterNodeDelete},
 		// PodGroup changes (minMember, or the PodGroup first appearing) may make a
 		// gang admissible.

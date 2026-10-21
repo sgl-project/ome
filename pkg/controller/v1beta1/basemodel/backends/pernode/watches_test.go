@@ -5,23 +5,20 @@ import (
 	"testing"
 
 	"github.com/onsi/gomega"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
-func TestMapConfigMapToModelRequests(t *testing.T) {
+func TestMapConfigMapToModelRequests_MixedKindsAndBadJSON_RequestsOnlyOwnKind(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	logger := ctrl.Log.WithName("test")
 
@@ -132,7 +129,7 @@ func TestMapConfigMapToModelRequests(t *testing.T) {
 	}
 }
 
-func TestCreateModelStatusConfigMapPredicate(t *testing.T) {
+func TestCreateModelStatusConfigMapPredicate_LabelAndNamespace_MatchesOnlyBoth(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
 	predicate := CreateModelStatusConfigMapPredicate()
@@ -210,7 +207,7 @@ func TestCreateModelStatusConfigMapPredicate(t *testing.T) {
 	}
 }
 
-func TestCreateNodeDeletionPredicate(t *testing.T) {
+func TestCreateNodeDeletionPredicate_CreateUpdateDelete_FiresOnlyOnDelete(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
 	pred := CreateNodeDeletionPredicate()
@@ -234,13 +231,8 @@ func TestCreateNodeDeletionPredicate(t *testing.T) {
 	g.Expect(deleteResult).To(gomega.BeTrue(), "DeleteFunc should return true")
 }
 
-func TestHandleNodeDeletion(t *testing.T) {
+func TestHandleNodeDeletion_NodeGone_DeletesOnlyItsModelStatusConfigMap(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-
-	scheme := runtime.NewScheme()
-	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
-	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
-	g.Expect(batchv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 
 	tests := []struct {
 		name       string
@@ -337,9 +329,7 @@ func TestHandleNodeDeletion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := ctrlclientfake.NewClientBuilder().
-				WithScheme(scheme).
-				Build()
+			c := fakeclient.New(t)
 
 			tt.setupMocks(c)
 

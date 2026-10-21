@@ -1,6 +1,10 @@
 package query
 
-import corev1 "k8s.io/api/core/v1"
+import (
+	corev1 "k8s.io/api/core/v1"
+
+	"sigs.k8s.io/ome/pkg/constants"
+)
 
 // Label keys and values OMENative stamps onto every managed Pod /
 // Service / ControllerRevision / ConfigMap. Shared here so the
@@ -50,6 +54,19 @@ const (
 	AnnotationWorkerSize = "ome.io/worker-size"
 	ManagedByOMENative   = "OMENative"
 )
+
+// WorkloadOwnedLabel reports whether key is a label the workload stamps on
+// every pod it renders (identity, revision hash, pairing protocol, pod-group):
+// its value comes from the workload, never from the pod template.
+func WorkloadOwnedLabel(key string) bool {
+	switch key {
+	case constants.InferenceServicePodLabelKey, constants.OMEComponentLabel,
+		LabelManagedBy, LabelInstanceIdx, LabelInstanceIncarnation, LabelRunner,
+		LabelRevisionHash, LabelPairingProtocol, LabelPodOrdinal, LabelPodGroup:
+		return true
+	}
+	return false
+}
 
 // RevisionHashFromControllerRevisionName extracts the trailing
 // hash segment from a ControllerRevision name of the form

@@ -19,7 +19,7 @@ import (
 const holdGate = "testing.example/hold"
 
 // gateWaits reads the plugin's Permit "wait" counter from the scheduler's
-// registry: it is the only signal that a member has pinned its domain and is
+// registry: it is the only signal that a member has taken its domain and is
 // holding the gang's reservation at the gate, since a waiting pod is not
 // updated in the API.
 func gateWaits(t *testing.T) float64 {
@@ -78,7 +78,7 @@ func liftGate(t *testing.T, tc *testContext, ns, name string) {
 // flush, minutes later.
 //
 // The holder's formation window is held open by a scheduling gate on its
-// worker: the leader pins the domain and waits at Permit, the second gang is
+// worker: the leader takes the domain and waits at Permit, the second gang is
 // created and parks, then the gate is lifted and the worker's Reserve drains
 // the reservation.
 func TestGangParkedOnReservedDomainRetriesWhenReservationDrains(t *testing.T) {
@@ -108,7 +108,7 @@ func TestGangParkedOnReservedDomainRetriesWhenReservationDrains(t *testing.T) {
 	}
 
 	// The holder's worker exists (so the leader sees a complete member set) but
-	// is gated out of the queue; the leader pins the domain, reserves both
+	// is gated out of the queue; the leader takes the domain, reserves both
 	// slots, and waits at the gate.
 	worker := makeGangPod("holder-worker", ns, "holder")
 	worker.Spec.SchedulingGates = []v1.PodSchedulingGate{{Name: holdGate}}

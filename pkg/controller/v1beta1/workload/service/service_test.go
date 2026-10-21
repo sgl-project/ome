@@ -1,4 +1,4 @@
-package service_test
+package service
 
 import (
 	"context"
@@ -12,11 +12,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	workloadservice "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/service"
 	workloadtypes "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
-// Headless Service tests for BuildHeadlessService + reconcileHeadlessService.
+// Headless Service tests for buildHeadlessService + ReconcileHeadlessService.
 // The workload-side helpers consume a PerComponentServiceSpec directly,
 // so each test constructs the spec inline against the expected outputs.
 // No adapter glue, no owner-CRD imports.
@@ -53,13 +52,13 @@ func fixtureSpec() workloadtypes.PerComponentServiceSpec {
 }
 
 // ---------------------------------------------------------------------
-// BuildHeadlessService — pure-compute shape assertions.
+// buildHeadlessService — pure-compute shape assertions.
 // ---------------------------------------------------------------------
 
 func TestBuildHeadlessService_RejectsEmptyName(t *testing.T) {
 	spec := fixtureSpec()
 	spec.Name = ""
-	if _, err := workloadservice.BuildHeadlessService(spec); err == nil {
+	if _, err := buildHeadlessService(spec); err == nil {
 		t.Fatal("expected error for empty Name")
 	}
 }
@@ -67,14 +66,14 @@ func TestBuildHeadlessService_RejectsEmptyName(t *testing.T) {
 func TestBuildHeadlessService_RejectsEmptyNamespace(t *testing.T) {
 	spec := fixtureSpec()
 	spec.Namespace = ""
-	if _, err := workloadservice.BuildHeadlessService(spec); err == nil {
+	if _, err := buildHeadlessService(spec); err == nil {
 		t.Fatal("expected error for empty Namespace")
 	}
 }
 
 func TestBuildHeadlessService_HappyPath(t *testing.T) {
 	spec := fixtureSpec()
-	svc, err := workloadservice.BuildHeadlessService(spec)
+	svc, err := buildHeadlessService(spec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -114,7 +113,7 @@ func TestBuildHeadlessService_SelectorAndLabels(t *testing.T) {
 			"ome.io/managed-by":       "OMENative",
 		},
 	}
-	svc, err := workloadservice.BuildHeadlessService(spec)
+	svc, err := buildHeadlessService(spec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -128,7 +127,7 @@ func TestBuildHeadlessService_SelectorAndLabels(t *testing.T) {
 
 func TestBuildHeadlessService_OwnerReference(t *testing.T) {
 	spec := fixtureSpec()
-	svc, err := workloadservice.BuildHeadlessService(spec)
+	svc, err := buildHeadlessService(spec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -169,7 +168,7 @@ func TestReconcileHeadlessService_FreshCreate(t *testing.T) {
 	c := newServiceClient(t)
 	spec := fixtureSpec()
 
-	if err := workloadservice.ReconcileHeadlessService(context.Background(), c, spec); err != nil {
+	if err := ReconcileHeadlessService(context.Background(), c, spec); err != nil {
 		t.Fatalf("first call: %v", err)
 	}
 
@@ -197,7 +196,7 @@ func TestReconcileHeadlessService_Idempotent(t *testing.T) {
 	c := newServiceClient(t)
 	spec := fixtureSpec()
 
-	if err := workloadservice.ReconcileHeadlessService(context.Background(), c, spec); err != nil {
+	if err := ReconcileHeadlessService(context.Background(), c, spec); err != nil {
 		t.Fatalf("first call: %v", err)
 	}
 	first := &corev1.Service{}
@@ -209,7 +208,7 @@ func TestReconcileHeadlessService_Idempotent(t *testing.T) {
 
 	// Second call must not bump ResourceVersion — there's nothing to
 	// update because the desired shape already matches.
-	if err := workloadservice.ReconcileHeadlessService(context.Background(), c, spec); err != nil {
+	if err := ReconcileHeadlessService(context.Background(), c, spec); err != nil {
 		t.Fatalf("second call: %v", err)
 	}
 	second := &corev1.Service{}
@@ -225,7 +224,7 @@ func TestReconcileHeadlessService_DriftCorrection(t *testing.T) {
 	c := newServiceClient(t)
 	spec := fixtureSpec()
 
-	if err := workloadservice.ReconcileHeadlessService(context.Background(), c, spec); err != nil {
+	if err := ReconcileHeadlessService(context.Background(), c, spec); err != nil {
 		t.Fatalf("seed reconcile: %v", err)
 	}
 
@@ -242,7 +241,7 @@ func TestReconcileHeadlessService_DriftCorrection(t *testing.T) {
 		t.Fatalf("mutate service: %v", err)
 	}
 
-	if err := workloadservice.ReconcileHeadlessService(context.Background(), c, spec); err != nil {
+	if err := ReconcileHeadlessService(context.Background(), c, spec); err != nil {
 		t.Fatalf("drift-correcting reconcile: %v", err)
 	}
 
@@ -276,7 +275,7 @@ func TestReconcileHeadlessService_KeepsClusterIPNoneAcrossPasses(t *testing.T) {
 	spec := fixtureSpec()
 
 	for i := 0; i < 3; i++ {
-		if err := workloadservice.ReconcileHeadlessService(context.Background(), c, spec); err != nil {
+		if err := ReconcileHeadlessService(context.Background(), c, spec); err != nil {
 			t.Fatalf("reconcile pass %d: %v", i, err)
 		}
 		got := &corev1.Service{}
@@ -291,14 +290,14 @@ func TestReconcileHeadlessService_KeepsClusterIPNoneAcrossPasses(t *testing.T) {
 }
 
 func TestReconcileHeadlessService_NilClientRejected(t *testing.T) {
-	if err := workloadservice.ReconcileHeadlessService(context.Background(), nil, fixtureSpec()); err == nil {
+	if err := ReconcileHeadlessService(context.Background(), nil, fixtureSpec()); err == nil {
 		t.Fatalf("expected error on nil client")
 	}
 }
 
 func TestReconcileHeadlessService_EmptySpecRejected(t *testing.T) {
 	c := newServiceClient(t)
-	if err := workloadservice.ReconcileHeadlessService(context.Background(), c, workloadtypes.PerComponentServiceSpec{}); err == nil {
+	if err := ReconcileHeadlessService(context.Background(), c, workloadtypes.PerComponentServiceSpec{}); err == nil {
 		t.Fatalf("expected error on empty spec")
 	}
 }

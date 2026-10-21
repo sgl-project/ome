@@ -16,7 +16,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
-	"sigs.k8s.io/ome/pkg/client/clientset/versioned"
 	"sigs.k8s.io/ome/pkg/modelconfig"
 )
 
@@ -267,15 +266,10 @@ func TestNewModelConfigParser(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	sugar := logger.Sugar()
 
-	parser := NewModelConfigParser(nil, sugar)
+	parser := NewModelConfigParser(sugar)
 	assert.NotNil(t, parser)
-	assert.Nil(t, parser.omeClient)
 	assert.Equal(t, sugar, parser.logger)
-
-	client := &versioned.Clientset{}
-	parser = NewModelConfigParser(client, sugar)
-	assert.NotNil(t, parser)
-	assert.Equal(t, client, parser.omeClient)
+	assert.NotNil(t, parser.loadModelConfig)
 }
 
 func TestFindConfigFile(t *testing.T) {
@@ -939,4 +933,37 @@ func TestUpdateModelSpecPreservesModelConfiguration(t *testing.T) {
 	assert.False(t, updated, "updateModelSpec must report no change when all fields are already set")
 	assert.Equal(t, storedConfig, spec.ModelConfiguration.Raw,
 		"ModelConfiguration must be preserved, not overwritten on a byte difference")
+}
+
+// TestUpdateFieldLeavesANilPointerUnwritten: a nil framework or pipeline
+// pointer in the parsed metadata is nothing to write, so the field stays
+// unset and no change is reported.
+func TestUpdateFieldLeavesANilPointerUnwritten(t *testing.T) {
+	spec := &v1beta1.BaseModelSpec{}
+	var framework *v1beta1.ModelFrameworkSpec
+	var pipeline *v1beta1.DiffusionPipelineSpec
+
+	assert.False(t, updateField(&spec.ModelFramework, framework), "a nil framework must not count as a change")
+	assert.Nil(t, spec.ModelFramework)
+	assert.False(t, updateField(&spec.DiffusionPipeline, pipeline), "a nil pipeline must not count as a change")
+	assert.Nil(t, spec.DiffusionPipeline)
+}
+
+// TestApplyModelMetadataTwiceReportsNoSecondChange: metadata without a
+// framework or a pipeline fills the spec once; applying it again changes
+// nothing.
+func TestApplyModelMetadataTwiceReportsNoSecondChange(t *testing.T) {
+	parser := &ModelConfigParser{logger: zap.NewNop().Sugar()}
+	spec := &v1beta1.BaseModelSpec{}
+	metadata := ModelMetadata{
+		ModelType:         "llama",
+		ModelArchitecture: "LlamaForCausalLM",
+		ModelFormat:       v1beta1.ModelFormat{Name: "safetensors"},
+		MaxTokens:         4096,
+	}
+
+	assert.True(t, parser.ApplyModelMetadata(spec, metadata), "the first apply fills the unset fields")
+	assert.False(t, parser.ApplyModelMetadata(spec, metadata), "the second apply of the same metadata must report no change")
+	assert.Nil(t, spec.ModelFramework)
+	assert.Nil(t, spec.DiffusionPipeline)
 }

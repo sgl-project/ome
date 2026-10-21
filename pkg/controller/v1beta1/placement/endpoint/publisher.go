@@ -17,55 +17,55 @@ import (
 )
 
 // Target is the resolved publication intent for one InferenceService: the global
-// host to program and the one-or-more serving homes it must resolve to. Built by
+// host to program and the one-or-more serving clusters it must resolve to. Built by
 // the reconciler from status.placement and the Config; the EndpointPublisher
 // backend translates it into its own resource(s). Single mode yields exactly one
-// Home; All/Split yield one per serving cluster.
+// ServingCluster; All/Split yield one per serving cluster.
 type Target struct {
 	// Service is the logical service represented by the target.
 	Service string
 
 	// GlobalHost is the externally-addressable hostname used by publishers that
-	// create a global endpoint. It is empty for backends that consume only Homes.
+	// create a global endpoint. It is empty for backends that consume only Clusters.
 	GlobalHost string
 
-	// Homes are the serving clusters the global host resolves to, one per admitted
-	// home. In Single there is exactly one; in All/Split there is one per cluster
+	// Clusters are the serving clusters the global host resolves to, one per admitted
+	// cluster. In Single there is exactly one; in All/Split there is one per cluster
 	// currently serving. Never empty when the reconciler decides to publish.
-	Homes []Home
+	Clusters []ServingCluster
 
-	// WeightsAuthoritative means the Home weights came from a TrafficMap and
+	// WeightsAuthoritative means the per-cluster weights came from a TrafficMap and
 	// must be applied verbatim, including an intentionally all-zero set.
 	WeightsAuthoritative bool
 }
 
-// Home is one serving cluster the global host load-balances across.
-type Home struct {
-	// Cluster is the WorkloadCluster serving this home (labels/logging).
+// ServingCluster is one serving cluster the global host load-balances across.
+type ServingCluster struct {
+	// Cluster is the WorkloadCluster name (labels/logging).
 	Cluster string
-	// Endpoint is the complete client-facing URL reported by this home. Backends
+	// Endpoint is the complete client-facing URL reported by this cluster. Backends
 	// that need more than a Kubernetes Service hostname can consume it directly.
 	Endpoint string
 	// BackendHost is that cluster's ingress hostname the global host resolves to —
-	// the host of the home's status endpoint. A bare hostname (no scheme/port);
+	// the host of the cluster's status endpoint. A bare hostname (no scheme/port);
 	// the backend supplies the port from Config.
 	BackendHost string
-	// Weight is the home's relative traffic share: the TrafficMap's
+	// Weight is the cluster's relative traffic share: the TrafficMap's
 	// capacity-aware, health-gated weight when the routing controller has
 	// published one, else the reactive ready-replica count (its ready replicas in
-	// Split, zero in Single/All or for a Split home with no ready replicas yet).
+	// Split, zero in Single/All or for a Split cluster with no ready replicas yet).
 	// Unless Target.WeightsAuthoritative is set, the publisher equal-weights all
-	// homes when every weight is zero, so an unweighted placement routes evenly.
+	// clusters when every weight is zero, so an unweighted placement routes evenly.
 	Weight int32
 }
 
-// EndpointPublisher programs a backend from the resolved serving homes and
+// EndpointPublisher programs a backend from the resolved serving clusters and
 // tears it down when the service leaves the placed state. Implementations MUST be
 // idempotent: Publish for an unchanged Target is a no-op, and Unpublish for an
 // already-clean service is a no-op.
 type EndpointPublisher interface {
 	// Publish ensures the backend routes target.GlobalHost to
-	// target.Homes for isvc, creating or repointing as needed.
+	// target.Clusters for isvc, creating or repointing as needed.
 	Publish(ctx context.Context, isvc *v1beta1.InferenceService, target Target) error
 
 	// Unpublish removes any backend resources this publisher created for isvc.

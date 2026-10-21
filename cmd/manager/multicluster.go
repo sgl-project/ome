@@ -270,258 +270,399 @@ func newTrafficMapPublisherReconciler(
 	}
 }
 
-// setupMultiCluster wires the multi-cluster control/transport layer onto mgr:
-// the WorkloadCluster registry/transport always, plus — on the control plane —
-// the placement (fan-out) controller, its orphan GC, and the global endpoint
-// publisher, all sharing the one WorkloadCluster Manager so the placement
-// controllers read the live per-cluster clients it connects. Tunables load from
-// the inferenceservice-config ConfigMap; topology, identity, and security come
-// from options (flags).
+// multiClusterSetup is one wiring of the multi-cluster layer onto the
+// manager: the flags and the role, the values read from the multicluster
+// ConfigMap block, and what the steps have built so far. The steps share the
+// record and run in the order steps lists.
+type multiClusterSetup struct {
+	mgr                   manager.Manager
+	clientSet             kubernetes.Interface
+	options               Options
+	isControlPlane        bool
+	instanceStatusDecoder irstatus.Decoder
+
+	wiring mcWiring
+	// execPolicy says whether a WorkloadCluster kubeconfig may run an exec
+	// credential plugin, and which commands.
+	execPolicy workloadcluster.ExecCredentialPolicy
+	// clusterManager holds the live client of every connected WorkloadCluster;
+	// the placement controllers read the member clusters through it.
+	clusterManager *workloadcluster.Manager
+
+	// The control plane's publisher choice and the observers routing uses;
+	// prober and capacity stay nil while routing is disabled.
+	publisherMode       trafficMapPublisherMode
+	trafficMapPublisher *placementrouting.TrafficMapPublisher
+	prober              *placementrouting.Prober
+	capacity            *placementrouting.CapacityPoller
+}
+
+// multiClusterStep is one step of the wiring. A step that fails returns why,
+// and the manager does not start.
+type multiClusterStep func() error
+
+// setupMultiCluster wires the multi-cluster layer onto mgr: the WorkloadCluster
+// registry and transport for every manager that enables multi-cluster, and on
+// the control plane the placement controller, its GC, the TrafficMap and
+// endpoint publishers and the routing controller, which all read the member
+// clusters through the one cluster manager. Tunables come from the
+// inferenceservice-config ConfigMap; topology, identity and security come from
+// the flags.
 func setupMultiCluster(mgr manager.Manager, clientSet kubernetes.Interface, options Options, isControlPlane bool, instanceStatusDecoder irstatus.Decoder) error {
-	mcConfig, err := controllerconfig.NewMultiClusterConfig(clientSet)
+	setup := &multiClusterSetup{
+		mgr:                   mgr,
+		clientSet:             clientSet,
+		options:               options,
+		isControlPlane:        isControlPlane,
+		instanceStatusDecoder: instanceStatusDecoder,
+	}
+	return runMultiClusterSteps(setup.steps())
+}
+
+// steps lists the wiring in order: the steps every multi-cluster manager runs,
+// then the steps only the control plane adds.
+func (s *multiClusterSetup) steps() []multiClusterStep {
+	steps := []multiClusterStep{
+		s.loadConfiguration,
+		s.validateResolvedWiring,
+		s.addClusterManager,
+		s.setupWorkloadClusterController,
+	}
+	if !s.isControlPlane {
+		return steps
+	}
+	return append(steps,
+		s.selectTrafficMapPublisher,
+		s.setupPlacementController,
+		s.addPlacementGC,
+		s.setupTrafficMapPublisherController,
+		s.setupPlacementEndpointController,
+		s.buildRoutingObservers,
+		s.setupPlacementRoutingController,
+	)
+}
+
+// runMultiClusterSteps runs the steps in order and returns the first failure.
+func runMultiClusterSteps(steps []multiClusterStep) error {
+	for _, step := range steps {
+		if err := step(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// loadConfiguration reads the multicluster block of the ConfigMap and maps it
+// onto the wiring values. Loading reads an unusable knob as unset, and the
+// owning package would then apply its own default, so a malformed block stops
+// the manager instead: the control plane must not run with timings the
+// operator did not choose.
+func (s *multiClusterSetup) loadConfiguration() error {
+	mcConfig, err := controllerconfig.NewMultiClusterConfig(s.clientSet)
 	if err != nil {
 		return fmt.Errorf("load multi-cluster configuration: %w", err)
 	}
-	// Loading is forgiving by contract (an unusable knob reads as "unset" and the
-	// owning package applies its default). Refuse to start on one instead: a
-	// silently-ignored knob means the control plane runs with timings the operator
-	// did not choose.
 	if err := mcConfig.Validate(); err != nil {
 		return fmt.Errorf("invalid multi-cluster configuration: %w", err)
 	}
-	w := resolveMCWiring(mcConfig)
-	if err := validateDispatcherMode(w.dispatcherMode); err != nil {
+	s.wiring = resolveMCWiring(mcConfig)
+	return nil
+}
+
+// validateResolvedWiring checks the dispatcher mode and the routing block
+// after the mapping, so the checks see parsed durations. A disabled
+// installation may keep staged observer settings without loading their
+// optional plugins until routing is enabled again.
+func (s *multiClusterSetup) validateResolvedWiring() error {
+	if err := validateDispatcherMode(s.wiring.dispatcherMode); err != nil {
 		return err
 	}
-	// Validate after resolution so the check sees parsed durations. A disabled
-	// installation may retain staged observer settings without loading their
-	// optional plugins until routing is enabled again.
-	if err := w.routing.Validate(); err != nil {
+	if err := s.wiring.routing.Validate(); err != nil {
 		return fmt.Errorf("invalid multi-cluster configuration: %w", err)
 	}
+	return nil
+}
 
-	clusterManager := workloadcluster.NewManager(mgr.GetScheme())
-	execPolicy := workloadcluster.ExecCredentialPolicy{
-		Allowed:         options.allowExecCredentials,
-		AllowedCommands: splitAndTrim(options.execCredentialAllowedCmds),
+// addClusterManager builds the WorkloadCluster manager with the credential
+// policy, the client tuning and the member cache, and adds it as a runnable:
+// it then opens its remote clients and cache informers under the controller
+// manager's long-lived context and disconnects them all on shutdown, so no
+// watch outlives the process.
+func (s *multiClusterSetup) addClusterManager() error {
+	s.clusterManager = workloadcluster.NewManager(s.mgr.GetScheme())
+	s.execPolicy = workloadcluster.ExecCredentialPolicy{
+		Allowed:         s.options.allowExecCredentials,
+		AllowedCommands: splitAndTrim(s.options.execCredentialAllowedCmds),
 	}
-	clusterManager.SetExecCredentialPolicy(execPolicy)
-	clusterManager.SetClientTuning(w.clientTuning)
-	if w.cacheEnabled {
-		clusterManager.SetCacheOptions(placement.MemberCacheOptions())
+	s.clusterManager.SetExecCredentialPolicy(s.execPolicy)
+	s.clusterManager.SetClientTuning(s.wiring.clientTuning)
+	if s.wiring.cacheEnabled {
+		s.clusterManager.SetCacheOptions(placement.MemberCacheOptions())
 	}
-	// Run the cluster Manager as a Runnable so it captures the controller-manager's
-	// long-lived context as the base for remote-client (and cache-informer)
-	// contexts, and disconnects everything on shutdown (no leaked watches).
-	if err := mgr.Add(clusterManager); err != nil {
+	if err := s.mgr.Add(s.clusterManager); err != nil {
 		return fmt.Errorf("add WorkloadCluster manager runnable: %w", err)
 	}
+	return nil
+}
+
+// setupWorkloadClusterController registers the controller that connects,
+// probes and reconnects every registered WorkloadCluster.
+func (s *multiClusterSetup) setupWorkloadClusterController() error {
 	setupLog.Info("Setting up WorkloadCluster controller")
-	if err := (&workloadcluster.Reconciler{
-		Client:                mgr.GetClient(),
-		Scheme:                mgr.GetScheme(),
+	err := (&workloadcluster.Reconciler{
+		Client:                s.mgr.GetClient(),
+		Scheme:                s.mgr.GetScheme(),
 		Log:                   ctrl.Log.WithName("controllers").WithName("WorkloadCluster"),
-		Manager:               clusterManager,
-		ExecPolicy:            execPolicy,
-		HealthInterval:        w.healthInterval,
-		ConnectionGracePeriod: w.connectionGrace,
-		ProbeTimeout:          w.clientTuning.PerCallTimeout,
-	}).SetupWithManager(mgr,
-		workloadcluster.WithEventsBatchPeriod(w.eventsBatchPeriod),
-		workloadcluster.WithReconnectBackoff(w.reconnectBackoff),
-	); err != nil {
+		Manager:               s.clusterManager,
+		ExecPolicy:            s.execPolicy,
+		HealthInterval:        s.wiring.healthInterval,
+		ConnectionGracePeriod: s.wiring.connectionGrace,
+		ProbeTimeout:          s.wiring.clientTuning.PerCallTimeout,
+	}).SetupWithManager(s.mgr,
+		workloadcluster.WithEventsBatchPeriod(s.wiring.eventsBatchPeriod),
+		workloadcluster.WithReconnectBackoff(s.wiring.reconnectBackoff),
+	)
+	if err != nil {
 		return fmt.Errorf("create WorkloadCluster controller: %w", err)
 	}
+	return nil
+}
 
-	if !isControlPlane {
-		return nil
-	}
-	publisherMode := resolveTrafficMapPublisherMode(w.routing)
-	var trafficMapPublisher *placementrouting.TrafficMapPublisher
-	if publisherMode.useBuiltInGateway {
-		utilruntime.Must(gatewayapiv1.Install(mgr.GetScheme()))
-		trafficMapPublisher, err = newGatewayTrafficMapPublisher(
-			mgr.GetClient(),
-			mgr.GetAPIReader(),
-			w.routing.Publisher,
-			w.endpoint,
+// selectTrafficMapPublisher builds the publisher the routing configuration
+// names. The built-in Gateway API publisher, which an empty name selects,
+// installs the Gateway API types on the scheme and resolves backend addresses
+// through the cluster manager; any other name comes from the registry.
+func (s *multiClusterSetup) selectTrafficMapPublisher() error {
+	s.publisherMode = resolveTrafficMapPublisherMode(s.wiring.routing)
+	var err error
+	if s.publisherMode.useBuiltInGateway {
+		utilruntime.Must(gatewayapiv1.Install(s.mgr.GetScheme()))
+		s.trafficMapPublisher, err = newGatewayTrafficMapPublisher(
+			s.mgr.GetClient(),
+			s.mgr.GetAPIReader(),
+			s.wiring.routing.Publisher,
+			s.wiring.endpoint,
 			placementendpoint.WithBackendAddressResolver(
-				placementendpoint.NewGatewayAddressResolver(clusterManager),
+				placementendpoint.NewGatewayAddressResolver(s.clusterManager),
 			),
 		)
 		if err != nil {
 			return fmt.Errorf("invalid multi-cluster configuration: configure built-in Gateway API publisher: %w", err)
 		}
-	} else {
-		trafficMapPublisher, err = placementrouting.NewTrafficMapPublisher(
-			w.routing.Publisher,
-			mgr.GetClient(),
-			mgr.GetAPIReader(),
-		)
-		if err != nil {
-			return fmt.Errorf("invalid multi-cluster configuration: %w", err)
-		}
+		return nil
 	}
+	s.trafficMapPublisher, err = placementrouting.NewTrafficMapPublisher(
+		s.wiring.routing.Publisher,
+		s.mgr.GetClient(),
+		s.mgr.GetAPIReader(),
+	)
+	if err != nil {
+		return fmt.Errorf("invalid multi-cluster configuration: %w", err)
+	}
+	return nil
+}
 
+// setupPlacementController registers the fan-out controller that places an
+// InferenceService onto the member clusters and converges its status from
+// the derived copies. Derived workloads are Kueue-gated only when they carry
+// a queue label, so with no localQueue placement bypasses quota, and the log
+// says so.
+func (s *multiClusterSetup) setupPlacementController() error {
 	setupLog.Info("Setting up multi-cluster placement (fan-out) controller")
-	// Cross-cluster status convergence. The status batch period and safety requeue
-	// always apply; when the cache is enabled the watch funnel additionally feeds
-	// events so a derived's status change re-reconciles its source on an event
-	// rather than waiting for the safety requeue (which is then only the
-	// missed-event backstop). Without the cache there is no event source, so
-	// convergence stays on the poll cadence (already folded into statusSafetyRequeue).
-	convergeOpts := []placement.ConvergeOption{
-		placement.WithStatusBatchPeriod(w.statusBatchPeriod),
-		placement.WithStatusSafetyRequeue(w.statusSafetyRequeue),
+	convergeOpts, err := s.statusConvergenceOptions()
+	if err != nil {
+		return err
 	}
-	if w.cacheEnabled {
-		for _, funnelCfg := range append(placement.StatusFunnelConfigsFor(options.placementControlPlaneID), placement.RuntimeFunnelConfigs()...) {
-			funnelCfg.ResyncInterval = w.funnelResyncInterval
-			funnelCfg.BufferSize = w.funnelBufferSize
-			funnel := workloadcluster.NewStatusFunnel(clusterManager, funnelCfg)
-			if err := mgr.Add(funnel); err != nil {
-				return fmt.Errorf("add multi-cluster status funnel runnable: %w", err)
-			}
-			convergeOpts = append(convergeOpts, placement.WithStatusEvents(funnel.Events()))
-		}
-	}
-
-	// Derived workloads are only Kueue-gated when they carry a queue label, so
-	// an unset queue means placement bypasses quota entirely — worth saying out
-	// loud rather than discovering it from admitted pods.
-	if w.localQueue == "" {
+	if s.wiring.localQueue == "" {
 		setupLog.Info("placement: no localQueue configured; derived workloads will not carry a Kueue queue label and will not be quota-gated")
 	}
-
-	if err := (&placement.Reconciler{
-		Client:                  mgr.GetClient(),
-		APIReader:               mgr.GetAPIReader(),
-		InstanceStatusDecoder:   instanceStatusDecoder,
-		Scheme:                  mgr.GetScheme(),
+	err = (&placement.Reconciler{
+		Client:                  s.mgr.GetClient(),
+		APIReader:               s.mgr.GetAPIReader(),
+		InstanceStatusDecoder:   s.instanceStatusDecoder,
+		Scheme:                  s.mgr.GetScheme(),
 		Log:                     ctrl.Log.WithName("controllers").WithName("Placement"),
-		Clusters:                clusterManager,
-		Requeue:                 w.requeue,
-		ControlPlaneID:          options.placementControlPlaneID,
-		MaxConcurrentReconciles: w.maxConcurrent,
-		PlaceTimeout:            w.placeTimeout,
-		WinnerLostGracePeriod:   w.winnerLostGrace,
-		ObservationGrace:        w.observationGrace,
-		MemberReadRetry:         w.memberReadRetry,
-		RoutingDisabled:         !w.routing.IsEnabled(),
-		DispatcherMode:          w.dispatcherMode,
-		DispatcherStepSize:      w.dispatcherStepSize,
-		DispatcherRoundTimeout:  w.dispatcherRoundTimeout,
-		LocalQueue:              w.localQueue,
-		Capacity:                w.capacity,
-		MemberOperatorNamespace: w.memberOperatorNamespace,
-	}).SetupWithManager(mgr, convergeOpts...); err != nil {
+		Clusters:                s.clusterManager,
+		Requeue:                 s.wiring.requeue,
+		ControlPlaneID:          s.options.placementControlPlaneID,
+		MaxConcurrentReconciles: s.wiring.maxConcurrent,
+		PlaceTimeout:            s.wiring.placeTimeout,
+		WinnerLostGracePeriod:   s.wiring.winnerLostGrace,
+		ObservationGrace:        s.wiring.observationGrace,
+		MemberReadRetry:         s.wiring.memberReadRetry,
+		RoutingDisabled:         !s.wiring.routing.IsEnabled(),
+		DispatcherMode:          s.wiring.dispatcherMode,
+		DispatcherStepSize:      s.wiring.dispatcherStepSize,
+		DispatcherRoundTimeout:  s.wiring.dispatcherRoundTimeout,
+		LocalQueue:              s.wiring.localQueue,
+		Capacity:                s.wiring.capacity,
+		MemberOperatorNamespace: s.wiring.memberOperatorNamespace,
+	}).SetupWithManager(s.mgr, convergeOpts...)
+	if err != nil {
 		return fmt.Errorf("create Placement controller: %w", err)
 	}
-	if err := mgr.Add(&placement.GCReconciler{
-		APIReader:      mgr.GetAPIReader(),
+	return nil
+}
+
+// statusConvergenceOptions says how a placed service's status follows its
+// derived copies. The status batch period and the safety requeue always
+// apply. With the member cache on, one watch funnel per funnel configuration
+// feeds member events, so a copy's status change re-reconciles its source at
+// once and the safety requeue only recovers a missed event. With the cache
+// off there is no event source, and the poll cadence, already folded into
+// statusSafetyRequeue, is what keeps the status fresh.
+func (s *multiClusterSetup) statusConvergenceOptions() ([]placement.ConvergeOption, error) {
+	convergeOpts := []placement.ConvergeOption{
+		placement.WithStatusBatchPeriod(s.wiring.statusBatchPeriod),
+		placement.WithStatusSafetyRequeue(s.wiring.statusSafetyRequeue),
+	}
+	if !s.wiring.cacheEnabled {
+		return convergeOpts, nil
+	}
+	funnelConfigs := append(placement.StatusFunnelConfigsFor(s.options.placementControlPlaneID), placement.RuntimeFunnelConfigs()...)
+	for _, funnelCfg := range funnelConfigs {
+		funnelCfg.ResyncInterval = s.wiring.funnelResyncInterval
+		funnelCfg.BufferSize = s.wiring.funnelBufferSize
+		funnel := workloadcluster.NewStatusFunnel(s.clusterManager, funnelCfg)
+		if err := s.mgr.Add(funnel); err != nil {
+			return nil, fmt.Errorf("add multi-cluster status funnel runnable: %w", err)
+		}
+		convergeOpts = append(convergeOpts, placement.WithStatusEvents(funnel.Events()))
+	}
+	return convergeOpts, nil
+}
+
+// addPlacementGC adds the runnable that sweeps the member clusters for
+// derived copies this control plane created whose source InferenceService no
+// longer exists.
+func (s *multiClusterSetup) addPlacementGC() error {
+	if err := s.mgr.Add(&placement.GCReconciler{
+		APIReader:      s.mgr.GetAPIReader(),
 		Log:            ctrl.Log.WithName("controllers").WithName("PlacementGC"),
-		Clusters:       clusterManager,
-		Interval:       w.gcInterval,
-		ControlPlaneID: options.placementControlPlaneID,
+		Clusters:       s.clusterManager,
+		Interval:       s.wiring.gcInterval,
+		ControlPlaneID: s.options.placementControlPlaneID,
 	}); err != nil {
 		return fmt.Errorf("add placement GC runnable: %w", err)
 	}
+	return nil
+}
 
-	setupLog.Info("Setting up multi-cluster TrafficMap publisher", "publisher", trafficMapPublisher.Publisher.Name(),
-		"active", publisherMode.trafficMapActive,
+// setupTrafficMapPublisherController registers the controller that publishes
+// every TrafficMap through the selected publisher. It runs whether or not
+// routing is enabled: a disabled publisher still finalizes the publications
+// it made earlier.
+func (s *multiClusterSetup) setupTrafficMapPublisherController() error {
+	setupLog.Info("Setting up multi-cluster TrafficMap publisher", "publisher", s.trafficMapPublisher.Publisher.Name(),
+		"active", s.publisherMode.trafficMapActive,
 		"availableTrafficMapPublishers", placementrouting.RegisteredTrafficMapPublishers())
-	if err := newTrafficMapPublisherReconciler(
-		mgr.GetClient(),
-		mgr.GetAPIReader(),
-		trafficMapPublisher,
-		publisherMode.trafficMapActive,
-		options.enableLeaderElection,
-	).SetupWithManager(mgr); err != nil {
+	err := newTrafficMapPublisherReconciler(
+		s.mgr.GetClient(),
+		s.mgr.GetAPIReader(),
+		s.trafficMapPublisher,
+		s.publisherMode.trafficMapActive,
+		s.options.enableLeaderElection,
+	).SetupWithManager(s.mgr)
+	if err != nil {
 		return fmt.Errorf("create TrafficMap publisher controller: %w", err)
 	}
+	return nil
+}
 
-	if publisherMode.useLegacyGateway {
-		endpointPublisher := placementendpoint.NewGatewayAPIPublisher(
-			mgr.GetClient(),
-			w.endpoint,
-			placementendpoint.WithBackendAddressResolver(
-				placementendpoint.NewGatewayAddressResolver(clusterManager),
-			),
-			placementendpoint.WithGatewayAPIReader(mgr.GetAPIReader()),
-		)
-		setupLog.Info("Setting up multi-cluster legacy endpoint publisher", "publisher", endpointPublisher.Name())
-		if err := (&placementendpoint.Reconciler{
-			Client:    mgr.GetClient(),
-			APIReader: mgr.GetAPIReader(),
-			Log:       ctrl.Log.WithName("controllers").WithName("PlacementEndpoint"),
-			Publisher: endpointPublisher,
-			Config:    w.endpoint,
-		}).SetupWithManager(mgr); err != nil {
-			return fmt.Errorf("create PlacementEndpoint controller: %w", err)
-		}
+// setupPlacementEndpointController registers the endpoint publisher that
+// writes one global Gateway API route per placed InferenceService straight
+// from its placement. It runs only while the built-in publisher is selected
+// and routing is disabled; with routing enabled the TrafficMap publisher
+// writes the routes instead.
+func (s *multiClusterSetup) setupPlacementEndpointController() error {
+	if !s.publisherMode.useLegacyGateway {
+		return nil
 	}
-
-	var (
-		prober   *placementrouting.Prober
-		capacity *placementrouting.CapacityPoller
+	endpointPublisher := placementendpoint.NewGatewayAPIPublisher(
+		s.mgr.GetClient(),
+		s.wiring.endpoint,
+		placementendpoint.WithBackendAddressResolver(
+			placementendpoint.NewGatewayAddressResolver(s.clusterManager),
+		),
+		placementendpoint.WithGatewayAPIReader(s.mgr.GetAPIReader()),
 	)
-	if w.routing.IsEnabled() {
-		// One process-wide executor bounds all probe and capacity HTTP work. Its
-		// queue is derived from the same operator-supplied request limit, keeping
-		// both running and waiting observations explicitly bounded.
-		executor, err := placementrouting.NewObserverExecutor(
-			w.routing.Observer.MaxConcurrentRequests,
-			w.routing.Observer.MaxConcurrentRequests,
-		)
-		if err != nil {
-			return fmt.Errorf("create routing observer executor: %w", err)
-		}
-		if err := mgr.Add(executor); err != nil {
-			return fmt.Errorf("add routing observer executor: %w", err)
-		}
-
-		// Both observed inputs talk to the same homes with the same credentials,
-		// so they share one redirect-refusing HTTP client and transport.
-		observerClient := placementrouting.NewObserverClient()
-		prober, err = placementrouting.NewProber(
-			executor,
-			observerClient,
-			clock.RealClock{},
-			w.routing.Observer.MaxResponseBytes,
-			ctrl.Log.WithName("controllers").WithName("PlacementRoutingProbe"),
-		)
-		if err != nil {
-			return fmt.Errorf("create routing endpoint prober: %w", err)
-		}
-		capacity, err = placementrouting.NewCapacityPoller(
-			executor,
-			observerClient,
-			clock.RealClock{},
-			w.routing.Observer.MaxResponseBytes,
-			ctrl.Log.WithName("controllers").WithName("PlacementRoutingCapacity"),
-		)
-		if err != nil {
-			return fmt.Errorf("create routing capacity poller: %w", err)
-		}
+	setupLog.Info("Setting up multi-cluster legacy endpoint publisher", "publisher", endpointPublisher.Name())
+	err := (&placementendpoint.Reconciler{
+		Client:    s.mgr.GetClient(),
+		APIReader: s.mgr.GetAPIReader(),
+		Log:       ctrl.Log.WithName("controllers").WithName("PlacementEndpoint"),
+		Publisher: endpointPublisher,
+		Config:    s.wiring.endpoint,
+	}).SetupWithManager(s.mgr)
+	if err != nil {
+		return fmt.Errorf("create PlacementEndpoint controller: %w", err)
 	}
+	return nil
+}
 
-	// Project placement into the capacity-aware TrafficMap the publisher consumes.
-	// Always wired: when disabled the controller is a no-op that reaps any
-	// TrafficMap it previously created, so toggling the feature (a restart, since
-	// config loads once) reverses cleanly without stranding routing tables.
-	setupLog.Info("Setting up multi-cluster TrafficMap routing controller", "enabled", w.routing.Enabled,
-		// Optional capacity formats are compiled in, so log what this build
-		// carries: a binary missing one should be obvious here rather than at
-		// the first poll.
+// buildRoutingObservers builds the endpoint prober and the capacity poller
+// when routing is enabled. One process-wide executor bounds all probe and
+// capacity HTTP work, and its queue takes the same operator-supplied request
+// limit, so running and waiting observations are both bounded. Both observers
+// reach the same member endpoints with the same credentials, so they share
+// one redirect-refusing HTTP client and transport.
+func (s *multiClusterSetup) buildRoutingObservers() error {
+	if !s.wiring.routing.IsEnabled() {
+		return nil
+	}
+	executor, err := placementrouting.NewObserverExecutor(
+		s.wiring.routing.Observer.MaxConcurrentRequests,
+		s.wiring.routing.Observer.MaxConcurrentRequests,
+	)
+	if err != nil {
+		return fmt.Errorf("create routing observer executor: %w", err)
+	}
+	if err := s.mgr.Add(executor); err != nil {
+		return fmt.Errorf("add routing observer executor: %w", err)
+	}
+	observerClient := placementrouting.NewObserverClient()
+	s.prober, err = placementrouting.NewProber(
+		executor,
+		observerClient,
+		clock.RealClock{},
+		s.wiring.routing.Observer.MaxResponseBytes,
+		ctrl.Log.WithName("controllers").WithName("PlacementRoutingProbe"),
+	)
+	if err != nil {
+		return fmt.Errorf("create routing endpoint prober: %w", err)
+	}
+	s.capacity, err = placementrouting.NewCapacityPoller(
+		executor,
+		observerClient,
+		clock.RealClock{},
+		s.wiring.routing.Observer.MaxResponseBytes,
+		ctrl.Log.WithName("controllers").WithName("PlacementRoutingCapacity"),
+	)
+	if err != nil {
+		return fmt.Errorf("create routing capacity poller: %w", err)
+	}
+	return nil
+}
+
+// setupPlacementRoutingController registers the controller that projects a
+// placement into the capacity-aware TrafficMap the publisher consumes. It
+// runs whether or not routing is enabled: when disabled it removes any
+// TrafficMap it created earlier, so turning the feature off (a restart, since
+// the configuration loads once) leaves no routing table behind. The log names
+// the capacity formats this build carries, so a binary missing one shows it
+// here rather than at the first poll.
+func (s *multiClusterSetup) setupPlacementRoutingController() error {
+	setupLog.Info("Setting up multi-cluster TrafficMap routing controller", "enabled", s.wiring.routing.Enabled,
 		"capacityFormats", placementrouting.RegisteredCapacityFormats())
-	if err := (&placementrouting.Reconciler{
-		Client:    mgr.GetClient(),
-		APIReader: mgr.GetAPIReader(),
+	err := (&placementrouting.Reconciler{
+		Client:    s.mgr.GetClient(),
+		APIReader: s.mgr.GetAPIReader(),
 		Log:       ctrl.Log.WithName("controllers").WithName("PlacementRouting"),
-		Config:    w.routing,
-		Prober:    prober,
-		Capacity:  capacity,
-	}).SetupWithManager(mgr); err != nil {
+		Config:    s.wiring.routing,
+		Prober:    s.prober,
+		Capacity:  s.capacity,
+	}).SetupWithManager(s.mgr)
+	if err != nil {
 		return fmt.Errorf("create PlacementRouting controller: %w", err)
 	}
 	return nil

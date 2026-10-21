@@ -10,7 +10,8 @@ type ComponentExtensionSpec struct {
 	// Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.
 	// +optional
 	MinReplicas *int `json:"minReplicas,omitempty"`
-	// Maximum number of replicas for autoscaling.
+	// Maximum number of replicas for autoscaling. A proportional-scaling
+	// follower that leaves it unset has no ceiling of its own.
 	// +optional
 	MaxReplicas int `json:"maxReplicas,omitempty"`
 	// TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.

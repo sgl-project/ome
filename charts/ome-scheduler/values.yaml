@@ -27,6 +27,14 @@ scheduler:
   # replicaCount > 1. Scale down to 1 for constrained/dev clusters.
   replicaCount: 2
   leaderElect: true
+  # Lease timing, rendered only as a complete set. controller-runtime's 15s/10s/2s
+  # loses the lease during short apiserver brownouts on large clusters, and each
+  # loss restarts the scheduler and rebuilds its cluster-wide cache. These match
+  # Kueue's; a standby waits up to leaseDuration before taking over.
+  leaderElection:
+    leaseDuration: "60s"
+    renewDeadline: "30s"
+    retryPeriod: "6s"
   # The OME controller publishes its topology contract with a fixed annotation
   # name. Keep this enabled for OME workloads. Generic/non-OME PodGroup
   # producers may disable it and configure their own annotation name below.

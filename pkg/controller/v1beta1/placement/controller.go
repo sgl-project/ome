@@ -63,7 +63,7 @@ const (
 
 	placementReadyReasonPending = "PlacementPending"
 	// PlacementReadyReasonLost identifies an authoritative loss of every current
-	// home without treating an unreadable member as absent.
+	// member without treating an unreadable member as absent.
 	PlacementReadyReasonLost = "PlacementLost"
 	// PlacementReadyReasonUnknown identifies an incomplete placement observation
 	// that cannot prove either serving readiness or authoritative placement loss.
@@ -90,9 +90,9 @@ type placementResult struct {
 	phase            v1beta1.PlacementPhase
 	candidates       []v1beta1.CandidatePlacement
 	url              *apis.URL // published endpoint; mirrored to BOTH status.placement.endpoint and status.url
-	ready            bool      // at least one observed admitted home has ready replicas and a ready ingress
+	ready            bool      // at least one observed admitted member has ready replicas and a ready ingress
 	readinessUnknown bool      // one or more candidates lacked a current serving-readiness observation
-	placementLost    bool      // every relevant standing home was conclusively absent
+	placementLost    bool      // every relevant standing member was conclusively absent
 }
 
 // ClusterClients is the subset of *workloadcluster.Manager the placer needs.
@@ -168,9 +168,9 @@ type Reconciler struct {
 	// once the window elapses. Config-driven
 	// (manager flag / chart); zero (unset) falls back to DefaultWinnerLostGrace.
 	WinnerLostGracePeriod time.Duration
-	// ObservationGrace is how long a home whose reads fail keeps the ready count
+	// ObservationGrace is how long a member whose reads fail keeps the ready count
 	// from its last successful read, counted from the first failed read that the
-	// home's candidate status records. Config-driven (chart); zero withdraws the
+	// member's candidate status records. Config-driven (chart); zero withdraws the
 	// count at the first failed read.
 	ObservationGrace time.Duration
 	// MemberReadRetry re-reads a member within one reconcile after a transient
@@ -229,7 +229,7 @@ type Reconciler struct {
 	converge *convergeConfig
 
 	// policy is the AutoscalerPolicy preflight/skew state: the config-driven
-	// preflight tunables plus the in-memory per-(source,home) bookkeeping the
+	// preflight tunables plus the in-memory per-(source,member) bookkeeping the
 	// multi-cluster policy detectors need (the API carries no such state).
 	// SetupWithManager resolves it from the autoscalerPolicy config block; a
 	// Reconciler built directly (unit tests) gets the package defaults lazily
@@ -245,7 +245,7 @@ type Reconciler struct {
 
 	// rollout is the RolloutPolicy preflight state: the staged condition, the
 	// per-source resolved policies the derive-time inflation consumes, and the
-	// per-(source,home) lifted run provenance. Built lazily via rolloutState;
+	// per-(source,member) lifted run provenance. Built lazily via rolloutState;
 	// inert for sources without rollout policy refs.
 	rollout     *rolloutPreflight
 	rolloutOnce sync.Once
@@ -355,16 +355,11 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 	ctx = withPlacementInputCondition(ctx, isvc, clusters.Items)
-	// Member observation is independent from placement eligibility. Status homes
-	// are read before any readiness or policy gate so those gates can stop
-	// actuation without freezing the source's view of serving health.
-	observations := r.observeStandingHomes(ctx, isvc, clusters.Items)
+	// Member observation is independent from placement eligibility. The members
+	// the status records are read before any readiness or policy gate, so those
+	// gates can stop actuation without freezing the source's view of serving health.
+	observations := r.observeStandingMembers(ctx, isvc, clusters.Items)
 	if err := validation.ValidatePlacementIntent(isvc); err != nil {
-		return r.writeObservedPlacement(ctx, isvc, observations)
-	}
-	// Differing component matches keep the last accepted plan: standing homes
-	// keep serving and a new source waits.
-	if err := componentClustersDiffer(isvc, clusters.Items); err != nil {
 		return r.writeObservedPlacement(ctx, isvc, observations)
 	}
 	if isvc.Status.Placement != nil && isvc.Status.Placement.Plan != nil && isvc.Status.Placement.Plan.Mode != "" && placementMode(isvc) != isvc.Status.Placement.Plan.Mode {
@@ -381,7 +376,7 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	candidates, reason, err := MatchCandidates(isvc, clusters.Items)
 	split := placementMode(isvc) == v1beta1.PlacementModeSplit || placementMode(isvc) == v1beta1.PlacementModeSplitByCapacity
 	if split || placementMode(isvc) == v1beta1.PlacementModeAll {
-		// Outgoing homes still serve during a move. Unreadable peers cannot
+		// Outgoing members still serve during a move. Unreadable peers cannot
 		// prevent discovery of health on the remaining matched members.
 		observations.projectAll = true
 		for _, cluster := range clusters.Items {
@@ -454,7 +449,7 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		}
 		backendEligible := verifiedBackendCandidates(ctx, candidates)
 		// Branch on placement mode. Each mode owns its own reconcile: Single keeps one
-		// winner, All keeps every home that admits, and Split apportions the requested
+		// winner, All keeps every member that admits, and Split apportions the requested
 		// replicas across its candidate set.
 		switch mode := placementMode(isvc); mode {
 		case v1beta1.PlacementModeSingle:
@@ -504,7 +499,7 @@ func splitDesiredReplicas(isvc *v1beta1.InferenceService) int32 {
 }
 
 // placementScaleComponents are the replica-scaled components whose
-// admitted/ready counts define a home's replica count: Engine and, for a PD
+// admitted/ready counts define a member's replica count: Engine and, for a PD
 // service, the Decoder — a replica is the coordinated pair. Router is excluded
 // (a shared front-end, not per-replica). Falls back to the first declared
 // component when neither Engine nor Decoder is present.
@@ -524,11 +519,11 @@ func placementScaleComponents(isvc *v1beta1.InferenceService) []v1beta1.Componen
 	return cs
 }
 
-// placementAdmittedReplicas is a home's admitted count in primary units: each
-// scaled component covers admitted/floor of its share and the home has the
+// placementAdmittedReplicas is a member's admitted count in primary units: each
+// scaled component covers admitted/floor of its share and the member has the
 // smallest coverage. Equal floors make this the minimum admitted count, so a
 // PD replica is admitted only when both its engine and decoder instances are;
-// an engine-only home is just the engine count. Zero without scaled components.
+// an engine-only member is just the engine count. Zero without scaled components.
 func placementAdmittedReplicas(comps []v1beta1.ComponentType, statuses map[v1beta1.ComponentType]*v1beta1.InferenceReplicaStatus, floors map[v1beta1.ComponentType]int32) int32 {
 	counts := make(map[v1beta1.ComponentType]int32, len(comps))
 	for _, c := range comps {
@@ -537,8 +532,8 @@ func placementAdmittedReplicas(comps []v1beta1.ComponentType, statuses map[v1bet
 	return primaryUnits(comps, counts, floors)
 }
 
-// placementReadyReplicas is a home's ready count (the endpoint weight) in
-// primary units, with the same per-component coverage as admission. A home
+// placementReadyReplicas is a member's ready count (the endpoint weight) in
+// primary units, with the same per-component coverage as admission. A member
 // that has admitted a full unit and has a ready instance of every required
 // component can still serve, so it counts at least one unit while a component
 // is below its share. The count never exceeds the admitted count.
@@ -857,7 +852,7 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, isvc *v1beta1.Inferenc
 	r.clearGrace(isvc.UID)
 	r.forgetCapacity(client.ObjectKeyFromObject(isvc))
 	// Likewise drop the AutoscalerPolicy preflight/skew bookkeeping for this
-	// source (staged condition, home observations, prune counters).
+	// source (staged condition, member observations, prune counters).
 	r.policyState().forget(isvc.UID)
 	// Likewise the RolloutPolicy preflight bookkeeping (staged condition,
 	// resolved plans, lifted run provenance).
@@ -922,7 +917,7 @@ func (r *Reconciler) derivedRemainingOnConnected(ctx context.Context, isvc *v1be
 // this source when a derived's status changes), so this is only the backstop
 // re-read for a missed event, not the former fixed status poll.
 func (r *Reconciler) writePlacement(ctx context.Context, isvc *v1beta1.InferenceService, res placementResult) (ctrl.Result, error) {
-	// For a policy-referencing source, attach the lifted per-home autoscaling
+	// For a policy-referencing source, attach the lifted per-member autoscaling
 	// and rollout state to the candidates and collect the policy conditions to
 	// write in the same status update. Both preflights stage the shared
 	// PlacementPolicyPreflight type; the merge keeps the operative verdict.
@@ -1003,7 +998,7 @@ func (r *Reconciler) writePlacement(ctx context.Context, isvc *v1beta1.Inference
 
 // setSourcePlacementReady reports whether the control-plane InferenceService is
 // usable. Placement admission and serving readiness are separate: a Placed
-// service is Ready only after an admitted home has both ready replicas and an
+// service is Ready only after an admitted member has both ready replicas and an
 // addressable endpoint.
 func setSourcePlacementReady(status *v1beta1.InferenceServiceStatus, res placementResult, previous *apis.Condition) {
 	manager := sourcePlacementConditionSet.Manage(status)
@@ -1368,17 +1363,12 @@ func clusterAffectsISVC(isvc *v1beta1.InferenceService, clusterName string, clus
 	if isvcStatusReferencesCluster(isvc, clusterName) {
 		return true
 	}
-	selectors, err := componentSelectors(isvc)
+	selector, err := placementSelector(isvc)
 	if err != nil {
 		return true
 	}
-	cluster := &v1beta1.WorkloadCluster{ObjectMeta: metav1.ObjectMeta{Name: clusterName, Labels: clusterSelectorSet}}
-	for _, selector := range selectors {
-		if _, matches := selector.Match(cluster); matches {
-			return true
-		}
-	}
-	return false
+	_, matches := selector.Match(&v1beta1.WorkloadCluster{ObjectMeta: metav1.ObjectMeta{Name: clusterName, Labels: clusterSelectorSet}})
+	return matches
 }
 
 // isvcStatusReferencesCluster reports whether the ISVC's placement status names

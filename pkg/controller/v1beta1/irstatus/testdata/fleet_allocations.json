@@ -1,0 +1,19 @@
+{
+  "recordedOn": {
+    "commit": "unrecorded",
+    "date": "2026-10-20",
+    "machine": "linux/amd64, 30 cores, go1.26"
+  },
+  "reason": "First recording: the status codec at 4,000 rows, encode and decode of both stored shapes.",
+  "tolerancePercent": 10,
+  "budgets": {
+    "decode/representative/4000/columnarV2": 429,
+    "decode/representative/4000/denseV1": 8526,
+    "decode/uniform/4000/columnarV2": 49,
+    "decode/uniform/4000/denseV1": 8026,
+    "encode/representative/4000/denseV1": 94,
+    "encode/representative/4000/selected": 9072,
+    "encode/uniform/4000/denseV1": 3,
+    "encode/uniform/4000/selected": 180
+  }
+}

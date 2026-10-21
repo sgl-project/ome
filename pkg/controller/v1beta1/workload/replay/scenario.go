@@ -179,6 +179,13 @@ type ConfigState struct {
 	// owner may hold its finalizer with pods surviving before it is
 	// released to background GC. Unset holds strictly.
 	TeardownDeadline string `json:"teardownDeadline,omitempty"`
+	// GroupMaxUnavailable stands in for a rollout group's unavailability
+	// budget, as an int-or-percent string resolved against the replica
+	// count: the update gate then denies a drain-first start while the
+	// Instances the published counters do not count as serving, plus the
+	// starts this pass opened, plus this one, exceed it, in the group
+	// gate's own words. Unset, the gate admits every start.
+	GroupMaxUnavailable string `json:"groupMaxUnavailable,omitempty"`
 }
 
 // MigrationAudit is the migration admission budget.
@@ -277,7 +284,11 @@ type PodSpec struct {
 	// PreviousImage renders the pod from an older template, so it carries
 	// a revision hash the current spec no longer targets. Empty renders
 	// the pod on the revision the initial spec mints.
-	PreviousImage   string `json:"previousImage,omitempty"`
+	PreviousImage string `json:"previousImage,omitempty"`
+	// LabelImage names, by its image, the revision the pod's revision label
+	// carries when that is not the template it runs: a pod left running one
+	// revision under another's label. Empty labels the rendered revision.
+	LabelImage      string `json:"labelImage,omitempty"`
 	Node            string `json:"node,omitempty"`
 	Phase           string `json:"phase,omitempty"`
 	ContainersReady bool   `json:"containersReady,omitempty"`
@@ -333,6 +344,12 @@ type EventArgs struct {
 	Count     int     `json:"count,omitempty"`
 	Container string  `json:"container,omitempty"`
 	Message   string  `json:"message,omitempty"`
+	// Termination is how a pod.containerRestart shows the run that ended:
+	// empty, the kubelet has published its termination beside the new
+	// run's start; "unpublished", the pass reads the new run's start
+	// before the kubelet has written the termination, so the last
+	// termination state is left as it was.
+	Termination string `json:"termination,omitempty"`
 	// Env rewrites the rendered container's environment. It is the
 	// template edit a spec.revision makes when the edit is not an image
 	// rewrite.
@@ -464,7 +481,7 @@ var eventArgKeys = map[string][]string{
 	"pod.unschedulable":        {"pod"},
 	"pod.schedulingGated":      {"pod"},
 	"pod.admitted":             {"pod"},
-	"pod.containerRestart":     {"pod", "container", "message"},
+	"pod.containerRestart":     {"pod", "container", "message", "termination"},
 	"pod.runningNotReady":      {"pod", "slack"},
 	"endpoint.rotationIn":      {"pod"},
 	"endpoint.rotationOut":     {"pod"},
@@ -483,6 +500,8 @@ var eventArgKeys = map[string][]string{
 	"spec.gangWidth":           {"to"},
 	"spec.partition":           {"to"},
 	"spec.rollbackTarget":      {"image"},
+	"gate.deny":                {"pod", "message"},
+	"gate.allow":               {"pod"},
 	"spec.policyTuning":        {"value"},
 	"spec.migrateRequest":      {"instance", "fromNode", "uuid", "reason"},
 	"config.changed":           {"config"},

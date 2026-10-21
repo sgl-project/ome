@@ -29,11 +29,15 @@ import (
 // RolloutHold; gate names Pairing, Ratio (the batch step reports under
 // it), Budget (surge or unavailability), or Sequential accordingly.
 //
-// The batch step takes the ratio gate's place for a group whose members all
-// roll drain-first (readBatchStep): each member's drains are counted in
-// batches of its maxUnavailable and no member opens batch b+1 until every
-// member's batch b serves, which keeps the ratio at every step boundary
-// without the serving band.
+// The batch step takes the ratio gate's place for the members of a group
+// whose engine and decoder both step (readBatchStep): a drain-first member
+// counts its drains in batches of its maxUnavailable, a surging member its
+// surges in batches of its maxSurge, and none opens batch b+1 until every
+// one's batch b serves, which keeps the ratio at every step boundary without
+// the serving band. The budget gates still cap each wake-up. Under the
+// operator's keepRatio setting a pairing member that patches single pods in
+// place steps too, and the two sides' batches are planned to the group's
+// tolerance; under firstSide the named side moves first inside each batch.
 //
 // Ratio projection is strategy-aware (see the projDelta computation
 // below): SurgeThenDrain projects +1 (a Ready pod is added before the old
@@ -101,8 +105,9 @@ func EvaluateUpdateGate(
 	// capacity flat (which is why CheckRatio bypasses it below) but still
 	// moves the instance across pairing cohorts — the exact transition the
 	// pair floor exists to pace.
-	if ok, reason := gateCtx.CheckPairing(fromRevision, strategy, inFlightSurge, inFlightUnavail); !ok {
-		return false, v1beta1.RolloutHoldGatePairing, reason
+	pairing := gateCtx.pairingVerdict(fromRevision, strategy, inFlightSurge, inFlightUnavail)
+	if !pairing.allowed {
+		return false, v1beta1.RolloutHoldGatePairing, pairing.reason
 	}
 
 	// The batch step reads every member's replica; a read it cannot make
@@ -116,9 +121,14 @@ func EvaluateUpdateGate(
 		strategy == workloadtypes.UpdateStrategyInPlaceOnly
 	switch {
 	case batch.governs:
-		// Every member rolls drain-first, so the batch step is their
-		// lockstep and the serving band is not consulted for them.
-		if held, reason := batch.hold(); held {
+		// The engine and decoder both step, so the batch step is the batched
+		// members' lockstep and the serving band is not consulted for them.
+		// A pairing peer the pairing gate holds still is not waited on.
+		var waived v1beta1.ComponentType
+		if pairing.peerHeldStill {
+			waived = pairingPeer(component)
+		}
+		if held, reason := batch.hold(waived); held {
 			return false, v1beta1.RolloutHoldGateRatio, reason
 		}
 	case !inPlace:
@@ -133,8 +143,16 @@ func EvaluateUpdateGate(
 		if strategy == workloadtypes.UpdateStrategySurgeThenDrain || strategy == "" {
 			projDelta = 1
 		}
-		if ok, reason := gateCtx.CheckRatio(inFlightSurge, inFlightUnavail, projDelta); !ok {
+		ok, reason, outsideTolerance := gateCtx.checkRatio(inFlightSurge, inFlightUnavail, projDelta)
+		if !ok {
 			return false, v1beta1.RolloutHoldGateRatio, reason
+		}
+		// A step no single step could keep inside the tolerance is admitted
+		// rather than held for good; the service says so with the numbers.
+		if outsideTolerance && recorder != nil && isvc != nil {
+			recorder.Eventf(isvc, corev1.EventTypeWarning, EventReasonRatioStepOutsideTolerance,
+				"%s: %s. The serving ratio is outside the tolerance while this step runs; the band admits one such step at a time rather than hold the roll for good. Widen the tolerance or resize the group to a shape one step keeps inside it.",
+				EventReasonRatioStepOutsideTolerance, reason)
 		}
 	default:
 		// A same-pod start keeps its serving capacity, so only the

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -198,7 +199,7 @@ func setMaterializationStatus(status *v1beta1.AcceleratorQuotaStatus, generation
 		status.Materialization.LastAppliedTime = &now
 	}
 
-	setCondition(status, condition)
+	apimeta.SetStatusCondition(&status.Conditions, condition)
 }
 
 // equalMaterialization compares the durable freeze bookkeeping, excluding

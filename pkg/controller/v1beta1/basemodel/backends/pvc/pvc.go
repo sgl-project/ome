@@ -336,14 +336,9 @@ func applyPVCStatusFromConfigMap(ctx context.Context, kubeClient client.Client, 
 // reading the latest CR via retry-on-conflict to avoid clobbering writes.
 func applyPVCSpecUpdate(ctx context.Context, kubeClient client.Client, log logr.Logger, obj client.Object, cfg *shared.ModelConfig) error {
 	return shared.RetryUpdate(ctx, kubeClient, log, obj, "pvc-spec", func(ctx context.Context, c client.Client, latest client.Object) error {
-		var spec *v1beta1.BaseModelSpec
-		switch m := latest.(type) {
-		case *v1beta1.BaseModel:
-			spec = &m.Spec
-		case *v1beta1.ClusterBaseModel:
-			spec = &m.Spec
-		default:
-			return fmt.Errorf("unsupported model type for PVC spec update: %T", latest)
+		spec, _, err := shared.ModelSpecAndStatus(latest)
+		if err != nil {
+			return err
 		}
 		if !shared.UpdateSpecWithConfig(spec, cfg) {
 			return nil
@@ -450,18 +445,13 @@ func CleanupStaleArtifacts(ctx context.Context, kubeClient client.Client, log lo
 	// inside retryUpdate to avoid clobbering concurrent edits. No-op if
 	// no PVC conditions are present.
 	return shared.RetryUpdate(ctx, kubeClient, log, obj, "pvc-condition-cleanup", func(ctx context.Context, c client.Client, latest client.Object) error {
-		var conditions *[]metav1.Condition
-		switch m := latest.(type) {
-		case *v1beta1.BaseModel:
-			conditions = &m.Status.Conditions
-		case *v1beta1.ClusterBaseModel:
-			conditions = &m.Status.Conditions
-		default:
-			return fmt.Errorf("cleanupStalePVCArtifacts: unsupported type %T", latest)
+		_, status, err := shared.ModelSpecAndStatus(latest)
+		if err != nil {
+			return err
 		}
-		filtered := make([]metav1.Condition, 0, len(*conditions))
+		filtered := make([]metav1.Condition, 0, len(status.Conditions))
 		removed := false
-		for _, cnd := range *conditions {
+		for _, cnd := range status.Conditions {
 			if isPVCConditionReason(cnd.Reason) {
 				removed = true
 				continue
@@ -471,7 +461,7 @@ func CleanupStaleArtifacts(ctx context.Context, kubeClient client.Client, log lo
 		if !removed {
 			return nil
 		}
-		*conditions = filtered
+		status.Conditions = filtered
 		return c.Status().Update(ctx, latest)
 	})
 }
@@ -583,26 +573,15 @@ func setPVCExtractionFailedStatus(ctx context.Context, kubeClient client.Client,
 // model's LifeCycleState is also set. Retries on resource conflicts.
 func updatePVCConditionedStatus(ctx context.Context, kubeClient client.Client, log logr.Logger, obj client.Object, state *v1beta1.LifeCycleState, conditions []metav1.Condition) error {
 	return shared.RetryUpdate(ctx, kubeClient, log, obj, "pvc-status", func(ctx context.Context, c client.Client, latest client.Object) error {
-		var statusConditions *[]metav1.Condition
-		var status *v1beta1.ModelStatusSpec
-		switch m := latest.(type) {
-		case *v1beta1.BaseModel:
-			if state != nil {
-				m.Status.State = *state
-			}
-			statusConditions = &m.Status.Conditions
-			status = &m.Status
-		case *v1beta1.ClusterBaseModel:
-			if state != nil {
-				m.Status.State = *state
-			}
-			statusConditions = &m.Status.Conditions
-			status = &m.Status
-		default:
-			return fmt.Errorf("unsupported model type for PVC status update: %T", latest)
+		_, status, err := shared.ModelSpecAndStatus(latest)
+		if err != nil {
+			return err
+		}
+		if state != nil {
+			status.State = *state
 		}
 		for _, cond := range conditions {
-			meta.SetStatusCondition(statusConditions, cond)
+			meta.SetStatusCondition(&status.Conditions, cond)
 		}
 		shared.StampObservedReconcile(latest, status)
 		return c.Status().Update(ctx, latest)

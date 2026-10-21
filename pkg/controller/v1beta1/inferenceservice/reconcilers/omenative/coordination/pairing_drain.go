@@ -23,31 +23,21 @@ import (
 // update asks it right before its source leaves rotation, with the
 // replacement already serving, and the source stays in rotation while any
 // of these holds:
-//   - the replacement cannot pair yet and the peer Component updates by
-//     SurgeThenDrain: no serving pod of the peer runs the target cohort (or
-//     the empty protocol, which pairs with anything), so retiring a source
-//     that does pair would trade serving capacity for none, and the peer's
-//     replacements come up without waiting on this drain, so the first one
-//     to serve releases the hold;
+//   - the replacement cannot pair yet and the pods leaving can: no serving
+//     pod of the peer runs the target cohort (or the empty protocol, which
+//     pairs with anything), so retiring a source that pairs would trade
+//     serving capacity for none. The first peer pod of the target cohort to
+//     serve releases the hold, whatever mechanism brings it up: a surging
+//     peer's replacements come up without this drain, and a drain-first or
+//     in-place peer's start is admitted beside the kept pods, because the
+//     start-time gate reads an Instance kept here as held still and the
+//     batch step does not wait on it (pairingPicture.heldStill);
 //   - the drain would push the peer below its pairable floor: fewer than
 //     desired minus maxUnavailable of its Instances would keep a serving pod
 //     with a partner, because the pods leaving are the last partners of the
 //     peer's old-cohort Instances. Those Instances recover a partner on
 //     their own, through a replacement of their own in rotation or their
-//     own move, so the hold cannot deadlock;
-//   - the drain would push this Component below its own floor, because the
-//     replacement cannot pair yet, and the peer's new cohort is already
-//     coming up without this promote: the peer surges, or an Instance of a
-//     drain-first or in-place peer is in an update attempt toward the
-//     target cohort (targetCohortComingUp). That attempt needs nothing from
-//     this drain: the start-time gate admits it on the replacement's
-//     serving capacity, so the first pod it brings into rotation releases
-//     the hold. An attempt the escalation has parked or failed is not
-//     coming up, so a first pod that never serves cannot hold this drain
-//     for good; the fresh attempt a retry opens arms the hold again. A
-//     drain-first peer that has not opened its first step is not waited on
-//     (the window is then the one a single-replica recreate costs without
-//     pairing);
+//     own move, so the hold always ends;
 //   - the source is the last pod keeping any pairable engine+decoder pair
 //     alive.
 //
@@ -62,6 +52,18 @@ import (
 // traffic. targetRevision is the ControllerRevision the Component's Instances
 // move to in this pass, the same one the start-time gate orients by. Fails
 // closed on a list error, like the start-time gate.
+//
+// The cohort the leaving pods are traded for is the one of the revision
+// their Instance's in-flight update is pinned to, read from the Component's
+// replica. That is the pass target's cohort on a first change. When a later
+// edit moves the target while the hand-over is already under way, the
+// replacement in rotation still runs the pinned revision, and judging it as
+// a pod of the newest cohort would hold the hand-over for a partner nothing
+// brings up, or admit it against partners it does not have. The same reading
+// answers the abandon question a moved target raises: the replacement
+// itself leaving rotation, with the source staying. It is then on the
+// pinned cohort already, so the hold that applies is the floor or the
+// one-pair rule, which is what its partners on the other side would lose.
 func EvaluatePairingDrain(ctx context.Context, reads client.Reader, isvc *v1beta1.InferenceService, component v1beta1.ComponentType, targetRevision *appsv1.ControllerRevision, defaults GroupDefaults, sourcePods []string) (allowed bool, gate v1beta1.RolloutHoldGate, reason string) {
 	gateCtx := ResolveGateContextWithDefaults(ctx, reads, isvc, component, defaults)
 	gateCtx.TargetRevision = targetRevision
@@ -97,7 +99,6 @@ func EvaluatePairingDrain(ctx context.Context, reads client.Reader, isvc *v1beta
 	}
 	protoByPod := map[string]string{}
 	instanceByPod := map[string]string{}
-	transition := false
 	for _, comp := range pairingComponents {
 		prefix := prefixFor(isvc, comp)
 		pods := &corev1.PodList{}
@@ -122,7 +123,32 @@ func EvaluatePairingDrain(ctx context.Context, reads client.Reader, isvc *v1beta
 			instances[comp][key] = append(instances[comp][key], proto)
 			protoByPod[pod.Name] = proto
 			instanceByPod[pod.Name] = key
-			if proto != "" && proto != target {
+		}
+	}
+
+	// Both pairing replicas, read once: the revision the leaving pods'
+	// Instance moves to and both sides' desired counts and budgets come
+	// from them. A missing replica leaves the one-pair rule; an unreadable
+	// one fails closed.
+	replicas := map[v1beta1.ComponentType]*v1beta1.InferenceReplica{}
+	for _, comp := range pairingComponents {
+		ir, _, err := irprojector.DecodedComponentIRFor(ctx, reads, isvc, comp)
+		if err != nil {
+			return false, v1beta1.RolloutHoldGatePairing, fmt.Sprintf("pairing drain gate: cannot read the %s replica, failing closed: %v", comp, err)
+		}
+		replicas[comp] = ir
+	}
+	cohort, reason := pinnedCohort(ctx, reads, isvc.Namespace, component, replicas[component], instanceByPod, sourcePods, gateCtx.TargetRevision.Name, target)
+	if reason != "" {
+		return false, v1beta1.RolloutHoldGatePairing, reason
+	}
+	if cohort == "" {
+		return true, "", "the revision the Instance hands over to declares no pairing protocol"
+	}
+	transition := false
+	for _, comp := range pairingComponents {
+		for proto, n := range serving[comp] {
+			if n > 0 && proto != "" && proto != cohort {
 				transition = true
 			}
 		}
@@ -131,7 +157,7 @@ func EvaluatePairingDrain(ctx context.Context, reads client.Reader, isvc *v1beta
 		return true, "", "no pairing protocol transition in flight"
 	}
 	if !pairableServingPairExists(serving) {
-		return true, "", fmt.Sprintf("no serving engine+decoder pair exists to protect; allowing progress toward cohort %q", target)
+		return true, "", fmt.Sprintf("no serving engine+decoder pair exists to protect; allowing progress toward cohort %q", cohort)
 	}
 
 	after := copyServing(serving)
@@ -148,97 +174,117 @@ func EvaluatePairingDrain(ctx context.Context, reads client.Reader, isvc *v1beta
 		afterInstances[component][key] = withoutOneCohort(afterInstances[component][key], proto)
 	}
 	peer := pairingPeer(component)
-
-	// Both pairing replicas, read once: the peer's update strategy, the
-	// attempts its Instances carry and both sides' desired counts and
-	// budgets come from them. A missing replica leaves the one-pair rule;
-	// an unreadable one fails closed.
-	replicas := map[v1beta1.ComponentType]*v1beta1.InferenceReplica{}
-	for _, comp := range pairingComponents {
-		ir, _, err := irprojector.DecodedComponentIRFor(ctx, reads, isvc, comp)
-		if err != nil {
-			return false, v1beta1.RolloutHoldGatePairing, fmt.Sprintf("pairing drain gate: cannot read the %s replica, failing closed: %v", comp, err)
-		}
-		replicas[comp] = ir
+	picture := pairingDrainPicture{
+		component: component,
+		cohort:    cohort,
+		serving:   serving, after: after,
+		instances: instances, afterInstances: afterInstances,
+		leaving: leaving,
+		floors: map[v1beta1.ComponentType]pairFloor{
+			component: resolvePairFloor(replicas[component], gateCtx.Group.Pacing),
+			peer:      resolvePairFloor(replicas[peer], gateCtx.Group.Pacing),
+		},
 	}
-	peerSurges := surgeStrategy(replicas[peer])
-	peerMoving := false
-	if !peerSurges {
-		var reason string
-		if peerMoving, reason = targetCohortComingUp(ctx, reads, isvc.Namespace, replicas[peer], target); reason != "" {
-			return false, v1beta1.RolloutHoldGatePairing, reason
-		}
+	if held, reason := picture.hold(); held {
+		return false, v1beta1.RolloutHoldGatePairing, reason
 	}
-	replacementPairs := pairsWithPeer(serving[peer], target)
-	if !replacementPairs && anyPairsWithPeer(serving[peer], leaving) && peerSurges {
-		return false, v1beta1.RolloutHoldGatePairing, fmt.Sprintf(
-			"pairing protocol transition to %q: the replacement %s cannot pair because no serving %s runs cohort %q yet; holding the drain of the serving %s of cohort %s until one does",
-			target, component, peer, target, component, cohortList(leaving))
-	}
-	if floor := resolvePairFloor(replicas[peer], gateCtx.Group.Pacing); floor.Applies() {
-		before := pairableInstanceCount(instances[peer], serving[component])
-		left := pairableInstanceCount(afterInstances[peer], after[component])
-		if left < floor.floor && left < before {
-			return false, v1beta1.RolloutHoldGatePairing, fmt.Sprintf(
-				"pairing protocol transition to %q: draining the serving %s pods of cohort %s would leave the %s with %d pairable serving Instance(s), below its %s; holding the drain until the %s Instances still on cohort %s have another partner or have moved",
-				target, component, cohortList(leaving), peer, left, floor, peer, cohortList(leaving))
-		}
-	}
-	if floor := resolvePairFloor(replicas[component], gateCtx.Group.Pacing); floor.Applies() && !replacementPairs && (peerSurges || peerMoving) {
-		before := pairableInstanceCount(instances[component], serving[peer])
-		left := pairableInstanceCount(afterInstances[component], serving[peer])
-		if left < floor.floor && left < before {
-			return false, v1beta1.RolloutHoldGatePairing, fmt.Sprintf(
-				"pairing protocol transition to %q: the replacement %s cannot pair because no serving %s runs cohort %q yet, and retiring the serving %s of cohort %s would leave the %s with %d pairable serving Instance(s), below its %s; holding the drain until one does",
-				target, component, peer, target, component, cohortList(leaving), component, left, floor)
-		}
-	}
-	if pairableServingPairExists(after) {
-		return true, "", ""
-	}
-	return false, v1beta1.RolloutHoldGatePairing, fmt.Sprintf(
-		"pairing protocol transition to %q: draining the serving %s pods of cohort %s would leave no pairable serving engine+decoder pair; holding the drain until cohort %q serves on both Components",
-		target, component, cohortList(leaving), target)
+	return true, "", ""
 }
 
-// targetCohortComingUp reports whether a drain-first or in-place replica is
-// bringing a pod of the target cohort into rotation on its own: one of its
-// Instances is in an update attempt pinned to a revision of that cohort, or
-// of the empty protocol, which pairs with anything. A Failed Instance and a
-// parked attempt are not coming up: the escalation ended that attempt, and
-// the roll opens a fresh one over it when it retries. Fails closed (a
-// non-empty reason) when the revision such an attempt names cannot be read,
-// like the rest of the gate; a revision that is gone names no cohort.
-func targetCohortComingUp(ctx context.Context, reads client.Reader, namespace string, ir *v1beta1.InferenceReplica, target string) (bool, string) {
-	if ir == nil {
+// pairingDrainPicture is what the drain-time pair floor judges when the
+// old pods of one pairing Component leave rotation: the serving pods of
+// both sides by cohort before and after they leave, each side's Instances
+// with the cohorts of their serving pods, the cohorts leaving, the cohort
+// the leaving pods are traded for, and both sides' pairable floors. The
+// drain gate builds it from pods; the start-time gate builds it from the
+// rows to read a hand-over it keeps (pairingPicture.handOverHeld), so both
+// read one rule.
+type pairingDrainPicture struct {
+	component      v1beta1.ComponentType
+	cohort         string
+	serving        map[v1beta1.ComponentType]map[string]int32
+	after          map[v1beta1.ComponentType]map[string]int32
+	instances      map[v1beta1.ComponentType]map[string][]string
+	afterInstances map[v1beta1.ComponentType]map[string][]string
+	leaving        map[string]struct{}
+	floors         map[v1beta1.ComponentType]pairFloor
+}
+
+// hold is the drain-time pair floor's answer: the old pods stay while the
+// replacement cannot pair yet and the pods leaving can, while the drain
+// would push the peer below its pairable floor, or while the pods are the
+// last keeping any pairable pair alive, as EvaluatePairingDrain describes.
+func (p pairingDrainPicture) hold() (held bool, reason string) {
+	component, peer := p.component, pairingPeer(p.component)
+	if !pairsWithPeer(p.serving[peer], p.cohort) && anyPairsWithPeer(p.serving[peer], p.leaving) {
+		return true, fmt.Sprintf(
+			"pairing protocol transition to %q: the replacement %s cannot pair because no serving %s runs cohort %q yet; holding the drain of the serving %s of cohort %s until one does",
+			p.cohort, component, peer, p.cohort, component, cohortList(p.leaving))
+	}
+	if floor := p.floors[peer]; floor.Applies() {
+		before := pairableInstanceCount(p.instances[peer], p.serving[component])
+		left := pairableInstanceCount(p.afterInstances[peer], p.after[component])
+		if left < floor.floor && left < before {
+			return true, fmt.Sprintf(
+				"pairing protocol transition to %q: draining the serving %s pods of cohort %s would leave the %s with %d pairable serving Instance(s), below its %s; holding the drain until the %s Instances still on cohort %s have another partner or have moved",
+				p.cohort, component, cohortList(p.leaving), peer, left, floor, peer, cohortList(p.leaving))
+		}
+	}
+	if pairableServingPairExists(p.after) {
 		return false, ""
 	}
-	protoByRevision := map[string]string{}
-	for i := range ir.Status.InstanceStatuses {
-		row := &ir.Status.InstanceStatuses[i]
-		op := row.Operation
-		if row.Phase == v1beta1.OMENativeInstanceFailed || op == nil || op.Type != v1beta1.InstanceOperationUpdate ||
-			op.Step == workloadtypes.UpdateStepParked || op.TargetRevision == "" {
+	return true, fmt.Sprintf(
+		"pairing protocol transition to %q: draining the serving %s pods of cohort %s would leave no pairable serving engine+decoder pair; holding the drain until cohort %q serves on both Components",
+		p.cohort, component, cohortList(p.leaving), p.cohort)
+}
+
+// pinnedCohort is the cohort the leaving pods are traded for: the protocol
+// of the revision their Instance's in-flight update is pinned to, which is
+// the pass target's protocol unless a later edit moved the target while the
+// hand-over was under way. Pods of an Instance with no pin, or of none,
+// leave the pass target's protocol in force. Fails closed (a non-empty
+// reason) when the pinned revision cannot be read or is gone, or when the
+// leaving pods are pinned to more than one revision, like the rest of the
+// gate.
+func pinnedCohort(ctx context.Context, reads client.Reader, namespace string, component v1beta1.ComponentType, ir *v1beta1.InferenceReplica, instanceByPod map[string]string, sourcePods []string, targetName, target string) (string, string) {
+	if ir == nil {
+		return target, ""
+	}
+	pins := map[string]struct{}{}
+	for _, name := range sourcePods {
+		idx, err := strconv.Atoi(instanceByPod[name])
+		if err != nil {
 			continue
 		}
-		proto, ok := protoByRevision[op.TargetRevision]
-		if !ok {
-			p, found, err := pairingProtocolForRevisionName(ctx, reads, namespace, op.TargetRevision)
-			if err != nil {
-				return false, fmt.Sprintf("pairing drain gate: cannot read revision %s of the %s attempt on instance %d, failing closed: %v",
-					op.TargetRevision, ir.Spec.Component, row.Index, err)
-			}
-			if !found {
+		for i := range ir.Status.InstanceStatuses {
+			row := &ir.Status.InstanceStatuses[i]
+			if int(row.Index) != idx || row.Operation == nil || row.Operation.Type != v1beta1.InstanceOperationUpdate || row.Operation.TargetRevision == "" {
 				continue
 			}
-			protoByRevision[op.TargetRevision] = p
-			proto = p
-		}
-		if proto == "" || proto == target {
-			return true, ""
+			pins[row.Operation.TargetRevision] = struct{}{}
 		}
 	}
-	return false, ""
+	if len(pins) == 0 {
+		return target, ""
+	}
+	if len(pins) > 1 {
+		return "", fmt.Sprintf("pairing drain gate: the leaving %s pods are pinned to %d revisions at once, failing closed", component, len(pins))
+	}
+	var pin string
+	for candidate := range pins {
+		pin = candidate
+	}
+	if pin == targetName {
+		return target, ""
+	}
+	proto, found, err := pairingProtocolForRevisionName(ctx, reads, namespace, pin)
+	if err != nil {
+		return "", fmt.Sprintf("pairing drain gate: cannot read revision %s the leaving %s pods are pinned to, failing closed: %v", pin, component, err)
+	}
+	if !found {
+		return "", fmt.Sprintf("pairing drain gate: revision %s the leaving %s pods are pinned to not found, failing closed", pin, component)
+	}
+	return proto, ""
 }
 
 // instanceKeyForPod names the Instance a pod belongs to, by its index label;

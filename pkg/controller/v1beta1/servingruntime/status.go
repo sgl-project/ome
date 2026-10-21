@@ -5,6 +5,7 @@ package servingruntime
 import (
 	"errors"
 
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
@@ -47,7 +48,7 @@ func projectInheritanceResult(
 		cond.Message = "inheritance chain resolved"
 	}
 
-	setCondition(&updated.Conditions, cond)
+	apimeta.SetStatusCondition(&updated.Conditions, cond)
 	return updated
 }
 
@@ -66,23 +67,4 @@ func classifyResolveError(err error) string {
 		return ReasonMaxDepthExceeded
 	}
 	return ReasonResolverInternal
-}
-
-// setCondition upserts cond on the slice, preserving LastTransitionTime
-// when Status didn't flip.
-func setCondition(conditions *[]metav1.Condition, cond metav1.Condition) {
-	if cond.LastTransitionTime.IsZero() {
-		cond.LastTransitionTime = metav1.Now()
-	}
-	for i := range *conditions {
-		if (*conditions)[i].Type != cond.Type {
-			continue
-		}
-		if (*conditions)[i].Status == cond.Status {
-			cond.LastTransitionTime = (*conditions)[i].LastTransitionTime
-		}
-		(*conditions)[i] = cond
-		return
-	}
-	*conditions = append(*conditions, cond)
 }

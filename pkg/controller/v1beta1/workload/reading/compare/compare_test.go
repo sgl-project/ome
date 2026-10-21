@@ -11,12 +11,29 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/reading"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/reading/compare"
+	fixture "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
+const podName = "engine-0-default-0"
+
+// now is the pass's clock in every test.
+var now = fixture.Epoch
+
+// base is the Context most cases read under: the pass's clock, a one-minute
+// unready grace, no availability window, the pod in rotation, no pairing
+// transition.
+func base() reading.Context {
+	return reading.Context{
+		Now:          now,
+		UnreadyGrace: time.Minute,
+		Rotation:     reading.Rotation{podName: {}},
+	}
+}
+
 // revisionA is the ControllerRevision name whose hash the fixture pods
 // carry, so a row running it owns them.
-const revisionA = "engine-" + hashA
+const revisionA = "engine-" + fixture.RevisionHashA
 
 // readyRow and failedRow are rows running revisionA whose persisted serving
 // and available counts agree with each other, as a publication over a set
@@ -68,14 +85,14 @@ func TestCompare_PlainFullyServingSetAgrees(t *testing.T) {
 	ctx := base()
 	ctx.Rotation = reading.Rotation{"a": {}, "b": {}}
 	ctx.AvailabilityWindow = 10 * time.Minute
-	set := pods(shape("a"), shape("b"))
+	set := fixture.Pods(fixture.Pod("a"), fixture.Pod("b"))
 	if ds := compare.Compare(set, 2, enteredReady(readyRow(2), now.Add(-30*time.Minute)), ctx); len(ds) != 0 {
 		t.Fatalf("plain fully-serving set disagrees:\n%s", classes(ds))
 	}
 	if ds := compare.Compare(set, 2, nil, ctx); len(ds) != 0 {
 		t.Fatalf("plain fully-serving set without a row disagrees:\n%s", classes(ds))
 	}
-	gang := pods(shape("a", asLeader), shape("b", asWorker))
+	gang := fixture.Pods(fixture.Pod("a", fixture.AsLeader), fixture.Pod("b", fixture.AsWorker))
 	if ds := compare.Compare(gang, 2, readyRow(2), ctx); len(ds) != 0 {
 		t.Fatalf("plain fully-serving gang disagrees:\n%s", classes(ds))
 	}
@@ -101,7 +118,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 	}{
 		{
 			name:    "gate written this pass, PodReady not folded yet",
-			pods:    pods(shape(podName, gateNotFolded)),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.GateNotFolded)),
 			desired: 1,
 			row:     readyRow(1),
 			want: map[string]string{
@@ -114,7 +131,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 		},
 		{
 			name:    "terminal pod whose conditions still read healthy",
-			pods:    pods(shape(podName, failed)),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.Failed)),
 			desired: 1,
 			row:     readyRow(1),
 			want: map[string]string{
@@ -131,7 +148,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 		},
 		{
 			name:    "gate condition absent, PodReady true",
-			pods:    pods(shape(podName, gateAbsent)),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.GateAbsent)),
 			desired: 1,
 			row:     readyRow(0),
 			want: map[string]string{
@@ -143,11 +160,11 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 		},
 		{
 			name:    "Failed row whose persisted serving count trails the parked pod by a pass",
-			pods:    pods(shape(podName, parkedIn("CrashLoopBackOff"))),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.ContainerWaiting("CrashLoopBackOff"))),
 			desired: 1,
 			row:     failedRow(1),
 			want: map[string]string{
-				compare.ReaderRecreateOfDarkRow:      "recreateOfDarkRow/row=false/reading=true",
+				compare.ReaderRecreateOfUnservingRow: "recreateOfDarkRow/row=false/reading=true",
 				compare.ReaderPersistedServingPods:   "persistedServingCount/row>reading",
 				compare.ReaderPersistedAvailablePods: "persistedAvailableCount/row>reading[routed-not-serving]",
 				compare.ReaderIsServing:              "gateWritten/podreadiness=true/reading=false[containers-not-ready]",
@@ -155,11 +172,11 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 		},
 		{
 			name:    "Failed row whose pod came back a pass after the row persisted zero",
-			pods:    pods(shape(podName)),
+			pods:    fixture.Pods(fixture.Pod(podName)),
 			desired: 1,
 			row:     failedRow(0),
 			want: map[string]string{
-				compare.ReaderRecreateOfDarkRow:      "recreateOfDarkRow/row=true/reading=false",
+				compare.ReaderRecreateOfUnservingRow: "recreateOfDarkRow/row=true/reading=false",
 				compare.ReaderPersistedServingPods:   "persistedServingCount/row<reading",
 				compare.ReaderPersistedAvailablePods: "persistedAvailableCount/row<reading",
 			},
@@ -169,7 +186,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 			// as not serving; the grace the reading waits out before it
 			// calls a set out of service plays no part in a dark row.
 			name:    "Failed row dark on a pod still coming up",
-			pods:    pods(shape(podName, neverReady)),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.NeverReady)),
 			desired: 1,
 			row:     failedRow(0),
 			want:    map[string]string{},
@@ -178,14 +195,14 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 			// A Failed row whose source pod still serves is not dark, by
 			// the counter it published and by the pods.
 			name:    "Failed row whose source still serves beside a failed replacement",
-			pods:    pods(shape(podName)),
+			pods:    fixture.Pods(fixture.Pod(podName)),
 			desired: 1,
 			row:     failedRow(1),
 			want:    map[string]string{},
 		},
 		{
 			name:    "pod came back a pass after the row persisted zero",
-			pods:    pods(shape(podName)),
+			pods:    fixture.Pods(fixture.Pod(podName)),
 			desired: 1,
 			row:     readyRow(0),
 			want: map[string]string{
@@ -199,7 +216,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 			// readers wait out the window; the persisted count, written
 			// before the window elapsed, agrees.
 			name:    "pod serving inside its availability window",
-			pods:    pods(shape(podName, readySince(now.Add(-time.Second)))),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.ReadySince(now.Add(-time.Second)))),
 			desired: 1,
 			row:     readyRow(1),
 			window:  time.Minute,
@@ -212,7 +229,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 			// counts available pods out of the headless rotation, the
 			// reading out of the Serving level.
 			name:     "serving pod outside every rotation",
-			pods:     pods(shape(podName)),
+			pods:     fixture.Pods(fixture.Pod(podName)),
 			desired:  1,
 			row:      readyRow(0),
 			rotation: reading.Rotation{},
@@ -228,7 +245,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 			// and the reading reads a deleting pod at no level, as
 			// coordination does.
 			name:    "pod being deleted with healthy conditions",
-			pods:    pods(shape(podName, terminating)),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.Terminating)),
 			desired: 1,
 			row:     readyRow(0),
 			want: map[string]string{
@@ -246,7 +263,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 			// source out of the rotation under another hand: the
 			// escalation reads no capacity, the reading reads the pods.
 			name:    "surge source taken out of the rotation under another hand",
-			pods:    pods(shape(podName)),
+			pods:    fixture.Pods(fixture.Pod(podName)),
 			desired: 1,
 			row:     updatingRow(1, types.WaitingReasonSourceUnrouted),
 			want: map[string]string{
@@ -260,7 +277,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 			// composition reads a dark pod. The detector and the reading
 			// agree the pod is broken.
 			name:    "rolled Instance dark but for a runner restarted since Ready",
-			pods:    pods(shape(podName, restartedAt(now.Add(-5*time.Minute)), unreadySince(now.Add(-2*time.Minute)))),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.RestartedAt(now.Add(-5*time.Minute)), fixture.UnreadySince(now.Add(-2*time.Minute)))),
 			desired: 1,
 			row:     darkRow(),
 			want: map[string]string{
@@ -275,7 +292,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 			// grace, and so does the reading beside the detector, which
 			// reads no restart on a container that has not run again.
 			name:    "rolled Instance dark but for a runner that exited",
-			pods:    pods(shape(podName, exitedAt(now.Add(-2*time.Minute)))),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.ExitedAt(now.Add(-2*time.Minute)))),
 			desired: 1,
 			row:     darkRow(),
 			want: map[string]string{
@@ -289,7 +306,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 			// attempt's own counts hold its slot, so the roll reads no
 			// dark Instance.
 			name:    "dark pod under an update attempt in flight",
-			pods:    pods(shape(podName, unreadySince(now.Add(-2*time.Minute)))),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.UnreadySince(now.Add(-2*time.Minute)))),
 			desired: 1,
 			row:     updatingRow(0, ""),
 			want: map[string]string{
@@ -303,7 +320,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 			// the composition both read the Instance dark. The detector
 			// has no Ready anchor on the row and reads no restart.
 			name:    "dark pod the roll and the reading agree on",
-			pods:    pods(shape(podName, unreadySince(now.Add(-2*time.Minute)))),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.UnreadySince(now.Add(-2*time.Minute)))),
 			desired: 1,
 			row:     readyRow(0),
 			want: map[string]string{
@@ -313,7 +330,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 		},
 		{
 			name:    "runner restarted since Ready and serving again",
-			pods:    pods(shape(podName, restartedAt(now.Add(-5*time.Minute)), readySince(now.Add(-4*time.Minute)))),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.RestartedAt(now.Add(-5*time.Minute)), fixture.ReadySince(now.Add(-4*time.Minute)))),
 			desired: 1,
 			row:     enteredReady(readyRow(1), now.Add(-30*time.Minute)),
 			want: map[string]string{
@@ -322,7 +339,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 		},
 		{
 			name:    "runner restarted since Ready, coming back inside the grace",
-			pods:    pods(shape(podName, restartedAt(now.Add(-5*time.Minute)), unreadySince(now.Add(-10*time.Second)))),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.RestartedAt(now.Add(-5*time.Minute)), fixture.UnreadySince(now.Add(-10*time.Second)))),
 			desired: 1,
 			row:     darkRow(),
 			want: map[string]string{
@@ -335,7 +352,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 			// one of the pods that were Ready then: the detector reads no
 			// restart on it, however it is parked.
 			name:    "pod rebuilt after the row entered Ready, parked in a crash loop",
-			pods:    pods(shape(podName, createdAt(now.Add(-10*time.Minute)), parkedIn("CrashLoopBackOff"))),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.CreatedAt(now.Add(-10*time.Minute)), fixture.ContainerWaiting("CrashLoopBackOff"))),
 			desired: 1,
 			row:     darkRow(),
 			want: map[string]string{
@@ -345,7 +362,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 		},
 		{
 			name:    "Failed pod of a Ready row whose runner died after Ready",
-			pods:    pods(shape(podName, restartedAt(now.Add(-5*time.Minute)), failed)),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.RestartedAt(now.Add(-5*time.Minute)), fixture.Failed)),
 			desired: 1,
 			row:     enteredReady(readyRow(1), now.Add(-30*time.Minute)),
 			want: map[string]string{
@@ -365,7 +382,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 			// Adoption reads a set ready on its containers; the gate is
 			// written and not folded yet, so nothing serves.
 			name:    "Failed row with no running revision, pods ready on their containers alone",
-			pods:    pods(shape(podName, gateNotFolded)),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.GateNotFolded)),
 			desired: 1,
 			row:     unrevisioned(failedRow(0)),
 			want: map[string]string{
@@ -377,7 +394,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 		},
 		{
 			name:    "Failed row with no running revision, pods serving inside the window",
-			pods:    pods(shape(podName, readySince(now.Add(-time.Second)))),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.ReadySince(now.Add(-time.Second)))),
 			desired: 1,
 			row:     unrevisioned(&types.InstanceStatus{Phase: types.InstancePhaseFailed, PodCount: 1, ServingPodCount: 1}),
 			window:  time.Minute,
@@ -390,7 +407,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 			// readers that read ContainersReady where the reading reads
 			// Serving.
 			name:    "containers stopped answering while PodReady and the gate read True",
-			pods:    pods(shape(podName, containersUnready)),
+			pods:    fixture.Pods(fixture.Pod(podName, fixture.ContainersUnready)),
 			desired: 1,
 			row:     readyRow(1),
 			want: map[string]string{
@@ -433,7 +450,7 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 		compare.ReaderCountServingPods,
 		compare.ReaderCountReadyPods,
 		compare.ReaderPodSetFullyServing,
-		compare.ReaderRecreateOfDarkRow,
+		compare.ReaderRecreateOfUnservingRow,
 		compare.ReaderPersistedServingPods,
 		compare.ReaderPersistedAvailablePods,
 		compare.ReaderPodReadyAndServing,
@@ -459,27 +476,27 @@ func TestCompare_CraftedSetsDisagreePerReader(t *testing.T) {
 // sweep pairs every shape with every other, as leader and as worker, under
 // every desired count and both graces.
 func TestCompare_EvidenceReadersNeverDisagree(t *testing.T) {
-	shapes := map[string][]mod{
+	shapes := map[string][]fixture.PodOption{
 		"serving":           nil,
-		"gate absent":       {gateAbsent},
-		"gate not folded":   {gateNotFolded},
-		"in-place drained":  {gateHeldBy(podreadiness.WriterUpdateInPlace, "0-1")},
-		"surge drained":     {gateHeldBy(podreadiness.WriterUpdateSurgeDrain, "0-1")},
-		"node lost":         {nodeLost},
-		"unready past":      {unreadySince(now.Add(-2 * time.Minute))},
-		"unready inside":    {unreadySince(now.Add(-time.Second))},
-		"never ready":       {neverReady},
-		"parked":            {parkedIn("CrashLoopBackOff")},
-		"parked, deleting":  {parkedIn("CrashLoopBackOff"), terminating},
-		"restarted":         {restartedAt(now.Add(-5 * time.Minute))},
-		"exited":            {exitedAt(now.Add(-2 * time.Minute))},
-		"failed":            {failed},
-		"succeeded":         {succeeded},
-		"terminating":       {terminating},
-		"pending":           {pending},
-		"no revision label": {noRevision},
+		"gate absent":       {fixture.GateAbsent},
+		"gate not folded":   {fixture.GateNotFolded},
+		"in-place drained":  {fixture.GateHeldBy(podreadiness.WriterUpdateInPlace, "0-1")},
+		"surge drained":     {fixture.GateHeldBy(podreadiness.WriterUpdateSurgeDrain, "0-1")},
+		"node lost":         {fixture.NodeLost},
+		"unready past":      {fixture.UnreadySince(now.Add(-2 * time.Minute))},
+		"unready inside":    {fixture.UnreadySince(now.Add(-time.Second))},
+		"never ready":       {fixture.NeverReady},
+		"parked":            {fixture.ContainerWaiting("CrashLoopBackOff")},
+		"parked, deleting":  {fixture.ContainerWaiting("CrashLoopBackOff"), fixture.Terminating},
+		"restarted":         {fixture.RestartedAt(now.Add(-5 * time.Minute))},
+		"exited":            {fixture.ExitedAt(now.Add(-2 * time.Minute))},
+		"failed":            {fixture.Failed},
+		"succeeded":         {fixture.Succeeded},
+		"terminating":       {fixture.Terminating},
+		"pending":           {fixture.Pending},
+		"no revision label": {fixture.NoRevision},
 	}
-	runners := map[string]mod{"leader": asLeader, "worker": asWorker, "default": func(*corev1.Pod) {}}
+	runners := map[string]fixture.PodOption{"leader": fixture.AsLeader, "worker": fixture.AsWorker, "default": func(*corev1.Pod) {}}
 	sameRule := map[string]bool{
 		compare.ReaderPodSetServesNothing: true,
 		compare.ReaderPodSetOutOfRotation: true,
@@ -492,7 +509,7 @@ func TestCompare_EvidenceReadersNeverDisagree(t *testing.T) {
 		for aName, a := range shapes {
 			for bName, b := range shapes {
 				for rName, runner := range runners {
-					set := pods(shape("a", a...), shape("b", append([]mod{runner}, b...)...))
+					set := fixture.Pods(fixture.Pod("a", a...), fixture.Pod("b", append([]fixture.PodOption{runner}, b...)...))
 					for _, desired := range []int32{0, 1, 2, 3} {
 						for _, d := range compare.Compare(set, desired, nil, ctx) {
 							if sameRule[d.Reader] {

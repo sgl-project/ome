@@ -14,6 +14,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestConnectionFollowsRegistryIdentity(t *testing.T) {
@@ -88,7 +89,7 @@ func TestRecreatedRegistrationCannotInheritConnectionGrace(t *testing.T) {
 	wc := wcWithSecret("cluster-a")
 	wc.UID = "old-uid"
 	probeFails := false
-	r, cl := newReconciler(scheme(t), func(context.Context, []byte) error {
+	r, cl := newReconciler(t, fakeclient.Scheme(t), func(context.Context, []byte) error {
 		if probeFails {
 			return errors.New("probe unavailable")
 		}

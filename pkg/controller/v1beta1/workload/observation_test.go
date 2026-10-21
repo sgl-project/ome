@@ -761,6 +761,22 @@ func TestTakeInlineV1PublicationDemotesReadyRowWithoutPods(t *testing.T) {
 		}
 	})
 
+	t.Run("a terminal pod backs nothing and publishes Pending beside its count", func(t *testing.T) {
+		refused := observationPod("pod-1", "node-b", false, false, false)
+		refused.Status.Phase = corev1.PodFailed
+		refused.Status.Reason = "OutOfcpu"
+		statuses, counters := publish(t, map[int32][]*corev1.Pod{0: {backed}, 1: {refused}})
+		if statuses[1].Phase != types.InstancePhasePending || statuses[1].PodCount != 1 {
+			t.Errorf("row whose only pod is terminal = phase %s with %d pod(s), want Pending with the pod still counted", statuses[1].Phase, statuses[1].PodCount)
+		}
+		if statuses[1].RunningRevision != "rev-a" {
+			t.Errorf("row RunningRevision = %q, want rev-a kept for the pass that rebuilds it", statuses[1].RunningRevision)
+		}
+		if counters.ReadyReplicas != 1 {
+			t.Errorf("ReadyReplicas = %d, want 1", counters.ReadyReplicas)
+		}
+	})
+
 	t.Run("a Ready pod publishes Ready again", func(t *testing.T) {
 		replacement := observationPod("pod-1", "node-b", true, true, false)
 		statuses, counters := publish(t, map[int32][]*corev1.Pod{0: {backed}, 1: {replacement}})
@@ -1143,12 +1159,12 @@ func TestTakeInlineV1PublicationReadsReadyOverASurgeSourceWhoseReplacementCrashe
 // An Instance serves through its routable pod, and a Service never
 // publishes a gang's worker. A Failed gang whose leader is gone therefore
 // publishes no serving pod however many workers keep the gate, and the
-// dark-row rule (types.RecreateOfDarkRow) reads it as serving nothing:
-// rebuilding it takes nothing further offline. A Failed gang whose leader
-// serves beside a wedged worker publishes the members that serve, short of
-// its desired count, and is not dark. A whole gang publishes every member
-// and is the one serving Instance.
-func TestTakeInlineV1PublicationReadsAGangWithoutItsLeaderAsDark(t *testing.T) {
+// unserving-row rule (types.RecreateOfUnservingRow) reads it as serving
+// nothing: rebuilding it takes nothing further offline. A Failed gang whose
+// leader serves beside a worker held in a waiting state publishes the
+// members that serve, short of its desired count, and is not unserving. A
+// whole gang publishes every member and is the one serving Instance.
+func TestTakeInlineV1PublicationReadsAGangWithoutItsLeaderAsUnserving(t *testing.T) {
 	member := func(index int32, runner string, ordinal int, serving bool) *corev1.Pod {
 		pod := observationPod(fmt.Sprintf("engine-%d-%s-%d", index, runner, ordinal), fmt.Sprintf("node-%d-%d", index, ordinal), serving, serving, false)
 		pod.Labels = map[string]string{query.LabelRunner: runner}
@@ -1191,7 +1207,7 @@ func TestTakeInlineV1PublicationReadsAGangWithoutItsLeaderAsDark(t *testing.T) {
 	if leaderGone.Phase != types.InstancePhaseFailed {
 		t.Errorf("gang without its leader publishes phase %s, want Failed", leaderGone.Phase)
 	}
-	if !types.RecreateOfDarkRow(&leaderGone, types.UpdateStrategyRecreatePod) {
+	if !types.RecreateOfUnservingRow(&leaderGone, types.UpdateStrategyRecreatePod) {
 		t.Errorf("a Failed gang without its leader must read as dark: %d serving pod(s) published", leaderGone.ServingPodCount)
 	}
 
@@ -1210,11 +1226,78 @@ func TestTakeInlineV1PublicationReadsAGangWithoutItsLeaderAsDark(t *testing.T) {
 	if wedgedWorker.Phase != types.InstancePhaseFailed {
 		t.Errorf("gang with a wedged worker publishes phase %s, want Failed", wedgedWorker.Phase)
 	}
-	if types.RecreateOfDarkRow(&wedgedWorker, types.UpdateStrategyRecreatePod) {
+	if types.RecreateOfUnservingRow(&wedgedWorker, types.UpdateStrategyRecreatePod) {
 		t.Errorf("a Failed gang whose leader serves beside a wedged worker is not dark: %d serving pod(s) published", wedgedWorker.ServingPodCount)
 	}
 
 	if counters.ServingReplicas != 1 {
 		t.Errorf("ServingReplicas = %d, want 1: the whole gang serves, the other two are short of their desired count", counters.ServingReplicas)
 	}
+}
+
+// A settled Ready row whose node stopped reporting publishes Restarting
+// beside a serving count of zero. The node lifecycle controller revokes
+// the pods' Ready condition with its own reason once the node's grace has
+// passed; the kubelet is gone, so ContainersReady and the serving gate
+// keep their last values. No pod of the set is in any Service's endpoints,
+// so the row reads not serving the moment the revocation lands, not when
+// the rebuild replaces the set. A pod whose Ready is merely not folded yet
+// still reads as serving (the sub-case in
+// TestTakeInlineV1PublicationReadsRestartingOverAPodSetNotServing).
+func TestTakeInlineV1PublicationReadsRestartingWhenTheNodeRevokedReady(t *testing.T) {
+	readySince := metav1.Unix(1700000000, 0)
+	rows := func() []types.InstanceStatus {
+		return []types.InstanceStatus{
+			{Index: 0, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: "rev-a", ReadySince: &readySince},
+			{Index: 1, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: "rev-a", ReadySince: &readySince},
+		}
+	}
+	publish := func(t *testing.T, desired map[int32]int32, byInstance map[int32][]*corev1.Pod) []types.InstanceStatus {
+		t.Helper()
+		observation, err := workload.NewOwnedPublicationObservation(
+			rows(), workload.NewCachedSelectorPodObservation(nil, byInstance), nil, status.AvailabilityWindow{})
+		if err != nil {
+			t.Fatalf("NewOwnedPublicationObservation: %v", err)
+		}
+		statuses, _, err := observation.TakeInlineV1Publication(desired, "rev-a")
+		if err != nil {
+			t.Fatalf("TakeInlineV1Publication: %v", err)
+		}
+		return statuses
+	}
+	revokedByNode := func(name, node string) *corev1.Pod {
+		pod := observationPod(name, node, true, true, false)
+		for i := range pod.Status.Conditions {
+			if pod.Status.Conditions[i].Type == corev1.PodReady {
+				pod.Status.Conditions[i].Status = corev1.ConditionFalse
+				pod.Status.Conditions[i].Reason = podreadiness.NodeNotReadyReason
+			}
+		}
+		return pod
+	}
+	serving := observationPod("pod-0", "node-a", true, true, false)
+
+	t.Run("a single pod whose node stopped reporting", func(t *testing.T) {
+		statuses := publish(t, map[int32]int32{0: 1, 1: 1}, map[int32][]*corev1.Pod{0: {serving}, 1: {revokedByNode("pod-1", "node-b")}})
+		row := statuses[1]
+		if row.Phase != types.InstancePhaseRestarting || row.PodCount != 1 || row.ServingPodCount != 0 {
+			t.Errorf("row = phase %s, %d pod(s), %d serving; want Restarting with one pod and none serving", row.Phase, row.PodCount, row.ServingPodCount)
+		}
+		if row.RunningRevision != "rev-a" || row.Operation != nil || row.ReadySince == nil {
+			t.Errorf("row = revision %q operation %+v readySince %v; want rev-a kept, no operation and the anchor preserved", row.RunningRevision, row.Operation, row.ReadySince)
+		}
+		if statuses[0].Phase != types.InstancePhaseReady {
+			t.Errorf("serving row phase = %s, want Ready", statuses[0].Phase)
+		}
+	})
+
+	t.Run("a gang whose node stopped reporting", func(t *testing.T) {
+		leader := revokedByNode("pod-1-leader", "node-b")
+		worker := revokedByNode("pod-1-worker", "node-b")
+		statuses := publish(t, map[int32]int32{0: 1, 1: 2}, map[int32][]*corev1.Pod{0: {serving}, 1: {leader, worker}})
+		row := statuses[1]
+		if row.Phase != types.InstancePhaseRestarting || row.PodCount != 2 || row.ServingPodCount != 0 {
+			t.Errorf("gang = phase %s, %d pod(s), %d serving; want Restarting with two pods and none serving", row.Phase, row.PodCount, row.ServingPodCount)
+		}
+	})
 }

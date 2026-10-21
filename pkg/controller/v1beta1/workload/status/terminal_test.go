@@ -9,13 +9,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	fixture "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
 func TestFinalizeAndRemoveInstance_StrongOrderingAndGuards(t *testing.T) {
 	const namespace, owner = "prod", "model"
 	index := int32(3)
-	expected := terminalStatusFixture(index)
+	expected := fixture.UpdatingRowAtSurge(index)
 	tests := []struct {
 		name              string
 		prepare           func(*terminalMutationStore, *types.InstanceStatus)
@@ -162,7 +163,7 @@ func TestFinalizeAndRemoveInstance_StrongOrderingAndGuards(t *testing.T) {
 }
 
 func TestFinalizeAndRemoveInstance_RetriesAfterStatusFailure(t *testing.T) {
-	expected := terminalStatusFixture(3)
+	expected := fixture.UpdatingRowAtSurge(3)
 	store := &terminalMutationStore{
 		ownerUID: "owner-a",
 		statuses: map[int32]types.InstanceStatus{3: cloneTerminalStatus(expected)},
@@ -196,7 +197,7 @@ func TestFinalizeAndRemoveInstance_RetriesAfterStatusFailure(t *testing.T) {
 func TestFinalizeAndRemoveInstance_ConfirmedAbsenceIsIdempotent(t *testing.T) {
 	const namespace, owner = "prod", "model"
 	index := int32(3)
-	expected := terminalStatusFixture(index)
+	expected := fixture.UpdatingRowAtSurge(index)
 	store := &terminalMutationStore{ownerUID: "owner-a", statuses: map[int32]types.InstanceStatus{}}
 	expectations := types.NewExpectations()
 	expectations.ExpectDeletes(namespace, owner, types.ComponentEngine, index, 1)
@@ -246,7 +247,7 @@ func TestFinalizeAndRemoveInstance_AbsentIdentityGuardsResidualFinalization(t *t
 		{
 			name: "live row blocks finalization",
 			prepare: func(store *terminalMutationStore) {
-				store.statuses[index] = terminalStatusFixture(index)
+				store.statuses[index] = fixture.UpdatingRowAtSurge(index)
 			},
 			wantApply: 1,
 		},
@@ -317,7 +318,7 @@ func TestFinalizeAndRemoveInstance_AbsentIdentityGuardsResidualFinalization(t *t
 func TestFinalizeAndRemoveInstance_LegacyRemovalWithoutPerInstanceResources(t *testing.T) {
 	const namespace, owner = "prod", "model"
 	index := int32(3)
-	expected := terminalStatusFixture(index)
+	expected := fixture.UpdatingRowAtSurge(index)
 	tests := []struct {
 		name          string
 		removed       bool
@@ -392,7 +393,7 @@ func TestFinalizeAndRemoveInstance_LegacyRemovalWithoutPerInstanceResources(t *t
 }
 
 func TestTerminalLifecycle_FailsClosedWithoutStrongOwnerIdentity(t *testing.T) {
-	expected := terminalStatusFixture(3)
+	expected := fixture.UpdatingRowAtSurge(3)
 	tests := []struct {
 		name  string
 		input types.ReconcileInput

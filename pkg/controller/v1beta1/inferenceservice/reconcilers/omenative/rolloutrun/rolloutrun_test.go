@@ -1510,3 +1510,130 @@ func TestAFinishedCanaryWithANegativeStepOpensNoRun(t *testing.T) {
 		}
 	})
 }
+
+// A canary unit with a prefill and a decode member: the engine is the
+// primary the step machine runs through, the decoder a secondary member.
+func pdCanaryGroup() v1beta1.RolloutGroup {
+	return v1beta1.RolloutGroup{
+		Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+		Canary:     canaryBody(10, 100),
+	}
+}
+
+// finishedCanaryRun pins a run whose unit is past its last step and reads
+// Stable: group is the unit, primary its step machine's Component, and
+// targets what the run pinned.
+func finishedCanaryRun(t *testing.T, group v1beta1.RolloutGroup, primary v1beta1.ComponentType, primaryRev string, targets ...v1beta1.RolloutRunTarget) *v1beta1.InferenceService {
+	t.Helper()
+	isvc := isvcFixture(group)
+	isvc.Status.Components = map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
+		primary: {
+			RolloutPhase: v1beta1.RolloutPhaseStable,
+			Canary: &v1beta1.CanaryStatus{
+				CanaryRevisionHash:    hashOf(t, primaryRev),
+				CurrentStep:           int32(len(group.Canary.Steps)),
+				ObservedTrafficWeight: 100,
+			},
+		},
+	}
+	isvc.Status.Rollout = &v1beta1.RolloutStatus{
+		ActiveRun: &v1beta1.RolloutRun{
+			RunID:           "llm-a-run",
+			TargetRevisions: targets,
+			Plan:            v1beta1.RolloutRunPlan{Groups: []v1beta1.RolloutRunGroup{{Group: group}}},
+		},
+	}
+	return isvc
+}
+
+// A canary unit reads Stable as soon as every member serves on its target
+// revision. The member's replica promotes its current revision only once
+// every Instance is Ready on it, and an Instance still leaving in a
+// scale-down delays that by a pass. Closing on the Stable read alone would
+// reopen a run toward the same revision on the next pass, because the
+// member's revision pair still diverges. The run stays pinned until the
+// member's current revision reaches the pin, closes Completed once, and the
+// pass after opens nothing. Both shapes: the lagging member is the primary
+// itself, or a secondary beside a primary that never moved.
+func TestACompletedCanaryWaitsForTheMemberToPromoteItsCurrentRevision(t *testing.T) {
+	type shape struct {
+		isvc     func(t *testing.T) *v1beta1.InferenceService
+		lagging  []runtime.Object
+		promoted []runtime.Object
+	}
+	shapes := map[string]shape{
+		"the primary promotes last": {
+			isvc: func(t *testing.T) *v1beta1.InferenceService {
+				return finishedCanaryRun(t, inlineCanary(), v1beta1.EngineComponent, newRev,
+					v1beta1.RolloutRunTarget{Component: v1beta1.EngineComponent, Revision: hashOf(t, newRev), StableRevision: hashOf(t, oldRev)})
+			},
+			lagging:  []runtime.Object{updatedIR("llm-a-engine", oldRev, newRev, 4)},
+			promoted: []runtime.Object{updatedIR("llm-a-engine", newRev, newRev, 4)},
+		},
+		"the decoder promotes after the engine reads Stable": {
+			isvc: func(t *testing.T) *v1beta1.InferenceService {
+				return finishedCanaryRun(t, pdCanaryGroup(), v1beta1.EngineComponent, oldRev,
+					v1beta1.RolloutRunTarget{Component: v1beta1.EngineComponent, Revision: hashOf(t, oldRev), StableRevision: hashOf(t, oldRev)},
+					v1beta1.RolloutRunTarget{Component: v1beta1.DecoderComponent, Revision: hashOf(t, decoderNewRev), StableRevision: hashOf(t, decoderRev)})
+			},
+			lagging:  []runtime.Object{updatedIR("llm-a-engine", oldRev, oldRev, 8), updatedIR("llm-a-decoder", decoderRev, decoderNewRev, 6)},
+			promoted: []runtime.Object{updatedIR("llm-a-engine", oldRev, oldRev, 8), updatedIR("llm-a-decoder", decoderNewRev, decoderNewRev, 6)},
+		},
+	}
+	for name, s := range shapes {
+		t.Run(name, func(t *testing.T) {
+			isvc := s.isvc(t)
+			id := isvc.Status.Rollout.ActiveRun.RunID
+
+			if out := pass(t, isvc, s.lagging...); out.StateChanged {
+				t.Fatalf("outcome = %+v, want the run kept pinned while the member's current revision trails the pin; lastRun=%+v", out, isvc.Status.Rollout.LastRun)
+			}
+			requireSameRun(t, isvc, id)
+
+			if out := pass(t, isvc, s.promoted...); !out.StateChanged || v1beta1.RolloutRunActive(isvc) {
+				t.Fatalf("outcome = %+v active=%v, want the run closed once the member's current revision reached the pin", out, v1beta1.RolloutRunActive(isvc))
+			}
+			if last := isvc.Status.Rollout.LastRun; last == nil || last.Outcome != v1beta1.RolloutRunCompleted {
+				t.Fatalf("lastRun = %+v, want Completed", last)
+			}
+
+			if out := pass(t, isvc, s.promoted...); out.Opened || out.StateChanged || v1beta1.RolloutRunActive(isvc) {
+				t.Fatalf("outcome = %+v active=%v, want no second run after a completed canary", out, v1beta1.RolloutRunActive(isvc))
+			}
+		})
+	}
+}
+
+// updatedIR is a replica whose every Instance counts on the target revision;
+// current is whatever the replica has promoted so far.
+func updatedIR(name, current, target string, replicas int32) *v1beta1.InferenceReplica {
+	ir := namedIR(name, current, target)
+	ir.Status.Replicas, ir.Status.UpdatedReplicas = replicas, replicas
+	return ir
+}
+
+// The wait for a member's current revision cannot outlive the pin it waits
+// on: a member whose target moves to a third revision before its replica
+// promoted the second is a retarget, so the run closes Superseded and a
+// fresh run opens toward the third revision in the same pass.
+func TestACompletedCanaryWhoseMemberMovesOnClosesSuperseded(t *testing.T) {
+	const decoderThirdRev = "llm-a-decoder-ffffffff"
+	isvc := finishedCanaryRun(t, pdCanaryGroup(), v1beta1.EngineComponent, oldRev,
+		v1beta1.RolloutRunTarget{Component: v1beta1.EngineComponent, Revision: hashOf(t, oldRev), StableRevision: hashOf(t, oldRev)},
+		v1beta1.RolloutRunTarget{Component: v1beta1.DecoderComponent, Revision: hashOf(t, decoderNewRev), StableRevision: hashOf(t, decoderRev)})
+	id := isvc.Status.Rollout.ActiveRun.RunID
+
+	out := pass(t, isvc, updatedIR("llm-a-engine", oldRev, oldRev, 8), decoderIR(decoderRev, decoderThirdRev, 6, 0))
+	if !out.StateChanged || !out.Opened {
+		t.Fatalf("outcome = %+v, want the moved target to supersede the run and open a fresh one", out)
+	}
+	if last := isvc.Status.Rollout.LastRun; last == nil || last.Outcome != v1beta1.RolloutRunSuperseded {
+		t.Fatalf("lastRun = %+v, want Superseded", last)
+	}
+	run := requirePinned(t, isvc)
+	if run.RunID == id {
+		t.Fatalf("the superseded run kept its id %s", id)
+	}
+	requireTarget(t, run.TargetRevisions, v1beta1.DecoderComponent, "ffffffff", "dddddddd")
+	requireTarget(t, run.TargetRevisions, v1beta1.EngineComponent, "aaaaaaaa", "aaaaaaaa")
+}

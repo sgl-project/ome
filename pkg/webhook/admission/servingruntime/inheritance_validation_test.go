@@ -7,24 +7,14 @@ import (
 
 	"github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/runtimeinheritance"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
-
-func newScheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
-	s := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(s); err != nil {
-		t.Fatalf("AddToScheme: %v", err)
-	}
-	return s
-}
 
 func mkProfile(name string, disabled bool) *v1beta1.ClusterServingRuntime {
 	return &v1beta1.ClusterServingRuntime{
@@ -74,7 +64,7 @@ func TestValidateProfileMarker(t *testing.T) {
 
 func TestValidateClusterRuntimeInheritance_NoAnnotation(t *testing.T) {
 	g := gomega.NewWithT(t)
-	c := ctrlclientfake.NewClientBuilder().WithScheme(newScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	csr := mkCSR("solo", "")
 	g.Expect(validateClusterRuntimeInheritance(context.Background(), c, csr)).To(gomega.Succeed())
@@ -83,7 +73,7 @@ func TestValidateClusterRuntimeInheritance_NoAnnotation(t *testing.T) {
 func TestValidateClusterRuntimeInheritance_ParentExists(t *testing.T) {
 	g := gomega.NewWithT(t)
 	profile := mkProfile("profile-infra", true)
-	c := ctrlclientfake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(profile).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(profile))
 
 	csr := mkCSR("rt", "profile-infra")
 	g.Expect(validateClusterRuntimeInheritance(context.Background(), c, csr)).To(gomega.Succeed())
@@ -91,7 +81,7 @@ func TestValidateClusterRuntimeInheritance_ParentExists(t *testing.T) {
 
 func TestValidateClusterRuntimeInheritance_ParentMissing(t *testing.T) {
 	g := gomega.NewWithT(t)
-	c := ctrlclientfake.NewClientBuilder().WithScheme(newScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	csr := mkCSR("rt", "ghost")
 	err := validateClusterRuntimeInheritance(context.Background(), c, csr)
@@ -106,7 +96,7 @@ func TestValidateClusterRuntimeInheritance_Cycle(t *testing.T) {
 	// b → a; we then create a → b which forms the cycle.
 	b := mkCSR("b", "a")
 	a := mkCSR("a", "b")
-	c := ctrlclientfake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(a, b).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(a, b))
 
 	err := validateClusterRuntimeInheritance(context.Background(), c, a)
 	g.Expect(err).To(gomega.HaveOccurred())
@@ -124,7 +114,7 @@ func TestValidateClusterRuntimeInheritance_DepthExceeded(t *testing.T) {
 		objects = append(objects, mkCSR(name, prev))
 		prev = name
 	}
-	c := ctrlclientfake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(objects...).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(objects...))
 
 	leaf := mkCSR("leaf", "n5")
 	err := validateClusterRuntimeInheritance(context.Background(), c, leaf)
@@ -138,7 +128,7 @@ func TestValidateNamespacedRuntimeInheritance_SameNamespace(t *testing.T) {
 	parent := &v1beta1.ServingRuntime{
 		ObjectMeta: metav1.ObjectMeta{Name: "ns-profile", Namespace: "team"},
 	}
-	c := ctrlclientfake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(parent).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(parent))
 
 	sr := &v1beta1.ServingRuntime{
 		ObjectMeta: metav1.ObjectMeta{
@@ -153,7 +143,7 @@ func TestValidateNamespacedRuntimeInheritance_SameNamespace(t *testing.T) {
 func TestValidateNamespacedRuntimeInheritance_FallsBackToCluster(t *testing.T) {
 	g := gomega.NewWithT(t)
 	parent := mkCSR("cluster-profile", "")
-	c := ctrlclientfake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(parent).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(parent))
 
 	sr := &v1beta1.ServingRuntime{
 		ObjectMeta: metav1.ObjectMeta{
@@ -175,7 +165,7 @@ func TestValidateNamespacedRuntimeInheritance_CrossNamespaceRejected(t *testing.
 	otherNS := &v1beta1.ServingRuntime{
 		ObjectMeta: metav1.ObjectMeta{Name: "shared", Namespace: "other-team"},
 	}
-	c := ctrlclientfake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(otherNS).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(otherNS))
 
 	sr := &v1beta1.ServingRuntime{
 		ObjectMeta: metav1.ObjectMeta{

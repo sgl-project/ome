@@ -158,6 +158,24 @@ func PodSetServesNothing(pods []*corev1.Pod, now time.Time, grace time.Duration)
 	return live > 0
 }
 
+// PodSetLost reports whether nothing of a pod set is left that could
+// serve: the set is empty, or every pod in it is being deleted or in a
+// terminal phase. Such an Instance is already outside the Component's
+// serving count, so a start that replaces the set opens no new
+// unavailability, as a set that provably serves nothing
+// (PodSetServesNothing) opens none; and it serves nothing now, so the
+// start is ordered ahead of the starts on Instances that still serve, as
+// a set out of rotation (PodSetOutOfRotation) is. A missing pod has no
+// wait that resolves on its own, so no grace applies.
+func PodSetLost(pods []*corev1.Pod) bool {
+	for _, pod := range pods {
+		if pod != nil && pod.DeletionTimestamp == nil && !query.IsTerminalPod(pod) {
+			return false
+		}
+	}
+	return true
+}
+
 // PodSetOutOfRotation reports whether a non-empty pod set has no routed pod
 // in rotation at this moment, whatever the reason and for however long: the
 // Instance serves nothing now. It is the roll's ordering reading, wider than
@@ -234,6 +252,26 @@ func PodSetUnavailableOnParkedMember(pods []*corev1.Pod, desired int32, now time
 		}
 	}
 	return parked && serving < desired
+}
+
+// PodSetShortOfMember reports whether a pod set is out of the
+// coordination gate's serving count because a member is missing: fewer
+// live pods than desired, with at least one live pod left. A pod being
+// deleted or in a terminal phase is not live, as the serving count reads
+// it. The gate counts an Instance as serving only when every desired pod
+// is, so such an Instance is already inside the gate's unavailability,
+// and a start that replaces the set takes nothing further out of that
+// count. A missing pod has no wait that resolves on its own, so no grace
+// applies; a set with no live pod left is read by PodSetLost.
+func PodSetShortOfMember(pods []*corev1.Pod, desired int32) bool {
+	var live int32
+	for _, pod := range pods {
+		if pod == nil || pod.DeletionTimestamp != nil || query.IsTerminalPod(pod) {
+			continue
+		}
+		live++
+	}
+	return live > 0 && live < desired
 }
 
 // podOnRevision reports whether a pod belongs to rev. An unknown hash on

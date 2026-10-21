@@ -1,22 +1,15 @@
-// Package v1beta1convert contains adapter helpers that bridge between
-// workload-owned types and the v1beta1.OMENative* source-of-truth types
-// that controllers (ISVC OMENative dispatch, InferenceReplica) read and
-// write. These converters are the only place in the repo where the
-// workload package's type set crosses the boundary into v1beta1.OMENative*
-// — workload code itself never imports pkg/apis/ome/v1beta1.
+// Package v1beta1convert copies values between the v1beta1 API types the
+// controllers read and write and the types the workload engine computes
+// with. It is the one seam where the two type sets meet: the engine never
+// imports pkg/apis/ome/v1beta1, and the adapters (the InferenceService
+// OMENative dispatch and the InferenceReplica controller) call these
+// functions at the boundary in both directions.
 //
-// The converters are field-for-field mirrors. They round-trip cleanly
-// for every value of every enum; round-trip tests live in convert_test.go.
-//
-// The package sits at the workload boundary by design: every caller is
-// an adapter (an ISVC-side or IR-side reconciler) that needs to map
-// CRD-shape values into workload-shape values (or vice versa) at a
-// single seam. Placing the converters under pkg/controller/v1beta1/
-// (a sibling of workload/, not inside the workload tree and not under
-// any specific reconciler tree) keeps the dependency direction clean —
-// owner-CRD adapters depend on the converters, the converters depend on
-// workload + v1beta1, and the workload package itself stays free of
-// v1beta1 imports.
+// Each enum is one table that pairs every API value with the workload
+// value of the same meaning, and both directions read from that table. A
+// value outside its table reads as the empty value, so a controller fed a
+// newer API version carries on without a panic. The tests round-trip every
+// pair and hold every constant declared on either side in its table.
 package v1beta1convert
 
 import (
@@ -24,173 +17,121 @@ import (
 	workloadtypes "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
-// ComponentTypeToWorkload converts a v1beta1.ComponentType to a
-// workload.ComponentType. Unknown values map to the empty string so
-// adapters tolerate API-version skew without panicking.
+// enumTable pairs the values of one API enum with the workload values of
+// the same meaning and answers in both directions. A value outside the
+// table reads as the empty value either way.
+type enumTable[API ~string, Workload ~string] struct {
+	workloadOf map[API]Workload
+	apiOf      map[Workload]API
+}
+
+// newEnumTable builds a table from its API-to-workload pairs and derives
+// the reverse direction once.
+func newEnumTable[API ~string, Workload ~string](workloadOf map[API]Workload) enumTable[API, Workload] {
+	apiOf := make(map[Workload]API, len(workloadOf))
+	for api, workload := range workloadOf {
+		apiOf[workload] = api
+	}
+	return enumTable[API, Workload]{workloadOf: workloadOf, apiOf: apiOf}
+}
+
+func (t enumTable[API, Workload]) toWorkload(v API) Workload { return t.workloadOf[v] }
+
+func (t enumTable[API, Workload]) fromWorkload(w Workload) API { return t.apiOf[w] }
+
+var componentTypes = newEnumTable(map[v1beta1.ComponentType]workloadtypes.ComponentType{
+	v1beta1.RouterComponent:  workloadtypes.ComponentRouter,
+	v1beta1.EngineComponent:  workloadtypes.ComponentEngine,
+	v1beta1.DecoderComponent: workloadtypes.ComponentDecoder,
+})
+
+// instancePhases lists the empty phase too: a row allocated before its
+// first observation carries it on both sides.
+var instancePhases = newEnumTable(map[v1beta1.OMENativeInstancePhase]workloadtypes.InstancePhase{
+	"":                                  workloadtypes.InstancePhaseEmpty,
+	v1beta1.OMENativeInstancePending:    workloadtypes.InstancePhasePending,
+	v1beta1.OMENativeInstanceCreating:   workloadtypes.InstancePhaseCreating,
+	v1beta1.OMENativeInstanceReady:      workloadtypes.InstancePhaseReady,
+	v1beta1.OMENativeInstanceUpdating:   workloadtypes.InstancePhaseUpdating,
+	v1beta1.OMENativeInstanceRestarting: workloadtypes.InstancePhaseRestarting,
+	v1beta1.OMENativeInstanceMigrating:  workloadtypes.InstancePhaseMigrating,
+	v1beta1.OMENativeInstanceFailed:     workloadtypes.InstancePhaseFailed,
+	v1beta1.OMENativeInstanceDeleting:   workloadtypes.InstancePhaseDeleting,
+})
+
+var updateStrategyTypes = newEnumTable(map[v1beta1.UpdateStrategyType]workloadtypes.UpdateStrategyType{
+	v1beta1.UpdateStrategySurgeThenDrain:    workloadtypes.UpdateStrategySurgeThenDrain,
+	v1beta1.UpdateStrategyRecreatePod:       workloadtypes.UpdateStrategyRecreatePod,
+	v1beta1.UpdateStrategyInPlaceIfPossible: workloadtypes.UpdateStrategyInPlaceIfPossible,
+	v1beta1.UpdateStrategyInPlaceOnly:       workloadtypes.UpdateStrategyInPlaceOnly,
+})
+
+var instanceOperationTypes = newEnumTable(map[v1beta1.InstanceOperationType]workloadtypes.InstanceOperationType{
+	v1beta1.InstanceOperationCreate:  workloadtypes.InstanceOperationCreate,
+	v1beta1.InstanceOperationUpdate:  workloadtypes.InstanceOperationUpdate,
+	v1beta1.InstanceOperationRestart: workloadtypes.InstanceOperationRestart,
+	v1beta1.InstanceOperationMigrate: workloadtypes.InstanceOperationMigrate,
+	v1beta1.InstanceOperationDelete:  workloadtypes.InstanceOperationDelete,
+})
+
+var instanceRestartPolicies = newEnumTable(map[v1beta1.InstanceRestartPolicy]workloadtypes.RestartPolicy{
+	v1beta1.InstanceRestartPolicyNone:             workloadtypes.RestartPolicyNone,
+	v1beta1.InstanceRestartPolicyRecreateInstance: workloadtypes.RestartPolicyRecreateInstance,
+})
+
+var instanceReadyPolicies = newEnumTable(map[v1beta1.InstanceReadyPolicy]workloadtypes.InstanceReadyPolicy{
+	v1beta1.InstanceReadyPolicyAllPodReady: workloadtypes.InstanceReadyPolicyAllPodReady,
+	v1beta1.InstanceReadyPolicyNone:        workloadtypes.InstanceReadyPolicyNone,
+})
+
+var migrationModes = newEnumTable(map[v1beta1.MigrationPolicyMode]workloadtypes.MigrationMode{
+	v1beta1.MigrationPolicyModeAuto:  workloadtypes.MigrationModeAuto,
+	v1beta1.MigrationPolicyModeSurge: workloadtypes.MigrationModeSurge,
+	v1beta1.MigrationPolicyModeNever: workloadtypes.MigrationModeNever,
+})
+
+// ComponentTypeToWorkload reads the workload component type of an API one.
 func ComponentTypeToWorkload(v v1beta1.ComponentType) workloadtypes.ComponentType {
-	switch v {
-	case v1beta1.RouterComponent:
-		return workloadtypes.ComponentRouter
-	case v1beta1.EngineComponent:
-		return workloadtypes.ComponentEngine
-	case v1beta1.DecoderComponent:
-		return workloadtypes.ComponentDecoder
-	default:
-		return workloadtypes.ComponentType("")
-	}
+	return componentTypes.toWorkload(v)
 }
 
-// ComponentTypeFromWorkload converts a workload.ComponentType to a
-// v1beta1.ComponentType. Unknown values map to the empty string so
-// adapters tolerate API-version skew without panicking.
+// ComponentTypeFromWorkload reads the API component type of a workload one.
 func ComponentTypeFromWorkload(w workloadtypes.ComponentType) v1beta1.ComponentType {
-	switch w {
-	case workloadtypes.ComponentRouter:
-		return v1beta1.RouterComponent
-	case workloadtypes.ComponentEngine:
-		return v1beta1.EngineComponent
-	case workloadtypes.ComponentDecoder:
-		return v1beta1.DecoderComponent
-	default:
-		return v1beta1.ComponentType("")
-	}
+	return componentTypes.fromWorkload(w)
 }
 
-// InstancePhaseToWorkload converts a v1beta1.OMENativeInstancePhase to
-// a workload.InstancePhase. Unknown values map to the empty phase so
-// adapters tolerate API-version skew without panicking.
+// InstancePhaseToWorkload reads the workload phase of an API one.
 func InstancePhaseToWorkload(v v1beta1.OMENativeInstancePhase) workloadtypes.InstancePhase {
-	switch v {
-	case "":
-		return workloadtypes.InstancePhaseEmpty
-	case v1beta1.OMENativeInstancePending:
-		return workloadtypes.InstancePhasePending
-	case v1beta1.OMENativeInstanceCreating:
-		return workloadtypes.InstancePhaseCreating
-	case v1beta1.OMENativeInstanceReady:
-		return workloadtypes.InstancePhaseReady
-	case v1beta1.OMENativeInstanceUpdating:
-		return workloadtypes.InstancePhaseUpdating
-	case v1beta1.OMENativeInstanceRestarting:
-		return workloadtypes.InstancePhaseRestarting
-	case v1beta1.OMENativeInstanceMigrating:
-		return workloadtypes.InstancePhaseMigrating
-	case v1beta1.OMENativeInstanceFailed:
-		return workloadtypes.InstancePhaseFailed
-	case v1beta1.OMENativeInstanceDeleting:
-		return workloadtypes.InstancePhaseDeleting
-	default:
-		return workloadtypes.InstancePhaseEmpty
-	}
+	return instancePhases.toWorkload(v)
 }
 
-// InstancePhaseFromWorkload converts a workload.InstancePhase to a
-// v1beta1.OMENativeInstancePhase. Unknown values map to the empty
-// phase so adapters tolerate API-version skew without panicking.
+// InstancePhaseFromWorkload reads the API phase of a workload one.
 func InstancePhaseFromWorkload(w workloadtypes.InstancePhase) v1beta1.OMENativeInstancePhase {
-	switch w {
-	case workloadtypes.InstancePhaseEmpty:
-		return v1beta1.OMENativeInstancePhase("")
-	case workloadtypes.InstancePhasePending:
-		return v1beta1.OMENativeInstancePending
-	case workloadtypes.InstancePhaseCreating:
-		return v1beta1.OMENativeInstanceCreating
-	case workloadtypes.InstancePhaseReady:
-		return v1beta1.OMENativeInstanceReady
-	case workloadtypes.InstancePhaseUpdating:
-		return v1beta1.OMENativeInstanceUpdating
-	case workloadtypes.InstancePhaseRestarting:
-		return v1beta1.OMENativeInstanceRestarting
-	case workloadtypes.InstancePhaseMigrating:
-		return v1beta1.OMENativeInstanceMigrating
-	case workloadtypes.InstancePhaseFailed:
-		return v1beta1.OMENativeInstanceFailed
-	case workloadtypes.InstancePhaseDeleting:
-		return v1beta1.OMENativeInstanceDeleting
-	default:
-		return v1beta1.OMENativeInstancePhase("")
-	}
+	return instancePhases.fromWorkload(w)
 }
 
-// UpdateStrategyTypeToWorkload converts a v1beta1.UpdateStrategyType
-// to a workload.UpdateStrategyType. Unknown values map to the empty string
-// so adapters tolerate API-version skew without panicking.
-//
-// The workload state machine compares against workload.UpdateStrategyType
-// constants exclusively — this converter is the only seam where the
-// CRD-shape strategy enters workload code, so any future drift between
-// the v1beta1 enum and the workload enum becomes a compile-time error.
+// UpdateStrategyTypeToWorkload reads the workload strategy of an API one.
+// The engine compares strategies against its own constants only, so this
+// is the one place an API strategy enters it.
 func UpdateStrategyTypeToWorkload(v v1beta1.UpdateStrategyType) workloadtypes.UpdateStrategyType {
-	switch v {
-	case v1beta1.UpdateStrategySurgeThenDrain:
-		return workloadtypes.UpdateStrategySurgeThenDrain
-	case v1beta1.UpdateStrategyRecreatePod:
-		return workloadtypes.UpdateStrategyRecreatePod
-	case v1beta1.UpdateStrategyInPlaceIfPossible:
-		return workloadtypes.UpdateStrategyInPlaceIfPossible
-	case v1beta1.UpdateStrategyInPlaceOnly:
-		return workloadtypes.UpdateStrategyInPlaceOnly
-	default:
-		return workloadtypes.UpdateStrategyType("")
-	}
+	return updateStrategyTypes.toWorkload(v)
 }
 
-// UpdateStrategyTypeFromWorkload converts a workload.UpdateStrategyType
-// to a v1beta1.UpdateStrategyType. Unknown values map to the
-// empty string so adapters tolerate API-version skew without panicking.
+// UpdateStrategyTypeFromWorkload reads the API strategy of a workload one.
 func UpdateStrategyTypeFromWorkload(w workloadtypes.UpdateStrategyType) v1beta1.UpdateStrategyType {
-	switch w {
-	case workloadtypes.UpdateStrategySurgeThenDrain:
-		return v1beta1.UpdateStrategySurgeThenDrain
-	case workloadtypes.UpdateStrategyRecreatePod:
-		return v1beta1.UpdateStrategyRecreatePod
-	case workloadtypes.UpdateStrategyInPlaceIfPossible:
-		return v1beta1.UpdateStrategyInPlaceIfPossible
-	case workloadtypes.UpdateStrategyInPlaceOnly:
-		return v1beta1.UpdateStrategyInPlaceOnly
-	default:
-		return v1beta1.UpdateStrategyType("")
-	}
+	return updateStrategyTypes.fromWorkload(w)
 }
 
-// InstanceOperationTypeToWorkload converts a v1beta1.InstanceOperationType
-// to a workload.InstanceOperationType. Unknown values map to the empty
-// string so adapters tolerate API-version skew without panicking.
+// InstanceOperationTypeToWorkload reads the workload operation type of an
+// API one.
 func InstanceOperationTypeToWorkload(v v1beta1.InstanceOperationType) workloadtypes.InstanceOperationType {
-	switch v {
-	case v1beta1.InstanceOperationCreate:
-		return workloadtypes.InstanceOperationCreate
-	case v1beta1.InstanceOperationUpdate:
-		return workloadtypes.InstanceOperationUpdate
-	case v1beta1.InstanceOperationRestart:
-		return workloadtypes.InstanceOperationRestart
-	case v1beta1.InstanceOperationMigrate:
-		return workloadtypes.InstanceOperationMigrate
-	case v1beta1.InstanceOperationDelete:
-		return workloadtypes.InstanceOperationDelete
-	default:
-		return workloadtypes.InstanceOperationType("")
-	}
+	return instanceOperationTypes.toWorkload(v)
 }
 
-// InstanceOperationTypeFromWorkload converts a workload.InstanceOperationType
-// to a v1beta1.InstanceOperationType. Unknown values map to the empty
-// string so adapters tolerate API-version skew without panicking.
+// InstanceOperationTypeFromWorkload reads the API operation type of a
+// workload one.
 func InstanceOperationTypeFromWorkload(w workloadtypes.InstanceOperationType) v1beta1.InstanceOperationType {
-	switch w {
-	case workloadtypes.InstanceOperationCreate:
-		return v1beta1.InstanceOperationCreate
-	case workloadtypes.InstanceOperationUpdate:
-		return v1beta1.InstanceOperationUpdate
-	case workloadtypes.InstanceOperationRestart:
-		return v1beta1.InstanceOperationRestart
-	case workloadtypes.InstanceOperationMigrate:
-		return v1beta1.InstanceOperationMigrate
-	case workloadtypes.InstanceOperationDelete:
-		return v1beta1.InstanceOperationDelete
-	default:
-		return v1beta1.InstanceOperationType("")
-	}
+	return instanceOperationTypes.fromWorkload(w)
 }
 
 // InstanceOperationToWorkload converts a *v1beta1.InstanceOperation to
@@ -429,48 +370,21 @@ func InstanceStatusSliceFromWorkload(in []workloadtypes.InstanceStatus) []v1beta
 	return out
 }
 
-// InstanceRestartPolicyToWorkload converts a v1beta1.InstanceRestartPolicy
-// to a workload.RestartPolicy. Unknown values map to the empty policy
-// so adapters tolerate API-version skew without panicking.
+// InstanceRestartPolicyToWorkload reads the workload restart policy of an
+// API one.
 func InstanceRestartPolicyToWorkload(v v1beta1.InstanceRestartPolicy) workloadtypes.RestartPolicy {
-	switch v {
-	case v1beta1.InstanceRestartPolicyNone:
-		return workloadtypes.RestartPolicyNone
-	case v1beta1.InstanceRestartPolicyRecreateInstance:
-		return workloadtypes.RestartPolicyRecreateInstance
-	default:
-		return workloadtypes.RestartPolicy("")
-	}
+	return instanceRestartPolicies.toWorkload(v)
 }
 
-// InstanceReadyPolicyToWorkload converts a v1beta1.InstanceReadyPolicy
-// to a workload.InstanceReadyPolicy. Unknown values map to the empty
-// policy so adapters tolerate API-version skew without panicking.
+// InstanceReadyPolicyToWorkload reads the workload ready policy of an API
+// one.
 func InstanceReadyPolicyToWorkload(v v1beta1.InstanceReadyPolicy) workloadtypes.InstanceReadyPolicy {
-	switch v {
-	case v1beta1.InstanceReadyPolicyAllPodReady:
-		return workloadtypes.InstanceReadyPolicyAllPodReady
-	case v1beta1.InstanceReadyPolicyNone:
-		return workloadtypes.InstanceReadyPolicyNone
-	default:
-		return workloadtypes.InstanceReadyPolicy("")
-	}
+	return instanceReadyPolicies.toWorkload(v)
 }
 
-// MigrationModeToWorkload converts a v1beta1.MigrationPolicyMode to a
-// workload.MigrationMode. Unknown values map to the empty mode so
-// adapters tolerate API-version skew without panicking.
+// MigrationModeToWorkload reads the workload migration mode of an API one.
 func MigrationModeToWorkload(v v1beta1.MigrationPolicyMode) workloadtypes.MigrationMode {
-	switch v {
-	case v1beta1.MigrationPolicyModeAuto:
-		return workloadtypes.MigrationModeAuto
-	case v1beta1.MigrationPolicyModeSurge:
-		return workloadtypes.MigrationModeSurge
-	case v1beta1.MigrationPolicyModeNever:
-		return workloadtypes.MigrationModeNever
-	default:
-		return workloadtypes.MigrationMode("")
-	}
+	return migrationModes.toWorkload(v)
 }
 
 // UpdateStrategyToWorkload converts a v1beta1.UpdateStrategy to a

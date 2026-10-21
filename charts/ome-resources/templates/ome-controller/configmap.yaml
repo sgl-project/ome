@@ -180,6 +180,16 @@ data:
   {{- with .teardown }}
   {{- $fields = append $fields (dict "teardown" (dict "deadline" .deadline)) }}
   {{- end }}
+  {{- with .prefillDecodeRoll }}
+  {{- $rules := dict }}
+  {{- if hasKey . "keepRatio" }}
+  {{- $_ := set $rules "keepRatio" .keepRatio }}
+  {{- end }}
+  {{- if hasKey . "firstSide" }}
+  {{- $_ := set $rules "firstSide" .firstSide }}
+  {{- end }}
+  {{- $fields = append $fields (dict "prefillDecodeRoll" $rules) }}
+  {{- end }}
   {{- if $fields }}
   lifecycle: |-
     {{- $merged := dict }}

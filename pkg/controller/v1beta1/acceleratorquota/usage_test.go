@@ -48,7 +48,7 @@ func tpu(name, flavor string) usage.Key {
 // report. Kueue also reports the cpu and memory cover every queue carries, and
 // those are a ceiling rather than an allowance: surfacing them would bury the
 // one line a tenant cares about under resources nobody manages.
-func TestBudgetStatus(t *testing.T) {
+func TestBudgetStatus_AuthoredBudgetsAndReadings_ReportsOnlyAuthoredLines(t *testing.T) {
 	tests := []struct {
 		name   string
 		quota  *v1beta1.AcceleratorQuota
@@ -134,7 +134,7 @@ func TestBudgetStatus(t *testing.T) {
 // Consumption is observational, so how a pass behaves when it cannot be read
 // is the whole question: publishing zeros would report an idle fleet on the
 // strength of a failed API call, which is exactly when somebody is looking.
-func TestReconcileUsageReporting(t *testing.T) {
+func TestReconcile_UsageReadOrFails_RollsUpFiguresOrPublishesNone(t *testing.T) {
 	held := map[string]map[usage.Key]usage.Observed{
 		"team-a": {tpu("google.com/tpu", "tpu7x"): {
 			Admitted: resource.MustParse("40"),
@@ -253,7 +253,7 @@ func TestReconcileUsageReporting(t *testing.T) {
 // field settles after the first pass, so if the change check does not look at
 // the figures then a pass carrying nothing but new consumption is taken for an
 // idle one and skipped — and the numbers written at startup never move again.
-func TestReconcileRewritesChangedConsumption(t *testing.T) {
+func TestReconcile_OnlyConsumptionChanges_RewritesTheFigures(t *testing.T) {
 	stub := &stubBackend{readings: map[string]map[usage.Key]usage.Observed{
 		"team-a": {tpu("google.com/tpu", "tpu7x"): {Admitted: resource.MustParse("10")}},
 	}}
@@ -302,7 +302,7 @@ func TestReconcileRewritesChangedConsumption(t *testing.T) {
 // A read that fails after figures were published must leave them standing.
 // Blanking them would turn a transient apiserver blip into a fleet that looks
 // idle, and the next successful pass is the only thing that should move them.
-func TestReconcileKeepsFiguresWhenAReadFails(t *testing.T) {
+func TestReconcile_UsageReadFailsAfterPublish_KeepsPublishedFigures(t *testing.T) {
 	held := map[string]map[usage.Key]usage.Observed{
 		"team-a": {tpu("google.com/tpu", "tpu7x"): {Admitted: resource.MustParse("40")}},
 	}

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestValidateInferenceReplicaTemplateSource(t *testing.T) {
+func TestValidateInferenceReplicaTemplateSource_RunnersOrRefs_OneSourceAutoSynced(t *testing.T) {
 	for _, tc := range []struct {
 		name                         string
 		runners                      int

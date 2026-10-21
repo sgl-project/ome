@@ -11,15 +11,14 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/quota/tree"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 const rootName = "root"
@@ -40,15 +39,6 @@ type nodeState struct {
 	Ready    metav1.ConditionStatus
 	Degraded metav1.ConditionStatus
 	Reason   string
-}
-
-func testScheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
-	s := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(s); err != nil {
-		t.Fatalf("scheme: %v", err)
-	}
-	return s
 }
 
 func budget(nominal string) v1beta1.AcceleratorBudget {
@@ -84,14 +74,10 @@ func leaf(name, parent string, budgets ...v1beta1.AcceleratorBudget) *v1beta1.Ac
 	}
 }
 
-func newReconciler(t *testing.T, objs ...client.Object) (*Reconciler, client.Client) {
+func newReconciler(t *testing.T, objs ...client.Object) (*Reconciler, client.WithWatch) {
 	t.Helper()
-	s := testScheme(t)
-	c := fake.NewClientBuilder().
-		WithScheme(s).
-		WithObjects(objs...).
-		WithStatusSubresource(&v1beta1.AcceleratorQuota{}).
-		Build()
+	s := fakeclient.Scheme(t)
+	c := fakeclient.New(t, fakeclient.WithScheme(s), fakeclient.WithObjects(objs...), fakeclient.WithStatusSubresource(&v1beta1.AcceleratorQuota{}))
 	return &Reconciler{
 		Client:    c,
 		Scheme:    s,
@@ -168,9 +154,9 @@ func bad(parent, reason string) nodeState {
 	}
 }
 
-// TestReconcile drives one pass over a fixed tree and compares the resulting
+// TestReconcile_FixedTrees_WritesPositionAndConditionsOnEveryNode drives one pass over a fixed tree and compares the resulting
 // status of EVERY node at once.
-func TestReconcile(t *testing.T) {
+func TestReconcile_FixedTrees_WritesPositionAndConditionsOnEveryNode(t *testing.T) {
 	tests := []struct {
 		name   string
 		quotas []client.Object
@@ -283,11 +269,11 @@ func TestReconcile(t *testing.T) {
 	}
 }
 
-// TestReconcileAfterEdit drives two passes with an edit in between. It is
-// separate from TestReconcile because the interesting property is what CHANGES:
+// TestReconcile_EditBetweenPasses_UpdatesAffectedNodesAndNoOpWritesNothing drives two passes with an edit in between. It is
+// separate from TestReconcile_FixedTrees_WritesPositionAndConditionsOnEveryNode because the interesting property is what CHANGES:
 // a verdict moving to a node the edit did not touch, a stale condition clearing,
 // or — for a no-op edit — nothing being written at all.
-func TestReconcileAfterEdit(t *testing.T) {
+func TestReconcile_EditBetweenPasses_UpdatesAffectedNodesAndNoOpWritesNothing(t *testing.T) {
 	tests := []struct {
 		name   string
 		quotas []client.Object
@@ -412,9 +398,9 @@ func setNominal(t *testing.T, c client.Client, name, nominal string) {
 	}
 }
 
-// TestReconcileResult covers the pass-level outcome — the error and the requeue —
+// TestReconcile_ResyncSetOrRootUnset_RequeuesOrFailsHard covers the pass-level outcome — the error and the requeue —
 // independently of what any node's status says.
-func TestReconcileResult(t *testing.T) {
+func TestReconcile_ResyncSetOrRootUnset_RequeuesOrFailsHard(t *testing.T) {
 	tests := []struct {
 		name             string
 		rootName         string
@@ -481,10 +467,10 @@ func TestReconcileResult(t *testing.T) {
 	}
 }
 
-// TestReconcileReadsThroughAPIReader pins the reason APIReader exists: a node
+// TestReconcile_NodeNotYetInCache_IsStillReadAndMarked pins the reason APIReader exists: a node
 // the cache has not caught up on must still be judged, or the controller clears
 // a Degraded that is still true.
-func TestReconcileReadsThroughAPIReader(t *testing.T) {
+func TestReconcile_NodeNotYetInCache_IsStillReadAndMarked(t *testing.T) {
 	r, c := newReconciler(t, cohort(rootName, "", budget("128")))
 	ctx := context.Background()
 
@@ -504,7 +490,7 @@ func TestReconcileReadsThroughAPIReader(t *testing.T) {
 	}
 }
 
-func TestSetupWithManager(t *testing.T) {
+func TestSetupWithManager_RootNameUnset_ReturnsError(t *testing.T) {
 	tests := []struct {
 		name     string
 		rootName string
@@ -516,7 +502,7 @@ func TestSetupWithManager(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &Reconciler{
-				APIReader: fake.NewClientBuilder().Build(),
+				APIReader: fakeclient.New(t),
 				Options:   tree.Options{RootName: tc.rootName},
 			}
 			err := r.SetupWithManager(nil)
@@ -531,7 +517,7 @@ func TestSetupWithManager(t *testing.T) {
 // source revision the copy reflects. The echoed number is what makes remote
 // progress comparable from the management plane -- and it has to mean
 // "materialized", not "received", or the hub reads work that has not happened.
-func TestMaterializedSourceGeneration(t *testing.T) {
+func TestMaterializedSourceGeneration_AnnotationAndCondition_ReportsOnlyMaterialized(t *testing.T) {
 	projected := func(stamp string, held int64) *v1beta1.AcceleratorQuota {
 		q := leaf("team", rootName)
 		if stamp != "" {
@@ -614,7 +600,7 @@ func TestMaterializedSourceGeneration(t *testing.T) {
 // entirely when it thinks nothing changed -- so a field it does not compare is
 // written once and then frozen for the life of the object. That has already
 // happened once in this package, to Budgets.
-func TestSourceGenerationFollowsTheProjector(t *testing.T) {
+func TestReconcile_SourceGenerationAnnotationMoves_StatusEchoFollows(t *testing.T) {
 	stamp := func(q *v1beta1.AcceleratorQuota, gen string) *v1beta1.AcceleratorQuota {
 		q.Annotations = map[string]string{
 			v1beta1.AcceleratorQuotaSourceGenerationAnnotation: gen,
@@ -656,5 +642,48 @@ func TestSourceGenerationFollowsTheProjector(t *testing.T) {
 	if got.Status.SourceGeneration != 8 {
 		t.Errorf("second pass: SourceGeneration = %d, want 8 -- the echo froze",
 			got.Status.SourceGeneration)
+	}
+}
+
+// TestRunPassSteps_StopsAtTheFirstStepThatEndsThePass holds the step runner
+// to the order of a pass: every step runs while each lets the pass go on,
+// and the first step that ends the pass, or fails, is the last one run. A
+// step that ends the pass leaves the result the pass returns on the record.
+func TestRunPassSteps_StopsAtTheFirstStepThatEndsThePass(t *testing.T) {
+	var ran []string
+	step := func(name string, next bool, err error) passStep {
+		return func(context.Context) (bool, error) {
+			ran = append(ran, name)
+			return next, err
+		}
+	}
+	run := func(steps ...passStep) (done bool, order string, err error) {
+		ran = nil
+		done, err = runPassSteps(context.Background(), steps)
+		return done, strings.Join(ran, ","), err
+	}
+
+	done, order, err := run(step("first", true, nil), step("second", true, nil))
+	if err != nil || !done || order != "first,second" {
+		t.Fatalf("every step went on: done=%v err=%v ran=%q, want done=true err=nil ran=first,second", done, err, order)
+	}
+	done, order, err = run(step("first", true, nil), step("ends", false, nil), step("never", true, nil))
+	if err != nil || done || order != "first,ends" {
+		t.Fatalf("a step ended the pass: done=%v err=%v ran=%q, want done=false err=nil ran=first,ends", done, err, order)
+	}
+	writeFailed := errors.New("write the status")
+	done, order, err = run(step("fails", true, writeFailed), step("never", true, nil))
+	if !errors.Is(err, writeFailed) || done || order != "fails" {
+		t.Fatalf("a step failed: done=%v err=%v ran=%q, want done=false the step's error ran=fails", done, err, order)
+	}
+
+	pass := &quotaPass{}
+	requeue := ctrl.Result{Requeue: true}
+	done, order, err = run(step("first", true, nil), func(context.Context) (bool, error) {
+		ran = append(ran, "ends")
+		return pass.end(requeue, nil)
+	}, step("never", true, nil))
+	if err != nil || done || order != "first,ends" || pass.result != requeue {
+		t.Fatalf("a step ended the pass with a result: done=%v err=%v ran=%q result=%+v, want done=false err=nil ran=first,ends result=%+v", done, err, order, pass.result, requeue)
 	}
 }

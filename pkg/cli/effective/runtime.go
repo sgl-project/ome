@@ -18,10 +18,10 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/specdefaults"
 	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"sigs.k8s.io/ome/pkg/runtimeinheritance"
 	"sigs.k8s.io/ome/pkg/runtimeselector"
+	"sigs.k8s.io/ome/pkg/specdefaults"
 )
 
 // ErrUnsafeRuntimeSerialization prevents internal, potentially secret-bearing

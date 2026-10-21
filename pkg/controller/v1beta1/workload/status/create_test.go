@@ -2,12 +2,14 @@ package status
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -153,5 +155,37 @@ func TestCreateRollbackMutation_RestoresOnlyTheCommittedTransition(t *testing.T)
 	}
 	if !removal.Precondition(&committed) || removal.Precondition(&moved) {
 		t.Fatal("the removal must own exactly the committed row")
+	}
+}
+
+func TestReadyMutation_UnknownRevisionKeepsTheAttempt(t *testing.T) {
+	now := time.Now()
+	before := types.InstanceStatus{
+		Index: 0, Phase: types.InstancePhaseCreating,
+		Operation: &types.InstanceOperation{ID: "create-0", Type: types.InstanceOperationCreate, TargetRevision: "example-engine-v1"},
+	}
+	row := Clone(before)
+	if ReadyMutation(0, now).Mutate(&row) || !reflect.DeepEqual(row, before) {
+		t.Fatalf("unverified promotion changed the row: %+v", row)
+	}
+	if !ReadyOnRevisionMutation(0, before.Operation.TargetRevision, now).Mutate(&row) {
+		t.Fatal("a verified revision must permit promotion")
+	}
+	if row.Phase != types.InstancePhaseReady || row.RunningRevision != before.Operation.TargetRevision || row.Operation != nil {
+		t.Fatalf("promotion did not record its revision before clearing the attempt: %+v", row)
+	}
+}
+
+func TestStampReady_ValidatesTheFreshRowsRevision(t *testing.T) {
+	before := types.InstanceStatus{Index: 0, Phase: types.InstancePhaseRestarting,
+		Operation: &types.InstanceOperation{ID: "restart-0", Type: types.InstanceOperationRestart}}
+	w := newRowWriter(before)
+	input := w.input(time.Now())
+	input.ObservedState.InstanceStatuses[0].RunningRevision = "example-engine-v1"
+	if err := StampReady(context.Background(), input, 0); !errors.Is(err, query.ErrRevisionUnknown) {
+		t.Fatalf("error = %v, want unknown revision from the fresh row", err)
+	}
+	if w.writes != 0 || !reflect.DeepEqual(w.rows[0], before) {
+		t.Fatalf("rejected promotion changed the row: %+v", w.rows[0])
 	}
 }

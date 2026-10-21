@@ -13,9 +13,10 @@
 //     no repair can lift: a PodGroup name another controller owns, and a
 //     pod the scheduler could not place for longer than the operator's
 //     grace.
-//   - disposition.go — what a disposable attempt's failure means:
-//     relocation first, then a RetryBlock against the revision when the
-//     cause is workload-caused, then the plain Failed stamp.
+//   - deadline_decision.go — what an expired Create, recreate or in-place
+//     Update attempt's failure means: a workload-caused failure holds the
+//     revision, an Instance that can move to another node records a node
+//     exclusion, anything else ends as terminal.
 //   - deadline.go — the deadline arithmetic: when an operation's clock
 //     has elapsed, and the parking step that stops it while an external
 //     authority holds the attempt.

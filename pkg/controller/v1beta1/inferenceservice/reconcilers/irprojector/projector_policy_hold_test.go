@@ -7,9 +7,9 @@ import (
 	"github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 // TestEnsureInferenceReplica_PolicyHold_PreservesStoredBlockAndReplicas pins
@@ -23,7 +23,7 @@ import (
 func TestEnsureInferenceReplica_PolicyHold_PreservesStoredBlockAndReplicas(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod") // MinReplicas = 2
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	// First projection: the rendered KEDA block lands as the IR's stored
 	// last-known-good.
@@ -86,7 +86,7 @@ func TestEnsureInferenceReplica_PolicyHold_PreservesStoredBlockAndReplicas(t *te
 func TestEnsureInferenceReplica_PolicyHold_CreateProjectsNoBlock(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod") // MinReplicas = 2
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 
 	p := minimalParams(t, isvc, c)
 	p.ResolvedAutoscaler = nil

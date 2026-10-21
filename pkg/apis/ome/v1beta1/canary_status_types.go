@@ -73,6 +73,14 @@ type CanaryStatus struct {
 	// +optional
 	RolledBackRevisionHash string `json:"rolledBackRevisionHash,omitempty"`
 
+	// RollbackRequested records that this unit's rollback was applied from an
+	// ome.io/rollout-rollback request. The request stays on the
+	// InferenceService through the hold and is this unit's while set: no
+	// other unit's canary acts on it. It clears when the request is observed
+	// removed, and with the hold when the unit starts its next canary.
+	// +optional
+	RollbackRequested bool `json:"rollbackRequested,omitempty"`
+
 	// AnalysisFailedChecks counts failing analysis samples in the CURRENT step
 	// (reset to zero on each advance). Auto-rollback fires when it reaches
 	// Analysis.FailureLimit. Set only under Promotion=Analysis.

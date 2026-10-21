@@ -135,9 +135,9 @@ func TestScore_NoTopologyKeyIsNeutral(t *testing.T) {
 	}
 }
 
-// TestScore_PinnedGangMemberSkipped: when PreFilter has pinned a domain (gang
+// TestScore_AssignedGangMemberSkipped: when PreFilter has assigned a domain (gang
 // member), the domain is already fixed; packing must not run and fight it.
-func TestScore_PinnedGangMemberSkipped(t *testing.T) {
+func TestScore_AssignedGangMemberSkipped(t *testing.T) {
 	g := packer()
 	pod := gpuPod("4")
 	nodes := []framework.NodeInfo{
@@ -146,9 +146,9 @@ func TestScore_PinnedGangMemberSkipped(t *testing.T) {
 		nodeInfo(gpuNode("b1", "b", "4")),
 	}
 	state := newCycleState()
-	writePin(state, "a", gangInfo{key: "ns/g", topologyKey: testKey})
+	writeAssignment(state, "a", gangInfo{key: "ns/g", topologyKey: testKey})
 	if st := g.PreScore(context.Background(), state, pod, nodes); st == nil || st.Code() != framework.Skip {
-		t.Fatalf("pinned gang member should Skip PreScore, got %v", st)
+		t.Fatalf("assigned gang member should Skip PreScore, got %v", st)
 	}
 }
 

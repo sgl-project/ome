@@ -35,7 +35,7 @@ func validKedaPolicySpec() *v1beta1.AutoscalerPolicySpec {
 	}
 }
 
-func TestValidateAutoscalerPolicySpec(t *testing.T) {
+func TestValidateAutoscalerPolicySpec_HpaAndKedaShapes_AcceptsValidJoinsEveryIssue(t *testing.T) {
 	t.Run("nil spec is valid", func(t *testing.T) {
 		if err := ValidateAutoscalerPolicySpec(nil); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -115,7 +115,7 @@ func isvcWithPolicyRefs(engine, decoder, router *v1beta1.AutoscalerPolicyRef) *v
 	return isvc
 }
 
-func TestValidateAutoscalerPolicyRefs(t *testing.T) {
+func TestValidateAutoscalerPolicyRefs_GateAndKind_RejectsGateOffOrClusterKind(t *testing.T) {
 	namespacedRef := &v1beta1.AutoscalerPolicyRef{Name: "request-activity-v1", Kind: constants.AutoscalerPolicyKind}
 	defaultedRef := &v1beta1.AutoscalerPolicyRef{Name: "request-activity-v1"}
 	reservedRef := &v1beta1.AutoscalerPolicyRef{Name: "request-activity-v1", Kind: "ClusterAutoscalerPolicy"}
@@ -195,7 +195,7 @@ func TestValidateAutoscalerPolicyRefs(t *testing.T) {
 	}
 }
 
-func TestAutoscalerPolicySplitCeilingWarning(t *testing.T) {
+func TestAutoscalerPolicySplitCeilingWarning_SplitRefNoCap_WarnsNamingComponents(t *testing.T) {
 	ref := &v1beta1.AutoscalerPolicyRef{Name: "request-activity-v1"}
 	withPlacement := func(isvc *v1beta1.InferenceService, placement *v1beta1.PlacementSpec) *v1beta1.InferenceService {
 		isvc.Spec.Placement = placement
@@ -278,7 +278,7 @@ func TestAutoscalerPolicySplitCeilingWarning(t *testing.T) {
 	})
 }
 
-func TestAutoscalerCeilingWarningSplitModes(t *testing.T) {
+func TestAutoscalerPolicySplitCeilingWarning_EitherSplitMode_SameWarningText(t *testing.T) {
 	for _, mode := range []v1beta1.PlacementMode{v1beta1.PlacementModeSplit, v1beta1.PlacementModeSplitByCapacity} {
 		t.Run(string(mode), func(t *testing.T) {
 			isvc := isvcWithPolicyRefs(&v1beta1.AutoscalerPolicyRef{Name: "request-activity-v1"}, nil, nil)

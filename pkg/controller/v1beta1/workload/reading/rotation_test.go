@@ -11,6 +11,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/reading"
+	fixture "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -45,17 +46,17 @@ func TestRotationFromEndpointSlices(t *testing.T) {
 }
 
 func TestRoutedServices(t *testing.T) {
-	got := reading.RoutedServices("svc", types.ComponentType("engine"), pods(
-		shape("a", onRevision(hashB)),
-		shape("b", onRevision(hashA)),
-		shape("c", onRevision(hashA)),
-		shape("w", asWorker, onRevision(hashA)),
-		shape("n", noRevision),
+	got := reading.RoutedServices("svc", types.ComponentType("engine"), fixture.Pods(
+		fixture.Pod("a", fixture.OnRevision(fixture.RevisionHashB)),
+		fixture.Pod("b", fixture.OnRevision(fixture.RevisionHashA)),
+		fixture.Pod("c", fixture.OnRevision(fixture.RevisionHashA)),
+		fixture.Pod("w", fixture.AsWorker, fixture.OnRevision(fixture.RevisionHashA)),
+		fixture.Pod("n", fixture.NoRevision),
 		nil,
 	))
 	want := []string{
-		query.PerRevisionServiceName("svc", "engine", hashA),
-		query.PerRevisionServiceName("svc", "engine", hashB),
+		query.PerRevisionServiceName("svc", "engine", fixture.RevisionHashA),
+		query.PerRevisionServiceName("svc", "engine", fixture.RevisionHashB),
 	}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("RoutedServices = %v, want %v", got, want)

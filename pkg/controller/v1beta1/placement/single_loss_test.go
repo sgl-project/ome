@@ -139,25 +139,25 @@ func TestSingleMoveLossRecovery(t *testing.T) {
 func TestSingleMoveEmptyInventory(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
-		standing    homeObservationState
+		standing    memberObservationState
 		newMember   bool
 		orphan      bool
 		unavailable bool
 		want        bool
 	}{
-		{name: "all registrations empty", standing: homeAbsent, want: true},
-		{name: "unknown winner cannot restart", standing: homeUnknown},
-		{name: "present winner cannot restart", standing: homePresent},
-		{name: "new registration must also be empty", standing: homeAbsent, newMember: true},
-		{name: "new registration orphan cannot be ignored", standing: homeAbsent, orphan: true},
-		{name: "unreadable new registration blocks restart", standing: homeAbsent, unavailable: true},
+		{name: "all registrations empty", standing: memberAbsent, want: true},
+		{name: "unknown winner cannot restart", standing: memberUnknown},
+		{name: "present winner cannot restart", standing: memberPresent},
+		{name: "new registration must also be empty", standing: memberAbsent, newMember: true},
+		{name: "new registration orphan cannot be ignored", standing: memberAbsent, orphan: true},
+		{name: "unreadable new registration blocks restart", standing: memberAbsent, unavailable: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			fixture := observationFixture(t)
 			source := fixture.source
 			source.Status.Placement.Plan.Mode = v1beta1.PlacementModeSingle
 			source.Status.Placement.Plan.Winner = "member-a"
-			standing := &placementObservations{homes: map[string]homeObservation{"member-a": {state: tt.standing}}}
+			standing := &placementObservations{members: map[string]memberObservation{"member-a": {state: tt.standing}}}
 			scheme := testScheme(t)
 			workers := map[string]client.WithWatch{"member-a": emptyWorker(scheme), "member-b": emptyWorker(scheme)}
 			if tt.newMember {
@@ -219,7 +219,7 @@ func TestSelectedReplacementTerminalFailure(t *testing.T) {
 				if name == "member-a" && tt.absent {
 					a.CurrentReplicas, a.CurrentHome = 0, nil
 					o := observations[name]
-					o.Home.Absent, o.Home.Ready, o.Home.Occupied = true, 0, 0
+					o.MemberState.Absent, o.MemberState.Ready, o.MemberState.Occupied = true, 0, 0
 					observations[name] = o
 				}
 				source.Status.Placement.Candidates = append(source.Status.Placement.Candidates, v1beta1.CandidatePlacement{Cluster: name, Allocation: a.DeepCopy()})

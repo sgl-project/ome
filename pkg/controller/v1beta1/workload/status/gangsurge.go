@@ -2,7 +2,6 @@ package status
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -75,19 +74,33 @@ func stampGangSurgeTarget(s *types.InstanceStatus, surgeIdx int32, targetRev str
 	if GangSurgeTargetClaimMatches(s, targetRev) || !EmptyGangSurgeTargetSlot(s) {
 		return false
 	}
-	s.Incarnation = 1
-	s.Phase = types.InstancePhaseCreating
-	s.TargetRevision = targetRev
-	s.Operation = &types.InstanceOperation{
-		ID:             fmt.Sprintf("gangsurgetarget-%d-%d", surgeIdx, now.Unix()),
-		Type:           types.InstanceOperationUpdate,
-		Step:           types.UpdateStepGangSurgeTarget,
-		TargetRevision: targetRev,
-		StartedAt:      now,
-		LastProgressAt: now,
-		Deadline:       types.DeadlineAt(now, timeout),
-	}
+	claim := gangSurgeTargetRow(surgeIdx, targetRev, types.UpdateStepGangSurgeTarget, timeout, now)
+	s.Incarnation = claim.Incarnation
+	s.Phase = claim.Phase
+	s.TargetRevision = claim.TargetRevision
+	s.Operation = claim.Operation
 	return true
+}
+
+// gangSurgeTargetRow is the row a gang surge's target index carries while
+// the slot is claimed: first incarnation, Creating toward targetRevision,
+// under an Update operation at step with the deadline timeout gives.
+func gangSurgeTargetRow(surgeIdx int32, targetRevision, step string, timeout time.Duration, now metav1.Time) types.InstanceStatus {
+	return types.InstanceStatus{
+		Index:          surgeIdx,
+		Incarnation:    1,
+		Phase:          types.InstancePhaseCreating,
+		TargetRevision: targetRevision,
+		Operation: &types.InstanceOperation{
+			ID:             fmt.Sprintf("gangsurgetarget-%d-%d", surgeIdx, now.Unix()),
+			Type:           types.InstanceOperationUpdate,
+			Step:           step,
+			TargetRevision: targetRevision,
+			StartedAt:      now,
+			LastProgressAt: now,
+			Deadline:       types.DeadlineAt(now, timeout),
+		},
+	}
 }
 
 // StartGangSurge commits the source claim and the target marker in one
@@ -114,7 +127,8 @@ func StartGangSurge(
 		}
 		return true, nil
 	}
-	if err := RequireOwner(input); err != nil {
+	write, err := newGuardedWrite(input)
+	if err != nil {
 		return false, err
 	}
 
@@ -126,28 +140,19 @@ func StartGangSurge(
 	desiredTarget := types.InstanceStatus{Index: surgeIdx}
 	stampGangSurgeTarget(&desiredTarget, surgeIdx, targetRev, timeout, now)
 	desiredTargetIdentity := Capture(&desiredTarget)
-	ownerUID := input.OwnerObject.GetUID()
-	committed := false
 	sourceMutation := types.InstanceMutation{
 		Index: source.Index,
 		Mutate: func(status *types.InstanceStatus) bool {
 			return stampGangSurgeSource(status, source.Index, surgeIdx, targetRev, strategy, timeout, now)
 		},
-		BatchPrecondition: func(snapshot types.InstanceMutationSnapshot) bool {
-			if snapshot.OwnerUID != ownerUID {
-				return false
-			}
-			currentSource, found := snapshot.Instances[source.Index]
-			if !found || !sourceIdentity.Matches(currentSource) {
-				return false
-			}
-			currentTarget, found := snapshot.Instances[surgeIdx]
-			return !found || EmptyGangSurgeTargetSlot(&currentTarget)
-		},
+		BatchPrecondition: write.guard(func(rows types.InstanceMutationSnapshot) bool {
+			currentTarget, found := rows.Instances[surgeIdx]
+			return sourceIdentity.holds(rows) && (!found || EmptyGangSurgeTargetSlot(&currentTarget))
+		}),
 		Postcondition: func(status *types.InstanceStatus) bool {
 			return status != nil && desiredSourceIdentity.Matches(*status)
 		},
-		OnCommit: func(_, _ *types.InstanceStatus) { committed = true },
+		OnCommit: write.recordCommit,
 	}
 	targetMutation := types.InstanceMutation{
 		Index: surgeIdx,
@@ -158,15 +163,7 @@ func StartGangSurge(
 			return status != nil && desiredTargetIdentity.Matches(*status)
 		},
 	}
-	err := input.ApplyInstanceMutationsWithRetryBlock(ctx,
-		[]types.InstanceMutation{sourceMutation, targetMutation}, targetRev, RetryBlockStartAttempt)
-	if errors.Is(err, types.ErrStatusMutationPrecondition) || errors.Is(err, types.ErrStatusOwnerGone) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return committed, nil
+	return write.commit(ctx, input, []types.InstanceMutation{sourceMutation, targetMutation}, targetRev, RetryBlockStartAttempt)
 }
 
 // StampGangSurgeDrainStep moves a gang surge's SOURCE from Step=Surge to
@@ -180,62 +177,19 @@ func StampGangSurgeDrainStep(
 	source *types.InstanceStatus,
 	target *types.InstanceStatus,
 ) (bool, error) {
-	if err := RequireOwner(input); err != nil {
-		return false, err
-	}
-
-	before := Capture(source)
-	after := before.WithStep(types.UpdateStepSurgeDrain)
-	targetIdentity := Capture(target)
-	ownerUID := input.OwnerObject.GetUID()
-	confirmed := false
-	committed := false
-	mutation := types.InstanceMutation{
-		Index: source.Index,
-		Mutate: func(row *types.InstanceStatus) bool {
-			if after.Matches(*row) {
-				confirmed = true
-				return false
-			}
-			if !before.Matches(*row) {
-				return false
-			}
-			row.Operation.Step = types.UpdateStepSurgeDrain
-			row.Operation.LastProgressAt = metav1.NewTime(input.Now())
-			return true
-		},
-		BatchPrecondition: func(snapshot types.InstanceMutationSnapshot) bool {
-			confirmed = false
-			if snapshot.OwnerUID != ownerUID {
-				return false
-			}
-			currentSource, sourceFound := snapshot.Instances[source.Index]
-			currentTarget, targetFound := snapshot.Instances[target.Index]
-			if !sourceFound || !targetFound || !targetIdentity.Matches(currentTarget) ||
-				!GangSurgeActiveTargetClaimMatches(&currentTarget, source.Operation.TargetRevision) {
-				return false
-			}
-			if after.Matches(currentSource) {
-				confirmed = true
-				return true
-			}
-			return before.Matches(currentSource)
-		},
-		Postcondition: func(row *types.InstanceStatus) bool {
-			return row != nil && after.Matches(*row)
-		},
-		OnCommit: func(_, _ *types.InstanceStatus) {
-			committed = true
-		},
-	}
-	err := Apply(ctx, input, []types.InstanceMutation{mutation})
-	if errors.Is(err, types.ErrStatusMutationPrecondition) || errors.Is(err, types.ErrStatusOwnerGone) {
-		return false, nil
-	}
+	write, err := newGuardedWrite(input)
 	if err != nil {
 		return false, err
 	}
-	return committed || confirmed, nil
+
+	targetIdentity := Capture(target)
+	targetHolds := func(rows types.InstanceMutationSnapshot) bool {
+		currentTarget := rows.Instances[target.Index]
+		return targetIdentity.holds(rows) &&
+			GangSurgeActiveTargetClaimMatches(&currentTarget, source.Operation.TargetRevision)
+	}
+	step := write.stepTransition(Capture(source), types.UpdateStepSurgeDrain, targetHolds, input.Now)
+	return write.commit(ctx, input, []types.InstanceMutation{step}, "", nil)
 }
 
 // StampGangSurgeTargetReady is the gang surge's promote terminator: the
@@ -250,25 +204,19 @@ func StampGangSurgeTargetReady(
 	target *types.InstanceStatus,
 	targetRevision string,
 ) (bool, error) {
-	if err := RequireOwner(input); err != nil {
+	write, err := newGuardedWrite(input)
+	if err != nil {
 		return false, err
 	}
 
 	sourceIdentity := Capture(source)
 	targetIdentity := Capture(target)
-	ownerUID := input.OwnerObject.GetUID()
-	promoted := false
 	mutation := ReadyOnRevisionMutation(target.Index, targetRevision, input.Now())
-	mutation.BatchPrecondition = func(snapshot types.InstanceMutationSnapshot) bool {
-		if snapshot.OwnerUID != ownerUID {
-			return false
-		}
-		currentSource, sourceFound := snapshot.Instances[source.Index]
-		currentTarget, targetFound := snapshot.Instances[target.Index]
-		return sourceFound && targetFound &&
-			sourceIdentity.Matches(currentSource) && targetIdentity.Matches(currentTarget) &&
+	mutation.BatchPrecondition = write.guard(func(rows types.InstanceMutationSnapshot) bool {
+		currentTarget := rows.Instances[target.Index]
+		return sourceIdentity.holds(rows) && targetIdentity.holds(rows) &&
 			GangSurgeActiveTargetClaimMatches(&currentTarget, targetRevision)
-	}
+	})
 	mutation.Postcondition = func(row *types.InstanceStatus) bool {
 		return row != nil && row.Index == target.Index &&
 			row.Incarnation == target.Incarnation &&
@@ -277,18 +225,10 @@ func StampGangSurgeTargetReady(
 			row.RunningRevision == targetRevision &&
 			row.TargetRevision == "" && row.Operation == nil
 	}
-	mutation.OnCommit = func(_, _ *types.InstanceStatus) {
-		promoted = true
-	}
-	err := Apply(ctx, input, []types.InstanceMutation{mutation})
-	if errors.Is(err, types.ErrStatusMutationPrecondition) || errors.Is(err, types.ErrStatusOwnerGone) {
-		return false, nil
-	}
-	if err != nil {
+	mutation.OnCommit = write.recordCommit
+	promoted, err := write.commit(ctx, input, []types.InstanceMutation{mutation}, "", nil)
+	if err != nil || !promoted {
 		return false, err
-	}
-	if !promoted {
-		return false, nil
 	}
 	if err := RetryBlockPruneOnPromote(ctx, input, targetRevision); err != nil {
 		return false, err
@@ -320,31 +260,15 @@ func ResetGangSurgeSource(
 	}
 
 	if input.ApplyInstanceMutationsWithRetryBlock != nil {
-		if err := RequireOwner(input); err != nil {
-			return false, err
-		}
-		ownerUID := input.OwnerObject.GetUID()
-		committed := false
-		reset.BatchPrecondition = func(snapshot types.InstanceMutationSnapshot) bool {
-			if snapshot.OwnerUID != ownerUID {
-				return false
-			}
-			currentSource, sourceFound := snapshot.Instances[source.Index]
-			currentTarget, targetFound := snapshot.Instances[target.Index]
-			return sourceFound && targetFound &&
-				sourceIdentity.Matches(currentSource) && targetIdentity.Matches(currentTarget)
-		}
-		reset.OnCommit = func(_, _ *types.InstanceStatus) {
-			committed = true
-		}
-		err := Apply(ctx, input, []types.InstanceMutation{reset})
-		if errors.Is(err, types.ErrStatusMutationPrecondition) || errors.Is(err, types.ErrStatusOwnerGone) {
-			return false, nil
-		}
+		write, err := newGuardedWrite(input)
 		if err != nil {
 			return false, err
 		}
-		return committed, nil
+		reset.BatchPrecondition = write.guard(func(rows types.InstanceMutationSnapshot) bool {
+			return sourceIdentity.holds(rows) && targetIdentity.holds(rows)
+		})
+		reset.OnCommit = write.recordCommit
+		return write.commit(ctx, input, []types.InstanceMutation{reset}, "", nil)
 	}
 
 	if input.MutateInstance == nil {
@@ -384,63 +308,14 @@ func StampGangSurgeTargetCleanupStep(
 	source *types.InstanceStatus,
 	marker *types.InstanceStatus,
 ) (bool, error) {
-	if err := RequireOwner(input); err != nil {
+	write, err := newGuardedWrite(input)
+	if err != nil {
 		return false, err
 	}
 
 	sourceIdentity := Capture(source)
-	before := Capture(marker)
-	after := before.WithStep(types.UpdateStepGangSurgeTargetCleanup)
-	ownerUID := input.OwnerObject.GetUID()
-	confirmed := false
-	committed := false
-	mutation := types.InstanceMutation{
-		Index: marker.Index,
-		Mutate: func(row *types.InstanceStatus) bool {
-			if after.Matches(*row) {
-				confirmed = true
-				return false
-			}
-			if !before.Matches(*row) {
-				return false
-			}
-			row.Operation.Step = types.UpdateStepGangSurgeTargetCleanup
-			return true
-		},
-		BatchPrecondition: func(snapshot types.InstanceMutationSnapshot) bool {
-			confirmed = false
-			if snapshot.OwnerUID != ownerUID {
-				return false
-			}
-			currentSource, found := snapshot.Instances[source.Index]
-			if !found || !sourceIdentity.Matches(currentSource) {
-				return false
-			}
-			currentMarker, found := snapshot.Instances[marker.Index]
-			if !found {
-				return false
-			}
-			if after.Matches(currentMarker) {
-				confirmed = true
-				return true
-			}
-			return before.Matches(currentMarker)
-		},
-		Postcondition: func(row *types.InstanceStatus) bool {
-			return row != nil && after.Matches(*row)
-		},
-		OnCommit: func(_, _ *types.InstanceStatus) {
-			committed = true
-		},
-	}
-	err := Apply(ctx, input, []types.InstanceMutation{mutation})
-	if errors.Is(err, types.ErrStatusMutationPrecondition) || errors.Is(err, types.ErrStatusOwnerGone) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return committed || confirmed, nil
+	step := write.stepTransition(Capture(marker), types.UpdateStepGangSurgeTargetCleanup, sourceIdentity.holds, nil)
+	return write.commit(ctx, input, []types.InstanceMutation{step}, "", nil)
 }
 
 // RestoreGangSurgeTargetCleanup closes the resumable gap between a
@@ -457,35 +332,18 @@ func RestoreGangSurgeTargetCleanup(
 	targetRevision string,
 	timeout time.Duration,
 ) (bool, error) {
-	if err := RequireOwner(input); err != nil {
+	write, err := newGuardedWrite(input)
+	if err != nil {
 		return false, err
 	}
 
-	now := metav1.NewTime(input.Now())
-	desired := types.InstanceStatus{
-		Index:          surgeIdx,
-		Incarnation:    1,
-		Phase:          types.InstancePhaseCreating,
-		TargetRevision: targetRevision,
-		Operation: &types.InstanceOperation{
-			ID:             fmt.Sprintf("gangsurgetarget-%d-%d", surgeIdx, now.Unix()),
-			Type:           types.InstanceOperationUpdate,
-			Step:           types.UpdateStepGangSurgeTargetCleanup,
-			TargetRevision: targetRevision,
-			StartedAt:      now,
-			LastProgressAt: now,
-			Deadline:       types.DeadlineAt(now, timeout),
-		},
-	}
+	desired := gangSurgeTargetRow(surgeIdx, targetRevision, types.UpdateStepGangSurgeTargetCleanup, timeout, metav1.NewTime(input.Now()))
 	sourceIdentity := Capture(source)
-	ownerUID := input.OwnerObject.GetUID()
-	confirmed := false
-	committed := false
 	mutation := types.InstanceMutation{
 		Index: surgeIdx,
 		Mutate: func(row *types.InstanceStatus) bool {
 			if GangSurgeCleanupTargetClaimMatches(row, targetRevision) {
-				confirmed = true
+				write.confirmed = true
 				return false
 			}
 			if GangSurgeActiveTargetClaimMatches(row, targetRevision) {
@@ -498,41 +356,27 @@ func RestoreGangSurgeTargetCleanup(
 			*row = Clone(desired)
 			return true
 		},
-		BatchPrecondition: func(snapshot types.InstanceMutationSnapshot) bool {
-			confirmed = false
-			if snapshot.OwnerUID != ownerUID {
+		BatchPrecondition: write.guard(func(rows types.InstanceMutationSnapshot) bool {
+			if !sourceIdentity.holds(rows) {
 				return false
 			}
-			currentSource, found := snapshot.Instances[source.Index]
-			if !found || !sourceIdentity.Matches(currentSource) {
-				return false
-			}
-			currentTarget, found := snapshot.Instances[surgeIdx]
+			currentTarget, found := rows.Instances[surgeIdx]
 			if !found {
 				return true
 			}
 			if GangSurgeCleanupTargetClaimMatches(&currentTarget, targetRevision) {
-				confirmed = true
+				write.confirmed = true
 				return true
 			}
 			return GangSurgeActiveTargetClaimMatches(&currentTarget, targetRevision)
-		},
+		}),
 		Postcondition: func(row *types.InstanceStatus) bool {
 			return row != nil && row.Index == surgeIdx &&
 				GangSurgeCleanupTargetClaimMatches(row, targetRevision)
 		},
-		OnCommit: func(_, _ *types.InstanceStatus) {
-			committed = true
-		},
+		OnCommit: write.recordCommit,
 	}
-	err := Apply(ctx, input, []types.InstanceMutation{mutation})
-	if errors.Is(err, types.ErrStatusMutationPrecondition) || errors.Is(err, types.ErrStatusOwnerGone) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return committed || confirmed, nil
+	return write.commit(ctx, input, []types.InstanceMutation{mutation}, "", nil)
 }
 
 // ResetGangSurgeSourceAndRemoveMarker ends an abandoned gang surge in
@@ -650,37 +494,21 @@ func endGangSurgePair(
 	retryRevision string,
 	mutateRetryBlock func(*types.RetryBlock) types.RetryBlockDisposition,
 ) (bool, error) {
-	if err := RequireOwner(input); err != nil {
+	write, err := newGuardedWrite(input)
+	if err != nil {
 		return false, err
 	}
-
-	ownerUID := input.OwnerObject.GetUID()
-	sourceIdentity := Capture(source)
 	if marker == nil {
 		return false, nil
 	}
-	markerIdentity := Capture(marker)
-	guard := func(snapshot types.InstanceMutationSnapshot) bool {
-		if snapshot.OwnerUID != ownerUID {
-			return false
-		}
-		currentSource, found := snapshot.Instances[source.Index]
-		if !found || !sourceIdentity.Matches(currentSource) {
-			return false
-		}
-		currentMarker, found := snapshot.Instances[surgeIdx]
-		return found && markerIdentity.Matches(currentMarker)
-	}
 
-	preflight := types.InstanceMutation{
-		Index:             source.Index,
-		Mutate:            func(*types.InstanceStatus) bool { return false },
-		BatchPrecondition: guard,
-	}
-	if err := Apply(ctx, input, []types.InstanceMutation{preflight}); err != nil {
-		if errors.Is(err, types.ErrStatusMutationPrecondition) || errors.Is(err, types.ErrStatusOwnerGone) {
-			return false, nil
-		}
+	sourceIdentity := Capture(source)
+	markerIdentity := Capture(marker)
+	guard := write.guard(func(rows types.InstanceMutationSnapshot) bool {
+		currentMarker, found := rows.Instances[surgeIdx]
+		return sourceIdentity.holds(rows) && found && markerIdentity.Matches(currentMarker)
+	})
+	if held, err := guardHolds(ctx, input, source.Index, guard); !held {
 		return false, err
 	}
 	if prunedRevision != "" && types.FindRetryBlock(input.ObservedState.RetryBlocks, prunedRevision) != nil {
@@ -699,26 +527,13 @@ func endGangSurgePair(
 		}
 	}
 
-	committed := false
 	end.BatchPrecondition = guard
 	end.OnCommit = func(_, _ *types.InstanceStatus) {
-		committed = true
+		write.committed = true
 		deps.ExpectationsCache().Forget(input.Key.Namespace, input.Key.OwnerName, input.Key.Component, surgeIdx)
 	}
 	removeMarker := types.InstanceMutation{Index: surgeIdx, Remove: true}
-	err := input.ApplyInstanceMutationsWithRetryBlock(
-		ctx,
-		[]types.InstanceMutation{end, removeMarker},
-		retryRevision,
-		mutateRetryBlock,
-	)
-	if errors.Is(err, types.ErrStatusMutationPrecondition) || errors.Is(err, types.ErrStatusOwnerGone) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return committed, nil
+	return write.commit(ctx, input, []types.InstanceMutation{end, removeMarker}, retryRevision, mutateRetryBlock)
 }
 
 // GangSurgeTargetMarker reports which marker state a target slot was
@@ -762,38 +577,27 @@ func RestoreGangSurgeTarget(
 		}
 		return GangSurgeTargetMarkerRestored, nil
 	}
-	if err := RequireOwner(input); err != nil {
+	write, err := newGuardedWrite(input)
+	if err != nil {
 		return GangSurgeTargetMarkerUnclaimed, err
 	}
 
-	now := metav1.NewTime(input.Now())
-	desired := types.InstanceStatus{
-		Index:          surgeIdx,
-		Incarnation:    1,
-		Phase:          types.InstancePhaseCreating,
-		TargetRevision: targetRev,
-		Operation: &types.InstanceOperation{
-			ID:             fmt.Sprintf("gangsurgetarget-%d-%d", surgeIdx, now.Unix()),
-			Type:           types.InstanceOperationUpdate,
-			Step:           types.UpdateStepGangSurgeTarget,
-			TargetRevision: targetRev,
-			StartedAt:      now,
-			LastProgressAt: now,
-			Deadline:       types.DeadlineAt(now, timeout),
-		},
-	}
+	desired := gangSurgeTargetRow(surgeIdx, targetRev, types.UpdateStepGangSurgeTarget, timeout, metav1.NewTime(input.Now()))
 	sourceIdentity := Capture(source)
-	ownerUID := input.OwnerObject.GetUID()
 	resolution := GangSurgeTargetMarkerUnclaimed
+	confirm := func(marker GangSurgeTargetMarker) {
+		resolution = marker
+		write.confirmed = true
+	}
 	mutation := types.InstanceMutation{
 		Index: surgeIdx,
 		Mutate: func(status *types.InstanceStatus) bool {
 			if GangSurgeActiveTargetClaimMatches(status, targetRev) {
-				resolution = GangSurgeTargetMarkerActive
+				confirm(GangSurgeTargetMarkerActive)
 				return false
 			}
 			if GangSurgeCleanupTargetClaimMatches(status, targetRev) {
-				resolution = GangSurgeTargetMarkerCleanup
+				confirm(GangSurgeTargetMarkerCleanup)
 				return false
 			}
 			if !EmptyGangSurgeTargetSlot(status) {
@@ -802,41 +606,35 @@ func RestoreGangSurgeTarget(
 			*status = Clone(desired)
 			return true
 		},
-		BatchPrecondition: func(snapshot types.InstanceMutationSnapshot) bool {
+		BatchPrecondition: write.guard(func(rows types.InstanceMutationSnapshot) bool {
 			resolution = GangSurgeTargetMarkerUnclaimed
-			if snapshot.OwnerUID != ownerUID {
+			if !sourceIdentity.holds(rows) {
 				return false
 			}
-			currentSource, found := snapshot.Instances[source.Index]
-			if !found || !sourceIdentity.Matches(currentSource) {
-				return false
-			}
-			currentTarget, found := snapshot.Instances[surgeIdx]
+			currentTarget, found := rows.Instances[surgeIdx]
 			if !found {
 				return true
 			}
 			if GangSurgeActiveTargetClaimMatches(&currentTarget, targetRev) {
-				resolution = GangSurgeTargetMarkerActive
+				confirm(GangSurgeTargetMarkerActive)
 				return true
 			}
 			if GangSurgeCleanupTargetClaimMatches(&currentTarget, targetRev) {
-				resolution = GangSurgeTargetMarkerCleanup
+				confirm(GangSurgeTargetMarkerCleanup)
 				return true
 			}
 			return false
-		},
+		}),
 		Postcondition: func(status *types.InstanceStatus) bool {
 			return sameRestoredGangSurgeTarget(status, &desired)
 		},
 		OnCommit: func(_, _ *types.InstanceStatus) {
 			resolution = GangSurgeTargetMarkerRestored
+			write.committed = true
 		},
 	}
-	err := Apply(ctx, input, []types.InstanceMutation{mutation})
-	if errors.Is(err, types.ErrStatusMutationPrecondition) || errors.Is(err, types.ErrStatusOwnerGone) {
-		return GangSurgeTargetMarkerUnclaimed, nil
-	}
-	if err != nil {
+	done, err := write.commit(ctx, input, []types.InstanceMutation{mutation}, "", nil)
+	if err != nil || !done {
 		return GangSurgeTargetMarkerUnclaimed, err
 	}
 	return resolution, nil
@@ -955,33 +753,19 @@ func RearmGangSurgeRebuild(
 		}
 		return true, RetryBlockAttemptStarted(ctx, input, pin)
 	}
-	if err := RequireOwner(input); err != nil {
+	write, err := newGuardedWrite(input)
+	if err != nil {
 		return false, err
 	}
-	ownerUID := input.OwnerObject.GetUID()
-	committed := false
 	mutation := types.InstanceMutation{
-		Index:  source.Index,
-		Mutate: rearm,
-		BatchPrecondition: func(snapshot types.InstanceMutationSnapshot) bool {
-			if snapshot.OwnerUID != ownerUID {
-				return false
-			}
-			current, found := snapshot.Instances[source.Index]
-			return found && identity.Matches(current)
-		},
+		Index:             source.Index,
+		Mutate:            rearm,
+		BatchPrecondition: write.guard(identity.holds),
 		Postcondition: func(row *types.InstanceStatus) bool {
 			return row != nil && row.Phase == types.InstancePhaseUpdating &&
 				row.Operation != nil && row.Operation.RetryCount == retry
 		},
-		OnCommit: func(_, _ *types.InstanceStatus) { committed = true },
+		OnCommit: write.recordCommit,
 	}
-	err := input.ApplyInstanceMutationsWithRetryBlock(ctx, []types.InstanceMutation{mutation}, pin, RetryBlockStartAttempt)
-	if errors.Is(err, types.ErrStatusMutationPrecondition) || errors.Is(err, types.ErrStatusOwnerGone) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return committed, nil
+	return write.commit(ctx, input, []types.InstanceMutation{mutation}, pin, RetryBlockStartAttempt)
 }

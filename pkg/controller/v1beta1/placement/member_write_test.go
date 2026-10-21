@@ -280,15 +280,15 @@ func TestPolicyPruningUsesSuccessfulWriteResponse(t *testing.T) {
 			for range policyPruneRevertThreshold {
 				require.True(t, apierrors.IsConflict(r.placeOn(t.Context(), "a", src, false)))
 			}
-			require.Empty(t, r.policyState().prunedHomes(src.UID), "stale cache retries cannot establish repeated pruning")
+			require.Empty(t, r.policyState().prunedMembers(src.UID), "stale cache retries cannot establish repeated pruning")
 			for range policyPruneRevertThreshold {
 				cached.stale = liveMember(t, worker)
 				require.NoError(t, r.placeOn(t.Context(), "a", src, false))
 			}
 			if pruned {
-				require.Equal(t, []string{"a"}, r.policyState().prunedHomes(src.UID))
+				require.Equal(t, []string{"a"}, r.policyState().prunedMembers(src.UID))
 			} else {
-				require.Empty(t, r.policyState().prunedHomes(src.UID))
+				require.Empty(t, r.policyState().prunedMembers(src.UID))
 			}
 		})
 	}
@@ -316,15 +316,15 @@ func TestCachedAbsenceCannotReleaseUnobservedMember(t *testing.T) {
 			cached := &staleCacheClient{WithWatch: worker}
 			clusters := identifiedTestClusters{fakeClusters: fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{"member-a": cached}}, uid: "member-a-uid"}
 			r, _ := newPlacer(s, clusters, fixture.source, plannedTestRegistration())
-			got, err := r.observePlannedHome(t.Context(), fixture.source, fixture.source.Status.Placement.Candidates[0], fixture.components)
+			got, err := r.observePlannedMember(t.Context(), fixture.source, fixture.source.Status.Placement.Candidates[0], fixture.components)
 			require.Equal(t, 1, gets, "allocation release requires one direct absence confirmation")
 			if state == "absent" {
 				require.NoError(t, err)
-				require.True(t, got.Home.Absent)
+				require.True(t, got.MemberState.Absent)
 			} else {
 				require.Error(t, err)
-				require.False(t, got.Home.Known)
-				require.False(t, got.Home.Absent)
+				require.False(t, got.MemberState.Known)
+				require.False(t, got.MemberState.Absent)
 			}
 		})
 	}

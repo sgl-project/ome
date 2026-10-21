@@ -57,8 +57,7 @@ const (
 )
 
 // testISVCGVK is the GroupVersionKind every ISVC-shaped OwnerReference
-// stamps. Hard-coded here rather than importing the omenative/core
-// package because that package depends on workload (cyclic).
+// stamps.
 var testISVCGVK = v1beta1.SchemeGroupVersion.WithKind("InferenceService")
 
 // testKey builds the revision.Key for an ISVC: Namespace =

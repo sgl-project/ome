@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/evidence"
@@ -2545,7 +2546,7 @@ func TestDetectUpdate_WedgedPodsReachHeld(t *testing.T) {
 			t.Fatalf("attempt %d: the wedged row must re-trigger so the ladder can advance", attempt)
 		}
 		if _, err := status.StampRecreating(ctx, *input, 0, tcr.Name,
-			recreateRevisionCause(*input, 0, tcr.Name), workload.UpdateStrategyRecreatePod, time.Hour); err != nil {
+			recreateRevisionCause(*input, 0, tcr.Name), workload.UpdateStrategyRecreatePod, time.Hour, false); err != nil {
 			t.Fatalf("stamp attempt %d: %v", attempt, err)
 		}
 		// The attempt wedges on the same bad image: the disposition charges
@@ -3741,4 +3742,171 @@ func TestDetectUpdate_VerdictEndedAttemptRollsOnlyTowardAnotherRevision(t *testi
 			t.Errorf("a target other than the pinned revision re-drives the ended recreate, the running revision included")
 		}
 	})
+}
+
+// TestInstanceNotServingOutsideRoll_ReadsTheRowsTheRollLeavesOut records
+// which Instances count as down outside the roll: one with no row, one
+// still being created, one under repair, a Failed one, and a Ready one
+// with no routed pod in rotation on its own revision; and which never do:
+// a Ready one whose routed pod serves, a gang serving through its leader
+// while its worker is down, a Ready one serving beside a pod of another
+// revision, a row on the target, an attempt in flight, a stopped attempt,
+// a gang surge replacement another row drives, a row a migration owns,
+// and a row being deleted.
+func TestInstanceNotServingOutsideRoll_ReadsTheRowsTheRollLeavesOut(t *testing.T) {
+	const target = "llama-70b-engine-v2hash"
+	const running = "llama-70b-engine-v1hash"
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	serving := func(idx int32, rev, runner string) *corev1.Pod {
+		pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("llama-70b-engine-%d-%s-0", idx, runner), Namespace: "prod",
+			Labels: map[string]string{query.LabelRevisionHash: query.RevisionHashFromControllerRevisionName(rev), query.LabelRunner: runner},
+		}}
+		pod.Status.Phase = corev1.PodRunning
+		pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+			Name: constants.MainContainerName, Ready: true,
+			State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+		}}
+		pod.Status.Conditions = []corev1.PodCondition{
+			{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
+			{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			{Type: query.ServingConditionType, Status: corev1.ConditionTrue},
+		}
+		return pod
+	}
+	pending := func(idx int32, rev, runner string) *corev1.Pod {
+		pod := serving(idx, rev, runner)
+		pod.Status.Phase = corev1.PodPending
+		pod.Status.Conditions = nil
+		pod.Status.ContainerStatuses[0].Ready = false
+		return pod
+	}
+	ready := func(phase workload.InstancePhase, op *workload.InstanceOperation) *workload.InstanceStatus {
+		return &workload.InstanceStatus{Index: 0, Phase: phase, RunningRevision: running, Operation: op}
+	}
+	surgeIndex := int32(5)
+	cases := []struct {
+		name string
+		row  *workload.InstanceStatus
+		pods []*corev1.Pod
+		down bool
+	}{
+		{name: "no row yet", row: nil, down: true},
+		{name: "still being created", row: &workload.InstanceStatus{Index: 0, Phase: workload.InstancePhaseCreating,
+			Operation: &workload.InstanceOperation{Type: workload.InstanceOperationCreate, Step: "CreatePods", TargetRevision: target}},
+			pods: []*corev1.Pod{pending(0, target, "default")}, down: true},
+		{name: "under repair", row: ready(workload.InstancePhaseRestarting, &workload.InstanceOperation{Type: workload.InstanceOperationRestart, Step: "Drain"}), down: true},
+		{name: "Failed with its repair kept", row: ready(workload.InstancePhaseFailed, &workload.InstanceOperation{Type: workload.InstanceOperationRestart, Step: "Drain"}),
+			pods: []*corev1.Pod{pending(0, running, "default")}, down: true},
+		{name: "Failed with no attempt", row: ready(workload.InstancePhaseFailed, nil), down: true},
+		{name: "Ready, routed pod out of rotation", row: ready(workload.InstancePhaseReady, nil), pods: []*corev1.Pod{pending(0, running, "default")}, down: true},
+		{name: "Ready gang, leader out of rotation", row: ready(workload.InstancePhaseReady, nil),
+			pods: []*corev1.Pod{pending(0, running, "leader"), serving(0, running, "worker")}, down: true},
+		{name: "Ready and serving", row: ready(workload.InstancePhaseReady, nil), pods: []*corev1.Pod{serving(0, running, "default")}},
+		{name: "Ready gang serving through its leader while its worker is down", row: ready(workload.InstancePhaseReady, nil),
+			pods: []*corev1.Pod{serving(0, running, "leader"), pending(0, running, "worker")}},
+		{name: "Ready and serving beside a pod of another revision", row: ready(workload.InstancePhaseReady, nil),
+			pods: []*corev1.Pod{serving(0, running, "default"), pending(0, "llama-70b-engine-v0hash", "default")}},
+		{name: "on the target", row: &workload.InstanceStatus{Index: 0, Phase: workload.InstancePhaseReady, RunningRevision: target}},
+		{name: "attempt in flight", row: ready(workload.InstancePhaseUpdating, &workload.InstanceOperation{Type: workload.InstanceOperationUpdate, Step: workload.UpdateStepDrain, TargetRevision: target})},
+		{name: "Failed attempt still claiming the update", row: ready(workload.InstancePhaseFailed, &workload.InstanceOperation{Type: workload.InstanceOperationUpdate, Step: workload.UpdateStepDrain, TargetRevision: target})},
+		{name: "stopped attempt", row: ready(workload.InstancePhaseFailed, &workload.InstanceOperation{Type: workload.InstanceOperationUpdate, Step: workload.UpdateStepParked, TargetRevision: target})},
+		{name: "gang surge replacement another row drives", row: &workload.InstanceStatus{Index: 5, Phase: workload.InstancePhaseCreating,
+			Operation: &workload.InstanceOperation{Type: workload.InstanceOperationUpdate, Step: workload.UpdateStepGangSurgeTarget, SurgeIndex: &surgeIndex}}},
+		{name: "owned by a migration", row: ready(workload.InstancePhaseMigrating, nil)},
+		{name: "being deleted", row: ready(workload.InstancePhaseDeleting, &workload.InstanceOperation{Type: workload.InstanceOperationDelete, Step: "Drain"})},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			down, wait, reason := InstanceNotServingOutsideRoll(tc.row, target, tc.pods, 30, now)
+			if down != tc.down || wait != 0 {
+				t.Fatalf("InstanceNotServingOutsideRoll = (%v, %s, %q), want down=%v with no wait", down, wait, reason, tc.down)
+			}
+			if down && reason == "" {
+				t.Fatal("an Instance read as down must say why")
+			}
+		})
+	}
+}
+
+// TestInstanceNotServingOutsideRoll_CrashLoopReadBetweenItsCrashes records
+// the window reading for a stable Instance whose runner restarted after the
+// row entered Ready: it counts as down while the pod is Ready again for
+// less than the window, with the time left as the wait, and serves once
+// it has held Ready for the window; with no window configured, Ready
+// again is serving.
+func TestInstanceNotServingOutsideRoll_CrashLoopReadBetweenItsCrashes(t *testing.T) {
+	const target = "llama-70b-engine-v2hash"
+	readySince := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	readyAgain := readySince.Add(45 * time.Second)
+	row := &workload.InstanceStatus{Index: 0, Phase: workload.InstancePhaseReady, RunningRevision: "llama-70b-engine-v1hash", ReadySince: &metav1.Time{Time: readySince}}
+	cases := []struct {
+		name   string
+		down   bool
+		window int32
+		now    time.Time
+		held   bool
+		wait   time.Duration
+	}{
+		{name: "Ready again for less than the window", window: 30, now: readyAgain.Add(10 * time.Second), held: true, wait: 20 * time.Second},
+		{name: "the new run not Ready yet", down: true, window: 30, now: readyAgain.Add(10 * time.Second), held: true},
+		{name: "Ready again for the window", window: 30, now: readyAgain.Add(30 * time.Second)},
+		{name: "no window configured", now: readyAgain.Add(time.Second)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pod := restartedRunnerPod(readySince, readyAgain, false, tc.down)
+			held, wait, reason := InstanceNotServingOutsideRoll(row, target, []*corev1.Pod{pod}, tc.window, tc.now)
+			if held != tc.held || wait != tc.wait {
+				t.Fatalf("InstanceNotServingOutsideRoll = (%v, %s, %q), want held=%v wait=%s", held, wait, reason, tc.held, tc.wait)
+			}
+		})
+	}
+}
+
+// The rebuild answering a recorded death is read two ways: the roll,
+// which asks whether the comeback must still prove itself, reads it
+// through the window alone and reads a fresh start when none is
+// configured; the retry record's reader, which asks whether the set's
+// death is the revision's own, reads the order alone when no window is
+// configured, since nothing then proves a set by time.
+func TestRebuiltAfterFailure_WindowBoundsTheRollAndNotTheRetryRecord(t *testing.T) {
+	born := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	failedAt := born.Add(10 * time.Minute)
+	record := func(container string, at time.Time) *workload.InstanceTermination {
+		return &workload.InstanceTermination{PodName: "svc-engine-0-default-0", ContainerName: container, Reason: "Error", Time: metav1.NewTime(at)}
+	}
+	podAt := func(created time.Time) *corev1.Pod {
+		return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "svc-engine-0-default-0", CreationTimestamp: metav1.NewTime(created)}}
+	}
+	for _, tc := range []struct {
+		name    string
+		pod     *corev1.Pod
+		failure *workload.InstanceTermination
+		window  int32
+		roll    bool
+		record  bool
+	}{
+		{name: "built right after the death, inside a 60s window: both read the comeback", pod: podAt(failedAt.Add(5 * time.Second)), failure: record(constants.MainContainerName, failedAt), window: 60, roll: true, record: true},
+		{name: "built two minutes after the death, past a 60s window: a fresh start to both", pod: podAt(failedAt.Add(2 * time.Minute)), failure: record(constants.MainContainerName, failedAt), window: 60},
+		{name: "built two minutes after the death with no window: a fresh start to the roll, the record's own to the retry record", pod: podAt(failedAt.Add(2 * time.Minute)), failure: record(constants.MainContainerName, failedAt), record: true},
+		{name: "built a day after the death with no window: still the record's own to the retry record", pod: podAt(failedAt.Add(24 * time.Hour)), failure: record(constants.MainContainerName, failedAt), record: true},
+		{name: "built before the death: neither", pod: podAt(failedAt.Add(-time.Second)), failure: record(constants.MainContainerName, failedAt), window: 60},
+		{name: "a record naming no container is a wait, not a death: neither", pod: podAt(failedAt.Add(5 * time.Second)), failure: record("", failedAt), window: 60},
+		{name: "a death older than the revision belongs to a set of an earlier revision: neither", pod: podAt(born.Add(5 * time.Second)), failure: record(constants.MainContainerName, born.Add(-time.Minute)), window: 60},
+		{name: "no record: neither", pod: podAt(failedAt.Add(5 * time.Second)), window: 60},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RebuiltAfterFailure(tc.pod, tc.failure, born, tc.window); got != tc.roll {
+				t.Fatalf("RebuiltAfterFailure(window=%d) = %v, want %v", tc.window, got, tc.roll)
+			}
+			record := RebuiltAfterFailure(tc.pod, tc.failure, born, tc.window)
+			if tc.window <= 0 {
+				record = RebuildAnswersFailure(tc.pod, tc.failure, born)
+			}
+			if record != tc.record {
+				t.Fatalf("the retry record's reading (window=%d) = %v, want %v", tc.window, record, tc.record)
+			}
+		})
+	}
 }

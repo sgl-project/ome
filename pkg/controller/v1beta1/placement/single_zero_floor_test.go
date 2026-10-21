@@ -48,7 +48,7 @@ func zeroFloorObservationFixture(t *testing.T) plannedObservationFixture {
 	return f
 }
 
-func TestZeroFloorHomeObservation(t *testing.T) {
+func TestZeroFloorMemberObservation(t *testing.T) {
 	type result struct {
 		Idle, ScalingDown, Applied bool
 		Occupied, Ready, Admitted  int32
@@ -58,7 +58,7 @@ func TestZeroFloorHomeObservation(t *testing.T) {
 		edit func(*plannedObservationFixture)
 		want result
 	}{
-		{name: "idle home is applied without admission", want: result{Idle: true, Applied: true}},
+		{name: "idle member is applied without admission", want: result{Idle: true, Applied: true}},
 		{name: "pending autoscaler demand needs admission", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.Replicas = ptr.To[int32](2) }, want: result{Applied: true, Occupied: 2}},
 		{name: "physical cleanup retains the winner", edit: func(f *plannedObservationFixture) {
 			f.resources.pods = observationFixture(t).resources.pods
@@ -69,12 +69,12 @@ func TestZeroFloorHomeObservation(t *testing.T) {
 		}, want: result{ScalingDown: true, Applied: true}},
 		{name: "missing component cannot acknowledge zero", edit: func(f *plannedObservationFixture) { f.resources.ir = nil }},
 		{name: "missing decoder cannot acknowledge zero", edit: func(f *plannedObservationFixture) { f.components = append(f.components, v1beta1.DecoderComponent) }},
-		{name: "unacknowledged execution policy cannot establish idle home", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.PlacementExecution = nil }},
-		{name: "stale guard acknowledgement cannot establish idle home", edit: func(f *plannedObservationFixture) { f.resources.ir.Status.PlacementObservedGeneration-- }},
-		{name: "stale parent projection cannot establish idle home", edit: func(f *plannedObservationFixture) {
+		{name: "unacknowledged execution policy cannot establish idle member", edit: func(f *plannedObservationFixture) { f.resources.ir.Spec.PlacementExecution = nil }},
+		{name: "stale guard acknowledgement cannot establish idle member", edit: func(f *plannedObservationFixture) { f.resources.ir.Status.PlacementObservedGeneration-- }},
+		{name: "stale parent projection cannot establish idle member", edit: func(f *plannedObservationFixture) {
 			f.resources.ir.Annotations[constants.InferenceReplicaParentGenerationAnnotationKey] = "2"
 		}},
-		{name: "terminating service cannot establish idle home", edit: func(f *plannedObservationFixture) {
+		{name: "terminating service cannot establish idle member", edit: func(f *plannedObservationFixture) {
 			f.member.Finalizers = []string{"example.com/cleanup"}
 			f.member.DeletionTimestamp = ptr.To(metav1.Now())
 		}},
@@ -95,11 +95,11 @@ func TestZeroFloorHomeObservation(t *testing.T) {
 			worker := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			clusters := identifiedTestClusters{fakeClusters: fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{"member-a": workloadcluster.NewNeverCachingClient(worker)}}, uid: "member-a-uid"}
 			r, _ := newPlacer(scheme, clusters, f.source, plannedTestRegistration())
-			observed, err := r.observePlannedHome(t.Context(), f.source, f.source.Status.Placement.Candidates[0], f.components)
+			observed, err := r.observePlannedMember(t.Context(), f.source, f.source.Status.Placement.Candidates[0], f.components)
 			if err != nil {
 				t.Fatal(err)
 			}
-			got := result{observed.IdleZeroFloor, observed.ScalingToZero, observed.Home.Applied, observed.Home.Occupied, observed.Candidate.ReadyReplicas, observed.Candidate.AdmittedReplicas}
+			got := result{observed.IdleZeroFloor, observed.ScalingToZero, observed.MemberState.Applied, observed.MemberState.Occupied, observed.Candidate.ReadyReplicas, observed.Candidate.AdmittedReplicas}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Fatal(diff)
 			}
@@ -147,9 +147,9 @@ func acknowledgeSingleFloor(t *testing.T, f *backendFixture, name string, replic
 	}
 }
 
-// unreadablePodInventory returns a connection to the named home whose Pod
+// unreadablePodInventory returns a connection to the named member whose Pod
 // inventory cannot be listed while its component inventory stays readable, so
-// only the planned observation of that home fails.
+// only the planned observation of that member fails.
 func unreadablePodInventory(f *backendFixture, name string) workloadcluster.SelectivelyCachingClient {
 	unreadable := interceptor.NewClient(f.workers[name], interceptor.Funcs{List: func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
 		if _, ok := list.(*corev1.PodList); ok {
@@ -385,7 +385,7 @@ func TestSingleZeroFloorMovementRequiresPositiveFloor(t *testing.T) {
 				t.Fatal(diff)
 			}
 			if source.Status.Placement.Plan.SingleMove != nil || source.Status.Placement.Plan.PauseSurge {
-				t.Fatal("move began before the retained home received its positive floor")
+				t.Fatal("move began before the retained member received its positive floor")
 			}
 			member := &v1beta1.InferenceService{}
 			if err := f.workers["member-a"].Get(t.Context(), client.ObjectKeyFromObject(source), member); err != nil {

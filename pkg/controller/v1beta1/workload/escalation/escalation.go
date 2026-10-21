@@ -1,11 +1,14 @@
-// escalation.go — the terminal-failure escalation pass. Reconcile runs
-// it once at the end of every eligible non-teardown, non-paused
-// reconcile: per Instance it consumes the snapshot's failure evidence
-// (stuck pod / elapsed Operation deadline) and decides the Failed
-// transition through the shared disposition classification
-// (disposition.go). The Failed DECISION lives here, next to the rest of
-// the transition decisions; the adapter-side status aggregator owns
-// only counters + conditions and never writes a transition field.
+// escalation.go — the pass that ends the attempts that will not finish.
+// Reconcile runs it once at the end of every pass that is neither a
+// teardown nor paused. Per Instance row it reads the pass's failure
+// reading (a pod held in a terminal kubelet waiting reason past the
+// stuck-pod grace, an operation past its deadline) beside the holds the
+// hold pass recorded, and decides the Failed write: a Create, recreate or
+// in-place attempt takes the deadline decision (deadline_decision.go),
+// every other attempt a plain Failed write with its operation kept. The
+// Failed decision lives here beside the other transition decisions; the
+// adapter's status aggregator owns counters and conditions and never
+// writes a transition field.
 //
 // The holds this pass reads were recorded at the top of the reconcile
 // (holds.Run); nothing here writes one.
@@ -50,320 +53,452 @@ type PassInput struct {
 	Held holds.Result
 }
 
-// Run walks every observed InstanceStatus and escalates terminal
-// failures from the pass's evidence. Three paths converge
-// on Phase=Failed, and they don't fight — whichever fires first wins and
-// the other no-ops on the already-Failed Instance:
+// Run walks every Instance row at the end of the pass and ends the attempts
+// that will not finish. Four readings end an attempt, and they do not
+// compete: the first to write wins, and the others skip a row that already
+// reads Failed.
 //
-//   - FAST path: a pod stuck in a terminal kubelet waiting state
-//     (CrashLoopBackOff, ImagePullBackOff, ...) past input.StuckPodGrace
-//     fails the Instance without waiting for the (default 30 min)
-//     per-Instance Operation deadline. Qualification is
-//     ShouldCheckForStuckPods: a transient-phase Instance with an
-//     in-flight Operation, or the wedged-pod recovery shape (a pod whose
-//     revision-hash label disagrees with CurrentRevision). A zero or
-//     negative grace disables this path (the snapshot reports no stuck
-//     evidence).
+//   - A pod of the attempt held in a terminal kubelet waiting reason
+//     (CrashLoopBackOff, ImagePullBackOff, ...) for longer than
+//     input.StuckPodGrace. A non-positive grace turns this reading off.
+//   - The operation's deadline elapsed (StartedAt + InstanceReadyTimeout).
+//     A pod behind an admission gate, or an operation waiting on quota or
+//     the scheduler, has its clock zeroed by the deadline step instead, and
+//     a deadline written before that zeroing landed does not count.
+//   - An Unschedulable hold older than input.UnschedulableGrace. The
+//     attempt ends as the environment's failure: the scheduler's message is
+//     recorded and no revision is charged. With no grace set, the hold
+//     lasts.
+//   - A PodGroup name another controller owns. The attempt ends at once as
+//     the environment's failure; a name still being collected only holds
+//     the row, and a group the gang scheduler failed ends nothing, because
+//     the PodGroup pass rebuilds it.
 //
-//   - BROAD path: any operation that never converges — a perpetually-
-//     Pending gang, a run-then-crash loop the kubelet never parks in a
-//     terminal waiting reason — fails once its Operation.Deadline
-//     (StartedAt + InstanceReadyTimeout, stamped by the per-op writers)
-//     elapses. Instances whose blamed pods (own bucket, plus the
-//     SurgeIndex bucket for a gang-surge source) are held by an
-//     admission scheduling gate (e.g. Kueue) are excluded, as are those
-//     whose operation is parked on the capacity-blocked Waiting token
-//     (a create admission refused for lack of quota leaves no pod to
-//     carry a gate): the deadline-parking step (ReconcileGatedDeadlines)
-//     owns their clock, and a queued wait must not count against the
-//     timeout.
+// What a row's owner permits comes first. The ownership table says whether
+// either clock may end the row's state: a migration pair ends through its
+// record and a teardown through the scale-down wave, so neither is written
+// here. A paused attempt waits for the unpause. A pod set fully in rotation
+// at the desired count is never written Failed, whatever the reading says;
+// a surge whose source left rotation is not such a set. A Create, recreate
+// or in-place attempt (takesDeadlineDecision) takes the deadline decision;
+// every other attempt keeps its operation under the Failed write so the
+// pass that owns it, a gang surge's end or a repair, can finish.
 //
-//   - SCHEDULER-HOLD path: a pod the scheduler reports it cannot place
-//     is queued on cluster capacity, not stuck, so it parks the clock
-//     through the Waiting token rather than counting against it. Only
-//     input.UnschedulableGrace ends that wait, and it ends it as an
-//     ENVIRONMENT cause — the evidence names the scheduler's message and
-//     no revision is held. Unconfigured, the hold simply lasts.
+// The plain Failed writes of one pass land in one batched status write, the
+// failureStampBuffer; nothing later in the reconcile depends on them. A
+// deadline decision flushes the buffer first, because its own writes keep
+// an order of their own: the retry record before the operation is cleared,
+// the audit record before the status. Writes go through
+// input.ApplyInstanceMutations or input.MutateInstance, the operator-facing
+// event through input.WarnInstanceFailed.
 //
-//   - GANG path: what only the Instance's PodGroup can say, since a gang
-//     is admitted as a unit. A deterministic name held by another
-//     controller ends the attempt: nothing this controller does frees
-//     it. It is an ENVIRONMENT cause and holds no revision. A name still
-//     being collected parks the clock instead and never escalates — the
-//     gang is announced again once the old object is gone — and a group
-//     the gang scheduler has failed ends nothing at all, because the
-//     PodGroup pass rebuilds it. Rows whose outcome another state
-//     machine owns (Delete, Migrate), rows with no attempt in flight,
-//     and a gang-surge SOURCE (whose attempt lives under the surge
-//     index) are left alone on every gang reading. Whether a gang can be
-//     PLACED is not read here — that arrives on the member pods and
-//     takes the SCHEDULER-HOLD path above.
-//
-// The FAST and BROAD paths skip operations whose state machine owns its
-// own terminal handling:
-//
-//   - Migrate (either pair side): timeout authority is the owner's
-//     status.migrations record, consumed by the dispatcher's
-//     migration-expiry pass. Stamping here would mark a healthy serving
-//     source Failed while the record keeps driving the pair. The
-//     scheduler hold still runs for them — it is scoped to the row whose
-//     OWN pod is unplaceable, so it can only reach a replacement.
-//   - Delete: DeleteBatch owns progress, stuck-Terminating escalation,
-//     and completion. Its durable ownership must survive an elapsed
-//     generic operation deadline, including when the index is planned
-//     again while deletion finishes. The SCHEDULER-HOLD path skips it
-//     as well: a paced teardown of a never-placed pod would otherwise
-//     be failed out from under the batch still driving it.
-//
-// FAILED-WHILE-SERVING GUARD: an Instance whose blamed pod set is fully
-// in rotation — every live (non-deleting) pod PodReady AND carrying the
-// serving gate, at the desired count — is never escalated, whatever the
-// evidence says. Stamping Phase=Failed over a serving workload is a
-// status lie (the pods are fine; only the bookkeeping is stale), and the
-// coordination layer would amplify it into a group-level failure. Such
-// an Instance is skipped untouched. A pod whose gate is written but whose
-// Ready never followed is in no Service's endpoints and earns no exemption:
-// the deadline is the one exit of an attempt it holds behind the promote bar.
-//
-// Instances with a disposable in-flight attempt (Create, recreate and
-// in-place Update Operations — see disposableAttempt) route through
-// DisposeExpiredAttempt; gang surge attempts keep the
-// Failed-preserving-Operation stamp (the gang abandon path consumes the
-// continuation), and everything else takes the plain stamp for its path.
-//
-// WRITE BATCHING: the plain Failed stamps are standalone — escalation is
-// the reconcile's final pass and nothing later depends on them being
-// persisted first — so they are coalesced into ONE batched status write
-// via a failureStampBuffer. Disposition routes flush the buffer first
-// and keep their immediate per-call writes: their ordering is
-// write-ahead (RetryBlock upsert before the op-clear, ledger persist
-// before the status mirror) and must not be deferred.
-//
-// Adapter-agnostic: writes Phase=Failed via
-// input.ApplyInstanceMutations / input.MutateInstance, emits the
-// operator-facing event via input.WarnInstanceFailed.
+// The steps run per row in the order rowEscalation.run lists them.
 func Run(ctx context.Context, in PassInput) error {
-	deps, input, plan, target := in.Deps, in.Input, in.Plan, in.Target
-	excluded, heldRows := in.Excluded, in.Held
-	byIdx, err := in.Pods(ctx)
+	podsByInstance, err := in.Pods(ctx)
 	if err != nil {
-		return fmt.Errorf("workload.Reconcile: list pods for escalation pass (component=%s): %w", plan.Component, err)
+		return fmt.Errorf("workload.Reconcile: list pods for escalation pass (component=%s): %w", in.Plan.Component, err)
 	}
-	// The Create-op disposition resolves its RetryBlock target from
-	// ObservedState.UpdateRevision; on a first rollout the aggregator may
-	// not have stamped it yet, so fall back to this reconcile's target
-	// revision. Empty-only: a non-empty stamp stays authoritative (during
-	// a canary rollback the roll target diverges from the spec target the
-	// stamp names, and the block must hold the spec target).
-	if input.ObservedState.UpdateRevision == "" && target != nil {
-		input.ObservedState.UpdateRevision = target.Name
+	// The deadline decision of a Create charges the retry record of
+	// ObservedState.UpdateRevision. On a first rollout the status aggregator
+	// may not have written it yet, so this pass's roll target stands in. A
+	// written value stays: during a canary rollback the roll target is not
+	// the spec target the value names, and the record must hold the spec
+	// target. The write lands on the pass's own copy of the input.
+	if in.Input.ObservedState.UpdateRevision == "" && in.Target != nil {
+		in.Input.ObservedState.UpdateRevision = in.Target.Name
 	}
-	now := input.Now()
-	desiredByIdx := status.DesiredPodCountByInstance(plan)
-	currentHash := query.RevisionFromName(input.ObservedState.CurrentRevision).Hash()
-	disposition := input.Disposition
-	disposition.MigrationMode = plan.MigrationMode
-	stamps := &failureStampBuffer{input: input}
-	for _, row := range input.ObservedState.InstanceStatuses {
-		if _, skip := excluded[row.Index]; skip {
+	pass := newEscalationPass(in, podsByInstance)
+	for _, row := range pass.input.ObservedState.InstanceStatuses {
+		if _, deferred := pass.excluded[row.Index]; deferred {
 			continue
 		}
-		// Idempotent: skip an already-Failed Instance so the
-		// operator-facing event fires exactly once per escalation. Its
-		// recorded evidence still gets one refresh, which takes no edge.
-		if row.Phase == types.InstancePhaseFailed {
-			rowEvidence := evidenceFor(input.ObservedState.InstanceStatuses, byIdx, row.Index, now, input.StuckPodGrace, attemptTargetRevision(input, row))
-			if t := refreshedFailureEvidence(row, rowEvidence); t != nil {
-				stamps.add(row.Index, status.RecordRefreshedFailure(t, DeadlineExceededReason), nil)
-			}
-			if err := announceRepairExhausted(ctx, deps, input, plan, row); err != nil {
-				return fmt.Errorf("announce exhausted repair (instance=%d): %w", row.Index, err)
-			}
-			if err := announceRepairWaiting(ctx, deps, input, plan, row); err != nil {
-				return fmt.Errorf("announce waiting repair (instance=%d): %w", row.Index, err)
-			}
-			continue
+		r := pass.readRow(row)
+		if err := r.run(ctx); err != nil {
+			return err
 		}
-		rowEvidence := evidenceFor(input.ObservedState.InstanceStatuses, byIdx, row.Index, now, input.StuckPodGrace, attemptTargetRevision(input, row))
-		pods := evidence.PodsForStuckCheck(row, byIdx)
-		desired := status.DesiredFor(desiredByIdx, row.Index, row.PodCount)
-		gang := types.GangReadingFor(input, row)
-		// The hold pass already recorded or released this row's tokens.
-		// What is owed here is the repair each wait ends with — the
-		// scheduler's grace, the gang's terminal verdict — and which
-		// authority owns the row is what says whether one is owed at all.
-		held := heldRows.Holding(row.Index, types.WaitingReasonUnschedulable)
-		gangHeld := heldRows.Holding(row.Index, types.WaitingReasonPodGroupTerminating)
-		// The hold arms above judge on pod health alone, so a row whose
-		// pods are healthy still hands a stale token back whatever it is
-		// reporting about its rotation. The FAILED-WHILE-SERVING exemption
-		// is the stricter question — is this Instance actually capacity —
-		// and a surge that has reported its source out of rotation is not.
-		if podSetIsCapacity(row, pods, desired) {
-			continue
-		}
-		if reason := gangTerminalReason(gang.State); reason != "" && gangVerdictActionable(&row) {
-			escalateGangFailure(input, stamps, row, gang, reason, now)
-			continue
-		}
-		if gangHeld {
-			// Parked until the object at the gang's name is collected,
-			// which resolves without anyone acting. A genuinely wedged
-			// sibling pod still escalates through the fast path below.
-			if rowEvidence.StuckPod == nil {
-				continue
-			}
-		}
-		if held {
-			if !unschedulableGraceElapsed(rowEvidence.UnschedulableSince, now, input.UnschedulableGrace) {
-				// Parked. A genuinely wedged sibling pod still escalates
-				// through the fast path below; the hold itself does not.
-				if rowEvidence.StuckPod == nil {
-					continue
-				}
-			} else {
-				if err := escalateSchedulerHold(ctx, deps, input, disposition, stamps, row, pods, desired, rowEvidence, now); err != nil {
-					return fmt.Errorf("escalate scheduler hold (instance=%d): %w", row.Index, err)
-				}
-				continue
-			}
-		}
-		// Whether either clock may end this row's step is the ownership
-		// table's answer, per state: a migration pair is the record's,
-		// which fails both rows through itself, and a teardown is
-		// DeleteBatch's, which paces a removal past any grace and warns
-		// on its own overdue drain.
-		stuckInterrupts := types.Interruptible(&row, types.EventStuckPodGrace)
-		deadlineInterrupts := types.Interruptible(&row, types.EventOperationDeadline)
-		if !stuckInterrupts && !deadlineInterrupts {
-			continue
-		}
-		// An attempt an operator is holding is not stalled, it was told
-		// to wait. Neither path may end it: the deadline is parked for
-		// the length of the hold, and a pod parked in a terminal waiting
-		// state is waiting on the unpause rather than on a verdict.
-		if types.OperationPaused(row.Operation) {
-			continue
-		}
-		if rowEvidence.StuckPod == nil && !rowEvidence.DeadlinePassed {
-			continue
-		}
-		// FAST path.
-		if stuckInterrupts && rowEvidence.StuckPod != nil && ShouldCheckForStuckPods(&row, pods, currentHash, query.LabelRevisionHash) {
-			if disposableAttempt(&row) {
-				// The disposition's writes are write-ahead-ordered; land
-				// the pending plain stamps first so the overall write +
-				// event order matches the unbatched pass.
-				if err := stamps.flush(ctx); err != nil {
-					return fmt.Errorf("flush escalation stamps (component=%s): %w", plan.Component, err)
-				}
-				dispositionPods := pods
-				if singlePodSurgeAttempt(&row, desired) {
-					// A single-pod surge shares its Instance index with the
-					// serving source. Relocation evidence belongs to the exact
-					// stuck target, not the source-plus-target node set.
-					dispositionPods = []*corev1.Pod{rowEvidence.StuckPod}
-				}
-				if _, err := DisposeExpiredAttempt(ctx, deps, input, disposition, row, dispositionPods, rowEvidence.StuckReason); err != nil {
-					return fmt.Errorf("dispose stuck attempt (instance=%d): %w", row.Index, err)
-				}
-				continue
-			}
-			// Preserve the stuck pod's diagnostics into LastFailure alongside
-			// the Phase=Failed flip — the escalation is followed by a recreate
-			// (or operator teardown) that deletes the wedged pod, so this is
-			// the surviving trace. StuckReason is the live waiting-state reason
-			// the classifier matched; PodTerminationWithReason fills in
-			// container / exit-code detail when present and falls back to the
-			// bare reason.
-			termination := types.PodTerminationWithReason(rowEvidence.StuckPod, rowEvidence.StuckReason, metav1.NewTime(now))
-			idx, podName, reason := row.Index, rowEvidence.StuckPod.Name, rowEvidence.StuckReason
-			// The stamp lands on the fresh row and names the pod it blames
-			// by incarnation, so a repair that claimed the pod set since
-			// this observation keeps it.
-			blamed, _ := query.InstanceIncarnationFromLabels(rowEvidence.StuckPod)
-			stamps.add(idx, status.StampFailedOnStuckPod(termination, blamed), func() {
-				input.WarnInstanceFailed(idx, podName, reason)
-			})
-			continue
-		}
-		// BROAD path.
-		if !deadlineInterrupts || !rowEvidence.DeadlinePassed {
-			continue
-		}
-		// Admission-gated pods are queued, not stuck: the parking step
-		// zeroes their deadline; a gate-enter observed before the park
-		// lands must not expire either. A gang-surge source's attempt
-		// pods live in its SurgeIndex bucket, so check that bucket too.
-		if anyPodAdmissionGated(byIdx[row.Index]) {
-			continue
-		}
-		if row.Operation != nil && row.Operation.SurgeIndex != nil && anyPodAdmissionGated(byIdx[*row.Operation.SurgeIndex]) {
-			continue
-		}
-		// Same rationale for the waits no pod can carry a gate for: a
-		// create admission refused for lack of quota leaves no pod at
-		// all, and a scheduler hold records itself on the Operation. Both
-		// live on the surge row for a gang surge, whose source this check
-		// follows the same way the gate check above follows the
-		// SurgeIndex bucket. The parking step zeroes that deadline; one
-		// stamped before the park landed must not expire either.
-		if instanceHeldExternally(&row, input.ObservedState.InstanceStatuses) {
-			continue
-		}
-		op := row.Operation
-		if disposableAttempt(&row) {
-			if err := stamps.flush(ctx); err != nil {
-				return fmt.Errorf("flush escalation stamps (component=%s): %w", plan.Component, err)
-			}
-			if _, err := DisposeExpiredAttempt(ctx, deps, input, disposition, row, pods, deadlineFailureMessage(op)); err != nil {
-				return fmt.Errorf("dispose expired attempt (instance=%d): %w", row.Index, err)
-			}
-			continue
-		}
-		idx := row.Index
-		if op.Type == types.InstanceOperationRestart {
-			// A set the repair's drain has already deleted is not one a
-			// park can stand on: the stamp waits for the pass that observes
-			// the rebuilt set.
-			gone, err := repairSetGone(ctx, deps, input, plan, idx)
-			if err != nil {
-				return fmt.Errorf("read the repair's pod set (instance=%d): %w", idx, err)
-			}
-			if gone {
-				continue
-			}
-		}
-		// The teardown that follows deletes the blamed pods, so revision-scoped
-		// evidence must survive on LastFailure: a workload-caused waiting reason
-		// — or a pod that ran every container yet never reported ready — names
-		// the cause more precisely than the elapsed timeout, and it is what the
-		// gang abandon charges the revision's retry ladder on.
-		termination := deadlineTermination(now, op)
-		if pod, reason := evidence.FirstWorkloadCausedPod(pods); pod != nil {
-			termination = types.PodTerminationWithReason(pod, reason, metav1.NewTime(now))
-		} else if pod, _ := evidence.FirstRunningNotReadyPod(pods, attemptTargetRevision(input, row)); pod != nil {
-			// Evidence only: a pod that runs yet never reports ready leaves
-			// no container-level diagnostics, so without this the record is
-			// the bare elapsed timeout. It does not change who is blamed —
-			// the gang abandon reads the reason and this one is not in the
-			// workload-caused set.
-			termination = evidence.ContainersNotReadyTermination(pod, metav1.NewTime(now))
-		} else if pod := evidence.FirstGateNotFoldedPod(pods, attemptTargetRevision(input, row)); pod != nil {
-			// Evidence only, same standing: a pod whose probes passed but
-			// whose readiness gate never folded into Ready is invisible to
-			// its Service, and that is what the record must say instead of
-			// the bare elapsed timeout.
-			termination = evidence.GateNotFoldedTermination(pod, metav1.NewTime(now))
-		}
-		stamps.add(idx, status.StampFailedKeepingOperation(termination), func() {
-			input.WarnInstanceFailed(idx, "", deadlineFailureMessage(op))
-		})
 	}
-	if err := stamps.flush(ctx); err != nil {
-		return fmt.Errorf("flush escalation stamps (component=%s): %w", plan.Component, err)
+	return pass.flushFailedWrites(ctx)
+}
+
+// escalationPass is what one run of the pass reads once: the inputs, the
+// pods of every Instance, the holds the hold pass recorded, the clock, the
+// planned pod count per Instance, the current revision's hash, the
+// deadline decision's inputs, and the buffer of plain Failed writes.
+type escalationPass struct {
+	deps  types.Deps
+	input types.ReconcileInput
+	plan  types.ComponentPlan
+	// podsByInstance is the reconcile's one cached pod observation by
+	// Instance index, the same read the hold pass used.
+	podsByInstance map[int32][]*corev1.Pod
+	// excluded holds the Instances a deferred scale-down owns; they take no
+	// lifecycle write before the wave admits them.
+	excluded map[int32]struct{}
+	held     holds.Result
+	now      time.Time
+	// desiredByInstance is the planned pod count per Instance index.
+	desiredByInstance map[int32]int32
+	// currentRevisionHash is the hash of the Component's current revision;
+	// a pod labelled with another hash belongs to a roll left behind.
+	currentRevisionHash string
+	deadlineDeps        types.DispositionDeps
+	// failedWrites collects the pass's plain Failed writes into one batched
+	// status write; a deadline decision flushes it before its own writes.
+	failedWrites *failureStampBuffer
+}
+
+// newEscalationPass reads what every row of the pass shares. The input is
+// the pass's own copy, with the update revision already settled by Run.
+func newEscalationPass(in PassInput, podsByInstance map[int32][]*corev1.Pod) *escalationPass {
+	input := in.Input
+	deadlineDeps := input.Disposition
+	deadlineDeps.MigrationMode = in.Plan.MigrationMode
+	return &escalationPass{
+		deps:                in.Deps,
+		input:               input,
+		plan:                in.Plan,
+		podsByInstance:      podsByInstance,
+		excluded:            in.Excluded,
+		held:                in.Held,
+		now:                 input.Now(),
+		desiredByInstance:   status.DesiredPodCountByInstance(in.Plan),
+		currentRevisionHash: query.RevisionFromName(input.ObservedState.CurrentRevision).Hash(),
+		deadlineDeps:        deadlineDeps,
+		failedWrites:        &failureStampBuffer{input: input},
+	}
+}
+
+// flushFailedWrites lands the buffered plain Failed writes and fires the
+// warnings of the ones that committed.
+func (p *escalationPass) flushFailedWrites(ctx context.Context) error {
+	if err := p.failedWrites.flush(ctx); err != nil {
+		return fmt.Errorf("flush escalation stamps (component=%s): %w", p.plan.Component, err)
 	}
 	return nil
+}
+
+// rowEscalation is one Instance row as the pass reads it: the row, the
+// failure reading of its attempt, the pods that reading is taken over, the
+// planned pod count, the PodGroup reading, the attempt's target revision,
+// the two holds the pass answers, and whether the ownership table lets the
+// stuck-pod grace or the deadline end the row's state.
+type rowEscalation struct {
+	pass *escalationPass
+	row  types.InstanceStatus
+	// reading is the attempt's failure reading: the first pod held in a
+	// terminal waiting reason past the grace, whether the deadline elapsed,
+	// and the pod the scheduler could not place.
+	reading InstanceEvidence
+	// pods are the pods the attempt's reading is taken over: the row's own,
+	// a gang surge's replacement gang, a migration pair's own and sibling.
+	pods        []*corev1.Pod
+	desiredPods int32
+	gang        types.GangObservation
+	// attemptRevision is the revision the attempt converges on.
+	attemptRevision string
+	// unschedulableHold and podGroupHold are the two waits the hold pass
+	// recorded that this pass answers.
+	unschedulableHold bool
+	podGroupHold      bool
+	// graceMayEnd and deadlineMayEnd are the ownership table's answers:
+	// whether the stuck-pod grace, or the operation deadline, may end the
+	// row's state at all.
+	graceMayEnd    bool
+	deadlineMayEnd bool
+}
+
+// readRow reads one row once, before any step runs.
+func (p *escalationPass) readRow(row types.InstanceStatus) rowEscalation {
+	attemptRevision := attemptTargetRevision(p.input, row)
+	r := rowEscalation{
+		pass:              p,
+		row:               row,
+		reading:           evidenceFor(&p.input.ObservedState, p.podsByInstance, row.Index, p.now, p.input.StuckPodGrace, attemptRevision),
+		pods:              evidence.PodsForStuckCheck(row, p.podsByInstance),
+		desiredPods:       status.DesiredFor(p.desiredByInstance, row.Index, row.PodCount),
+		gang:              types.GangReadingFor(p.input, row),
+		attemptRevision:   attemptRevision,
+		unschedulableHold: p.held.Holding(row.Index, types.WaitingReasonUnschedulable),
+		podGroupHold:      p.held.Holding(row.Index, types.WaitingReasonPodGroupTerminating),
+	}
+	r.graceMayEnd = types.Interruptible(&r.row, types.EventStuckPodGrace)
+	r.deadlineMayEnd = types.Interruptible(&r.row, types.EventOperationDeadline)
+	return r
+}
+
+// rowStep is one step of a row's walk through the pass. It reports whether
+// the walk goes on to the next step; an error ends the whole pass.
+type rowStep func(ctx context.Context) (next bool, err error)
+
+// runRowSteps runs the steps in order and stops at the first that ends the
+// walk or fails. It reports whether every step went on.
+func runRowSteps(ctx context.Context, steps []rowStep) (bool, error) {
+	for _, step := range steps {
+		if next, err := step(ctx); !next || err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+// run takes the row through the pass's steps in order. Each step answers
+// one question about the row; the first that ends the walk, or fails, is
+// the last one run.
+func (r *rowEscalation) run(ctx context.Context) error {
+	_, err := runRowSteps(ctx, []rowStep{
+		r.refreshFailedRow,
+		r.keepServingSet,
+		r.endOnPodGroupOwnedElsewhere,
+		r.waitForPodGroupName,
+		r.endOnSchedulerGrace,
+		r.requireInterruptibleState,
+		r.skipPausedAttempt,
+		r.endOnStuckPod,
+		r.requireElapsedDeadline,
+		r.waitForAdmissionGate,
+		r.waitForExternalHold,
+		r.decideExpiredAttempt,
+		r.waitForRepairRebuild,
+		r.endOnDeadline,
+	})
+	return err
+}
+
+// refreshFailedRow is the one visit a row already Failed gets: its failure
+// record is refreshed once when the kubelet now names a concrete cause, and
+// the once-only repair warnings are published. The row is never written
+// Failed again, so the operator-facing event fires once per escalation.
+func (r *rowEscalation) refreshFailedRow(ctx context.Context) (bool, error) {
+	if r.row.Phase != types.InstancePhaseFailed {
+		return true, nil
+	}
+	p := r.pass
+	if t := refreshedFailureEvidence(r.row, r.reading); t != nil {
+		p.failedWrites.add(r.row.Index, status.RecordRefreshedFailure(t, DeadlineExceededReason), nil)
+	}
+	if err := announceRepairExhausted(ctx, p.deps, p.input, p.plan, r.row); err != nil {
+		return false, fmt.Errorf("announce exhausted repair (instance=%d): %w", r.row.Index, err)
+	}
+	if err := announceRepairWaiting(ctx, p.deps, p.input, p.plan, r.row); err != nil {
+		return false, fmt.Errorf("announce waiting repair (instance=%d): %w", r.row.Index, err)
+	}
+	return false, nil
+}
+
+// keepServingSet is the failed-while-serving rule: a pod set fully in
+// rotation at the desired count is capacity and is never written Failed,
+// whatever the reading says. The hold steps after it read pod health
+// alone, so a serving set hands any stale token back here. A surge whose
+// source left rotation is not capacity (podSetIsCapacity).
+func (r *rowEscalation) keepServingSet(context.Context) (bool, error) {
+	return !podSetIsCapacity(r.row, r.pods, r.desiredPods), nil
+}
+
+// endOnPodGroupOwnedElsewhere ends an attempt whose PodGroup name another
+// controller owns: nothing this controller does frees the name. The
+// failure is the environment's and charges no revision.
+func (r *rowEscalation) endOnPodGroupOwnedElsewhere(context.Context) (bool, error) {
+	reason := gangTerminalReason(r.gang.State)
+	if reason == "" || !gangVerdictActionable(&r.row) {
+		return true, nil
+	}
+	p := r.pass
+	escalateGangFailure(p.input, p.failedWrites, r.row, r.gang, reason, p.now)
+	return false, nil
+}
+
+// waitForPodGroupName keeps a row whose PodGroup name is still being
+// collected: the wait ends on its own once the old object is gone. A pod of
+// the row's own held in a terminal waiting reason still reaches the
+// stuck-pod step.
+func (r *rowEscalation) waitForPodGroupName(context.Context) (bool, error) {
+	return !r.podGroupHold || r.reading.StuckPod != nil, nil
+}
+
+// endOnSchedulerGrace answers an Unschedulable hold. Inside the operator's
+// grace the row waits on cluster capacity, unless a pod of its own is held
+// in a terminal waiting reason, which the stuck-pod step reads. Past the
+// grace the attempt ends as the environment's failure: the scheduler's
+// message is recorded and no revision is charged. With no grace set, the
+// hold lasts.
+func (r *rowEscalation) endOnSchedulerGrace(ctx context.Context) (bool, error) {
+	if !r.unschedulableHold {
+		return true, nil
+	}
+	p := r.pass
+	if !unschedulableGraceElapsed(r.reading.UnschedulableSince, p.now, p.input.UnschedulableGrace) {
+		return r.reading.StuckPod != nil, nil
+	}
+	if err := escalateSchedulerHold(ctx, p.deps, p.input, p.deadlineDeps, p.failedWrites, r.row, r.pods, r.desiredPods, r.reading, p.now); err != nil {
+		return false, fmt.Errorf("escalate scheduler hold (instance=%d): %w", r.row.Index, err)
+	}
+	return false, nil
+}
+
+// requireInterruptibleState asks the ownership table whether either clock
+// may end the row's state. A migration pair ends through its record, which
+// fails both rows; a teardown is the scale-down wave's, which paces a
+// removal past any grace and reports its own overdue drain.
+func (r *rowEscalation) requireInterruptibleState(context.Context) (bool, error) {
+	return r.graceMayEnd || r.deadlineMayEnd, nil
+}
+
+// skipPausedAttempt leaves an attempt the operator paused: it was told to
+// wait, its deadline rests for the length of the pause, and a pod held in a
+// terminal waiting reason waits on the unpause, not on this pass.
+func (r *rowEscalation) skipPausedAttempt(context.Context) (bool, error) {
+	return !types.OperationPaused(r.row.Operation), nil
+}
+
+// endOnStuckPod ends an attempt one of whose pods the kubelet has held in a
+// terminal waiting reason past the stuck-pod grace, when the table lets the
+// grace end the state and the row qualifies (ShouldCheckForStuckPods: an
+// attempt in flight, or a pod whose revision label disagrees with the
+// current revision). A Create, recreate or in-place attempt takes the
+// deadline decision; every other attempt is written Failed with the pod's
+// diagnostics.
+func (r *rowEscalation) endOnStuckPod(ctx context.Context) (bool, error) {
+	if !r.graceMayEnd || r.reading.StuckPod == nil ||
+		!ShouldCheckForStuckPods(&r.row, r.pods, r.pass.currentRevisionHash, query.LabelRevisionHash) {
+		return true, nil
+	}
+	if takesDeadlineDecision(&r.row) {
+		return false, r.decideStuckAttempt(ctx)
+	}
+	r.failOnStuckPod()
+	return false, nil
+}
+
+// decideStuckAttempt hands the attempt to the deadline decision with the
+// pod that is held. A single-pod surge shares its Instance index with the
+// serving source, so the decision reads the held replacement alone, not
+// both pods' nodes. The decision's own writes are ordered (the retry record
+// before the operation is cleared), so the pending plain writes land first,
+// as they would in an unbatched pass.
+func (r *rowEscalation) decideStuckAttempt(ctx context.Context) error {
+	p := r.pass
+	if err := p.flushFailedWrites(ctx); err != nil {
+		return err
+	}
+	attemptPods := r.pods
+	if singlePodSurgeAttempt(&r.row, r.desiredPods) {
+		attemptPods = []*corev1.Pod{r.reading.StuckPod}
+	}
+	if _, err := DecideExpiredAttempt(ctx, p.deps, p.input, p.deadlineDeps, r.row, attemptPods, r.reading.StuckReason); err != nil {
+		return fmt.Errorf("decide stuck attempt (instance=%d): %w", r.row.Index, err)
+	}
+	return nil
+}
+
+// failOnStuckPod writes the row Failed with the held pod's waiting reason
+// and container detail on its failure record, the one trace that survives
+// the rebuild or teardown that deletes the pod. The write names the pod set
+// by incarnation, so a repair that claimed that set since this observation
+// keeps it.
+func (r *rowEscalation) failOnStuckPod() {
+	p := r.pass
+	termination := types.PodTerminationWithReason(r.reading.StuckPod, r.reading.StuckReason, metav1.NewTime(p.now))
+	idx, podName, reason := r.row.Index, r.reading.StuckPod.Name, r.reading.StuckReason
+	p.failedWrites.add(idx, status.StampFailedOnStuckPod(termination, blamedIncarnation(r.row, r.reading.StuckPod)), func() {
+		p.input.WarnInstanceFailed(idx, podName, reason)
+	})
+}
+
+// requireElapsedDeadline admits a row to the deadline steps only when its
+// operation's deadline has elapsed and the table lets the deadline end the
+// state.
+func (r *rowEscalation) requireElapsedDeadline(context.Context) (bool, error) {
+	return r.deadlineMayEnd && r.reading.DeadlinePassed, nil
+}
+
+// waitForAdmissionGate keeps a row whose pods still carry an admission
+// scheduling gate: they are queued, not failing, and the deadline step
+// zeroes their clock; a gate seen before that write lands must not expire
+// the attempt either. A gang surge's attempt pods live under its surge
+// index, so that bucket is read too.
+func (r *rowEscalation) waitForAdmissionGate(context.Context) (bool, error) {
+	pods := r.pass.podsByInstance
+	if anyPodAdmissionGated(pods[r.row.Index]) {
+		return false, nil
+	}
+	op := r.row.Operation
+	if op != nil && op.SurgeIndex != nil && anyPodAdmissionGated(pods[*op.SurgeIndex]) {
+		return false, nil
+	}
+	return true, nil
+}
+
+// waitForExternalHold keeps a row whose operation waits on an authority
+// outside the workload: quota the apiserver refused, a placement the
+// scheduler has not found. No pod carries a gate for these, so the wait is
+// on the operation, on the surge row for a gang surge. The deadline step
+// zeroes that clock; one written before the hold landed must not expire
+// the attempt either.
+func (r *rowEscalation) waitForExternalHold(context.Context) (bool, error) {
+	return !instanceHeldExternally(&r.row, r.pass.input.ObservedState.InstanceStatuses), nil
+}
+
+// decideExpiredAttempt hands an expired Create, recreate or in-place
+// attempt to the deadline decision, after the pending plain writes have
+// landed; the decision's writes keep their own order.
+func (r *rowEscalation) decideExpiredAttempt(ctx context.Context) (bool, error) {
+	if !takesDeadlineDecision(&r.row) {
+		return true, nil
+	}
+	p := r.pass
+	if err := p.flushFailedWrites(ctx); err != nil {
+		return false, err
+	}
+	if _, err := DecideExpiredAttempt(ctx, p.deps, p.input, p.deadlineDeps, r.row, r.pods, deadlineFailureMessage(r.row.Operation)); err != nil {
+		return false, fmt.Errorf("decide expired attempt (instance=%d): %w", r.row.Index, err)
+	}
+	return false, nil
+}
+
+// waitForRepairRebuild keeps a repair whose drained set is already gone:
+// the Failed write would stand on no pod set, so it waits for the pass that
+// observes the rebuilt one (repairSetGone).
+func (r *rowEscalation) waitForRepairRebuild(ctx context.Context) (bool, error) {
+	if r.row.Operation.Type != types.InstanceOperationRestart {
+		return true, nil
+	}
+	p := r.pass
+	gone, err := repairSetGone(ctx, p.deps, p.input, p.plan, r.row.Index)
+	if err != nil {
+		return false, fmt.Errorf("read the repair's pod set (instance=%d): %w", r.row.Index, err)
+	}
+	return !gone, nil
+}
+
+// endOnDeadline writes the row Failed with its operation kept, so the pass
+// that owns the attempt (a gang surge's end, a repair) can finish it, and
+// warns with the operation and step that ran out of time.
+func (r *rowEscalation) endOnDeadline(context.Context) (bool, error) {
+	p := r.pass
+	idx, op := r.row.Index, r.row.Operation
+	p.failedWrites.add(idx, status.StampFailedKeepingOperation(r.deadlineFailureRecord()), func() {
+		p.input.WarnInstanceFailed(idx, "", deadlineFailureMessage(op))
+	})
+	return false, nil
+}
+
+// deadlineFailureRecord is what the row keeps of an elapsed deadline once
+// the pods it names are deleted. A workload-caused waiting reason, a pod
+// that ran yet never reported ready, or a pod whose readiness gate never
+// folded into Ready names the cause better than the elapsed timeout, and a
+// gang surge's end charges the revision's retry record by that reason.
+func (r *rowEscalation) deadlineFailureRecord() *types.InstanceTermination {
+	now := metav1.NewTime(r.pass.now)
+	if pod, reason := evidence.FirstWorkloadCausedPod(r.pods); pod != nil {
+		return types.PodTerminationWithReason(pod, reason, now)
+	}
+	if pod, _ := evidence.FirstRunningNotReadyPod(r.pods, r.attemptRevision); pod != nil {
+		return evidence.ContainersNotReadyTermination(pod, now)
+	}
+	if pod := evidence.FirstGateNotFoldedPod(r.pods, r.attemptRevision); pod != nil {
+		return evidence.GateNotFoldedTermination(pod, now)
+	}
+	return deadlineTermination(r.pass.now, r.row.Operation)
 }
 
 // announceRepairExhausted warns once per parked attempt that a repair has
@@ -456,15 +591,9 @@ type InstanceEvidence struct {
 // deadline backstop and the scheduler hold still report). now/grace are
 // supplied by the caller (clock seam); attemptRev is the attempt's
 // resolved target revision.
-func evidenceFor(insts []types.InstanceStatus, byIdx map[int32][]*corev1.Pod, idx int32, now time.Time, grace time.Duration, attemptRev string) InstanceEvidence {
+func evidenceFor(observed *types.WorkloadObservedState, byIdx map[int32][]*corev1.Pod, idx int32, now time.Time, grace time.Duration, attemptRev string) InstanceEvidence {
 	var ev InstanceEvidence
-	var inst *types.InstanceStatus
-	for i := range insts {
-		if insts[i].Index == idx {
-			inst = &insts[i]
-			break
-		}
-	}
+	inst := observed.Instance(idx)
 	if inst != nil {
 		ev.DeadlinePassed = operationDeadlinePassed(inst, now)
 	}
@@ -496,6 +625,17 @@ func attemptEvidenceFloor(inst *types.InstanceStatus) time.Time {
 		return time.Time{}
 	}
 	return inst.Operation.StartedAt.Time
+}
+
+// blamedIncarnation names the pod set the stuck-pod stamp blames: the pod's
+// own incarnation when it is the row's, and the row's observed incarnation
+// for a gang surge source, whose replacement pods carry the marker row's.
+func blamedIncarnation(row types.InstanceStatus, stuck *corev1.Pod) int64 {
+	if row.Operation != nil && row.Operation.Type == types.InstanceOperationUpdate && row.Operation.SurgeIndex != nil {
+		return row.Incarnation
+	}
+	inc, _ := query.InstanceIncarnationFromLabels(stuck)
+	return inc
 }
 
 func singlePodSurgeAttempt(row *types.InstanceStatus, desiredPods int32) bool {

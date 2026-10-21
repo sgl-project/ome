@@ -37,7 +37,7 @@ var _ podGroupReader = &informerReader{}
 // declared (using the configured annotation key), and the gate timeout (the standard
 // Spec.ScheduleTimeoutSeconds, falling back to the configured value when unset).
 // A PodGroup without the topology annotation yields an empty key, which
-// resolveGang treats as unresolvable (no domain to pin to).
+// resolveGang treats as unresolvable (no domain to assign).
 func factsFromPodGroup(pg *schedv1alpha1.PodGroup, topologyKeyAnnotation string, defaultPermitTimeout time.Duration) (minMember int, topologyKey string, timeout time.Duration) {
 	if pg == nil {
 		return 0, "", defaultPermitTimeout

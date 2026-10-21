@@ -2,9 +2,9 @@
 // uses to gate destructive pod operations: IsPodDrained (safe to
 // delete?) and IsPodInRotation (surge eligible for new traffic?).
 //
-// Boundary: pure leaf. Only Kubernetes API machinery. Knows nothing
-// about ReconcileParams or any OMENative-specific shape — every entry
-// point takes a plain client.Reader + (namespace, serviceName, pod).
+// Boundary: pure leaf. Only Kubernetes API machinery. Knows no
+// OMENative-specific shape — every entry point takes a plain
+// client.Reader + (namespace, serviceName, pod).
 package drain
 
 import (

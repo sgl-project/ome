@@ -1,7 +1,6 @@
 package resolution
 
 import (
-	"context"
 	"errors"
 	"maps"
 	"strings"
@@ -10,13 +9,12 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/placement/capacity"
 	quotacapacity "sigs.k8s.io/ome/pkg/quota/capacity"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 type demandFixture struct {
@@ -93,16 +91,8 @@ func TestResolveDemand(t *testing.T) {
 				tt.mutate(&f)
 			}
 			before := unitJSON(t, []any{f.service, f.runtime, f.extra})
-			writes := 0
-			reject := func() error { writes++; return errors.New("unexpected object write") }
-			cl := unitClient(t, f.runtimeFixture, interceptor.Funcs{
-				Create: func(context.Context, client.WithWatch, client.Object, ...client.CreateOption) error { return reject() },
-				Update: func(context.Context, client.WithWatch, client.Object, ...client.UpdateOption) error { return reject() },
-				Patch: func(context.Context, client.WithWatch, client.Object, client.Patch, ...client.PatchOption) error {
-					return reject()
-				},
-				Delete: func(context.Context, client.WithWatch, client.Object, ...client.DeleteOption) error { return reject() },
-			})
+			writes := fakeclient.CountingWrites()
+			cl := unitClient(t, f.runtimeFixture, writes, fakeclient.FailingWrites(fakeclient.EveryCall, errors.New("unexpected object write")))
 			got, err := (Resolver{Client: cl, OperatorNamespace: f.namespace, ComponentUnits: tt.units}).ResolveDemand(t.Context(), f.service, nil, f.root.Name)
 			if err != nil {
 				t.Fatal(err)
@@ -130,7 +120,7 @@ func TestResolveDemand(t *testing.T) {
 			if err := got.Check(t.Context()); err != nil {
 				t.Fatal(err)
 			}
-			if diff := cmp.Diff(0, writes); diff != "" {
+			if diff := cmp.Diff(0, writes.Count()); diff != "" {
 				t.Fatalf("object writes (-want +got):\n%s", diff)
 			}
 			got.Demand.Pools[0].NodeLabels["hardware"] = "mutated"
@@ -173,7 +163,7 @@ func TestResolveDemandRejectsUnknownInputs(t *testing.T) {
 			if tt.mutate != nil {
 				tt.mutate(&f)
 			}
-			got, err := (Resolver{Client: unitClient(t, f.runtimeFixture, interceptor.Funcs{}), OperatorNamespace: f.namespace}).ResolveDemand(t.Context(), f.service, nil, tt.root)
+			got, err := (Resolver{Client: unitClient(t, f.runtimeFixture), OperatorNamespace: f.namespace}).ResolveDemand(t.Context(), f.service, nil, tt.root)
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("error = %v, want %q", err, tt.wantErr)
 			}
@@ -200,35 +190,23 @@ func TestResolveDemandReadFailures(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newDemandFixture()
-			reads := 0
 			readErr := errors.New("capacity read failed")
-			cl := unitClient(t, f.runtimeFixture, interceptor.Funcs{
-				Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, object client.Object, opts ...client.GetOption) error {
-					if _, ok := object.(*v1beta1.AcceleratorQuota); ok && tt.root {
-						reads++
-						if reads == tt.read {
-							return readErr
-						}
+			var fault fakeclient.Option
+			switch {
+			case tt.root:
+				fault = fakeclient.FailingVerb(fakeclient.Get, tt.read, readErr).OnKind(&v1beta1.AcceleratorQuota{})
+			case tt.partial:
+				reads := 0
+				fault = fakeclient.EditedRead(func(flavors *kueuev1beta2.ResourceFlavorList) {
+					reads++
+					if reads == tt.read {
+						flavors.SetContinue("next-page")
 					}
-					return cl.Get(ctx, key, object, opts...)
-				},
-				List: func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
-					if err := cl.List(ctx, list, opts...); err != nil {
-						return err
-					}
-					if _, ok := list.(*kueuev1beta2.ResourceFlavorList); ok && !tt.root {
-						reads++
-						if reads == tt.read {
-							if tt.partial {
-								list.SetContinue("next-page")
-							} else {
-								return readErr
-							}
-						}
-					}
-					return nil
-				},
-			})
+				})
+			default:
+				fault = fakeclient.FailingVerb(fakeclient.List, tt.read, readErr).OnKind(&kueuev1beta2.ResourceFlavorList{})
+			}
+			cl := unitClient(t, f.runtimeFixture, fault)
 			got, err := (Resolver{Client: cl, OperatorNamespace: f.namespace}).ResolveDemand(t.Context(), f.service, nil, f.root.Name)
 			if tt.partial {
 				if err == nil || !strings.Contains(err.Error(), "incomplete") {

@@ -179,7 +179,7 @@ func TestCancellationCoverageReadyAfterOptionalConfigParseError(t *testing.T) {
 			// Parsing is optional for these existing artifacts. A malformed config
 			// must not prevent an active task from publishing its final Ready state.
 			require.NoError(t, os.WriteFile(filepath.Join(modelPath, "config.json"), []byte("{invalid-json"), 0600))
-			g.modelConfigParser = modelparser.NewModelConfigParser(nil, g.logger)
+			g.modelConfigParser = modelparser.NewModelConfigParser(g.logger)
 			require.NoError(t, g.processTask(task))
 			assertCancellationCoverageStatus(t, g, task, ModelStatusReady)
 			modelType, namespace, name := GetModelTypeNamespaceAndName(task)
@@ -246,7 +246,7 @@ func TestCanceledUpdatingStopsNonOCITasks(t *testing.T) {
 			t.Run(string(taskType)+"/"+uri, func(t *testing.T) {
 				g, task := newCancellationCoverageGopher(t, uri)
 				task.TaskType = taskType
-				g.modelConfigParser = modelparser.NewModelConfigParser(nil, g.logger)
+				g.modelConfigParser = modelparser.NewModelConfigParser(g.logger)
 				client := g.configMapReconciler.kubeClient.(*k8sfake.Clientset)
 				client.PrependReactor("patch", "nodes", func(k8stesting.Action) (bool, runtime.Object, error) {
 					g.taskTracker.cancelLegacyDownload(gopherTaskModelKey(task))
@@ -387,7 +387,7 @@ func TestHfSnapshotCancellationAndFinalProgress(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g, task := newCancellationCoverageGopher(t, "hf://org/model")
 			g.xetConfig = &xet.Config{}
-			g.modelConfigParser = modelparser.NewModelConfigParser(nil, g.logger)
+			g.modelConfigParser = modelparser.NewModelConfigParser(g.logger)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			source := cancellationTestHfSource(g, func(_ context.Context, config *xet.DownloadConfig, progress xet.ProgressHandler, _ time.Duration) (string, error) {
@@ -438,7 +438,7 @@ func TestHfFinalProgressFlushHonorsTaskCancellation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			g, task := newCancellationCoverageGopher(t, "hf://org/model")
 			g.xetConfig = &xet.Config{}
-			g.modelConfigParser = modelparser.NewModelConfigParser(nil, g.logger)
+			g.modelConfigParser = modelparser.NewModelConfigParser(g.logger)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			client := g.configMapReconciler.kubeClient.(*k8sfake.Clientset)
@@ -540,7 +540,7 @@ func TestHfProgressFlushSerializesWithAffinityCleanup(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			g, task := newCancellationCoverageGopher(t, "hf://org/model")
 			g.xetConfig = &xet.Config{}
-			g.modelConfigParser = modelparser.NewModelConfigParser(nil, g.logger)
+			g.modelConfigParser = modelparser.NewModelConfigParser(g.logger)
 			require.NoError(t, g.safeNodeLabelReconciliation(context.Background(), &NodeLabelOp{BaseModel: task.BaseModel, ModelStateOnNode: Updating}))
 			baseCtx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -677,7 +677,7 @@ func TestCanceledConfigParsingIsNotOptional(t *testing.T) {
 					return err
 				}
 			}
-			g.modelConfigParser = modelparser.NewModelConfigParser(nil, g.logger)
+			g.modelConfigParser = modelparser.NewModelConfigParser(g.logger)
 			core, _ := observer.New(zap.DebugLevel)
 			entered := false
 			// Direct callers log immediately before parsing; shared OCI reaches
@@ -712,7 +712,7 @@ func TestDownloadSuccessRequiresReadyPublication(t *testing.T) {
 	for _, mode := range []string{"canceled", "publication failed", "published"} {
 		t.Run(mode, func(t *testing.T) {
 			g, task := newCancellationCoverageGopher(t, "local:///model")
-			g.modelConfigParser = modelparser.NewModelConfigParser(nil, g.logger)
+			g.modelConfigParser = modelparser.NewModelConfigParser(g.logger)
 			core, logs := observer.New(zap.DebugLevel)
 			g.logger = zap.New(core, zap.Hooks(func(entry zapcore.Entry) error {
 				if strings.HasPrefix(entry.Message, "Successfully processed local model") && mode == "canceled" {
@@ -761,7 +761,7 @@ func TestSharedReadyRetryDoesNotRecordSuccess(t *testing.T) {
 	}}, metav1.CreateOptions{})
 	require.NoError(t, err)
 	g.nodeLabelReconciler = NewNodeLabelReconciler(g.configMapReconciler.nodeName, client, 1, g.logger)
-	g.modelConfigParser = modelparser.NewModelConfigParser(nil, g.logger)
+	g.modelConfigParser = modelparser.NewModelConfigParser(g.logger)
 	g.samePathWaitDelay = time.Millisecond
 	core, _ := observer.New(zap.DebugLevel)
 	var unlock func()

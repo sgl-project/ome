@@ -107,7 +107,7 @@ func (r *Reconciler) singleMoveProposal(ctx context.Context, source *v1beta1.Inf
 	out.InputDigest = hex.EncodeToString(digest[:])
 	if source.Status.Placement.Plan == nil {
 		a := out.Assignments[out.Winner]
-		err = r.adoptAllHome(ctx, source, out.Winner, &a, out.InputDigest, true)
+		err = r.adoptAllModeMember(ctx, source, out.Winner, &a, out.InputDigest, true)
 		if err != nil {
 			return out, err
 		}
@@ -132,12 +132,12 @@ func (r *Reconciler) singleMoveProposal(ctx context.Context, source *v1beta1.Inf
 	}
 	for _, name := range slices.Sorted(maps.Keys(out.Assignments)) {
 		a := out.Assignments[name]
-		if a.RaceCandidate && a.CurrentReplicas == 0 && a.DrainRequested && zeroHomeFloor(a.CurrentHome) {
-			observed, err := r.observePlannedHome(ctx, source, v1beta1.CandidatePlacement{Cluster: name, Allocation: &a}, declaredComponents(source))
+		if a.RaceCandidate && a.CurrentReplicas == 0 && a.DrainRequested && hasZeroReplicaFloor(a.CurrentHome) {
+			observed, err := r.observePlannedMember(ctx, source, v1beta1.CandidatePlacement{Cluster: name, Allocation: &a}, declaredComponents(source))
 			if err != nil {
 				return out, err
 			}
-			if !observed.Home.Absent {
+			if !observed.MemberState.Absent {
 				return out, fmt.Errorf("zero-floor race loser %q still requires cleanup", name)
 			}
 			a.CurrentHome = nil
@@ -155,18 +155,18 @@ func (r *Reconciler) singleMoveProposal(ctx context.Context, source *v1beta1.Inf
 			a.HomeInputsPending = true
 			if slices.Contains(eligible, name) {
 				cctx, cancel := context.WithTimeout(ctx, r.placeTimeout())
-				home, resolveErr := r.resolveFullHome(cctx, source, desired, name, a.ClusterUID, out.InputDigest)
+				policy, resolveErr := r.resolveFullPolicy(cctx, source, desired, name, a.ClusterUID, out.InputDigest)
 				cancel()
 				if resolveErr == nil {
 					a.HomeInputsPending = false
-					a.DesiredHome = home
-					a.DesiredReplicas, _ = protocol.ValidateReplicaFloors(home.ReplicaFloors)
+					a.DesiredHome = policy
+					a.DesiredReplicas, _ = protocol.ValidateReplicaFloors(policy.ReplicaFloors)
 				}
 			}
 		}
 		out.Assignments[name] = a
-		for _, home := range []*v1beta1.PlacementHomePolicy{a.CurrentHome, a.DesiredHome} {
-			if err := positiveMovementFloor(home); err != nil {
+		for _, policy := range []*v1beta1.PlacementHomePolicy{a.CurrentHome, a.DesiredHome} {
+			if err := positiveMovementFloor(policy); err != nil {
 				return out, err
 			}
 		}
@@ -187,15 +187,15 @@ func (r *Reconciler) restoreSingleWinner(ctx context.Context, source *v1beta1.In
 		return nil
 	}
 	if a.CurrentReplicas > 0 {
-		home, known := standing.get(proposal.Winner)
-		if !known || home.state != homeAbsent {
+		member, known := standing.get(proposal.Winner)
+		if !known || member.state != memberAbsent {
 			return nil
 		}
-		observed, err := r.observePlannedHome(ctx, source, v1beta1.CandidatePlacement{Cluster: proposal.Winner, Allocation: &a}, declaredComponents(source))
+		observed, err := r.observePlannedMember(ctx, source, v1beta1.CandidatePlacement{Cluster: proposal.Winner, Allocation: &a}, declaredComponents(source))
 		if err != nil {
 			return err
 		}
-		if !observed.Home.Absent {
+		if !observed.MemberState.Absent {
 			return nil
 		}
 		a.CurrentReplicas, a.CurrentHome, a.DrainRequested = 0, nil, false
@@ -204,23 +204,23 @@ func (r *Reconciler) restoreSingleWinner(ctx context.Context, source *v1beta1.In
 		return fmt.Errorf("absent original home is ineligible for restoration")
 	}
 	cctx, cancel := context.WithTimeout(ctx, r.placeTimeout())
-	home, err := r.resolveFullHome(cctx, source, desired, proposal.Winner, a.ClusterUID, proposal.InputDigest)
+	policy, err := r.resolveFullPolicy(cctx, source, desired, proposal.Winner, a.ClusterUID, proposal.InputDigest)
 	cancel()
 	if err != nil {
 		return err
 	}
-	if err := positiveMovementFloor(home); err != nil {
+	if err := positiveMovementFloor(policy); err != nil {
 		return err
 	}
-	a.DesiredHome = home
-	a.DesiredReplicas, _ = protocol.ValidateReplicaFloors(home.ReplicaFloors)
+	a.DesiredHome = policy
+	a.DesiredReplicas, _ = protocol.ValidateReplicaFloors(policy.ReplicaFloors)
 	proposal.Assignments[proposal.Winner] = a
 	return nil
 }
 
-// advanceSingleRace charges every occupied home and rollout reservation. The
+// advanceSingleRace charges every occupied member and rollout reservation. The
 // smallest active probe floor bounds the budget so any admitted probe can win.
-func advanceSingleRace(source *v1beta1.InferenceService, observations map[string]plannedHomeObservation, proposal *plan.Proposal, now time.Time) (allocation.Step, error) {
+func advanceSingleRace(source *v1beta1.InferenceService, observations map[string]plannedMemberObservation, proposal *plan.Proposal, now time.Time) (allocation.Step, error) {
 	step := allocation.Step{Targets: map[string]int32{}, Reason: "AwaitingReplacementAdmission"}
 	var original, used int64
 	var activeFloor int32
@@ -230,16 +230,16 @@ func advanceSingleRace(source *v1beta1.InferenceService, observations map[string
 		a, o := proposal.Assignments[name], observations[name]
 		step.Targets[name] = a.CurrentReplicas
 		original += int64(a.OriginalReplicas)
-		used += int64(max(a.CurrentReplicas, o.Home.Occupied)) + int64(o.RolloutReserved)
-		allKnown = allKnown && o.Home.Known
-		paused = paused && (o.Home.Absent || o.PauseAcknowledged)
+		used += int64(max(a.CurrentReplicas, o.MemberState.Occupied)) + int64(o.RolloutReserved)
+		allKnown = allKnown && o.MemberState.Known
+		paused = paused && (o.MemberState.Absent || o.PauseAcknowledged)
 		if name == proposal.Winner || a.CurrentReplicas <= 0 || a.DesiredReplicas <= 0 || a.DrainRequested {
 			continue
 		}
 		if activeFloor == 0 || a.CurrentReplicas < activeFloor {
 			activeFloor = a.CurrentReplicas
 		}
-		if selected == "" && o.Home.Known && o.Home.Applied && o.Home.Eligible && !o.Terminal && o.Candidate.Phase == v1beta1.CandidatePhaseAdmitted && !a.HomeInputsPending && equality.Semantic.DeepEqual(a.CurrentHome, a.DesiredHome) {
+		if selected == "" && o.MemberState.Known && o.MemberState.Applied && o.MemberState.Eligible && !o.Terminal && o.Candidate.Phase == v1beta1.CandidatePhaseAdmitted && !a.HomeInputsPending && equality.Semantic.DeepEqual(a.CurrentHome, a.DesiredHome) {
 			selected = name
 		}
 	}
@@ -261,7 +261,7 @@ func advanceSingleRace(source *v1beta1.InferenceService, observations map[string
 		return step, nil
 	}
 	winner := proposal.Assignments[proposal.Winner]
-	if winner.OriginalReplicas > 0 && winner.CurrentReplicas > 0 && observations[proposal.Winner].Home.Absent {
+	if winner.OriginalReplicas > 0 && winner.CurrentReplicas > 0 && observations[proposal.Winner].MemberState.Absent {
 		step.Targets[proposal.Winner] = 0
 		step.Reason = "AwaitingMemberConvergence"
 		return step, nil
@@ -275,7 +275,7 @@ func advanceSingleRace(source *v1beta1.InferenceService, observations map[string
 		if name == proposal.Winner {
 			continue
 		}
-		if a.CurrentReplicas == 0 && o.Home.Absent {
+		if a.CurrentReplicas == 0 && o.MemberState.Absent {
 			a.CurrentHome, a.DrainRequested = nil, false
 			a.ReplacementStartedAt = nil
 			proposal.Assignments[name] = a
@@ -303,7 +303,7 @@ func advanceSingleRace(source *v1beta1.InferenceService, observations map[string
 	names = append(slices.Clone(names[index:]), names[:index]...)
 	for _, name := range names {
 		a, o := proposal.Assignments[name], observations[name]
-		if name == proposal.Winner || a.DesiredReplicas <= 0 || a.CurrentReplicas > 0 || a.HomeInputsPending || a.DrainRequested || !o.Home.Eligible || !o.Home.Absent || a.DesiredHome == nil {
+		if name == proposal.Winner || a.DesiredReplicas <= 0 || a.CurrentReplicas > 0 || a.HomeInputsPending || a.DrainRequested || !o.MemberState.Eligible || !o.MemberState.Absent || a.DesiredHome == nil {
 			continue
 		}
 		floor := a.DesiredReplicas

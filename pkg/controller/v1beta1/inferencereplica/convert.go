@@ -415,29 +415,13 @@ func desiredFromIR(ir *v1beta1.InferenceReplica, runners []v1beta1.Runner) workl
 	if ir.Spec.Lifecycle != nil {
 		desired.Lifecycle = v1beta1convert.LifecycleSpecToWorkload(*ir.Spec.Lifecycle)
 	}
-	// Pull the per-role PodSpec + ObjectMeta out of the runners. The
-	// webhook validates the {default} | {leader, worker} shapes of stored
-	// runners; rendered runners take the same shapes.
-	for i := range runners {
-		runner := &runners[i]
-		switch runner.Name {
-		case v1beta1.RunnerNameDefault:
-			spec := runner.Template.Spec
-			desired.PodSpec = &spec
-			meta := runner.Template.ObjectMeta
-			desired.PodTemplateObjectMeta = &meta
-		case v1beta1.RunnerNameLeader:
-			spec := runner.Template.Spec
-			desired.PodSpec = &spec
-			meta := runner.Template.ObjectMeta
-			desired.PodTemplateObjectMeta = &meta
-			desired.MultiPod = true
-		case v1beta1.RunnerNameWorker:
-			spec := runner.Template.Spec
-			desired.WorkerPodSpec = &spec
-			desired.MultiPod = true
-		}
-	}
+	// The per-role PodSpec and ObjectMeta come off the runners through the
+	// one reader the revision hash and the projector's template stamp share.
+	templates := v1beta1convert.PodTemplatesOf(runners)
+	desired.PodSpec = templates.Primary
+	desired.PodTemplateObjectMeta = templates.Meta
+	desired.WorkerPodSpec = templates.Worker
+	desired.MultiPod = templates.MultiPod
 	return desired
 }
 
@@ -673,39 +657,25 @@ func buildApplyInstanceMutationsWithRetryBlock(writer statusWriter, ir *v1beta1.
 // reader for conflict retries and the client for status writes. The split is
 // required for adjacent writes in one reconcile: the informer cache may not
 // observe the first write before the next mutation starts.
+//
+// Each attempt reads the replica live, applies the batch to that copy
+// through an instanceBatchWrite, writes the copy, and reads back the rows
+// the apiserver stored for the caller's copy and the commit callbacks. The
+// rows of the API object are read and written here alone; the record works
+// on copies.
 func buildApplyInstanceMutationsWithRetryBlockFromReader(writer statusWriter, reads client.Reader, ir *v1beta1.InferenceReplica, historyLimit *int32) func(ctx context.Context, muts []workloadtypes.InstanceMutation, targetRevision string, mutateRetryBlock func(*workloadtypes.RetryBlock) workloadtypes.RetryBlockDisposition) error {
 	key := client.ObjectKeyFromObject(ir)
 	ownerUID := ir.UID
 	return func(ctx context.Context, muts []workloadtypes.InstanceMutation, targetRevision string, mutateRetryBlock func(*workloadtypes.RetryBlock) workloadtypes.RetryBlockDisposition) error {
-		mutationCounts := make(map[int32]int, len(muts))
-		for i := range muts {
-			mutationCounts[muts[i].Index]++
-		}
-		for i := range muts {
-			switch {
-			case muts[i].Remove && muts[i].Mutate != nil:
-				return fmt.Errorf("instance mutation %d for index %d sets both Remove and Mutate", i, muts[i].Index)
-			case !muts[i].Remove && muts[i].Mutate == nil:
-				return fmt.Errorf("instance mutation %d for index %d sets neither Remove nor Mutate", i, muts[i].Index)
-			case muts[i].OnCommit != nil && mutationCounts[muts[i].Index] > 1:
-				return fmt.Errorf("instance mutation %d for index %d uses OnCommit but the index appears %d times", i, muts[i].Index, mutationCounts[muts[i].Index])
-			}
+		if err := validateInstanceMutations(muts); err != nil {
+			return err
 		}
 		if len(muts) == 0 && mutateRetryBlock == nil {
 			return nil
 		}
-		var committedInstances []v1beta1.OMENativeInstanceStatus
-		var committedRetryBlocks []v1beta1.RetryBlock
-		var committedMutationCallbacks []committedInstanceMutation
-		replaceCommittedInstances := false
-		committedRetryBlockMutation := false
-		statusWriteAttempted := false
+		write := &instanceBatchWrite{mutations: muts, targetRevision: targetRevision, mutateRetryBlock: mutateRetryBlock, historyLimit: historyLimit}
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			committedInstances = nil
-			committedRetryBlocks = nil
-			committedMutationCallbacks = nil
-			replaceCommittedInstances = false
-			committedRetryBlockMutation = false
+			write.beginAttempt()
 			fresh := &v1beta1.InferenceReplica{}
 			source, err := irstatus.GetDecoded(ctx, reads, key, fresh)
 			if err != nil {
@@ -717,245 +687,438 @@ func buildApplyInstanceMutationsWithRetryBlockFromReader(writer statusWriter, re
 			if ownerUID == "" || fresh.UID != ownerUID {
 				return workloadtypes.ErrStatusOwnerGone
 			}
-			insts := fresh.Status.InstanceStatuses
-			slots := make(map[int32]v1beta1.OMENativeInstanceStatus, len(insts)+len(muts))
-			order := make([]int32, 0, len(insts)+len(muts))
-			ordered := make(map[int32]struct{}, len(insts)+len(muts))
-			for i := range insts {
-				idx := insts[i].Index
-				if _, seen := ordered[idx]; !seen {
-					order = append(order, idx)
-					ordered[idx] = struct{}{}
-				}
-				slots[idx] = insts[i]
+			rows := indexInstanceRows(fresh.Status.InstanceStatuses, len(muts))
+			if err := write.checkBatchPreconditions(fresh, rows); err != nil {
+				return err
 			}
-			for _, mutation := range muts {
-				if mutation.BatchPrecondition == nil {
-					continue
-				}
-				snapshot := workloadtypes.InstanceMutationSnapshot{
-					OwnerUID:        fresh.UID,
-					OwnerGeneration: fresh.Generation,
-					Instances:       make(map[int32]workloadtypes.InstanceStatus, len(slots)),
-				}
-				for index, slot := range slots {
-					snapshot.Instances[index] = v1beta1convert.InstanceStatusToWorkload(*slot.DeepCopy())
-				}
-				if !mutation.BatchPrecondition(snapshot) {
-					return workloadtypes.ErrStatusMutationPrecondition
-				}
+			write.applyInstanceMutations(rows)
+			if write.instanceChanged {
+				fresh.Status.InstanceStatuses = rows.inStoredOrder()
 			}
-			instanceChanged := false
-			removalApplied := false
-			touched := make([]int32, 0, len(muts))
-			touchedSet := make(map[int32]struct{}, len(muts))
-			for _, m := range muts {
-				if m.Remove {
-					slot, found := slots[m.Index]
-					if !found {
-						continue
-					}
-					previous := v1beta1convert.InstanceStatusToWorkload(*slot.DeepCopy())
-					if m.Precondition != nil && !m.Precondition(&previous) {
-						continue
-					}
-					delete(slots, m.Index)
-					instanceChanged = true
-					removalApplied = true
-					if m.OnCommit != nil {
-						previousCopy := cloneWorkloadInstanceStatus(previous)
-						committedMutationCallbacks = append(committedMutationCallbacks, committedInstanceMutation{
-							index:    m.Index,
-							onCommit: m.OnCommit,
-							previous: previousCopy,
-						})
-					}
-					continue
-				}
-				slot, found := slots[m.Index]
-				if !found {
-					slot = v1beta1.OMENativeInstanceStatus{Index: m.Index}
-				}
-				w := v1beta1convert.InstanceStatusToWorkload(slot)
-				if m.Precondition != nil && !m.Precondition(&w) {
-					continue
-				}
-				var previous *workloadtypes.InstanceStatus
-				if found {
-					previous = cloneWorkloadInstanceStatus(w)
-				}
-				read := w.Phase
-				if !m.Mutate(&w) {
-					continue
-				}
-				slot = encodeMutatedInstance(slot.Phase, read, w)
-				slots[m.Index] = slot
-				if _, seen := ordered[m.Index]; !seen {
-					order = append(order, m.Index)
-					ordered[m.Index] = struct{}{}
-				}
-				instanceChanged = true
-				if _, seen := touchedSet[m.Index]; !seen {
-					touched = append(touched, m.Index)
-					touchedSet[m.Index] = struct{}{}
-				}
-				if m.OnCommit != nil {
-					committedMutationCallbacks = append(committedMutationCallbacks, committedInstanceMutation{
-						index:    m.Index,
-						onCommit: m.OnCommit,
-						previous: previous,
-						current:  cloneWorkloadInstanceStatus(w),
-					})
-				}
-			}
-			if instanceChanged {
-				insts = make([]v1beta1.OMENativeInstanceStatus, 0, len(slots))
-				for _, idx := range order {
-					if slot, found := slots[idx]; found {
-						insts = append(insts, slot)
-					}
-				}
-				fresh.Status.InstanceStatuses = insts
-			}
-
-			retryBlockChanged := false
-			var retryBlockPostcondition func([]v1beta1.RetryBlock) bool
-			if mutateRetryBlock != nil {
-				blocks := fresh.Status.RetryBlocks
-				pos := -1
-				for i := range blocks {
-					if blocks[i].TargetRevision == targetRevision {
-						pos = i
-						break
-					}
-				}
-				w := workloadtypes.RetryBlock{TargetRevision: targetRevision}
-				if pos != -1 {
-					w = retryBlockToWorkload(blocks[pos])
-				}
-				disposition := mutateRetryBlock(&w)
-				switch disposition {
-				case workloadtypes.RetryBlockPersist:
-					next := retryBlockFromWorkload(w)
-					next.TargetRevision = targetRevision
-					if pos == -1 {
-						blocks = append(blocks, next)
-					} else {
-						blocks[pos] = next
-					}
-					retryBlockChanged = true
-				case workloadtypes.RetryBlockRemove:
-					if pos != -1 {
-						blocks = append(blocks[:pos], blocks[pos+1:]...)
-						retryBlockChanged = true
-					}
-				}
-				if retryBlockChanged {
-					fresh.Status.RetryBlocks = pruneRetryBlocks(blocks, fresh.Status.UpdateRevision, historyLimit)
-					expected, expectedFound := retryBlockForRevision(fresh.Status.RetryBlocks, targetRevision)
-					retryBlockPostcondition = func(blocks []v1beta1.RetryBlock) bool {
-						actual, found := retryBlockForRevision(blocks, targetRevision)
-						return found == expectedFound && (!found || apiequality.Semantic.DeepEqual(actual, expected))
-					}
-				}
-			}
-
-			if !instanceChanged && !retryBlockChanged {
+			write.applyRetryBlockMutation(&fresh.Status)
+			if !write.instanceChanged && !write.retryBlockChanged {
 				return nil
 			}
-			statusWriteAttempted = true
-			if err := updateInferenceReplicaStatus(ctx, writer, fresh, source); err != nil {
-				if apierrors.IsNotFound(err) {
-					return workloadtypes.ErrStatusOwnerGone
-				}
-				updateErr := fmt.Errorf("update IR status: %w", err)
-				confirmed := &v1beta1.InferenceReplica{}
-				confirmedSource, readErr := irstatus.GetDecoded(ctx, reads, key, confirmed)
-				if readErr != nil || confirmed.UID != fresh.UID {
-					return updateErr
-				}
-				if len(muts) > 0 && !instanceMutationPostconditionsHold(confirmed, muts) {
-					return updateErr
-				}
-				if retryBlockPostcondition != nil && !retryBlockPostcondition(confirmed.Status.RetryBlocks) {
-					return updateErr
-				}
-				if len(muts) == 0 && retryBlockPostcondition == nil {
-					return updateErr
-				}
-				// The live object proves the intended state was committed
-				// despite the ambiguous error, so the write counts as
-				// confirmed rather than failed.
-				obsmetrics.RecordIRStatusWrite(encodingLabel(confirmedSource), obsmetrics.IRStatusWriteConfirmed)
-				fresh = confirmed
+			write.statusWriteAttempted = true
+			if fresh, err = write.persist(ctx, writer, reads, key, fresh, source); err != nil {
+				return err
 			}
-			persistedSlots := make(map[int32]v1beta1.OMENativeInstanceStatus, len(fresh.Status.InstanceStatuses))
+			// The rows the apiserver stored, by Instance: the caller's copy
+			// and the commit callbacks read these, never the attempt's own.
+			persisted := make(map[int32]v1beta1.OMENativeInstanceStatus, len(fresh.Status.InstanceStatuses))
 			for i := range fresh.Status.InstanceStatuses {
-				persisted := fresh.Status.InstanceStatuses[i]
-				persistedSlots[persisted.Index] = persisted
+				row := fresh.Status.InstanceStatuses[i]
+				persisted[row.Index] = row
 			}
-			for i := range committedMutationCallbacks {
-				if committedMutationCallbacks[i].current == nil {
-					continue
-				}
-				committedMutationCallbacks[i].current = nil
-				if persisted, found := persistedSlots[committedMutationCallbacks[i].index]; found {
-					current := v1beta1convert.InstanceStatusToWorkload(*persisted.DeepCopy())
-					committedMutationCallbacks[i].current = cloneWorkloadInstanceStatus(current)
-				}
-			}
-			if removalApplied {
-				replaceCommittedInstances = true
-				committedInstances = make([]v1beta1.OMENativeInstanceStatus, len(fresh.Status.InstanceStatuses))
+			write.recordCommittedCallbacks(persisted)
+			// A removal replaces the caller's whole row list, so every
+			// stored row is copied; otherwise the changed rows alone.
+			if write.removalApplied {
+				write.replaceCommittedInstances = true
+				write.committedInstances = make([]v1beta1.OMENativeInstanceStatus, len(fresh.Status.InstanceStatuses))
 				for i := range fresh.Status.InstanceStatuses {
-					committedInstances[i] = *fresh.Status.InstanceStatuses[i].DeepCopy()
+					write.committedInstances[i] = *fresh.Status.InstanceStatuses[i].DeepCopy()
 				}
 			} else {
-				committedInstances = make([]v1beta1.OMENativeInstanceStatus, 0, len(touched))
-				for _, idx := range touched {
-					if persisted, found := persistedSlots[idx]; found {
-						committedInstances = append(committedInstances, *persisted.DeepCopy())
-					}
-				}
+				write.committedInstances = write.touchedRows(persisted)
 			}
-			if retryBlockChanged {
-				committedRetryBlockMutation = true
-				committedRetryBlocks = make([]v1beta1.RetryBlock, len(fresh.Status.RetryBlocks))
-				for i := range fresh.Status.RetryBlocks {
-					committedRetryBlocks[i] = *fresh.Status.RetryBlocks[i].DeepCopy()
-				}
-			}
+			write.recordCommittedRetryBlocks(fresh.Status.RetryBlocks)
 			return nil
 		})
-		if err != nil {
-			switch {
-			case errors.Is(err, workloadtypes.ErrStatusMutationPrecondition):
-				// Replanning is expected control flow and has no terminal status
-				// write outcome of its own.
-			case errors.Is(err, workloadtypes.ErrStatusOwnerGone):
-				obsmetrics.RecordStatusUpdate(obsmetrics.ControllerIR, obsmetrics.ResultNotFound)
-			case apierrors.IsConflict(err):
-				obsmetrics.RecordStatusUpdate(obsmetrics.ControllerIR, obsmetrics.ResultConflict)
-			case statusWriteAttempted:
-				obsmetrics.RecordStatusUpdate(obsmetrics.ControllerIR, obsmetrics.ResultError)
-			}
-			return err
+		return write.finish(err, ir)
+	}
+}
+
+// validateInstanceMutations rejects a batch whose shape the write cannot
+// apply: a mutation either removes its row or changes it, and a commit
+// callback needs its Instance once in the batch, so the callback has one
+// previous and one current value.
+func validateInstanceMutations(muts []workloadtypes.InstanceMutation) error {
+	mutationCounts := make(map[int32]int, len(muts))
+	for i := range muts {
+		mutationCounts[muts[i].Index]++
+	}
+	for i := range muts {
+		switch {
+		case muts[i].Remove && muts[i].Mutate != nil:
+			return fmt.Errorf("instance mutation %d for index %d sets both Remove and Mutate", i, muts[i].Index)
+		case !muts[i].Remove && muts[i].Mutate == nil:
+			return fmt.Errorf("instance mutation %d for index %d sets neither Remove nor Mutate", i, muts[i].Index)
+		case muts[i].OnCommit != nil && mutationCounts[muts[i].Index] > 1:
+			return fmt.Errorf("instance mutation %d for index %d uses OnCommit but the index appears %d times", i, muts[i].Index, mutationCounts[muts[i].Index])
 		}
-		if statusWriteAttempted {
-			obsmetrics.RecordStatusUpdate(obsmetrics.ControllerIR, obsmetrics.ResultSuccess)
+	}
+	return nil
+}
+
+// instanceRows is one attempt's working copy of the stored rows: by
+// Instance for the mutations, with the stored order kept for the write.
+type instanceRows struct {
+	byInstance map[int32]v1beta1.OMENativeInstanceStatus
+	order      []int32
+	ordered    map[int32]struct{}
+}
+
+// indexInstanceRows copies the stored rows into a working set with room for
+// pending new Instances. An Instance the stored list names twice keeps its
+// first position and its last row.
+func indexInstanceRows(stored []v1beta1.OMENativeInstanceStatus, pending int) *instanceRows {
+	rows := &instanceRows{
+		byInstance: make(map[int32]v1beta1.OMENativeInstanceStatus, len(stored)+pending),
+		order:      make([]int32, 0, len(stored)+pending),
+		ordered:    make(map[int32]struct{}, len(stored)+pending),
+	}
+	for i := range stored {
+		rows.set(stored[i].Index, stored[i])
+	}
+	return rows
+}
+
+// set stores a row; an Instance the set has not seen takes the next
+// position after the rows already ordered.
+func (r *instanceRows) set(index int32, row v1beta1.OMENativeInstanceStatus) {
+	r.byInstance[index] = row
+	if _, seen := r.ordered[index]; !seen {
+		r.order = append(r.order, index)
+		r.ordered[index] = struct{}{}
+	}
+}
+
+// inStoredOrder lists the rows for the write: the stored order first, new
+// Instances after it, removed Instances left out.
+func (r *instanceRows) inStoredOrder() []v1beta1.OMENativeInstanceStatus {
+	rows := make([]v1beta1.OMENativeInstanceStatus, 0, len(r.byInstance))
+	for _, index := range r.order {
+		if row, found := r.byInstance[index]; found {
+			rows = append(rows, row)
 		}
-		if replaceCommittedInstances {
-			replaceInstanceStatuses(ir, committedInstances)
+	}
+	return rows
+}
+
+// snapshot copies every row into the engine's shape for a batch
+// precondition, beside the owner's identity and generation.
+func (r *instanceRows) snapshot(owner *v1beta1.InferenceReplica) workloadtypes.InstanceMutationSnapshot {
+	snapshot := workloadtypes.InstanceMutationSnapshot{
+		OwnerUID:        owner.UID,
+		OwnerGeneration: owner.Generation,
+		Instances:       make(map[int32]workloadtypes.InstanceStatus, len(r.byInstance)),
+	}
+	for index, row := range r.byInstance {
+		snapshot.Instances[index] = v1beta1convert.InstanceStatusToWorkload(*row.DeepCopy())
+	}
+	return snapshot
+}
+
+// instanceBatchWrite is one call of the batch status write: the row
+// mutations and the retry record mutation it was asked for, what the
+// attempt in progress changed on the fresh copy, and what the apiserver
+// stored, which the caller's copy and the commit callbacks read once the
+// write is in.
+type instanceBatchWrite struct {
+	mutations        []workloadtypes.InstanceMutation
+	targetRevision   string
+	mutateRetryBlock func(*workloadtypes.RetryBlock) workloadtypes.RetryBlockDisposition
+	historyLimit     *int32
+
+	// The attempt in progress; beginAttempt clears these for a retry.
+	instanceChanged         bool
+	removalApplied          bool
+	touched                 []int32
+	touchedSet              map[int32]struct{}
+	retryBlockChanged       bool
+	retryBlockPostcondition func([]v1beta1.RetryBlock) bool
+
+	// Whether any attempt reached the apiserver. Kept across retries, so a
+	// failure after an attempted write counts as a failed write.
+	statusWriteAttempted bool
+
+	// What the apiserver stored, read back after the write.
+	committedInstances          []v1beta1.OMENativeInstanceStatus
+	replaceCommittedInstances   bool
+	committedRetryBlocks        []v1beta1.RetryBlock
+	committedRetryBlockMutation bool
+	committedMutationCallbacks  []committedInstanceMutation
+}
+
+// beginAttempt clears what an earlier attempt recorded, so a retry after a
+// conflict rebuilds everything from the fresh copy it reads.
+func (w *instanceBatchWrite) beginAttempt() {
+	w.instanceChanged = false
+	w.removalApplied = false
+	w.touched = make([]int32, 0, len(w.mutations))
+	w.touchedSet = make(map[int32]struct{}, len(w.mutations))
+	w.retryBlockChanged = false
+	w.retryBlockPostcondition = nil
+	w.committedInstances = nil
+	w.replaceCommittedInstances = false
+	w.committedRetryBlocks = nil
+	w.committedRetryBlockMutation = false
+	w.committedMutationCallbacks = nil
+}
+
+// checkBatchPreconditions runs every batch precondition against the fresh
+// rows before any mutation applies, so a rejected batch changes nothing.
+// Each precondition reads its own copy of the rows.
+func (w *instanceBatchWrite) checkBatchPreconditions(owner *v1beta1.InferenceReplica, rows *instanceRows) error {
+	for _, mutation := range w.mutations {
+		if mutation.BatchPrecondition == nil {
+			continue
+		}
+		if !mutation.BatchPrecondition(rows.snapshot(owner)) {
+			return workloadtypes.ErrStatusMutationPrecondition
+		}
+	}
+	return nil
+}
+
+// applyInstanceMutations applies the mutations to the working rows in the
+// order given. A mutation whose precondition fails, whose callback reports
+// no change, or whose removal names no row leaves the rows as they are.
+func (w *instanceBatchWrite) applyInstanceMutations(rows *instanceRows) {
+	for i := range w.mutations {
+		if w.mutations[i].Remove {
+			w.removeInstance(w.mutations[i], rows)
+			continue
+		}
+		w.mutateInstance(w.mutations[i], rows)
+	}
+}
+
+// removeInstance drops one row when it exists and its precondition holds,
+// and keeps the row's last value for the commit callback.
+func (w *instanceBatchWrite) removeInstance(m workloadtypes.InstanceMutation, rows *instanceRows) {
+	row, found := rows.byInstance[m.Index]
+	if !found {
+		return
+	}
+	previous := v1beta1convert.InstanceStatusToWorkload(*row.DeepCopy())
+	if m.Precondition != nil && !m.Precondition(&previous) {
+		return
+	}
+	delete(rows.byInstance, m.Index)
+	w.instanceChanged = true
+	w.removalApplied = true
+	if m.OnCommit != nil {
+		w.committedMutationCallbacks = append(w.committedMutationCallbacks, committedInstanceMutation{
+			index:    m.Index,
+			onCommit: m.OnCommit,
+			previous: cloneWorkloadInstanceStatus(previous),
+		})
+	}
+}
+
+// mutateInstance hands one row, or an empty row for an Instance that has
+// none, to the mutation's callback and stores the result when the callback
+// reports a change. A new row joins the stored order at its end.
+func (w *instanceBatchWrite) mutateInstance(m workloadtypes.InstanceMutation, rows *instanceRows) {
+	row, found := rows.byInstance[m.Index]
+	if !found {
+		row = v1beta1.OMENativeInstanceStatus{Index: m.Index}
+	}
+	status := v1beta1convert.InstanceStatusToWorkload(row)
+	if m.Precondition != nil && !m.Precondition(&status) {
+		return
+	}
+	var previous *workloadtypes.InstanceStatus
+	if found {
+		previous = cloneWorkloadInstanceStatus(status)
+	}
+	read := status.Phase
+	if !m.Mutate(&status) {
+		return
+	}
+	rows.set(m.Index, encodeMutatedInstance(row.Phase, read, status))
+	w.instanceChanged = true
+	if _, seen := w.touchedSet[m.Index]; !seen {
+		w.touched = append(w.touched, m.Index)
+		w.touchedSet[m.Index] = struct{}{}
+	}
+	if m.OnCommit != nil {
+		w.committedMutationCallbacks = append(w.committedMutationCallbacks, committedInstanceMutation{
+			index:    m.Index,
+			onCommit: m.OnCommit,
+			previous: previous,
+			current:  cloneWorkloadInstanceStatus(status),
+		})
+	}
+}
+
+// applyRetryBlockMutation hands the retry record of the target revision, or
+// an empty one, to the caller's callback and keeps, removes or leaves the
+// record as the callback decides. A changed list is pruned to the history
+// limit, and the record's written shape is kept to confirm an ambiguous
+// write.
+func (w *instanceBatchWrite) applyRetryBlockMutation(status *v1beta1.InferenceReplicaStatus) {
+	if w.mutateRetryBlock == nil {
+		return
+	}
+	blocks := status.RetryBlocks
+	pos := retryBlockPosition(blocks, w.targetRevision)
+	block := workloadtypes.RetryBlock{TargetRevision: w.targetRevision}
+	if pos != -1 {
+		block = retryBlockToWorkload(blocks[pos])
+	}
+	switch w.mutateRetryBlock(&block) {
+	case workloadtypes.RetryBlockPersist:
+		next := retryBlockFromWorkload(block)
+		next.TargetRevision = w.targetRevision
+		if pos == -1 {
+			blocks = append(blocks, next)
 		} else {
-			mirrorInstanceStatuses(ir, committedInstances)
+			blocks[pos] = next
 		}
-		if committedRetryBlockMutation && ir != nil {
-			ir.Status.RetryBlocks = committedRetryBlocks
+		w.retryBlockChanged = true
+	case workloadtypes.RetryBlockRemove:
+		if pos != -1 {
+			blocks = append(blocks[:pos], blocks[pos+1:]...)
+			w.retryBlockChanged = true
 		}
-		for _, committed := range committedMutationCallbacks {
-			committed.onCommit(committed.previous, committed.current)
+	}
+	if !w.retryBlockChanged {
+		return
+	}
+	status.RetryBlocks = pruneRetryBlocks(blocks, status.UpdateRevision, w.historyLimit)
+	w.retryBlockPostcondition = retryBlockPostconditionFor(status.RetryBlocks, w.targetRevision)
+}
+
+// retryBlockPosition is the position of the revision's retry record in
+// blocks, or -1 when the revision has none.
+func retryBlockPosition(blocks []v1beta1.RetryBlock, revision string) int {
+	for i := range blocks {
+		if blocks[i].TargetRevision == revision {
+			return i
 		}
-		return nil
+	}
+	return -1
+}
+
+// retryBlockPostconditionFor recognizes the written retry record of one
+// revision on a later read: present with the same content, or absent, as
+// the write left it.
+func retryBlockPostconditionFor(blocks []v1beta1.RetryBlock, revision string) func([]v1beta1.RetryBlock) bool {
+	expected, expectedFound := retryBlockForRevision(blocks, revision)
+	return func(blocks []v1beta1.RetryBlock) bool {
+		actual, found := retryBlockForRevision(blocks, revision)
+		return found == expectedFound && (!found || apiequality.Semantic.DeepEqual(actual, expected))
+	}
+}
+
+// persist writes the fresh copy and returns the object as the apiserver
+// stored it. An error that may still have committed the write is checked
+// against a live read: the write counts when the live object confirms it,
+// and the error stands otherwise.
+func (w *instanceBatchWrite) persist(ctx context.Context, writer statusWriter, reads client.Reader, key client.ObjectKey, fresh *v1beta1.InferenceReplica, source irstatus.Encoding) (*v1beta1.InferenceReplica, error) {
+	err := updateInferenceReplicaStatus(ctx, writer, fresh, source)
+	if err == nil {
+		return fresh, nil
+	}
+	if apierrors.IsNotFound(err) {
+		return nil, workloadtypes.ErrStatusOwnerGone
+	}
+	updateErr := fmt.Errorf("update IR status: %w", err)
+	confirmed := &v1beta1.InferenceReplica{}
+	confirmedSource, readErr := irstatus.GetDecoded(ctx, reads, key, confirmed)
+	if readErr != nil || confirmed.UID != fresh.UID || !w.confirms(confirmed) {
+		return nil, updateErr
+	}
+	obsmetrics.RecordIRStatusWrite(encodingLabel(confirmedSource), obsmetrics.IRStatusWriteConfirmed)
+	return confirmed, nil
+}
+
+// confirms reports whether a live object proves the write landed: every
+// row mutation's postcondition holds there and the retry record reads as
+// written. A batch with nothing to confirm never counts as landed.
+func (w *instanceBatchWrite) confirms(confirmed *v1beta1.InferenceReplica) bool {
+	if len(w.mutations) > 0 && !instanceMutationPostconditionsHold(confirmed, w.mutations) {
+		return false
+	}
+	if w.retryBlockPostcondition != nil && !w.retryBlockPostcondition(confirmed.Status.RetryBlocks) {
+		return false
+	}
+	return len(w.mutations) > 0 || w.retryBlockPostcondition != nil
+}
+
+// recordCommittedCallbacks gives each commit callback the row as the
+// apiserver stored it, or nil for an Instance the write left without a
+// row. A removal's callback keeps its nil current value.
+func (w *instanceBatchWrite) recordCommittedCallbacks(persisted map[int32]v1beta1.OMENativeInstanceStatus) {
+	for i := range w.committedMutationCallbacks {
+		if w.committedMutationCallbacks[i].current == nil {
+			continue
+		}
+		w.committedMutationCallbacks[i].current = nil
+		if row, found := persisted[w.committedMutationCallbacks[i].index]; found {
+			current := v1beta1convert.InstanceStatusToWorkload(*row.DeepCopy())
+			w.committedMutationCallbacks[i].current = cloneWorkloadInstanceStatus(current)
+		}
+	}
+}
+
+// touchedRows copies the stored rows of the Instances this write changed,
+// in the order the mutations named them.
+func (w *instanceBatchWrite) touchedRows(persisted map[int32]v1beta1.OMENativeInstanceStatus) []v1beta1.OMENativeInstanceStatus {
+	rows := make([]v1beta1.OMENativeInstanceStatus, 0, len(w.touched))
+	for _, index := range w.touched {
+		if row, found := persisted[index]; found {
+			rows = append(rows, *row.DeepCopy())
+		}
+	}
+	return rows
+}
+
+// recordCommittedRetryBlocks keeps a copy of the stored retry records when
+// this write changed them.
+func (w *instanceBatchWrite) recordCommittedRetryBlocks(blocks []v1beta1.RetryBlock) {
+	if !w.retryBlockChanged {
+		return
+	}
+	w.committedRetryBlockMutation = true
+	w.committedRetryBlocks = make([]v1beta1.RetryBlock, len(blocks))
+	for i := range blocks {
+		w.committedRetryBlocks[i] = *blocks[i].DeepCopy()
+	}
+}
+
+// finish records the write's outcome and, after a committed write, mirrors
+// the stored rows and retry records onto the caller's copy and runs the
+// commit callbacks in mutation order, so later work in the same pass reads
+// the state the apiserver holds.
+func (w *instanceBatchWrite) finish(err error, ir *v1beta1.InferenceReplica) error {
+	if err != nil {
+		w.recordFailure(err)
+		return err
+	}
+	if w.statusWriteAttempted {
+		obsmetrics.RecordStatusUpdate(obsmetrics.ControllerIR, obsmetrics.ResultSuccess)
+	}
+	if w.replaceCommittedInstances {
+		replaceInstanceStatuses(ir, w.committedInstances)
+	} else {
+		mirrorInstanceStatuses(ir, w.committedInstances)
+	}
+	if w.committedRetryBlockMutation && ir != nil {
+		ir.Status.RetryBlocks = w.committedRetryBlocks
+	}
+	for _, committed := range w.committedMutationCallbacks {
+		committed.onCommit(committed.previous, committed.current)
+	}
+	return nil
+}
+
+// recordFailure counts a failed write by its kind. A rejected batch
+// precondition is a replan, not a write outcome, and an error before any
+// attempt reached the apiserver counts nothing.
+func (w *instanceBatchWrite) recordFailure(err error) {
+	switch {
+	case errors.Is(err, workloadtypes.ErrStatusMutationPrecondition):
+		// A replan: no write outcome to count.
+	case errors.Is(err, workloadtypes.ErrStatusOwnerGone):
+		obsmetrics.RecordStatusUpdate(obsmetrics.ControllerIR, obsmetrics.ResultNotFound)
+	case apierrors.IsConflict(err):
+		obsmetrics.RecordStatusUpdate(obsmetrics.ControllerIR, obsmetrics.ResultConflict)
+	case w.statusWriteAttempted:
+		obsmetrics.RecordStatusUpdate(obsmetrics.ControllerIR, obsmetrics.ResultError)
 	}
 }
 
@@ -1072,24 +1235,32 @@ func mirrorInstanceStatuses(ir *v1beta1.InferenceReplica, statuses []v1beta1.OME
 //     once every Instance is back on the revision it was withdrawn from,
 //     which the CurrentRevisionWithdrawn condition records beside the
 //     empty current and this write raises or clears with it;
+//   - the rows are read beside the revision their pods carry (podReader,
+//     the cached client); the write that moves current records targetName
+//     as the update revision too, so the withdrawal names the pair written;
 //   - an unchanged value short-circuits with no write (a converged steady
 //     state performs ZERO writes);
 //   - retry.RetryOnConflict mirrors buildMutateInstance.
 //
-// On a committed write the new CurrentRevision is mirrored onto the
-// caller's in-memory IR so the deferred aggregator's Ready computation and
-// the reconciler's promotion log observe the post-write value.
-func buildPromoteCurrentRevision(writer statusWriter, reads client.Reader, ir *v1beta1.InferenceReplica) func(ctx context.Context, targetName string) error {
+// On a committed write the new revision pair is mirrored onto the caller's
+// in-memory IR so the deferred aggregator's Ready computation and the
+// reconciler's promotion log observe the post-write value.
+func buildPromoteCurrentRevision(writer statusWriter, reads, podReader client.Reader, ir *v1beta1.InferenceReplica) func(ctx context.Context, targetName string) error {
 	key := client.ObjectKeyFromObject(ir)
 	ownerUID := ir.UID
 	ownerGeneration := ir.Generation
+	templateHash := templateHashOf(ir)
 	return func(ctx context.Context, targetName string) error {
 		if targetName == "" {
 			return nil
 		}
+		pods, err := podRevisionsFor(ctx, podReader, ir)
+		if err != nil {
+			return err
+		}
 		var committed string
 		wrote := false
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			committed, wrote = "", false
 			fresh := &v1beta1.InferenceReplica{}
 			source, err := irstatus.GetDecoded(ctx, reads, key, fresh)
@@ -1102,16 +1273,18 @@ func buildPromoteCurrentRevision(writer statusWriter, reads client.Reader, ir *v
 			if ownerUID == "" || fresh.UID != ownerUID {
 				return workloadtypes.ErrStatusOwnerGone
 			}
-			if fresh.Generation != ownerGeneration {
+			if fresh.Generation != ownerGeneration && specChangedSincePlanned(ir, fresh) {
 				return workloadtypes.ErrStatusMutationPrecondition
 			}
 			insts := v1beta1convert.InstanceStatusSliceToWorkload(fresh.Status.InstanceStatuses)
 			withdrawn := withdrawnRevisionFor(&fresh.Status)
 			recorded := fresh.Status.CurrentRevision
-			want := workloadstatus.CurrentRevisionFor(insts, recorded, targetName, retryBlocksFromIR(fresh), withdrawn)
+			want := workloadstatus.CurrentRevisionFor(insts, recorded, targetName, retryBlocksFromIR(fresh), withdrawn, pods)
 			if want == recorded {
 				return nil
 			}
+			fresh.Status.UpdateRevision = targetName
+			fresh.Status.ObservedTemplateHash = templateHash
 			fresh.Status.CurrentRevision = want
 			recordCurrentRevisionWithdrawal(&fresh.Status, withdrawn, recorded)
 			if err := updateInferenceReplicaStatus(ctx, writer, fresh, source); err != nil {
@@ -1127,6 +1300,8 @@ func buildPromoteCurrentRevision(writer statusWriter, reads client.Reader, ir *v
 			return err
 		}
 		if wrote && ir != nil {
+			ir.Status.UpdateRevision = targetName
+			ir.Status.ObservedTemplateHash = templateHash
 			ir.Status.CurrentRevision = committed
 		}
 		return nil
@@ -1137,22 +1312,30 @@ func buildPromoteCurrentRevision(writer statusWriter, reads client.Reader, ir *v
 // that first renders a revision: re-read under retry.RetryOnConflict,
 // refuse a generation the pass did not plan against, write, and mirror the
 // committed names onto the caller's in-memory IR. The publication at the end
-// of the pass restates the same name beside the counters.
+// of the pass restates the same name beside the counters. The template hash
+// the revision was computed from is written beside it, so a reader can tell
+// the status describes the spec's current templates.
 //
 // The pair is written as one pair: the same write sets status.currentRevision
-// from status.CurrentRevisionFor over the fresh rows, so no stored status reads
+// from status.CurrentRevisionFor over the fresh rows and the revision their
+// pods carry (podReader, the cached client), so no stored status reads
 // current equal to update while an Instance runs, or is pinned to, another revision.
-func buildRecordUpdateRevision(writer statusWriter, reads client.Reader, ir *v1beta1.InferenceReplica) func(ctx context.Context, targetName string) error {
+func buildRecordUpdateRevision(writer statusWriter, reads, podReader client.Reader, ir *v1beta1.InferenceReplica) func(ctx context.Context, targetName string) error {
 	key := client.ObjectKeyFromObject(ir)
 	ownerUID := ir.UID
 	ownerGeneration := ir.Generation
+	templateHash := templateHashOf(ir)
 	return func(ctx context.Context, targetName string) error {
 		if targetName == "" {
 			return nil
 		}
+		pods, err := podRevisionsFor(ctx, podReader, ir)
+		if err != nil {
+			return err
+		}
 		var committedCurrent string
 		wrote := false
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			committedCurrent, wrote = "", false
 			fresh := &v1beta1.InferenceReplica{}
 			source, err := irstatus.GetDecoded(ctx, reads, key, fresh)
@@ -1165,17 +1348,18 @@ func buildRecordUpdateRevision(writer statusWriter, reads client.Reader, ir *v1b
 			if ownerUID == "" || fresh.UID != ownerUID {
 				return workloadtypes.ErrStatusOwnerGone
 			}
-			if fresh.Generation != ownerGeneration {
+			if fresh.Generation != ownerGeneration && specChangedSincePlanned(ir, fresh) {
 				return workloadtypes.ErrStatusMutationPrecondition
 			}
-			if fresh.Status.UpdateRevision == targetName {
+			if fresh.Status.UpdateRevision == targetName && fresh.Status.ObservedTemplateHash == templateHash {
 				return nil
 			}
 			insts := v1beta1convert.InstanceStatusSliceToWorkload(fresh.Status.InstanceStatuses)
 			withdrawn := withdrawnRevisionFor(&fresh.Status)
 			recorded := fresh.Status.CurrentRevision
-			current := workloadstatus.CurrentRevisionFor(insts, recorded, targetName, retryBlocksFromIR(fresh), withdrawn)
+			current := workloadstatus.CurrentRevisionFor(insts, recorded, targetName, retryBlocksFromIR(fresh), withdrawn, pods)
 			fresh.Status.UpdateRevision = targetName
+			fresh.Status.ObservedTemplateHash = templateHash
 			fresh.Status.CurrentRevision = current
 			recordCurrentRevisionWithdrawal(&fresh.Status, withdrawn, recorded)
 			if err := updateInferenceReplicaStatus(ctx, writer, fresh, source); err != nil {
@@ -1192,12 +1376,29 @@ func buildRecordUpdateRevision(writer statusWriter, reads client.Reader, ir *v1b
 		}
 		if ir != nil {
 			ir.Status.UpdateRevision = targetName
+			ir.Status.ObservedTemplateHash = templateHash
 			if wrote {
 				ir.Status.CurrentRevision = committedCurrent
 			}
 		}
 		return nil
 	}
+}
+
+// templateHashOf is the pod-template hash the projector stamped on a
+// replica's spec, "" on a replica no projector writes.
+func templateHashOf(ir *v1beta1.InferenceReplica) string {
+	return ir.Annotations[constants.InferenceReplicaTemplateHashAnnotationKey]
+}
+
+// podRevisionsFor lists the Component's pods through the cache, as the
+// publication does, and reads the revision each Instance's pods carry.
+func podRevisionsFor(ctx context.Context, c client.Reader, ir *v1beta1.InferenceReplica) (workloadstatus.PodRevisions, error) {
+	pods, err := query.ListOMENativePodsByName(ctx, c, ir.Namespace, ir.NamePrefix(), v1beta1convert.ComponentTypeToWorkload(ir.Spec.Component), true)
+	if err != nil {
+		return nil, fmt.Errorf("list pods: %w", err)
+	}
+	return workloadstatus.PodRevisionsByInstance(query.BucketPodsByInstanceIdx(pods)), nil
 }
 
 // buildMutateRetryBlock wraps the workload-typed RetryBlock mutate

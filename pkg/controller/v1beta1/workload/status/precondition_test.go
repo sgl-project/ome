@@ -6,11 +6,12 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	fixture "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
 func TestTerminalInstanceIdentity_IgnoresWireTimeAndDerivedStatus(t *testing.T) {
-	expected := terminalStatusFixture(3)
+	expected := fixture.UpdatingRowAtSurge(3)
 	current := cloneTerminalStatus(expected)
 	current.Operation.StartedAt = metav1.NewTime(current.Operation.StartedAt.Truncate(time.Second))
 	current.Operation.LastProgressAt = metav1.NewTime(current.Operation.LastProgressAt.Truncate(time.Second))
@@ -29,7 +30,7 @@ func TestTerminalInstanceIdentity_IgnoresWireTimeAndDerivedStatus(t *testing.T) 
 }
 
 func TestTerminalInstanceIdentity_RejectsLifecycleDrift(t *testing.T) {
-	expected := terminalStatusFixture(3)
+	expected := fixture.UpdatingRowAtSurge(3)
 	identity := Capture(&expected)
 	tests := []struct {
 		name   string

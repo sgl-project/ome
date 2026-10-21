@@ -124,7 +124,7 @@ func updateDrainAnnotation(t *testing.T, c client.Client, raw string) {
 	require.NoError(t, c.Update(context.Background(), cur))
 }
 
-func TestReconcile_TrafficDrainAnnotationCanExplicitlyZeroEveryArm(t *testing.T) {
+func TestReconcile_DrainAnnotationNamesEveryCluster_ZeroWeightsReasonTrafficDrain(t *testing.T) {
 	isvc := splitISVC([]string{"a", "b"}, []int32{7, 3}, []int32{7, 3})
 	isvc.Annotations = map[string]string{
 		constants.TrafficDrainAnnotation: `{
@@ -148,7 +148,7 @@ func TestReconcile_TrafficDrainAnnotationCanExplicitlyZeroEveryArm(t *testing.T)
 	assert.Equal(t, v1beta1.TrafficMapReasonTrafficDrain, cond.Reason)
 }
 
-func TestReconcile_PendingTrafficDrainAppliesWhenArmBecomesRoutable(t *testing.T) {
+func TestReconcile_DrainNamesAClusterNotYetPlaced_AppliesWhenItJoins(t *testing.T) {
 	isvc := splitISVC([]string{"a"}, []int32{7}, []int32{7})
 	isvc.Annotations = map[string]string{
 		constants.TrafficDrainAnnotation: `{"turnup-hold":{"cluster":"b","reason":"hold new cluster until verified"}}`,
@@ -242,17 +242,17 @@ func TestBuildSpec_ManualDrainsComposeWithProbePolicy(t *testing.T) {
 			reason: v1beta1.TrafficMapReasonRoutable,
 		},
 		{
-			name:    "removing a manual hold cannot restore probe-failed homes",
+			name:    "removing a manual hold cannot restore probe-failed clusters",
 			failing: [2]bool{true, true}, weights: [2]int32{0, 0}, status: metav1.ConditionFalse,
 			reason: v1beta1.TrafficMapReasonAllHomesProbeFailed,
 		},
 		{
-			name:    "recovered homes without manual holds use current capacity",
+			name:    "recovered clusters without manual holds use current capacity",
 			weights: [2]int32{7, 3}, status: metav1.ConditionTrue,
 			reason: v1beta1.TrafficMapReasonRoutable,
 		},
 		{
-			name:    "a manual hold drains the only probe-healthy home",
+			name:    "a manual hold drains the only probe-healthy cluster",
 			failing: [2]bool{true, false}, manualHold: true,
 			weights: [2]int32{0, 0}, status: metav1.ConditionFalse,
 			reason: v1beta1.TrafficMapReasonTrafficDrain,

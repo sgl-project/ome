@@ -13,7 +13,7 @@ import (
 // A new admission race cannot inherit occupied or unknown movement resources.
 func (r *Reconciler) singleMoveEmpty(ctx context.Context, source *v1beta1.InferenceService, clusters []v1beta1.WorkloadCluster, standing *placementObservations) bool {
 	winner, known := standing.get(winnerCluster(source))
-	if !known || winner.state != homeAbsent || len(source.Status.Placement.Candidates) == 0 {
+	if !known || winner.state != memberAbsent || len(source.Status.Placement.Candidates) == 0 {
 		return false
 	}
 	inventory := map[string]v1beta1.CandidatePlacement{}
@@ -24,8 +24,8 @@ func (r *Reconciler) singleMoveEmpty(ctx context.Context, source *v1beta1.Infere
 		inventory[candidate.Cluster] = candidate
 	}
 	for _, name := range slices.Sorted(maps.Keys(inventory)) {
-		observed, err := r.observePlannedHome(ctx, source, inventory[name], declaredComponents(source))
-		if err != nil || !observed.Home.Known || !observed.Home.Absent {
+		observed, err := r.observePlannedMember(ctx, source, inventory[name], declaredComponents(source))
+		if err != nil || !observed.MemberState.Known || !observed.MemberState.Absent {
 			return false
 		}
 	}
@@ -33,7 +33,7 @@ func (r *Reconciler) singleMoveEmpty(ctx context.Context, source *v1beta1.Infere
 }
 
 // emptySingleMove revokes movement authority before a fresh admission race.
-// Its caller must verify all homes are empty and the loss grace has expired.
+// Its caller must verify all members are empty and the loss grace has expired.
 func emptySingleMove(source *v1beta1.InferenceService) plan.Proposal {
 	out := plan.Proposal{Mode: v1beta1.PlacementModeSingle, InputDigest: source.Status.Placement.Plan.InputDigest, Assignments: map[string]v1beta1.CandidateAllocationStatus{}}
 	for _, candidate := range source.Status.Placement.Candidates {

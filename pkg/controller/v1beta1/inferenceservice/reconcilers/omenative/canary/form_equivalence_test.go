@@ -88,8 +88,9 @@ var executorPhases = []struct {
 		in.RunActive = true
 		in.TargetID = activeCanaryTargetID(f.isvc, g)
 	}},
-	// The rollback completed and closed its run; the IR reports the stable
-	// revision as the target until the hold is cleared.
+	// The rollback completed and closed its run; the replica runs the stable
+	// revision and keeps reporting the spec's revision, the rejected one, as
+	// its target while the hold stands.
 	{"closed after rollback", func(t *testing.T, f executorForm, in *ReconcileInputs) {
 		cs := servingFirstSplit()
 		cs.ObservedTrafficWeight = 0
@@ -104,7 +105,7 @@ var executorPhases = []struct {
 		}}
 		in.PerRevisionPods = map[string]int32{"old": 4}
 		in.RunActive = false
-		in.CanaryRevisionHash = "old"
+		in.CanaryRevisionHash = "new"
 	}},
 }
 
@@ -217,8 +218,8 @@ func TestProjection_ReferencedCanaryProjectsLikeInline(t *testing.T) {
 				phase.apply(t, f, &in)
 				policies := rollout.PoliciesOf(f.isvc.Namespace, f.policy)
 				p := projection{
-					Step:     StepPartition(f.isvc, policies, v1beta1.EngineComponent, ext),
-					PlanGate: PlanGateHoldPartition(f.isvc, policies, v1beta1.EngineComponent, ext),
+					Step:     StepPartition(f.isvc, policies, v1beta1.EngineComponent, DesiredReplicas(nil, ext)),
+					PlanGate: PlanGateHoldPartition(f.isvc, policies, v1beta1.EngineComponent, DesiredReplicas(nil, ext)),
 				}
 				p.Effective, p.Active = EffectivePartition(f.isvc, policies, v1beta1.EngineComponent, int32(n))
 				raw, err := json.Marshal(p)

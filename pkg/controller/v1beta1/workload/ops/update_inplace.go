@@ -21,330 +21,505 @@ import (
 	workload "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
-// inPlaceUpdate runs the in-place rollout: drain (optional), patch
-// container images, reconcile pod-template annotations from the
-// target revision's PodMeta, wait for runtime ready on the target
-// image, flip serving back, promote Ready. Multi-pass; idempotent.
-//
-// Annotation handling adds / updates keys present in the new spec and
-// deletes keys the previous revision once authored; foreign
-// (third-party) annotations are left alone. Recreate-on-annotation-
-// change was rejected because annotations are not load-bearing for
-// runtime image semantics and would defeat the zero-downtime
-// contract.
-func inPlaceUpdate(ctx context.Context, deps workload.Deps, input workload.ReconcileInput, plan workload.ComponentPlan, inst workload.InstancePlan, target *appsv1.ControllerRevision, targetSpec *corev1.PodSpec, pods []*corev1.Pod) (bool, error) {
-	// An in-place step patches pods it does not create, so an empty pod
-	// set has no repair anywhere in the pipeline: the update pass owns the
-	// index, so the Create pass is skipped and fresh-index creation
-	// excludes an Updating row, and the restart trigger declines below
-	// Ready. Re-resolve the roll to recreate instead, which does render a
-	// replacement at the target revision.
-	if len(pods) == 0 {
-		// An empty set is evidence only once this Instance's own creates
-		// and deletes have been observed. Before that it can be a read
-		// that predates them, and re-resolving on one would bump the
-		// Incarnation out from under a pod that does exist.
-		if !deps.ExpectationsCache().Satisfied(input.Key.Namespace, input.Key.OwnerName, input.Key.Component, inst.Index) {
-			return false, nil
-		}
-		reresolved, err := status.StampRecreateFromInPlace(ctx, input, inst.Index, target.Name)
-		if err != nil {
-			return false, fmt.Errorf("re-resolve in-place roll to recreate (instance=%d): %w", inst.Index, err)
-		}
-		if reresolved {
-			workload.RecordWarning(deps.Recorder, workload.EventTarget(input), workload.EventReasonInPlaceUpdateNotPossible,
-				"OMENative %s lost the pod its in-place update to revision %s was patching; recreating instead",
-				workload.InstanceKey(input.Key.Component, inst.Index), target.Name)
-		}
-		return recreateUpdate(ctx, deps, input, plan, inst, target, pods)
-	}
+// inPlacePhase is one step of an in-place pass. It reports whether the pass
+// goes on to the next step; a step that ends the pass returns false with
+// the error that ended it, if any.
+type inPlacePhase func(ctx context.Context) (next bool, err error)
 
-	// In-place keeps the same Incarnation — only the container image rolls.
-	// A row the update pass owns is mid-update; one in Updating only
-	// because a parked attempt's pods serve is not, and the patch over it
-	// is a first pass.
-	wasNotUpdating := workload.Owner(input.ObservedState.Instance(inst.Index)) != workload.OwnerUpdate
-	if err := status.StampUpdatingInPlace(ctx, input, inst.Index, target.Name, plan.UpdateStrategy.Type, plan.InstanceReadyTimeout); err != nil {
-		return false, fmt.Errorf("patch status Updating (instance=%d): %w", inst.Index, err)
-	}
-	if wasNotUpdating {
-		workload.RecordNormal(deps.Recorder, workload.EventTarget(input), workload.EventReasonInPlaceUpdateStarted,
-			"OMENative %s in-place update to revision %s",
-			workload.InstanceKey(input.Key.Component, inst.Index), target.Name)
-	}
-
-	// A pod in a terminal phase can never report the new image: free it
-	// now rather than patch and poll it to the deadline; the empty set then
-	// re-resolves the roll to recreate, above.
-	if recycling, err := recycleTerminalTargets(ctx, deps, input, inst.Index, inst.Index,
-		workload.InstanceOperationUpdate, pods, expectedPodNamesForInstance(input, plan, inst)); err != nil {
-		return false, fmt.Errorf("recycle terminal pod (instance=%d): %w", inst.Index, err)
-	} else if recycling {
-		return false, nil
-	}
-
-	markNotReady := true
-	if plan.UpdateStrategy.InPlaceUpdateStrategy != nil &&
-		plan.UpdateStrategy.InPlaceUpdateStrategy.MarkNotReadyDuringLifecycle != nil {
-		markNotReady = *plan.UpdateStrategy.InPlaceUpdateStrategy.MarkNotReadyDuringLifecycle
-	}
-
-	// A pod mutation the apiserver could not take to admission is a wait,
-	// not a verdict: the row records it in the apiserver's words and the
-	// pass ends quietly for the ordinary retry, exactly as a refused
-	// create does.
-	admissionWait := func(pod *corev1.Pod, err error) (bool, error) {
-		rejection := evidence.ClassifyAPIError(err)
-		if rejection.Class != workload.APIRejectionAdmissionUnavailable {
-			return false, nil
-		}
-		if rerr := recordAdmissionWait(ctx, deps, input, plan, inst.Index, pod.Name, rejection); rerr != nil {
-			return true, fmt.Errorf("record admission wait (instance=%d, pod=%s): %w", inst.Index, pod.Name, rerr)
-		}
-		return true, nil
-	}
-
-	// A pod already relabeled to the target revision has been through the
-	// drain + patch steps and is back in (or returning to) rotation; draining
-	// it again would remove converged capacity and restart its PodReady age
-	// on every pass while promotion waits out the minReadySeconds window.
-	targetRev := query.RevisionOf(target)
-	onTarget := func(pod *corev1.Pod) bool { return query.RevisionFromPod(pod).Same(targetRev) }
-
-	// Drain first when the strategy requires it.
-	if markNotReady {
-		for _, pod := range pods {
-			if !podreadiness.IsServing(pod) || onTarget(pod) {
-				continue
-			}
-			if err := podreadiness.MarkPodNotServing(ctx, deps.Client, deps.Reader(), pod, podreadiness.WriterUpdateInPlace, updateDrainKey(inst.Index, inst.Incarnation)); err != nil {
-				if handled, herr := admissionWait(pod, err); handled {
-					return false, herr
-				}
-				return false, fmt.Errorf("mark not serving (instance=%d, pod=%s): %w", inst.Index, pod.Name, err)
-			}
-		}
-		// Live reader on drain check so kube-proxy isn't still routing.
-		for _, pod := range pods {
-			if onTarget(pod) {
-				continue
-			}
-			serviceName := drainServiceForPod(input, plan, pod)
-			if serviceName == "" {
-				continue
-			}
-			drained, err := drain.IsPodDrained(ctx, deps.Reader(), input.Key.Namespace, serviceName, pod)
-			if err != nil {
-				return false, fmt.Errorf("check drain (instance=%d, pod=%s): %w", inst.Index, pod.Name, err)
-			}
-			if !drained {
-				return false, nil
-			}
-		}
-	}
-
-	// Pre-load the target + running revision metadata once, before the
-	// per-pod patch loop. The CR's PodMeta is the source of truth for the
-	// annotation set the new revision authored; the running revision's
-	// PodMeta tells us which keys the previous spec owned (so we can
-	// delete the ones the user just removed without clobbering keys set
-	// by other controllers / pod-mutating webhooks). Both can be nil on
-	// edge cases (CR with no PodMeta yet, first in-place update with no
-	// recorded running CR) — evidence.AnnotationsDiff handles nil-as-empty.
-	targetPayload, err := loadControllerRevisionPayload(target)
-	if err != nil {
-		return false, fmt.Errorf("load target CR data (instance=%d): %w", inst.Index, err)
-	}
-	runningPayload, err := loadRunningRevisionPayload(ctx, deps.Reader(), input, inst.Index)
-	if err != nil {
-		return false, fmt.Errorf("load running CR data (instance=%d): %w", inst.Index, err)
-	}
-	var targetAnnotations, previousAnnotations map[string]string
-	var runningSpec *corev1.PodSpec
-	if targetPayload != nil && targetPayload.PodMeta != nil {
-		targetAnnotations = targetPayload.PodMeta.Annotations
-	}
-	if runningPayload != nil {
-		runningSpec = runningPayload.PodSpec
-		if runningPayload.PodMeta != nil {
-			previousAnnotations = runningPayload.PodMeta.Annotations
-		}
-	}
-
-	// Pod mutation and convergence both start from a live read. Kubelet status
-	// writes advance resourceVersion independently of the cached observation;
-	// using that observation for an optimistic image patch can conflict until
-	// the cache catches up. The same live object closes the window where a pod
-	// becomes serving again after the drain check. The metadata patches
-	// piggyback on this loop. Any issued mutation ends the pass so convergence
-	// and status promotion use another live pod observation.
-	livePods := make([]*corev1.Pod, 0, len(pods))
-	for _, pod := range pods {
-		fresh := &corev1.Pod{}
-		if gerr := deps.Reader().Get(ctx, client.ObjectKeyFromObject(pod), fresh); gerr != nil {
-			if apierrors.IsNotFound(gerr) {
-				return false, nil
-			}
-			return false, fmt.Errorf("re-read pod before in-place update (instance=%d, pod=%s): %w", inst.Index, pod.Name, gerr)
-		}
-		livePods = append(livePods, fresh)
-	}
-	// A pod mutation the apiserver PERMANENTLY rejects is a statement
-	// about the revision, not a transient hiccup: the object this
-	// revision asks for is not admissible, so no number of retries
-	// produces a different answer. Dispose exactly as a rejected create
-	// does — the corrected revision is then admitted immediately.
-	rejected := func(pod *corev1.Pod, err error) (bool, error) {
-		if handled, herr := admissionWait(pod, err); handled {
-			return true, herr
-		}
-		rejection := evidence.ClassifyAPIError(err)
-		if !rejection.Class.Permanent() {
-			return false, nil
-		}
-		if derr := disposeRejectedAttempt(ctx, deps, input, inst.Index, target.Name, pod.Name, rejection, true); derr != nil {
-			return true, fmt.Errorf("dispose rejected in-place patch (instance=%d, pod=%s): %w", inst.Index, pod.Name, derr)
-		}
-		return true, nil
-	}
-
-	mutated := false
-	for _, pod := range livePods {
-		imagePatches := imagePatchTargets(pod, targetSpec)
-		needsImagePatch := len(imagePatches) > 0
-		if markNotReady && needsImagePatch && podreadiness.IsServing(pod) {
-			if err := podreadiness.MarkPodNotServing(ctx, deps.Client, deps.Reader(), pod, podreadiness.WriterUpdateInPlace, updateDrainKey(inst.Index, inst.Incarnation)); err != nil {
-				if handled, herr := admissionWait(pod, err); handled {
-					return false, herr
-				}
-				return false, fmt.Errorf("re-mark not serving (instance=%d, pod=%s): %w", inst.Index, pod.Name, err)
-			}
-			return false, nil
-		}
-		markerReady, merr := ensureInPlaceImageTransition(ctx, deps.Client, pod, targetSpec, imagePatches)
-		if merr != nil {
-			if disposed, derr := rejected(pod, merr); disposed {
-				return false, derr
-			}
-			return false, fmt.Errorf("record image transition (instance=%d, pod=%s): %w", inst.Index, pod.Name, merr)
-		}
-		if !markerReady {
-			return false, nil
-		}
-		if needsImagePatch {
-			issued, perr := patchPodImages(ctx, deps.Client, pod, targetSpec)
-			if perr != nil {
-				if disposed, derr := rejected(pod, perr); disposed {
-					return false, derr
-				}
-				return false, fmt.Errorf("patch images (instance=%d, pod=%s): %w", inst.Index, pod.Name, perr)
-			}
-			if issued {
-				mutated = true
-			}
-		}
-		annotationsPatched, err := patchPodAnnotations(ctx, deps.Client, pod, previousAnnotations, targetAnnotations)
-		if err != nil {
-			if disposed, derr := rejected(pod, err); disposed {
-				return false, derr
-			}
-			return false, fmt.Errorf("patch annotations (instance=%d, pod=%s): %w", inst.Index, pod.Name, err)
-		}
-		mutated = mutated || annotationsPatched
-		// Restamp the revision-owned labels (revision hash + pairing
-		// protocol) so the in-place-rolled pod is recognized as the target
-		// revision by per-revision Service routing, drain, and stuck-pod
-		// detection, and reports the target revision's pairing cohort.
-		// Idempotent.
-		targetProtocol := ""
-		if targetPayload != nil && targetPayload.PairingProtocol != nil {
-			targetProtocol = *targetPayload.PairingProtocol
-		}
-		revisionLabelsPatched, err := patchPodRevisionLabels(ctx, deps.Client, pod, query.RevisionOf(target).Hash(), targetProtocol)
-		if err != nil {
-			if disposed, derr := rejected(pod, err); disposed {
-				return false, derr
-			}
-			return false, fmt.Errorf("patch revision labels (instance=%d, pod=%s): %w", inst.Index, pod.Name, err)
-		}
-		mutated = mutated || revisionLabelsPatched
-	}
-	// Every patch went through admission: an admission wait a refused
-	// pass left on the row is over.
-	if err := releaseAdmissionWait(ctx, input, inst.Index); err != nil {
-		return false, fmt.Errorf("release admission wait (instance=%d): %w", inst.Index, err)
-	}
-	if mutated {
-		return false, nil
-	}
-
-	// ContainersReady can remain true in a stale observation after an image
-	// patch. Every container the roll re-images must therefore be confirmed
-	// at runtime before the pod returns to rotation: the kubelet reports the
-	// target image for it, or has replaced it since the patch. An empty
-	// changed-image set is already satisfied; runtime aliases for unchanged
-	// containers are not evidence about this rollout.
-	if !query.AllPodsRuntimeReady(livePods) {
-		return false, nil
-	}
-	transitions := make(map[string]*inPlaceImageTransition, len(livePods))
-	for _, pod := range livePods {
-		if !evidence.PodImagesMatch(pod, targetSpec) {
-			return false, nil
-		}
-		transition, present, valid := inPlaceImageTransitionFromPod(pod)
-		valid = valid && inPlaceImageTransitionMatchesTarget(transition, targetSpec)
-		if present && !valid {
-			return false, nil
-		}
-		if !inPlaceImageRollConfirmed(pod, runningSpec, targetSpec, transition) {
-			return false, nil
-		}
-		transitions[pod.Name] = transition
-	}
-
-	for _, pod := range livePods {
-		if podreadiness.IsServing(pod) {
-			continue
-		}
-		if err := podreadiness.MarkPodServing(ctx, deps.Client, deps.Reader(), pod, podreadiness.WriterUpdateInPlace, updateDrainKey(inst.Index, inst.Incarnation)); err != nil {
-			return false, fmt.Errorf("mark serving (instance=%d, pod=%s): %w", inst.Index, pod.Name, err)
-		}
-	}
-
-	// The shared promote bar with the in-place extra: on top of PodReady past
-	// the availability window, every container whose image the roll changed
-	// must be confirmed at runtime. Promotion releases this Instance's
-	// unavailability budget slot, so a pod the serving-gate flip has not yet
-	// carried back into rotation holds it.
-	promotable, wait := query.PodSetPromotable(livePods, plan.MinReadySeconds, input.Now(),
-		func(pod *corev1.Pod) bool {
-			return inPlaceImageRollConfirmed(pod, runningSpec, targetSpec, transitions[pod.Name])
-		})
-	if !promotable {
-		input.PromoteWindow.Observe(wait)
-		return false, nil
-	}
-	if err := status.StampReadyOnRevision(ctx, input, inst.Index, target.Name); err != nil {
-		return false, fmt.Errorf("patch status Ready (instance=%d): %w", inst.Index, err)
-	}
-	workload.RecordNormal(deps.Recorder, workload.EventTarget(input), workload.EventReasonInPlaceUpdateCompleted,
-		"OMENative %s in-place update to revision %s complete",
-		workload.InstanceKey(input.Key.Component, inst.Index), target.Name)
-	// The transition outlives the stamp: it carries the restart counts the
-	// confirmation compares against, and a pass that finds it gone before
-	// the row is Ready cannot confirm a container the kubelet reports
-	// under another name. A marker left by a failed clear is re-recorded
-	// by the next roll's patch.
-	for _, pod := range livePods {
-		if err := removeInPlaceImageTransition(ctx, deps.Client, pod); err != nil {
-			return false, fmt.Errorf("clear image transition (instance=%d, pod=%s): %w", inst.Index, pod.Name, err)
+// runInPlacePhases runs the phases in order and reports whether every one
+// of them went on, which is the roll finishing. The first phase that ends
+// the pass ends it, with its error.
+func runInPlacePhases(ctx context.Context, phases []inPlacePhase) (bool, error) {
+	for _, phase := range phases {
+		if next, err := phase(ctx); err != nil || !next {
+			return false, err
 		}
 	}
 	return true, nil
 }
 
-var inPlaceImageTransitionAnnotation = constants.InferenceServiceInPlaceImageTransitionAnnotationKey
+// inPlaceRoll is one pass of the in-place roll of an Instance: what the
+// pass read at its start, and what its phases learn as they run. The pods
+// keep their names and their generation number; only their images, template
+// metadata and revision labels move, in one patch per pod.
+type inPlaceRoll struct {
+	deps       workload.Deps
+	input      workload.ReconcileInput
+	plan       workload.ComponentPlan
+	inst       workload.InstancePlan
+	target     *appsv1.ControllerRevision
+	targetSpec *corev1.PodSpec
+	// pods are the Instance's pods as the pass listed them.
+	pods []*corev1.Pod
+
+	targetRevision query.RevisionID
+	// markNotReady: the strategy takes a pod out of rotation before its
+	// images move and returns it once the kubelet runs the new images.
+	markNotReady bool
+
+	// template is what the patch moves a pod onto (loadTemplate).
+	template podTemplateChanges
+	// runningSpec is the running revision's pod template, nil when no
+	// running revision is recorded (loadTemplate).
+	runningSpec *corev1.PodSpec
+	// carried widens the template's deletable keys with the templates of
+	// the revisions the pods carry besides the target and the running
+	// revision (loadTemplate, readLivePods).
+	carried carriedTemplates
+	// livePods are the pods re-read from the apiserver before the patch
+	// (readLivePods); the phases from the patch on work on these.
+	livePods []*corev1.Pod
+	// transitions is each live pod's image transition record by pod name,
+	// once every re-imaged container is confirmed (confirmImageTransition).
+	transitions map[string]*inPlaceImageTransition
+}
+
+// newInPlaceRoll reads what one pass of the roll needs from its inputs.
+func newInPlaceRoll(deps workload.Deps, input workload.ReconcileInput, plan workload.ComponentPlan, inst workload.InstancePlan, target *appsv1.ControllerRevision, targetSpec *corev1.PodSpec, pods []*corev1.Pod) *inPlaceRoll {
+	roll := &inPlaceRoll{
+		deps:           deps,
+		input:          input,
+		plan:           plan,
+		inst:           inst,
+		target:         target,
+		targetSpec:     targetSpec,
+		pods:           pods,
+		targetRevision: query.RevisionOf(target),
+		markNotReady:   true,
+	}
+	if strategy := plan.UpdateStrategy.InPlaceUpdateStrategy; strategy != nil && strategy.MarkNotReadyDuringLifecycle != nil {
+		roll.markNotReady = *strategy.MarkNotReadyDuringLifecycle
+	}
+	return roll
+}
+
+// inPlaceUpdate runs the in-place roll of one Instance. The pods keep their
+// names; one patch per pod moves its images, template metadata and revision
+// labels together. Metadata keys the new revision names are written and
+// keys only the running revision, or a revision a pod was patched onto
+// before the row recorded it, authored are deleted; labels and
+// annotations from other owners are left alone, and a metadata change
+// alone never forces a rebuild. With no pod standing the roll is
+// re-resolved to recreate, which does render a replacement. Otherwise the
+// phases below run in order, from the top on every pass; the row and the
+// pods found decide how far a pass gets:
+//
+//	open the attempt; remove a pod in a terminal phase; load the template;
+//	relabel a pod already on the target template; take the pods out of
+//	rotation; wait for them to drain; re-read the pods; patch them onto
+//	the target; confirm the kubelet runs the new images; mark the pods
+//	serving; wait for the promote bar; promote.
+func inPlaceUpdate(ctx context.Context, deps workload.Deps, input workload.ReconcileInput, plan workload.ComponentPlan, inst workload.InstancePlan, target *appsv1.ControllerRevision, targetSpec *corev1.PodSpec, pods []*corev1.Pod) (bool, error) {
+	roll := newInPlaceRoll(deps, input, plan, inst, target, targetSpec, pods)
+	if len(pods) == 0 {
+		return roll.recreateWhenNoPodStands(ctx)
+	}
+	return runInPlacePhases(ctx, []inPlacePhase{
+		roll.openAttempt,
+		roll.removeTerminalPods,
+		roll.loadTemplate,
+		roll.relabelPodsOnTargetTemplate,
+		roll.takePodsOutOfRotation,
+		roll.waitForPodsToDrain,
+		roll.readLivePods,
+		roll.patchPods,
+		roll.confirmImageTransition,
+		roll.markPodsServing,
+		roll.waitForPromoteBar,
+		roll.promote,
+	})
+}
+
+// recreateWhenNoPodStands re-resolves the roll to recreate when the
+// Instance has no pod: an in-place step patches pods it does not create,
+// and no other pass rebuilds an Instance the update pass owns. The empty
+// set counts only once this Instance's own creates and deletes have been
+// observed; before that it can be a read that predates them, and
+// re-resolving on one would raise the Incarnation under a pod that does
+// exist.
+func (r *inPlaceRoll) recreateWhenNoPodStands(ctx context.Context) (bool, error) {
+	if !r.deps.ExpectationsCache().Satisfied(r.input.Key.Namespace, r.input.Key.OwnerName, r.input.Key.Component, r.inst.Index) {
+		return false, nil
+	}
+	reresolved, err := status.StampRecreateFromInPlace(ctx, r.input, r.inst.Index, r.target.Name)
+	if err != nil {
+		return false, fmt.Errorf("re-resolve in-place roll to recreate (instance=%d): %w", r.inst.Index, err)
+	}
+	if reresolved {
+		workload.RecordWarning(r.deps.Recorder, workload.EventTarget(r.input), workload.EventReasonInPlaceUpdateNotPossible,
+			"OMENative %s lost the pod its in-place update to revision %s was patching; recreating instead",
+			workload.InstanceKey(r.input.Key.Component, r.inst.Index), r.target.Name)
+	}
+	return recreateUpdate(ctx, r.deps, r.input, r.plan, r.inst, r.target, r.pods)
+}
+
+// openAttempt writes the row Updating at the InPlace step and records the
+// started event on the first pass; a later pass finds the row there and
+// the write is a no-op. The Incarnation stays: only the pods' images and
+// metadata move. A row the update pass owns is mid-roll; a row in Updating
+// only because a held attempt's pods serve is not, and the patch over it
+// is a first pass.
+func (r *inPlaceRoll) openAttempt(ctx context.Context) (bool, error) {
+	wasNotUpdating := workload.Owner(r.input.ObservedState.Instance(r.inst.Index)) != workload.OwnerUpdate
+	if err := status.StampUpdatingInPlace(ctx, r.input, r.inst.Index, r.target.Name, r.plan.UpdateStrategy.Type, r.plan.InstanceReadyTimeout); err != nil {
+		return false, fmt.Errorf("patch status Updating (instance=%d): %w", r.inst.Index, err)
+	}
+	if wasNotUpdating {
+		workload.RecordNormal(r.deps.Recorder, workload.EventTarget(r.input), workload.EventReasonInPlaceUpdateStarted,
+			"OMENative %s in-place update to revision %s",
+			workload.InstanceKey(r.input.Key.Component, r.inst.Index), r.target.Name)
+	}
+	return true, nil
+}
+
+// removeTerminalPods deletes a pod in a terminal phase and ends the pass:
+// such a pod can never report the new image, so it is freed now rather
+// than patched and polled to the deadline. The empty set then re-resolves
+// the roll to recreate (recreateWhenNoPodStands).
+func (r *inPlaceRoll) removeTerminalPods(ctx context.Context) (bool, error) {
+	recycling, err := recycleTerminalTargets(ctx, r.deps, r.input, r.inst.Index, r.inst.Index,
+		workload.InstanceOperationUpdate, r.pods, expectedPodNamesForInstance(r.input, r.plan, r.inst))
+	if err != nil {
+		return false, fmt.Errorf("recycle terminal pod (instance=%d): %w", r.inst.Index, err)
+	}
+	return !recycling, nil
+}
+
+// loadTemplate reads what the patch moves a pod onto: the target
+// revision's images, template labels and annotations and revision labels,
+// the running revision's template, whose keys the previous spec owned and
+// the patch may delete, and the template of any other revision a pod's
+// label names, whose keys the patch may delete too. Either payload may be
+// missing (a revision with no PodMeta yet, a first in-place update with no
+// recorded running revision); the diffs read nil as empty.
+func (r *inPlaceRoll) loadTemplate(ctx context.Context) (bool, error) {
+	targetPayload, err := loadControllerRevisionPayload(r.target)
+	if err != nil {
+		return false, fmt.Errorf("load target CR data (instance=%d): %w", r.inst.Index, err)
+	}
+	runningPayload, err := loadRunningRevisionPayload(ctx, r.deps.Reader(), r.input, r.inst.Index)
+	if err != nil {
+		return false, fmt.Errorf("load running CR data (instance=%d): %w", r.inst.Index, err)
+	}
+	r.template = podTemplateChanges{spec: r.targetSpec, revisionHash: r.targetRevision.Hash()}
+	if targetPayload != nil && targetPayload.PodMeta != nil {
+		r.template.targetLabels = targetPayload.PodMeta.Labels
+		r.template.targetAnnotations = targetPayload.PodMeta.Annotations
+	}
+	if targetPayload != nil && targetPayload.PairingProtocol != nil {
+		r.template.pairingProtocol = *targetPayload.PairingProtocol
+	}
+	if runningPayload != nil {
+		r.runningSpec = runningPayload.PodSpec
+		if runningPayload.PodMeta != nil {
+			r.template.previousLabels = runningPayload.PodMeta.Labels
+			r.template.previousAnnotations = runningPayload.PodMeta.Annotations
+		}
+	}
+	// A pod patched onto another revision before the row recorded it still
+	// carries that revision's template, which its revision label names. Its
+	// keys are deletable too, or a revert to the running revision would
+	// leave them on the pod.
+	r.carried = newCarriedTemplates(r.deps.Reader(), r.input, r.plan.Component, r.inst.Index)
+	if err := r.carried.widen(ctx, &r.template, r.pods); err != nil {
+		return false, fmt.Errorf("load the revisions the pods carry (instance=%d): %w", r.inst.Index, err)
+	}
+	return true, nil
+}
+
+// relabelPodsOnTargetTemplate moves a pod that already runs the target
+// template under another revision's label onto the target's labels before
+// anything else, the drain included: that label is what the previous
+// revision's routing Service selects by. One relabel ends the pass; a pod
+// gone since the list ends it too.
+func (r *inPlaceRoll) relabelPodsOnTargetTemplate(ctx context.Context) (bool, error) {
+	for _, pod := range r.pods {
+		if r.onTarget(pod) || !r.template.carriedBy(pod) {
+			continue
+		}
+		fresh := &corev1.Pod{}
+		if gerr := r.deps.Reader().Get(ctx, client.ObjectKeyFromObject(pod), fresh); gerr != nil {
+			if apierrors.IsNotFound(gerr) {
+				return false, nil
+			}
+			return false, fmt.Errorf("re-read pod before relabel (instance=%d, pod=%s): %w", r.inst.Index, pod.Name, gerr)
+		}
+		if r.onTarget(fresh) || !r.template.carriedBy(fresh) {
+			continue
+		}
+		if _, perr := patchPodTemplate(ctx, r.deps.Client, fresh, r.template); perr != nil {
+			if handled, herr := r.recordRefusedPatch(ctx, fresh, perr); handled {
+				return false, herr
+			}
+			return false, fmt.Errorf("relabel pod on the target template (instance=%d, pod=%s): %w", r.inst.Index, pod.Name, perr)
+		}
+		return false, nil
+	}
+	return true, nil
+}
+
+// takePodsOutOfRotation sets the serving gate false on every pod still in
+// rotation that is not yet on the target revision, under the strategy that
+// drains before the patch. A pod already relabelled to the target has been
+// through the drain and the patch and is back in, or returning to,
+// rotation: draining it again would remove converged capacity and restart
+// its PodReady age on every pass while the promote waits out the
+// availability window.
+func (r *inPlaceRoll) takePodsOutOfRotation(ctx context.Context) (bool, error) {
+	if !r.markNotReady {
+		return true, nil
+	}
+	for _, pod := range r.pods {
+		if !podreadiness.IsServing(pod) || r.onTarget(pod) {
+			continue
+		}
+		if err := podreadiness.MarkPodNotServing(ctx, r.deps.Client, r.deps.Reader(), pod, podreadiness.WriterUpdateInPlace, updateDrainKey(r.inst.Index, r.inst.Incarnation)); err != nil {
+			if handled, herr := r.waitForAdmission(ctx, pod, err); handled {
+				return false, herr
+			}
+			return false, fmt.Errorf("mark not serving (instance=%d, pod=%s): %w", r.inst.Index, pod.Name, err)
+		}
+	}
+	return true, nil
+}
+
+// waitForPodsToDrain ends the pass while a pod not yet on the target
+// revision still has a Ready endpoint in its routed Service, read live so
+// the patch never lands on a pod the proxies still route to. Only the
+// strategy that drains before the patch waits.
+func (r *inPlaceRoll) waitForPodsToDrain(ctx context.Context) (bool, error) {
+	if !r.markNotReady {
+		return true, nil
+	}
+	for _, pod := range r.pods {
+		if r.onTarget(pod) {
+			continue
+		}
+		serviceName := drainServiceForPod(r.input, r.plan, pod)
+		if serviceName == "" {
+			continue
+		}
+		drained, err := drain.IsPodDrained(ctx, r.deps.Reader(), r.input.Key.Namespace, serviceName, pod)
+		if err != nil {
+			return false, fmt.Errorf("check drain (instance=%d, pod=%s): %w", r.inst.Index, pod.Name, err)
+		}
+		if !drained {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// readLivePods re-reads every pod of the Instance from the apiserver. The
+// kubelet's status writes advance a pod's resourceVersion ahead of the
+// cached copy, so a patch locked to the cached copy conflicts until the
+// cache catches up; the live copy also closes the window in which a pod
+// returned to rotation after the drain check. A pod gone since the list
+// ends the pass.
+func (r *inPlaceRoll) readLivePods(ctx context.Context) (bool, error) {
+	r.livePods = make([]*corev1.Pod, 0, len(r.pods))
+	for _, pod := range r.pods {
+		fresh := &corev1.Pod{}
+		if gerr := r.deps.Reader().Get(ctx, client.ObjectKeyFromObject(pod), fresh); gerr != nil {
+			if apierrors.IsNotFound(gerr) {
+				return false, nil
+			}
+			return false, fmt.Errorf("re-read pod before in-place update (instance=%d, pod=%s): %w", r.inst.Index, pod.Name, gerr)
+		}
+		r.livePods = append(r.livePods, fresh)
+	}
+	// The live read can show a pod on a revision the observation did not
+	// carry yet.
+	if err := r.carried.widen(ctx, &r.template, r.livePods); err != nil {
+		return false, fmt.Errorf("load the revisions the live pods carry (instance=%d): %w", r.inst.Index, err)
+	}
+	return true, nil
+}
+
+// patchPods moves every live pod onto the target template and ends the
+// pass when any patch was issued, so the next pass reads the pods again
+// before it confirms them. When every patch went through admission, an
+// admission wait a refused pass left on the row is over.
+func (r *inPlaceRoll) patchPods(ctx context.Context) (bool, error) {
+	mutated := false
+	for _, pod := range r.livePods {
+		issued, next, err := r.patchPod(ctx, pod)
+		if err != nil || !next {
+			return false, err
+		}
+		mutated = mutated || issued
+	}
+	if err := releaseAdmissionWait(ctx, r.input, r.inst.Index); err != nil {
+		return false, fmt.Errorf("release admission wait (instance=%d): %w", r.inst.Index, err)
+	}
+	return !mutated, nil
+}
+
+// patchPod moves one live pod onto the target template. Under the strategy
+// that drains first, a pod that returned to rotation after the drain check
+// is taken out again before its images move, and the pass ends. The image
+// transition record is written before the patch that moves the images, so
+// a later pass can tell which containers the kubelet has replaced since;
+// writing it ends the pass. One write then moves the pod onto the target
+// template and the target revision's labels together, so a manager that
+// stops right after it leaves no pod running one revision under another's
+// label. Reports whether a write was issued and whether the pass goes on
+// to the next pod.
+func (r *inPlaceRoll) patchPod(ctx context.Context, pod *corev1.Pod) (issued, next bool, err error) {
+	imagePatches := imagePatchTargets(pod, r.targetSpec)
+	if r.markNotReady && len(imagePatches) > 0 && podreadiness.IsServing(pod) {
+		if merr := podreadiness.MarkPodNotServing(ctx, r.deps.Client, r.deps.Reader(), pod, podreadiness.WriterUpdateInPlace, updateDrainKey(r.inst.Index, r.inst.Incarnation)); merr != nil {
+			if handled, herr := r.waitForAdmission(ctx, pod, merr); handled {
+				return false, false, herr
+			}
+			return false, false, fmt.Errorf("re-mark not serving (instance=%d, pod=%s): %w", r.inst.Index, pod.Name, merr)
+		}
+		return false, false, nil
+	}
+	transitionRecorded, terr := ensureInPlaceImageTransition(ctx, r.deps.Client, pod, r.targetSpec, imagePatches)
+	if terr != nil {
+		if handled, herr := r.recordRefusedPatch(ctx, pod, terr); handled {
+			return false, false, herr
+		}
+		return false, false, fmt.Errorf("record image transition (instance=%d, pod=%s): %w", r.inst.Index, pod.Name, terr)
+	}
+	if !transitionRecorded {
+		return false, false, nil
+	}
+	issued, perr := patchPodTemplate(ctx, r.deps.Client, pod, r.template)
+	if perr != nil {
+		if handled, herr := r.recordRefusedPatch(ctx, pod, perr); handled {
+			return false, false, herr
+		}
+		return false, false, fmt.Errorf("patch pod onto the target revision (instance=%d, pod=%s): %w", r.inst.Index, pod.Name, perr)
+	}
+	return issued, true, nil
+}
+
+// confirmImageTransition ends the pass until the kubelet runs the target
+// image in every container the roll re-images. ContainersReady can stay
+// true in a stale observation after an image patch, so every live pod's
+// containers must be runtime-ready and its images must match the target
+// spec, and each changed container must be confirmed: the kubelet reports
+// the target image for it, or has replaced it since the patch, which the
+// transition record's restart counts tell. A record that does not parse
+// or names another target ends the pass; an empty changed-image set is
+// already satisfied. Each pod's record is kept for the promote bar.
+func (r *inPlaceRoll) confirmImageTransition(context.Context) (bool, error) {
+	if !query.AllPodsRuntimeReady(r.livePods) {
+		return false, nil
+	}
+	r.transitions = make(map[string]*inPlaceImageTransition, len(r.livePods))
+	for _, pod := range r.livePods {
+		if !evidence.PodImagesMatch(pod, r.targetSpec) {
+			return false, nil
+		}
+		transition, present, valid := inPlaceImageTransitionFromPod(pod)
+		valid = valid && inPlaceImageTransitionMatchesTarget(transition, r.targetSpec)
+		if present && !valid {
+			return false, nil
+		}
+		if !inPlaceImageRollConfirmed(pod, r.runningSpec, r.targetSpec, transition) {
+			return false, nil
+		}
+		r.transitions[pod.Name] = transition
+	}
+	return true, nil
+}
+
+// markPodsServing sets the serving gate true on every live pod that is out
+// of rotation; the kubelet folds it into PodReady and the pod returns to
+// its routed Service on the new images.
+func (r *inPlaceRoll) markPodsServing(ctx context.Context) (bool, error) {
+	for _, pod := range r.livePods {
+		if podreadiness.IsServing(pod) {
+			continue
+		}
+		if err := podreadiness.MarkPodServing(ctx, r.deps.Client, r.deps.Reader(), pod, podreadiness.WriterUpdateInPlace, updateDrainKey(r.inst.Index, r.inst.Incarnation)); err != nil {
+			return false, fmt.Errorf("mark serving (instance=%d, pod=%s): %w", r.inst.Index, pod.Name, err)
+		}
+	}
+	return true, nil
+}
+
+// waitForPromoteBar ends the pass until every live pod has held PodReady
+// for the availability window with every re-imaged container confirmed at
+// runtime, the in-place extra over the shared promote bar. The promote
+// releases this Instance's unavailability budget slot, so a pod the
+// serving-gate write has not yet carried back into rotation holds it.
+func (r *inPlaceRoll) waitForPromoteBar(context.Context) (bool, error) {
+	promotable, wait := query.PodSetPromotable(r.livePods, r.plan.MinReadySeconds, r.input.Now(),
+		func(pod *corev1.Pod) bool {
+			return inPlaceImageRollConfirmed(pod, r.runningSpec, r.targetSpec, r.transitions[pod.Name])
+		})
+	if !promotable {
+		r.input.PromoteWindow.Observe(wait)
+		return false, nil
+	}
+	return true, nil
+}
+
+// promote writes the row Ready on the target revision, records the
+// completed event, and clears each pod's transition record. The record
+// outlives the Ready write: it carries the restart counts the confirmation
+// compares against, and a pass that found it gone before the row was Ready
+// could not confirm a container the kubelet reports under another name. A
+// record a failed clear leaves behind is rewritten by the next roll's patch.
+func (r *inPlaceRoll) promote(ctx context.Context) (bool, error) {
+	if err := status.StampReadyOnRevision(ctx, r.input, r.inst.Index, r.target.Name); err != nil {
+		return false, fmt.Errorf("patch status Ready (instance=%d): %w", r.inst.Index, err)
+	}
+	workload.RecordNormal(r.deps.Recorder, workload.EventTarget(r.input), workload.EventReasonInPlaceUpdateCompleted,
+		"OMENative %s in-place update to revision %s complete",
+		workload.InstanceKey(r.input.Key.Component, r.inst.Index), r.target.Name)
+	for _, pod := range r.livePods {
+		if err := removeInPlaceImageTransition(ctx, r.deps.Client, pod); err != nil {
+			return false, fmt.Errorf("clear image transition (instance=%d, pod=%s): %w", r.inst.Index, pod.Name, err)
+		}
+	}
+	return true, nil
+}
+
+// onTarget reports whether pod already carries the target revision's
+// label: it has been through the drain and the patch.
+func (r *inPlaceRoll) onTarget(pod *corev1.Pod) bool {
+	return query.RevisionFromPod(pod).Same(r.targetRevision)
+}
+
+// waitForAdmission records, when the apiserver could not take the pod write
+// to admission, that the row waits on it, in the apiserver's words, and
+// reports the write handled: the pass ends with no error for the ordinary
+// retry, as a refused create does. Any other refusal is left to the caller.
+func (r *inPlaceRoll) waitForAdmission(ctx context.Context, pod *corev1.Pod, err error) (bool, error) {
+	rejection := evidence.ClassifyAPIError(err)
+	if rejection.Class != workload.APIRejectionAdmissionUnavailable {
+		return false, nil
+	}
+	if rerr := recordAdmissionWait(ctx, r.deps, r.input, r.plan, r.inst.Index, pod.Name, rejection); rerr != nil {
+		return true, fmt.Errorf("record admission wait (instance=%d, pod=%s): %w", r.inst.Index, pod.Name, rerr)
+	}
+	return true, nil
+}
+
+// recordRefusedPatch settles a refused pod patch. An admission outage is a
+// wait on the row (waitForAdmission). A refusal the apiserver gives again
+// however often the patch is retried is a statement about the revision: the
+// attempt is written Failed and the revision charged, exactly as a rejected
+// create is, so the corrected revision is admitted at once. Reports whether
+// the refusal was handled; any other error is left to the caller.
+func (r *inPlaceRoll) recordRefusedPatch(ctx context.Context, pod *corev1.Pod, err error) (bool, error) {
+	if handled, herr := r.waitForAdmission(ctx, pod, err); handled {
+		return true, herr
+	}
+	rejection := evidence.ClassifyAPIError(err)
+	if !rejection.Class.Permanent() {
+		return false, nil
+	}
+	if derr := disposeRejectedAttempt(ctx, r.deps, r.input, r.inst.Index, r.target.Name, pod.Name, rejection, true); derr != nil {
+		return true, fmt.Errorf("dispose rejected in-place patch (instance=%d, pod=%s): %w", r.inst.Index, pod.Name, derr)
+	}
+	return true, nil
+}
 
 // inPlaceImageTransition is the write-ahead record of an image patch: the
 // images the patch moves each container to, and the restart count each
@@ -426,7 +601,7 @@ func inPlaceImageTransitionFromPod(pod *corev1.Pod) (*inPlaceImageTransition, bo
 	if pod == nil || pod.Annotations == nil {
 		return nil, false, false
 	}
-	raw, present := pod.Annotations[inPlaceImageTransitionAnnotation]
+	raw, present := pod.Annotations[constants.InferenceServiceInPlaceImageTransitionAnnotationKey]
 	if !present {
 		return nil, false, false
 	}
@@ -559,7 +734,7 @@ func patchInPlaceImageTransition(ctx context.Context, c client.Client, pod *core
 	if pod.Annotations == nil {
 		pod.Annotations = map[string]string{}
 	}
-	pod.Annotations[inPlaceImageTransitionAnnotation] = string(raw)
+	pod.Annotations[constants.InferenceServiceInPlaceImageTransitionAnnotationKey] = string(raw)
 	patch := client.StrategicMergeFrom(base, client.MergeFromWithOptimisticLock{})
 	if err := c.Patch(ctx, pod, patch); err != nil {
 		return fmt.Errorf("patch in-place image transition for pod %s/%s: %w", pod.Namespace, pod.Name, err)
@@ -567,21 +742,21 @@ func patchInPlaceImageTransition(ctx context.Context, c client.Client, pod *core
 	return nil
 }
 
-// removeInPlaceImageTransition clears the transition marker. The key is
-// written by this roll alone, so the removal names only it and takes no
-// resource-version lock: the serving-gate patch issued earlier in the
-// same pass, and the kubelet's own status writes, move the pod's version
-// without touching the marker, and a clear that conflicted on them would
-// leave the marker behind with no later pass to retry it.
+// removeInPlaceImageTransition clears the pod's transition record. The
+// annotation is written by this roll alone, so the removal names only it
+// and takes no resource-version lock: the serving-gate patch issued
+// earlier in the same pass, and the kubelet's own status writes, move the
+// pod's version without touching the record, and a clear that conflicted
+// on them would leave the record behind with no later pass to retry it.
 func removeInPlaceImageTransition(ctx context.Context, c client.Client, pod *corev1.Pod) error {
 	if pod == nil || pod.Annotations == nil {
 		return nil
 	}
-	if _, present := pod.Annotations[inPlaceImageTransitionAnnotation]; !present {
+	if _, present := pod.Annotations[constants.InferenceServiceInPlaceImageTransitionAnnotationKey]; !present {
 		return nil
 	}
 	raw, err := json.Marshal(map[string]any{
-		"metadata": map[string]any{"annotations": map[string]any{inPlaceImageTransitionAnnotation: nil}},
+		"metadata": map[string]any{"annotations": map[string]any{constants.InferenceServiceInPlaceImageTransitionAnnotationKey: nil}},
 	})
 	if err != nil {
 		return fmt.Errorf("marshal in-place image transition removal for pod %s/%s: %w", pod.Namespace, pod.Name, err)
@@ -592,27 +767,122 @@ func removeInPlaceImageTransition(ctx context.Context, c client.Client, pod *cor
 	return nil
 }
 
-// The in-place writers: the strategic-merge patches
-// that move a live pod onto the target revision's images, its
-// revision-owned labels and its annotations. What the pod still needs
-// patched is evidence.PodImagesMatch / evidence.AnnotationsDiff; this
-// file only issues the writes.
+// The in-place writer: one strategic-merge patch moves a live pod onto the
+// target revision's images, template metadata and revision-owned labels.
+// evidence.PodImagesMatch, LabelsDiff and AnnotationsDiff say what it owes.
 
-// patchPodImages strategic-merge-patches each changed container image with an
-// optimistic resource-version precondition. Strategic merge keys by container
-// name, and the precondition rejects a concurrent pod or status mutation after
-// the caller's live read.
-// Returns whether a patch was actually issued so callers only requeue
-// for a kubelet roll when one is coming.
-func patchPodImages(ctx context.Context, c client.Client, pod *corev1.Pod, target *corev1.PodSpec) (bool, error) {
-	if pod == nil || target == nil {
-		return false, fmt.Errorf("patchPodImages: nil pod or target")
+// podTemplateChanges is what the in-place step moves a live pod onto: the
+// target revision's images, template labels and annotations, and the labels
+// the revision owns. The metadata of the running revision, and of any
+// revision a pod was patched onto before the row recorded it, names the
+// deletable keys.
+type podTemplateChanges struct {
+	spec                                   *corev1.PodSpec
+	previousLabels, targetLabels           map[string]string
+	previousAnnotations, targetAnnotations map[string]string
+	revisionHash, pairingProtocol          string
+}
+
+// carriedTemplates widens a pass's deletable key sets with the template
+// metadata of every revision the Instance's pods carry besides the target
+// and the running revision. Each revision is read once per pass; one that
+// is gone adds nothing.
+type carriedTemplates struct {
+	reads     client.Reader
+	input     workload.ReconcileInput
+	component workload.ComponentType
+	running   query.RevisionID
+	loaded    map[string]bool
+}
+
+func newCarriedTemplates(reads client.Reader, input workload.ReconcileInput, component workload.ComponentType, idx int32) carriedTemplates {
+	c := carriedTemplates{reads: reads, input: input, component: component}
+	if row := input.ObservedState.Instance(idx); row != nil {
+		c.running = query.RevisionFromName(row.RunningRevision)
 	}
+	return c
+}
+
+// widen adds the template keys of the revisions pods carry to template's
+// deletable sets.
+func (c *carriedTemplates) widen(ctx context.Context, template *podTemplateChanges, pods []*corev1.Pod) error {
+	target := query.RevisionFromHash(template.revisionHash)
+	for _, pod := range pods {
+		carried := query.RevisionFromPod(pod)
+		if carried.IsZero() || carried.Same(target) || carried.Same(c.running) || c.loaded[carried.Hash()] {
+			continue
+		}
+		if c.loaded == nil {
+			c.loaded = map[string]bool{}
+		}
+		c.loaded[carried.Hash()] = true
+		payload, err := loadRevisionPayload(ctx, c.reads, c.input.Key.Namespace, revisionNamed(c.input, c.component, carried.Hash()))
+		if err != nil {
+			return fmt.Errorf("load revision %s carried by pod %s: %w", carried, pod.Name, err)
+		}
+		if payload == nil || payload.PodMeta == nil {
+			continue
+		}
+		template.previousLabels = withKeys(template.previousLabels, payload.PodMeta.Labels)
+		template.previousAnnotations = withKeys(template.previousAnnotations, payload.PodMeta.Annotations)
+	}
+	return nil
+}
+
+// withKeys returns previous widened with every key of more; a value already
+// in previous wins.
+func withKeys(previous, more map[string]string) map[string]string {
+	if len(more) == 0 {
+		return previous
+	}
+	merged := make(map[string]string, len(previous)+len(more))
+	maps.Copy(merged, more)
+	maps.Copy(merged, previous)
+	return merged
+}
+
+// carriedBy reports whether pod already runs the template, whatever its
+// revision labels say: no image, template label or annotation differs.
+func (t podTemplateChanges) carriedBy(pod *corev1.Pod) bool {
+	return len(imagePatchTargets(pod, t.spec)) == 0 &&
+		len(evidence.AnnotationsDiff(pod.Annotations, t.previousAnnotations, t.targetAnnotations)) == 0 &&
+		len(evidence.LabelsDiff(pod.Labels, t.previousLabels, t.targetLabels)) == 0
+}
+
+// apply moves pod onto the template in memory and reports whether anything
+// changed. The caller issues the write.
+func (t podTemplateChanges) apply(pod *corev1.Pod) bool {
+	changed := applyPodImages(pod, t.spec)
+	changed = applyMetadata(&pod.Annotations, evidence.AnnotationsDiff(pod.Annotations, t.previousAnnotations, t.targetAnnotations)) || changed
+	changed = applyTemplateLabels(pod, t.previousLabels, t.targetLabels) || changed
+	return applyRevisionLabels(pod, t.revisionHash, t.pairingProtocol) || changed
+}
+
+// patchPodTemplate moves a live pod onto the template in one strategic-merge
+// patch locked to the caller's read, so no write leaves the pod running one
+// revision's template under another's label. Reports whether it wrote.
+func patchPodTemplate(ctx context.Context, c client.Client, pod *corev1.Pod, template podTemplateChanges) (bool, error) {
+	if pod == nil || template.spec == nil {
+		return false, fmt.Errorf("patchPodTemplate: nil pod or target")
+	}
+	base := pod.DeepCopy()
+	if !template.apply(pod) {
+		return false, nil
+	}
+	patch := client.StrategicMergeFrom(base, client.MergeFromWithOptimisticLock{})
+	if err := c.Patch(ctx, pod, patch); err != nil {
+		return false, fmt.Errorf("patch pod %s/%s onto revision %s: %w", pod.Namespace, pod.Name, template.revisionHash, err)
+	}
+	return true, nil
+}
+
+// applyPodImages rewrites each changed container image in memory; a
+// container the target does not name is left alone.
+func applyPodImages(pod *corev1.Pod, target *corev1.PodSpec) bool {
 	wantByName := make(map[string]string, len(target.Containers))
 	for _, t := range target.Containers {
 		wantByName[t.Name] = t.Image
 	}
-	base := pod.DeepCopy()
 	changed := false
 	for i := range pod.Spec.Containers {
 		current := &pod.Spec.Containers[i]
@@ -623,88 +893,52 @@ func patchPodImages(ctx context.Context, c client.Client, pod *corev1.Pod, targe
 		current.Image = newImage
 		changed = true
 	}
-	if !changed {
-		return false, nil
-	}
-	patch := client.StrategicMergeFrom(base, client.MergeFromWithOptimisticLock{})
-	if err := c.Patch(ctx, pod, patch); err != nil {
-		return false, fmt.Errorf("patch pod %s/%s images: %w", pod.Namespace, pod.Name, err)
-	}
-	return true, nil
+	return changed
 }
 
-// patchPodRevisionLabels strategic-merge-patches the pod's revision-owned
-// labels (ome.io/revision-hash, ome.io/pairing-protocol) to the target
-// revision's values. An in-place update changes a pod's revision (image /
-// annotations) WITHOUT recreating it, but those labels are stamped only at
-// pod create time (render.go). Without restamping them here, an
-// in-place-rolled pod keeps its OLD revision-hash label while
-// InstanceStatus.RunningRevision advances — so per-revision Service
-// routing, drain (drain.IsPodDrained), and stuck-pod detection
-// (HasWedgedPodAgainstCurrent), which all key on this label, treat the
-// rolled pod as the PREVIOUS revision — and a stale pairing-protocol label
-// would misreport the pod's cohort. An empty pairingProtocol deletes the
-// label (the target revision pairs with anything). Returns whether a patch
-// was issued; matching labels and empty target hashes are no-ops.
-func patchPodRevisionLabels(ctx context.Context, c client.Client, pod *corev1.Pod, targetHash, pairingProtocol string) (bool, error) {
-	if pod == nil {
-		return false, fmt.Errorf("patchPodRevisionLabels: nil pod")
-	}
+// applyRevisionLabels sets the labels the revision owns: the revision hash
+// the routed Services, drain and stuck-pod detection key on, and the pairing
+// protocol, which an empty protocol deletes. An empty hash changes nothing.
+func applyRevisionLabels(pod *corev1.Pod, targetHash, pairingProtocol string) bool {
 	if targetHash == "" {
-		return false, nil
+		return false
 	}
-	labelsPatch := map[string]any{}
+	changed := false
+	if pod.Labels == nil {
+		pod.Labels = map[string]string{}
+	}
 	if pod.Labels[query.LabelRevisionHash] != targetHash {
-		labelsPatch[query.LabelRevisionHash] = targetHash
+		pod.Labels[query.LabelRevisionHash] = targetHash
+		changed = true
 	}
 	current, hasCurrent := pod.Labels[query.LabelPairingProtocol]
 	switch {
 	case pairingProtocol != "" && current != pairingProtocol:
-		labelsPatch[query.LabelPairingProtocol] = pairingProtocol
+		pod.Labels[query.LabelPairingProtocol] = pairingProtocol
+		changed = true
 	case pairingProtocol == "" && hasCurrent:
-		// Strategic-merge null deletes the key.
-		labelsPatch[query.LabelPairingProtocol] = nil
+		delete(pod.Labels, query.LabelPairingProtocol)
+		changed = true
 	}
-	if len(labelsPatch) == 0 {
-		return false, nil
-	}
-	raw, err := json.Marshal(map[string]any{
-		"metadata": map[string]any{"labels": labelsPatch},
-	})
-	if err != nil {
-		return false, fmt.Errorf("marshal revision label patch for pod %s/%s: %w", pod.Namespace, pod.Name, err)
-	}
-	if err := c.Patch(ctx, pod, client.RawPatch(types.StrategicMergePatchType, raw)); err != nil {
-		return false, fmt.Errorf("patch pod %s/%s revision labels: %w", pod.Namespace, pod.Name, err)
-	}
-	return true, nil
+	return changed
 }
 
-// patchPodAnnotations applies a strategic-merge patch on the pod's
-// metadata.annotations to reconcile it toward the target revision's
-// PodMeta. previousTargetAnnotations is the running revision's PodMeta
-// (used to compute which keys OMENative owns and is allowed to
-// delete). Returns whether a patch was issued; an empty diff is a no-op.
-// Without this reconcile, in-place updates would leave
-// pod.metadata.annotations stuck at the value the pod was created
-// with, so spec.{component}.annotations edits during an
-// in-place-eligible rollout would never reach the pod.
-func patchPodAnnotations(ctx context.Context, c client.Client, pod *corev1.Pod, previousTargetAnnotations, newTargetAnnotations map[string]string) (bool, error) {
-	if pod == nil {
-		return false, fmt.Errorf("patchPodAnnotations: nil pod")
-	}
-	diff := evidence.AnnotationsDiff(pod.Annotations, previousTargetAnnotations, newTargetAnnotations)
+// applyMetadata applies a label or annotation diff in memory: a nil value
+// deletes the key, a string sets it. Reports whether anything changed.
+func applyMetadata(m *map[string]string, diff map[string]any) bool {
 	if len(diff) == 0 {
-		return false, nil
+		return false
 	}
-	raw, err := json.Marshal(map[string]any{
-		"metadata": map[string]any{"annotations": diff},
-	})
-	if err != nil {
-		return false, fmt.Errorf("marshal annotation patch for pod %s/%s: %w", pod.Namespace, pod.Name, err)
+	if *m == nil {
+		*m = make(map[string]string, len(diff))
 	}
-	if err := c.Patch(ctx, pod, client.RawPatch(types.StrategicMergePatchType, raw)); err != nil {
-		return false, fmt.Errorf("patch pod %s/%s annotations: %w", pod.Namespace, pod.Name, err)
+	for key, value := range diff {
+		text, set := value.(string)
+		if !set {
+			delete(*m, key)
+			continue
+		}
+		(*m)[key] = text
 	}
-	return true, nil
+	return true
 }

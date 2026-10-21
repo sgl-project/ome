@@ -1,0 +1,13 @@
+{
+  "recordedOn": {
+    "commit": "unrecorded",
+    "date": "2026-10-20",
+    "machine": "linux/amd64, 30 cores, go1.26"
+  },
+  "reason": "First recording: one pass's reading of 4,000 single-pod Instances and of 160 gangs of 8.",
+  "tolerancePercent": 10,
+  "budgets": {
+    "160x8": 160,
+    "4000x1": 4000
+  }
+}

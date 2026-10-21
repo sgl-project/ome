@@ -103,7 +103,7 @@ func TestDirectDeleteWaitsForCanceledWriterReturn(t *testing.T) {
 	for _, uri := range []string{"hf://org/model", "oci://n/ns/b/bucket/o/model"} {
 		t.Run(uri, func(t *testing.T) {
 			g, task := newDirectOperationTestGopher(t, uri)
-			g.modelConfigParser = modelparser.NewModelConfigParser(nil, g.logger)
+			g.modelConfigParser = modelparser.NewModelConfigParser(g.logger)
 			started := make(chan context.Context, 1)
 			release := make(chan struct{})
 			unblock := sync.OnceFunc(func() { close(release) })
@@ -149,7 +149,7 @@ func TestDirectFileLockHeldThroughReady(t *testing.T) {
 	for _, uri := range []string{"hf://org/model", "oci://n/ns/b/bucket/o/model"} {
 		t.Run(uri, func(t *testing.T) {
 			g, task := newDirectOperationTestGopher(t, uri)
-			g.modelConfigParser = modelparser.NewModelConfigParser(nil, g.logger)
+			g.modelConfigParser = modelparser.NewModelConfigParser(g.logger)
 			ready := make(chan struct{})
 			release := make(chan struct{})
 			unblock := sync.OnceFunc(func() { close(release) })
@@ -247,7 +247,7 @@ func TestDirectDownloadRetriesCompatibleFileLock(t *testing.T) {
 	for _, uri := range []string{"hf://org/model", "oci://n/ns/b/bucket/o/model"} {
 		t.Run(uri, func(t *testing.T) {
 			g, task := newDirectOperationTestGopher(t, uri)
-			g.modelConfigParser = modelparser.NewModelConfigParser(nil, g.logger)
+			g.modelConfigParser = modelparser.NewModelConfigParser(g.logger)
 			lock, acquired, err := tryHfArtifactChildFileLock(hfArtifactTaskInput{ModelStoreRoot: g.modelRootDir, ChildModelPath: *task.BaseModel.Spec.Storage.Path})
 			require.NoError(t, err)
 			require.True(t, acquired)

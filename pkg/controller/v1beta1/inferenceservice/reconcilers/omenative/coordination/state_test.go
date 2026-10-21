@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
@@ -36,6 +38,38 @@ func TestComputeTransition_PausedGlobal(t *testing.T) {
 	tr := ComputeTransition(obs)
 	if tr.Phase != v1beta1.CoordinationPhasePaused {
 		t.Errorf("global pause: phase got %q want Paused", tr.Phase)
+	}
+}
+
+// TestComputeTransition_UnpauseRecomputesThePhaseFromTheMembers reads the
+// group on the first pass after the pause annotation is removed: nothing is
+// latched by the pause, so the phase is whatever the members compute, Idle
+// when no member rolls, Surging for a roll in flight, Failed for a Failed
+// row.
+func TestComputeTransition_UnpauseRecomputesThePhaseFromTheMembers(t *testing.T) {
+	bg := v1beta1.CoordinationPolicyBlueGreen
+	engine, decoder := v1beta1.EngineComponent, v1beta1.DecoderComponent
+	settled := func(c v1beta1.ComponentType) ComponentObservation { return settledOn(c, "rev1") }
+	cases := []struct {
+		name string
+		obs  GroupObservation
+		want v1beta1.CoordinationPhase
+	}{
+		{name: "nothing-rolls-reads-idle", obs: groupOf(bg, settled(engine), settled(decoder)), want: v1beta1.CoordinationPhaseIdle},
+		{name: "a-roll-in-flight-reads-surging", obs: groupOf(bg, rollingTo(engine, 2, 0, 0), settled(decoder)), want: v1beta1.CoordinationPhaseSurging},
+		{name: "a-failed-row-reads-failed", obs: groupOf(bg, edited(rollingTo(engine, 3, 1, 0), func(m *ComponentObservation) { m.Failed = true }), settled(decoder)), want: v1beta1.CoordinationPhaseFailed},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			paused := tc.obs
+			paused.PausedGlobal = true
+			if got := ComputeTransition(paused).Phase; got != v1beta1.CoordinationPhasePaused {
+				t.Fatalf("under the pause: phase %q, want Paused", got)
+			}
+			if got := ComputeTransition(tc.obs).Phase; got != tc.want {
+				t.Fatalf("after the unpause: phase %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -488,9 +522,10 @@ func TestComputeTransition_SequentialSoakHolds(t *testing.T) {
 				RolloutInFlight:     true,
 			},
 		},
-		Now:                    now,
-		PreviousPhaseEnteredAt: now.Add(-2 * time.Second), // 2s into a 5s soak
+		Now: now,
 	}
+	// 2s into a 5s soak, measured from the decoder's Ready transition.
+	finishedAt(obs, v1beta1.DecoderComponent, now.Add(-2*time.Second))
 	tr := ComputeTransition(obs)
 	if tr.CompositePhase != v1beta1.CompositePhaseSequentialAwaiting {
 		t.Errorf("soak should hold engine at Sequential.Awaiting; got composite=%q phase=%q msg=%q",
@@ -534,15 +569,64 @@ func TestComputeTransition_SequentialSoakReleases(t *testing.T) {
 				RolloutInFlight:     true,
 			},
 		},
-		Now:                    now,
-		PreviousPhaseEnteredAt: now.Add(-10 * time.Second), // soak elapsed (10s > 5s)
+		Now: now,
 	}
+	// soak elapsed (10s > 5s) since the decoder's Ready transition
+	finishedAt(obs, v1beta1.DecoderComponent, now.Add(-10*time.Second))
 	tr := ComputeTransition(obs)
 	if tr.CompositePhase == v1beta1.CompositePhaseSequentialAwaiting {
 		t.Errorf("soak elapsed: must NOT be Awaiting; got composite=%q", tr.CompositePhase)
 	}
 	if tr.CurrentComponent != v1beta1.EngineComponent {
 		t.Errorf("CurrentComponent post-soak: got %q want engine", tr.CurrentComponent)
+	}
+}
+
+// TestComputeTransition_SequentialWaitDoesNotRestartOnTheNextMembersPhaseChange
+// holds the wait after a member to one measurement: once it has elapsed and
+// the next member has started, a change of that member's own roll (its first
+// Instance rebuilt, its group entry's transition time moved a second ago)
+// reads the member's phase, never Awaiting again.
+func TestComputeTransition_SequentialWaitDoesNotRestartOnTheNextMembersPhaseChange(t *testing.T) {
+	g := ResolvedGroup{
+		Name:       "0",
+		Components: []v1beta1.ComponentType{v1beta1.DecoderComponent, v1beta1.EngineComponent},
+		Policy:     v1beta1.CoordinationPolicySequential,
+		Order:      []v1beta1.ComponentType{v1beta1.DecoderComponent, v1beta1.EngineComponent},
+		Soak:       5 * time.Minute,
+	}
+	now := time.Now()
+	obs := GroupObservation{
+		Group: g,
+		Components: map[v1beta1.ComponentType]ComponentObservation{
+			v1beta1.DecoderComponent: {
+				Component:           v1beta1.DecoderComponent,
+				DesiredReplicas:     2,
+				TargetRevisionHash:  "rev2",
+				CurrentRevisionHash: "rev2",
+				RolloutInFlight:     false,
+			},
+			v1beta1.EngineComponent: {
+				Component:           v1beta1.EngineComponent,
+				DesiredReplicas:     2,
+				TotalPods:           2,
+				NewRevisionPods:     1,
+				TargetRevisionHash:  "rev2",
+				CurrentRevisionHash: "rev1",
+				RolloutInFlight:     true,
+			},
+		},
+		Now: now,
+		// The engine started when the wait elapsed and its entry's transition
+		// time moved a second ago with its own phase change.
+		PreviousPhaseEnteredAt: now.Add(-time.Second),
+	}
+	// The decoder finished five minutes and a second ago.
+	finishedAt(obs, v1beta1.DecoderComponent, now.Add(-5*time.Minute-time.Second))
+	tr := ComputeTransition(obs)
+	if tr.CompositePhase != "engine.Waiting" || tr.Phase != v1beta1.CoordinationPhaseWaiting {
+		t.Fatalf("a phase change of the member already rolling restarted the wait: composite=%q phase=%q msg=%q",
+			tr.CompositePhase, tr.Phase, tr.Message)
 	}
 }
 
@@ -830,6 +914,13 @@ func stagedMember(c v1beta1.ComponentType) ComponentObservation {
 	return m
 }
 
+// scaledTo is a member whose desired count was moved to n; the rows and
+// pods it carries are the ones the roll has at that moment.
+func scaledTo(m ComponentObservation, n int32) ComponentObservation {
+	m.DesiredReplicas = n
+	return m
+}
+
 // darkened takes every pod of a member out of readiness and rotation, as
 // rows demoted to Pending read, without a Failed row.
 func darkened(m ComponentObservation) ComponentObservation {
@@ -862,13 +953,23 @@ func groupOf(policy v1beta1.CoordinationPolicy, members ...ComponentObservation)
 
 // soaking is a Sequential group in its soak window: the decoder completed,
 // the engine bumped and rolling, and the soak not yet elapsed since the
-// group's last base-phase change.
+// decoder's Ready transition. The group's own transition time is a second
+// old, as after a phase change, and decides nothing.
 func soaking(engine ComponentObservation, elapsed time.Duration) GroupObservation {
 	obs := groupOf(v1beta1.CoordinationPolicySequential, settledOn(v1beta1.DecoderComponent, "rev2"), engine)
 	obs.Group.Soak = 5 * time.Minute
 	obs.Now = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	obs.PreviousPhaseEnteredAt = obs.Now.Add(-elapsed)
+	obs.PreviousPhaseEnteredAt = obs.Now.Add(-time.Second)
+	finishedAt(obs, v1beta1.DecoderComponent, obs.Now.Add(-elapsed))
 	return obs
+}
+
+// finishedAt records when the named member's replica reported its roll done,
+// the instant the wait after it is measured from.
+func finishedAt(obs GroupObservation, c v1beta1.ComponentType, at time.Time) {
+	m := obs.Components[c]
+	m.ReadyAt = at
+	obs.Components[c] = m
 }
 
 // ratioBalanced puts the group under RatioBalanced pacing with a 25%
@@ -959,13 +1060,15 @@ func TestComputeTransition_PhaseFollowsTheMembersFromEveryState(t *testing.T) {
 		{name: "surging-old-capacity-lost-keeps-surging", obs: groupOf(bg, darkened(rollingTo(engine, 2, 0, 0)), settled(decoder)), want: surging},
 		{name: "surging-old-pods-gone-first-keeps-surging", obs: groupOf(bg, rollingTo(engine, 0, 0, 0), settled(decoder)), want: surging},
 		{name: "surging-dark-settled-member-keeps-surging", obs: groupOf(bg, rollingTo(engine, 2, 0, 0), darkened(settled(decoder))), want: surging},
-		{name: "surging-ratio-admits-the-step-keeps-surging", obs: ratioBalanced(groupOf(bg, fourWide(rollingTo(engine, 4, 0, 0)), fourWide(rollingTo(decoder, 4, 0, 0))), 4, 4), want: surging, skew: ptrBool(false)},
+		{name: "surging-ratio-admits-the-step-keeps-surging", obs: ratioBalanced(groupOf(bg, fourWide(rollingTo(engine, 4, 0, 0)), fourWide(rollingTo(decoder, 4, 0, 0))), 4, 4), want: surging, skew: ptr.To(false)},
 		{name: "surging-under-rollingupdate", obs: groupOf(ru, rollingTo(engine, 2, 0, 0), settled(decoder)), want: surging},
 		{name: "surging-under-independent-reads-shifting", obs: groupOf(ind, rollingTo(engine, 2, 0, 0), settled(decoder)), want: shift},
 		{name: "surging-partition-set-keeps-surging", obs: groupOf(bg, withPartition(rollingTo(engine, 2, 0, 0), 1), settled(decoder)), want: surging},
 		{name: "surging-partition-cleared-keeps-surging", obs: groupOf(bg, withPartition(rollingTo(engine, 2, 0, 0), 0), settled(decoder)), want: surging},
 		{name: "surging-only-rolling-member-missing-reads-idle", obs: groupOf(bg, missing(engine), settled(decoder)), want: idle},
 		{name: "surging-resync-keeps-surging", obs: groupOf(bg, rollingTo(engine, 2, 0, 0), settled(decoder)), want: surging},
+		{name: "surging-scale-up-counts-the-new-instance-on-the-target-reads-waiting", obs: groupOf(bg, scaledTo(rollingTo(engine, 3, 1, 0), 3), settled(decoder)), want: waiting},
+		{name: "surging-scale-down-of-old-instances-keeps-surging", obs: groupOf(bg, scaledTo(rollingTo(engine, 1, 0, 0), 1), settled(decoder)), want: surging},
 
 		// Waiting: every rolling member has a new pod and one is not Ready.
 		{name: "waiting-rebump-reads-surging", obs: groupOf(bg, retargeted(rollingTo(engine, 3, 1, 0)), settled(decoder)), want: surging},
@@ -975,12 +1078,14 @@ func TestComputeTransition_PhaseFollowsTheMembersFromEveryState(t *testing.T) {
 		{name: "waiting-old-capacity-lost-keeps-waiting", obs: groupOf(bg, edited(rollingTo(engine, 3, 1, 0), func(m *ComponentObservation) { m.ReadyPods, m.ServingPods = 0, 0 }), settled(decoder)), want: waiting},
 		{name: "waiting-old-pods-gone-keeps-waiting", obs: groupOf(bg, rollingTo(engine, 1, 1, 0), settled(decoder)), want: waiting},
 		{name: "waiting-dark-settled-member-keeps-waiting", obs: groupOf(bg, rollingTo(engine, 3, 1, 0), darkened(settled(decoder))), want: waiting},
-		{name: "waiting-ratio-admits-the-step-keeps-waiting", obs: ratioBalanced(groupOf(bg, fourWide(rollingTo(engine, 5, 1, 0)), fourWide(rollingTo(decoder, 5, 1, 0))), 4, 4), want: waiting, skew: ptrBool(false)},
+		{name: "waiting-ratio-admits-the-step-keeps-waiting", obs: ratioBalanced(groupOf(bg, fourWide(rollingTo(engine, 5, 1, 0)), fourWide(rollingTo(decoder, 5, 1, 0))), 4, 4), want: waiting, skew: ptr.To(false)},
 		{name: "waiting-under-rollingupdate", obs: groupOf(ru, rollingTo(engine, 3, 1, 0), settled(decoder)), want: waiting},
 		{name: "waiting-partition-set-keeps-waiting", obs: groupOf(bg, withPartition(rollingTo(engine, 3, 1, 0), 1), settled(decoder)), want: waiting},
 		{name: "waiting-partition-cleared-keeps-waiting", obs: groupOf(bg, withPartition(rollingTo(engine, 3, 1, 0), 0), settled(decoder)), want: waiting},
 		{name: "waiting-only-rolling-member-missing-reads-idle", obs: groupOf(bg, missing(engine), settled(decoder)), want: idle},
 		{name: "waiting-resync-keeps-waiting", obs: groupOf(bg, rollingTo(engine, 3, 1, 0), settled(decoder)), want: waiting},
+		{name: "waiting-scale-up-adds-an-instance-on-the-target-keeps-waiting", obs: groupOf(bg, scaledTo(rollingTo(engine, 4, 2, 0), 3), settled(decoder)), want: waiting},
+		{name: "waiting-scale-down-removes-the-only-instance-on-the-target-reads-surging", obs: groupOf(bg, scaledTo(rollingTo(engine, 2, 0, 0), 2), settled(decoder)), want: surging},
 
 		// Shifting: every new pod Ready, old pods remain.
 		{name: "shifting-rebump-reads-surging", obs: groupOf(bg, retargeted(rollingTo(engine, 4, 2, 2)), settled(decoder)), want: surging},
@@ -989,6 +1094,9 @@ func TestComputeTransition_PhaseFollowsTheMembersFromEveryState(t *testing.T) {
 		{name: "shifting-new-pod-unready-reads-waiting", obs: groupOf(bg, rollingTo(engine, 4, 2, 1), settled(decoder)), want: waiting},
 		{name: "shifting-new-pods-all-gone-reads-surging", obs: groupOf(bg, rollingTo(engine, 2, 0, 0), settled(decoder)), want: surging},
 		{name: "shifting-old-capacity-lost-keeps-shifting", obs: groupOf(bg, edited(rollingTo(engine, 4, 2, 2), func(m *ComponentObservation) { m.ReadyPods, m.ServingPods = 2, 2 }), settled(decoder)), want: shift},
+		// a failed surge replacement is a live pod that never serves beside the old pod it was to
+		// replace: the counters of Instances on the target stand, and the old pods keep the phase
+		{name: "shifting-failed-replacement-keeps-shifting", obs: groupOf(bg, edited(rollingTo(engine, 5, 2, 2), func(m *ComponentObservation) { m.ReadyPods, m.ServingPods = 4, 4 }), settled(decoder)), want: shift},
 		{name: "shifting-dark-settled-member-reads-waiting", obs: groupOf(bg, rollingTo(engine, 4, 2, 2), darkened(settled(decoder))), want: waiting},
 		{name: "shifting-dark-settled-member-under-rollingupdate-keeps-shifting", obs: groupOf(ru, rollingTo(engine, 2, 2, 2), darkened(settled(decoder))), want: shift},
 		{name: "shifting-under-rollingupdate-reads-scalingdown", obs: groupOf(ru, rollingTo(engine, 4, 2, 2), settled(decoder)), want: scaling},
@@ -997,6 +1105,8 @@ func TestComputeTransition_PhaseFollowsTheMembersFromEveryState(t *testing.T) {
 		{name: "shifting-partition-cleared-keeps-shifting", obs: groupOf(bg, withPartition(rollingTo(engine, 4, 2, 2), 0), settled(decoder)), want: shift},
 		{name: "shifting-only-rolling-member-missing-reads-idle", obs: groupOf(bg, missing(engine), settled(decoder)), want: idle},
 		{name: "shifting-resync-keeps-shifting", obs: groupOf(bg, rollingTo(engine, 4, 2, 2), settled(decoder)), want: shift},
+		{name: "shifting-scale-up-counts-the-new-instance-on-the-target-reads-waiting", obs: groupOf(bg, scaledTo(rollingTo(engine, 4, 2, 1), 3), settled(decoder)), want: waiting},
+		{name: "shifting-scale-down-removes-the-only-instance-on-the-target-reads-surging", obs: groupOf(bg, scaledTo(rollingTo(engine, 1, 0, 0), 1), settled(decoder)), want: surging},
 
 		// ScalingDown: every new pod Ready, no old pod left, not promoted.
 		{name: "scalingdown-rebump-reads-surging", obs: groupOf(bg, retargeted(rollingTo(engine, 2, 2, 2)), settled(decoder)), want: surging},
@@ -1006,11 +1116,18 @@ func TestComputeTransition_PhaseFollowsTheMembersFromEveryState(t *testing.T) {
 		{name: "scalingdown-new-pods-all-gone-reads-surging", obs: groupOf(bg, rollingTo(engine, 0, 0, 0), settled(decoder)), want: surging},
 		{name: "scalingdown-dark-settled-member-reads-waiting", obs: groupOf(bg, rollingTo(engine, 2, 2, 2), darkened(settled(decoder))), want: waiting},
 		{name: "scalingdown-under-rollingupdate-reads-shifting", obs: groupOf(ru, rollingTo(engine, 2, 2, 2), settled(decoder)), want: shift},
+		// RollingUpdate between two batches: old pods still serve beside the promoted ones. The
+		// last old pod of one member leaving keeps the phase while another member keeps one, and a
+		// failed surge replacement adds a live pod that never serves while the counters stand.
+		{name: "scalingdown-under-rollingupdate-one-member-old-pods-gone-keeps-scalingdown", obs: groupOf(ru, rollingTo(engine, 2, 2, 2), rollingTo(decoder, 4, 2, 2)), want: scaling},
+		{name: "scalingdown-under-rollingupdate-failed-replacement-keeps-scalingdown", obs: groupOf(ru, edited(rollingTo(engine, 5, 2, 2), func(m *ComponentObservation) { m.ReadyPods, m.ServingPods = 4, 4 }), settled(decoder)), want: scaling},
 		{name: "scalingdown-under-rollingupdate-old-capacity-lost-keeps-scalingdown", obs: groupOf(ru, edited(rollingTo(engine, 4, 2, 2), func(m *ComponentObservation) { m.ReadyPods, m.ServingPods = 2, 2 }), settled(decoder)), want: scaling},
 		{name: "scalingdown-partition-set-keeps-scalingdown", obs: groupOf(bg, withPartition(rollingTo(engine, 2, 2, 2), 1), settled(decoder)), want: scaling},
 		{name: "scalingdown-partition-cleared-keeps-scalingdown", obs: groupOf(bg, withPartition(rollingTo(engine, 2, 2, 2), 0), settled(decoder)), want: scaling},
 		{name: "scalingdown-only-rolling-member-missing-reads-idle", obs: groupOf(bg, missing(engine), settled(decoder)), want: idle},
 		{name: "scalingdown-resync-keeps-scalingdown", obs: groupOf(bg, rollingTo(engine, 2, 2, 2), settled(decoder)), want: scaling},
+		{name: "scalingdown-scale-up-counts-the-new-instance-on-the-target-reads-waiting", obs: groupOf(bg, scaledTo(rollingTo(engine, 3, 3, 2), 3), settled(decoder)), want: waiting},
+		{name: "scalingdown-scale-down-removes-the-only-instance-on-the-target-reads-surging", obs: groupOf(bg, scaledTo(rollingTo(engine, 0, 0, 0), 1), settled(decoder)), want: surging},
 
 		// Staged: the staged shape is re-judged against every fact.
 		{name: "staged-rebump-reads-surging", obs: groupOf(bg, retargeted(stagedMember(engine)), settled(decoder)), want: surging},
@@ -1031,7 +1148,15 @@ func TestComputeTransition_PhaseFollowsTheMembersFromEveryState(t *testing.T) {
 		{name: "staged-scale-down-drops-the-target-rows-reads-surging", obs: groupOf(bg, edited(stagedMember(engine), func(m *ComponentObservation) {
 			m.DesiredReplicas, m.TotalPods, m.NewRevisionPods, m.NewRevisionReadyPods, m.AtDesiredShape = 1, 1, 0, 0, false
 		}), settled(decoder)), want: surging},
-		{name: "staged-partition-moved-reads-shifting", obs: groupOf(bg, edited(stagedMember(engine), func(m *ComponentObservation) { m.Partition, m.AtDesiredShape = 2, false }), settled(decoder)), want: shift},
+		{name: "staged-scale-down-at-which-the-shape-holds-keeps-staged", obs: groupOf(bg, edited(stagedMember(engine), func(m *ComponentObservation) {
+			m.DesiredReplicas, m.TotalPods, m.ReadyPods, m.ServingPods, m.NewRevisionPods, m.NewRevisionReadyPods = 2, 2, 2, 2, 1, 1
+		}), settled(decoder)), want: stagedP},
+		{name: "staged-partition-moved-reads-shifting", obs: groupOf(bg, edited(stagedMember(engine), func(m *ComponentObservation) {
+			// Three Instances under a partition of two, lowered to one: the
+			// released Instance still runs its old pod.
+			m.DesiredReplicas, m.TotalPods, m.ReadyPods, m.ServingPods, m.Partition, m.AtDesiredShape = 3, 3, 3, 3, 1, false
+		}), settled(decoder)), want: shift},
+		{name: "staged-partition-raised-above-the-old-count-keeps-staged", obs: groupOf(bg, edited(stagedMember(engine), func(m *ComponentObservation) { m.Partition = 2 }), settled(decoder)), want: stagedP},
 		{name: "staged-only-rolling-member-missing-reads-idle", obs: groupOf(bg, missing(engine), settled(decoder)), want: idle},
 		{name: "staged-resync-keeps-staged", obs: groupOf(bg, stagedMember(engine), settled(decoder)), want: stagedP},
 
@@ -1094,5 +1219,3 @@ func fourWide(m ComponentObservation) ComponentObservation {
 	m.ReadyPods = 4
 	return m
 }
-
-func ptrBool(b bool) *bool { return &b }

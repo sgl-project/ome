@@ -22,7 +22,7 @@ func inferenceReplicaBlock(raw string) *v1.ConfigMap {
 	return &v1.ConfigMap{Data: map[string]string{InferenceReplicaConfigName: raw}}
 }
 
-func TestParseInferenceReplicaConfig(t *testing.T) {
+func TestParseInferenceReplicaConfig_UsernamesAndGroups_IdentityMatchesEither(t *testing.T) {
 	cfg, err := parseInferenceReplicaConfig(inferenceReplicaBlock(
 		`{"controllerIdentity":{"usernames":["system:serviceaccount:ome:ome-controller-manager"],"groups":["system:masters"]}}`))
 	require.NoError(t, err)
@@ -35,7 +35,7 @@ func TestParseInferenceReplicaConfig(t *testing.T) {
 
 // An absent or blank key yields no config; an empty object or an empty
 // controllerIdentity yields an unconfigured identity. Neither matches anyone.
-func TestParseInferenceReplicaConfigUnconfigured(t *testing.T) {
+func TestParseInferenceReplicaConfig_AbsentOrEmptyBlock_MatchesNoOne(t *testing.T) {
 	anyone := authenticationv1.UserInfo{Username: "example-user", Groups: []string{"system:authenticated"}}
 
 	for name, cm := range map[string]*v1.ConfigMap{
@@ -67,7 +67,7 @@ func TestParseInferenceReplicaConfigUnconfigured(t *testing.T) {
 
 // A block the parser cannot read exactly as written is an error, never a
 // silently narrower, wider or empty identity.
-func TestParseInferenceReplicaConfigRejects(t *testing.T) {
+func TestParseInferenceReplicaConfig_UnreadableOrCatchAllBlock_Rejected(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		raw     string
@@ -103,10 +103,10 @@ func TestParseInferenceReplicaConfigRejects(t *testing.T) {
 	}
 }
 
-// TestNewInferenceReplicaConfigCached verifies the loader the admission
+// TestNewInferenceReplicaConfigCached_WithinTTL_OneGetEditAppliesAfterExpiry verifies the loader the admission
 // webhook calls per request: loads share one apiserver GET within the TTL, an
 // edit applies after it, and a missing ConfigMap is an error.
-func TestNewInferenceReplicaConfigCached(t *testing.T) {
+func TestNewInferenceReplicaConfigCached_WithinTTL_OneGetEditAppliesAfterExpiry(t *testing.T) {
 	t.Run("hit: repeated loads share one GET within TTL", func(t *testing.T) {
 		clientset, gets := countingClientset(t, map[string]string{
 			InferenceReplicaConfigName: `{"controllerIdentity":{"groups":["group-a"]}}`,

@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 )
 
-func TestNewMultiClusterConfig(t *testing.T) {
+func TestNewMultiClusterConfig_BlockForms_FullBlockParsesAbsentIsZeroBadJsonErrors(t *testing.T) {
 	tests := []struct {
 		name          string
 		configMapData map[string]string

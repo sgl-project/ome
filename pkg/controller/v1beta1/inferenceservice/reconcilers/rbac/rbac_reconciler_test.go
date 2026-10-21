@@ -13,12 +13,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 const (
@@ -28,11 +26,8 @@ const (
 )
 
 func TestNewRBACReconciler(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, clientgoscheme.AddToScheme(scheme))
-	require.NoError(t, v1beta1.AddToScheme(scheme))
-
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	fakeClient := fakeclient.New(t)
+	scheme := fakeClient.Scheme()
 	objectMeta := metav1.ObjectMeta{
 		Name:      testServiceName,
 		Namespace: testNamespace,
@@ -146,10 +141,6 @@ func TestRBACReconciler_GetServiceAccountName(t *testing.T) {
 }
 
 func TestRBACReconciler_Reconcile_RouterComponent(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, clientgoscheme.AddToScheme(scheme))
-	require.NoError(t, v1beta1.AddToScheme(scheme))
-
 	ownerRef := metav1.OwnerReference{
 		APIVersion: "ome.io/v1beta1",
 		Kind:       "InferenceService",
@@ -192,10 +183,10 @@ func TestRBACReconciler_Reconcile_RouterComponent(t *testing.T) {
 				OwnerReferences: tt.ownerReferences,
 			}
 
-			fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+			fakeClient := fakeclient.New(t)
 			reconciler := NewRBACReconciler(
 				fakeClient,
-				scheme,
+				fakeClient.Scheme(),
 				objectMeta,
 				v1beta1.RouterComponent,
 				inferenceService,
@@ -292,10 +283,6 @@ func TestRBACReconciler_Reconcile_RouterComponent(t *testing.T) {
 }
 
 func TestRBACReconciler_Reconcile_NonRouterComponent(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, clientgoscheme.AddToScheme(scheme))
-	require.NoError(t, v1beta1.AddToScheme(scheme))
-
 	objectMeta := metav1.ObjectMeta{
 		Name:      testServiceName,
 		Namespace: testNamespace,
@@ -312,10 +299,10 @@ func TestRBACReconciler_Reconcile_NonRouterComponent(t *testing.T) {
 		},
 	}
 
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	fakeClient := fakeclient.New(t)
 	reconciler := NewRBACReconciler(
 		fakeClient,
-		scheme,
+		fakeClient.Scheme(),
 		objectMeta,
 		v1beta1.EngineComponent, // Non-router component
 		inferenceService,
@@ -353,10 +340,6 @@ func TestRBACReconciler_Reconcile_NonRouterComponent(t *testing.T) {
 }
 
 func TestRBACReconciler_Reconcile_Update(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, clientgoscheme.AddToScheme(scheme))
-	require.NoError(t, v1beta1.AddToScheme(scheme))
-
 	objectMeta := metav1.ObjectMeta{
 		Name:      testServiceName,
 		Namespace: testNamespace,
@@ -386,14 +369,11 @@ func TestRBACReconciler_Reconcile_Update(t *testing.T) {
 		},
 	}
 
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(existingSA).
-		Build()
+	fakeClient := fakeclient.New(t, fakeclient.WithObjects(existingSA))
 
 	reconciler := NewRBACReconciler(
 		fakeClient,
-		scheme,
+		fakeClient.Scheme(),
 		objectMeta,
 		v1beta1.RouterComponent,
 		inferenceService,
@@ -414,10 +394,7 @@ func TestRBACReconciler_Reconcile_Update(t *testing.T) {
 }
 
 func TestRBACReconciler_createOrUpdate(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, clientgoscheme.AddToScheme(scheme))
-
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	fakeClient := fakeclient.New(t)
 	reconciler := &RBACReconciler{
 		client: fakeClient,
 		Log:    logr.Discard(),
@@ -459,11 +436,8 @@ func TestRBACReconciler_createOrUpdate(t *testing.T) {
 }
 
 func TestRBACReconciler_createOrUpdate_Error(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, clientgoscheme.AddToScheme(scheme))
-
 	// Create a failing client that returns errors
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	fakeClient := fakeclient.New(t)
 	reconciler := &RBACReconciler{
 		client: fakeClient,
 		Log:    logr.Discard(),
@@ -480,23 +454,9 @@ func TestRBACReconciler_createOrUpdate_Error(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// countingClient wraps a client and tracks how many Update calls are issued so
-// tests can assert that a steady reconcile is a true no-op (no PUT).
-func countingClient(inner client.WithWatch, updates *int) client.Client {
-	return interceptor.NewClient(inner, interceptor.Funcs{
-		Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
-			*updates++
-			return c.Update(ctx, obj, opts...)
-		},
-	})
-}
-
 // TestRBACReconciler_createOrUpdate_NoOpWhenUnchanged verifies that a steady
 // object (live == desired) does not trigger an Update PUT.
 func TestRBACReconciler_createOrUpdate_NoOpWhenUnchanged(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, clientgoscheme.AddToScheme(scheme))
-
 	labels := map[string]string{"app": "test-app"}
 	owner := []metav1.OwnerReference{{
 		APIVersion: "ome.io/v1beta1",
@@ -551,12 +511,11 @@ func TestRBACReconciler_createOrUpdate_NoOpWhenUnchanged(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			updates := 0
-			base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.live).Build()
-			reconciler := &RBACReconciler{client: countingClient(base, &updates), Log: logr.Discard()}
+			updates := fakeclient.CountingVerb(fakeclient.Update)
+			reconciler := &RBACReconciler{client: fakeclient.New(t, fakeclient.WithObjects(tc.live), updates), Log: logr.Discard()}
 
 			require.NoError(t, reconciler.createOrUpdate(tc.desired))
-			assert.Equal(t, 0, updates, "steady %s must not issue an Update PUT", tc.name)
+			assert.Equal(t, 0, updates.Count(), "steady %s must not issue an Update PUT", tc.name)
 		})
 	}
 }
@@ -564,9 +523,6 @@ func TestRBACReconciler_createOrUpdate_NoOpWhenUnchanged(t *testing.T) {
 // TestRBACReconciler_createOrUpdate_UpdatesOnDrift verifies that a real
 // difference in a managed field does trigger exactly one Update.
 func TestRBACReconciler_createOrUpdate_UpdatesOnDrift(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, clientgoscheme.AddToScheme(scheme))
-
 	cases := []struct {
 		name    string
 		desired client.Object
@@ -613,22 +569,17 @@ func TestRBACReconciler_createOrUpdate_UpdatesOnDrift(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			updates := 0
-			base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.live).Build()
-			reconciler := &RBACReconciler{client: countingClient(base, &updates), Log: logr.Discard()}
+			updates := fakeclient.CountingVerb(fakeclient.Update)
+			reconciler := &RBACReconciler{client: fakeclient.New(t, fakeclient.WithObjects(tc.live), updates), Log: logr.Discard()}
 
 			require.NoError(t, reconciler.createOrUpdate(tc.desired))
-			assert.Equal(t, 1, updates, "drifted %s must issue exactly one Update PUT", tc.name)
+			assert.Equal(t, 1, updates.Count(), "drifted %s must issue exactly one Update PUT", tc.name)
 		})
 	}
 }
 
 // Benchmark tests
 func BenchmarkRBACReconciler_Reconcile(b *testing.B) {
-	scheme := runtime.NewScheme()
-	require.NoError(b, clientgoscheme.AddToScheme(scheme))
-	require.NoError(b, v1beta1.AddToScheme(scheme))
-
 	objectMeta := metav1.ObjectMeta{
 		Name:      testServiceName,
 		Namespace: testNamespace,
@@ -645,10 +596,10 @@ func BenchmarkRBACReconciler_Reconcile(b *testing.B) {
 		},
 	}
 
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	fakeClient := fakeclient.New(b)
 	reconciler := NewRBACReconciler(
 		fakeClient,
-		scheme,
+		fakeClient.Scheme(),
 		objectMeta,
 		v1beta1.RouterComponent,
 		inferenceService,

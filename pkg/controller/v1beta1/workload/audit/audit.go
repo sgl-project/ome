@@ -256,10 +256,6 @@ func (l *Ledger) InFlightEntryOrSeed(uuid string, req *MigrationRequest, surgeId
 // anchor for an active migration.
 const maxTerminalEntries = 200
 
-// MaxTerminalEntries exposes the trim cap for tests that need to assert
-// the ring-buffer behavior. Source of truth is the unexported constant.
-const MaxTerminalEntries = maxTerminalEntries
-
 // UpsertEntry adds the entry if its UUID is new, or replaces the
 // existing same-UUID entry in place. Last-writer-wins on Phase / Outcome
 // for the lifetime of one migration. After mutation the ledger is

@@ -4,8 +4,8 @@
 // (blueGreen / rollingUpdate) on spec.rollout.groups[]: per-group structural
 // checks (valid components, order subset), cross-group checks (a Component
 // appears in at most one group; every group member is a declared Component;
-// groups are OMENative), pacing zero-budget, and the RollingUpdate lockstep on
-// update.
+// groups are OMENative), pacing zero-budget, and the update-time warning on a
+// rollingUpdate group whose members change one at a time.
 // The one-of progression shape and order⊆components are also enforced by the CRD
 // CEL rules; these are the value-level mirrors plus the cross-group rules CEL
 // can't express. Canary groups are validated by ValidateCanary.
@@ -31,8 +31,11 @@ const (
 	ReasonRatioToleranceOutOfRange               = "RatioToleranceOutOfRange"
 	ReasonOrphanCoordinationGroup                = "OrphanCoordinationGroup"
 	ReasonInvalidCoordinationOrder               = "InvalidCoordinationOrder"
-	ReasonRollingUpdateLockstepViolation         = "RollingUpdateLockstepViolation"
 	ReasonPairingProtocolChangeUncoordinated     = "PairingProtocolChangeUncoordinated"
+	// ReasonRollingUpdatePartialChange tags the warning on an update that
+	// re-renders some members of a rollingUpdate group and not others: the
+	// changed members roll and the rest keep their revision.
+	ReasonRollingUpdatePartialChange = "RollingUpdatePartialChange"
 	// ReasonSequentialDuplicateOrder flags a duplicate entry in a group's Order
 	// (the rule applies to any group's surge Order, not only the v1 Sequential
 	// policy that is gone).
@@ -54,6 +57,11 @@ const (
 	// group advance together — so accepting it would promise a sequence
 	// that never happens.
 	ReasonOrderNotHonored = "OrderNotHonored"
+	// ReasonMaintainRatioUnpaired flags maintainRatio on a group that lists
+	// one Component: there is no second side to keep a ratio with, and the
+	// engine would silently ignore the field, so admission refuses it the
+	// way it refuses maintainRatio on a canary group.
+	ReasonMaintainRatioUnpaired = "MaintainRatioUnpaired"
 	// ReasonRatioDrainInfeasible flags a drain-first member of a maintainRatio
 	// group whose single drain the ratio check could never admit: it would
 	// empty the member's side, or move the pairwise serving ratio more than
@@ -78,8 +86,7 @@ var validComponents = map[v1beta1.ComponentType]struct{}{
 
 // ValidateCoordination runs the coordination-style (blueGreen / rollingUpdate)
 // admission rules over spec.rollout.groups[]. Returns the first error; nil on
-// success. Update-time (RollingUpdate lockstep) checks live in
-// ValidateCoordinationUpdate.
+// success. The update-time warning lives in CoordinationUpdateWarnings.
 func ValidateCoordination(spec *v1beta1.InferenceServiceSpec) error {
 	groups := spec.GetRolloutGroups()
 	if len(groups) == 0 {
@@ -103,6 +110,9 @@ func ValidateCoordination(spec *v1beta1.InferenceServiceSpec) error {
 	if err := validateRatioToleranceRange(groups); err != nil {
 		return err
 	}
+	if err := validateMaintainRatioPaired(groups); err != nil {
+		return err
+	}
 	if err := validatePacingNotZeroBudget(groups); err != nil {
 		return err
 	}
@@ -112,23 +122,29 @@ func ValidateCoordination(spec *v1beta1.InferenceServiceSpec) error {
 	return nil
 }
 
-// ValidateCoordinationUpdate runs the update-time rule comparing old vs new spec:
-// a rollingUpdate group bumps all its Components together (lockstep). Structural
+// CoordinationUpdateWarnings returns the update-time warnings over
+// spec.rollout.groups[]: one per rollingUpdate group in which this update
+// re-renders some members' pod templates and not others'. Such an update is
+// admitted: the group promises that any revision of one member works with any
+// revision of another (declared through spec.rollout.pairingProtocol where it
+// matters), so a member changed alone rolls and the others keep their
+// revision. The warning names who moves and who stands still. Structural
 // validation runs separately on the new spec.
-func ValidateCoordinationUpdate(oldSpec, newSpec *v1beta1.InferenceServiceSpec) error {
+func CoordinationUpdateWarnings(oldSpec, newSpec *v1beta1.InferenceServiceSpec) []string {
+	var warnings []string
 	groups := newSpec.GetRolloutGroups()
 	for i := range groups {
 		g := &groups[i]
 		// Kind-resolved so a group whose rollingUpdate comes from a declared
-		// policyRef obeys the same all-together contract as an inline one.
+		// policyRef is read like an inline one.
 		if rolloutGroupKind(g) != v1beta1.RolloutProgressionRollingUpdate {
 			continue
 		}
-		if err := validateRollingUpdateLockstep(oldSpec, newSpec, g.Components); err != nil {
-			return err
+		if w := rollingUpdatePartialChangeWarning(oldSpec, newSpec, i, g.Components); w != "" {
+			warnings = append(warnings, w)
 		}
 	}
-	return nil
+	return warnings
 }
 
 // ValidatePairingProtocolUpdate rejects a pairing-protocol change between two
@@ -321,6 +337,28 @@ func validateGroupRollingUpdateBudgets(groups []v1beta1.RolloutGroup) error {
 	return nil
 }
 
+// validateMaintainRatioPaired rejects maintainRatio on a coordination-style
+// group that lists fewer than two distinct Components. The ratio rule reads
+// two sides; with one the field would be ignored without a word, and an
+// operator would believe a ratio is kept that nothing keeps.
+func validateMaintainRatioPaired(groups []v1beta1.RolloutGroup) error {
+	for i := range groups {
+		g := &groups[i]
+		if g.MaintainRatio == nil || rolloutGroupKind(g) == v1beta1.RolloutProgressionCanary {
+			continue
+		}
+		distinct := map[v1beta1.ComponentType]struct{}{}
+		for _, c := range g.Components {
+			distinct[c] = struct{}{}
+		}
+		if len(distinct) < 2 {
+			return fmt.Errorf("spec.rollout.groups[%d]: maintainRatio needs two Components to keep a ratio between, and this group lists one; remove maintainRatio, or list the peer Component in the same group (%s)",
+				i, ReasonMaintainRatioUnpaired)
+		}
+	}
+	return nil
+}
+
 // validateRatioToleranceRange is the value-level mirror of the CRD's
 // Minimum=0/Maximum=100 bounds on maintainRatio.tolerance, for callers that
 // bypass schema validation. Nil (omitted) is valid — the operator-configured
@@ -360,14 +398,14 @@ func validatePacingNotZeroBudget(groups []v1beta1.RolloutGroup) error {
 	return nil
 }
 
-// validateRollingUpdateLockstep enforces the all-together contract of a
-// rollingUpdate group on update: if any grouped Component's revision-affecting
-// spec changed, every grouped Component's must have changed. The compare
-// covers the full revision-affecting view (componentRevisionSpecChanged), not
-// just container images — an env, command, resource, volume, label, or
-// annotation change re-renders the pod template and rolls the Component
-// exactly like an image bump, so it must obey the same group contract.
-func validateRollingUpdateLockstep(oldSpec, newSpec *v1beta1.InferenceServiceSpec, components []v1beta1.ComponentType) error {
+// rollingUpdatePartialChangeWarning is the warning for a rollingUpdate group
+// in which this update changes some members' revision-affecting spec and not
+// others'. The compare covers the full revision-affecting view
+// (componentRevisionSpecChanged), not just container images: an env, command,
+// resource, volume, label or annotation change re-renders the pod template
+// and rolls the Component exactly like an image bump. Empty when every member
+// changes or none does.
+func rollingUpdatePartialChangeWarning(oldSpec, newSpec *v1beta1.InferenceServiceSpec, index int, components []v1beta1.ComponentType) string {
 	var changed, unchanged []v1beta1.ComponentType
 	for _, c := range components {
 		if componentRevisionSpecChanged(oldSpec, newSpec, c) {
@@ -376,11 +414,32 @@ func validateRollingUpdateLockstep(oldSpec, newSpec *v1beta1.InferenceServiceSpe
 			unchanged = append(unchanged, c)
 		}
 	}
-	if len(changed) > 0 && len(unchanged) > 0 {
-		return fmt.Errorf("spec.rollout: rollingUpdate group requires all components to bump together; changed %v but not %v (%s)",
-			changed, unchanged, ReasonRollingUpdateLockstepViolation)
+	if len(changed) == 0 || len(unchanged) == 0 {
+		return ""
 	}
-	return nil
+	verb, keep, roll := "changes", "keeps its revision", "rolls"
+	if len(changed) > 1 {
+		verb = "change"
+	}
+	if len(unchanged) > 1 {
+		keep, roll = "keep their revisions", "roll"
+	}
+	return fmt.Sprintf("spec.rollout.groups[%d]: only %s %s; %s %s and %s nothing (%s)",
+		index, componentPhrase(changed), verb, componentPhrase(unchanged), keep, roll, ReasonRollingUpdatePartialChange)
+}
+
+// componentPhrase names Components the way an operator reads them: "the
+// engine", "the engine and the decoder", "the engine, the decoder and the
+// router".
+func componentPhrase(components []v1beta1.ComponentType) string {
+	names := make([]string, len(components))
+	for i, c := range components {
+		names[i] = "the " + string(c)
+	}
+	if len(names) == 1 {
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
 }
 
 // declaredComponents returns the set of Components present on the spec.

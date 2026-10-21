@@ -262,15 +262,20 @@ func TestPruneOutlivedRetryBlocks_HealedInPlaceSetIsOutlivedAtTheWindow(t *testi
 	for _, tc := range []struct {
 		name   string
 		at     time.Duration
+		grace  time.Duration
 		pruned bool
 	}{
-		{name: "inside the window the block is kept", at: 45 * time.Second},
-		{name: "at the window the block is pruned", at: 60 * time.Second, pruned: true},
+		{name: "inside the window the block is kept", at: 45 * time.Second, grace: time.Minute},
+		{name: "at the window the block is pruned", at: 60 * time.Second, grace: time.Minute, pruned: true},
+		// Neither readiness knob is configured: no span proves the set, so
+		// the block is kept however long the set serves, and the next
+		// death counts on it.
+		{name: "with no window configured the block is kept", at: time.Hour},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			input := minimalInput(t)
 			input.Clock = clocktesting.NewFakeClock(readyAgain.Add(tc.at))
-			input.StuckPodGrace = time.Minute
+			input.StuckPodGrace = tc.grace
 			removed := recordRetryBlockRemovals(&input)
 			input.ObservedState.CurrentRevision = rev
 			input.ObservedState.UpdateRevision = rev
@@ -288,6 +293,76 @@ func TestPruneOutlivedRetryBlocks_HealedInPlaceSetIsOutlivedAtTheWindow(t *testi
 				t.Fatalf("outlived prune: %v", err)
 			}
 			if got := len(*removed) == 1 && (*removed)[0] == rev; got != tc.pruned {
+				t.Fatalf("pruned=%v want %v (removed %v)", got, tc.pruned, *removed)
+			}
+		})
+	}
+}
+
+// A gang surge onto the roll target failed to start, its abandon recorded
+// the attempt as a Backoff block and reset the source Ready on the revision
+// it still runs. A sibling that has served the target all along does not
+// outlive that failure on the source's behalf: the block stays while the
+// source still has to roll onto the target, and the rows are read the old
+// way once the target moves on.
+func TestPruneOutlivedRetryBlocks_RollTargetKeptWhileARowStillHasToRollOntoIt(t *testing.T) {
+	const (
+		target  = "own-engine-current1"
+		running = "own-engine-pushed01"
+		newer   = "own-engine-newer001"
+	)
+	now := time.Date(2026, 1, 1, 0, 10, 0, 0, time.UTC)
+	readySince := metav1.NewTime(now.Add(-time.Hour))
+	due := metav1.NewTime(now.Add(2 * time.Minute))
+	servingPod := func(idx int32, rev string) *corev1.Pod {
+		pod := enginePod("llama-70b", "prod", idx)
+		pod.CreationTimestamp = metav1.NewTime(readySince.Add(-time.Minute))
+		pod.Labels[query.LabelRevisionHash] = query.RevisionHashFromControllerRevisionName(rev)
+		pod.Status.Phase = corev1.PodRunning
+		pod.Status.Conditions = []corev1.PodCondition{
+			{Type: corev1.ContainersReady, Status: corev1.ConditionTrue, LastTransitionTime: readySince},
+			{Type: corev1.PodReady, Status: corev1.ConditionTrue, LastTransitionTime: readySince},
+			{Type: query.ServingConditionType, Status: corev1.ConditionTrue, LastTransitionTime: readySince},
+		}
+		pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+			Name: constants.MainContainerName, Image: "test:v1", Ready: true,
+			State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{StartedAt: readySince}},
+		}}
+		return pod
+	}
+	plan := minimalPlan()
+	plan.Replicas = 2
+	plan.Instances = append(plan.Instances, types.InstancePlan{Index: 1, Incarnation: 2, Runners: []types.RunnerPlan{{Name: "default", Size: 1}}})
+	for _, tc := range []struct {
+		name       string
+		rollTarget string
+		pruned     bool
+	}{
+		{name: "the target's block stays while the second Instance is off it", rollTarget: target},
+		{name: "a newer target leaves the old revision's rows to the old reading", rollTarget: newer, pruned: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input := minimalInput(t)
+			input.Clock = clocktesting.NewFakeClock(now)
+			input.StuckPodGrace = time.Minute
+			removed := recordRetryBlockRemovals(&input)
+			input.ObservedState.CurrentRevision = target
+			input.ObservedState.UpdateRevision = tc.rollTarget
+			input.ObservedState.InstanceStatuses = []types.InstanceStatus{
+				{Index: 0, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: target, PodCount: 1, ServingPodCount: 1, ReadySince: &readySince},
+				{Index: 1, Incarnation: 2, Phase: types.InstancePhaseReady, RunningRevision: running, PodCount: 1, ReadySince: &readySince,
+					LastFailure: &types.InstanceTermination{PodName: "llama-70b-engine-2-default-0", ContainerName: constants.MainContainerName, Reason: "CreateContainerConfigError", Time: metav1.NewTime(now.Add(-time.Minute))}},
+			}
+			input.ObservedState.RetryBlocks = []types.RetryBlock{{TargetRevision: target, State: types.RetryBlockBackoff, AttemptsStarted: 1, NextRetryAt: &due, Reason: "CreateContainerConfigError"}}
+			rollTarget := &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: tc.rollTarget, CreationTimestamp: metav1.NewTime(readySince.Add(-time.Hour))}}
+			pods := func(context.Context) (map[int32][]*corev1.Pod, error) {
+				return map[int32][]*corev1.Pod{0: {servingPod(0, target)}, 1: {servingPod(1, running)}}, nil
+			}
+
+			if err := escalation.PruneOutlivedRetryBlocks(context.Background(), input, plan, rollTarget, pods); err != nil {
+				t.Fatalf("outlived prune: %v", err)
+			}
+			if got := len(*removed) == 1 && (*removed)[0] == target; got != tc.pruned {
 				t.Fatalf("pruned=%v want %v (removed %v)", got, tc.pruned, *removed)
 			}
 		})

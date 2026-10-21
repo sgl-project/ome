@@ -122,7 +122,7 @@ func (r *Reconciler) placePlannedOn(ctx context.Context, source *v1beta1.Inferen
 	return r.placePlannedMember(ctx, source, candidate, false, nil)
 }
 
-// placePlannedMember applies the candidate's allocation. On a split home, holds
+// placePlannedMember applies the candidate's allocation. On a split member, holds
 // raise a component's apportioned floor while its replacements elsewhere start.
 func (r *Reconciler) placePlannedMember(ctx context.Context, source *v1beta1.InferenceService, candidate v1beta1.CandidatePlacement, existingOnly bool, holds map[v1beta1.ComponentType]int32) error {
 	if err := r.checkPlanCurrent(ctx, source); err != nil {
@@ -181,7 +181,7 @@ func (r *Reconciler) placePlannedMember(ctx context.Context, source *v1beta1.Inf
 }
 
 // syncPlannedPolicy updates coordination authority without a source refresh.
-// Paused full-policy homes retain their accepted floors even when member
+// Paused full-policy members retain their accepted floors even when member
 // runtime or operator defaults change during the transition.
 func (r *Reconciler) syncPlannedPolicy(ctx context.Context, source *v1beta1.InferenceService, candidate v1beta1.CandidatePlacement) error {
 	if err := r.checkPlanCurrent(ctx, source); err != nil {

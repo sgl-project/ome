@@ -11,16 +11,14 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/quota/tree"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 const tpuFlavor = "tpu7x"
@@ -96,22 +94,7 @@ func capacityOf(t *testing.T, c client.Client) []observed {
 	return out
 }
 
-// capacityScheme adds the two kinds this half of the controller reads on top of
-// the OME types: Nodes are the measurement, ResourceFlavors are what it is
-// attributed to.
-func capacityScheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
-	s := testScheme(t)
-	if err := corev1.AddToScheme(s); err != nil {
-		t.Fatalf("corev1 scheme: %v", err)
-	}
-	if err := kueuev1beta2.AddToScheme(s); err != nil {
-		t.Fatalf("kueue scheme: %v", err)
-	}
-	return s
-}
-
-func TestReconcileCapacity(t *testing.T) {
+func TestReconcileCapacity_FleetShapes_RecordsAllocatableAndMarkPerPair(t *testing.T) {
 	flavors := []client.Object{resourceFlavor(tpuFlavor, map[string]string{"accelerator": tpuFlavor})}
 
 	tests := []struct {
@@ -192,12 +175,8 @@ func TestReconcileCapacity(t *testing.T) {
 			}
 			objs := append(append(append([]client.Object{}, quotas...), tc.nodes...), tc.flavors...)
 
-			s := capacityScheme(t)
-			c := fake.NewClientBuilder().
-				WithScheme(s).
-				WithObjects(objs...).
-				WithStatusSubresource(&v1beta1.AcceleratorQuota{}).
-				Build()
+			s := fakeclient.Scheme(t, kueuev1beta2.AddToScheme)
+			c := fakeclient.New(t, fakeclient.WithScheme(s), fakeclient.WithObjects(objs...), fakeclient.WithStatusSubresource(&v1beta1.AcceleratorQuota{}))
 			r := &Reconciler{
 				Client: c, Scheme: s, Log: logf.Log.WithName("test"), APIReader: c,
 				Options:  tree.Options{RootName: rootName, MaxDepth: 5},
@@ -221,7 +200,7 @@ func TestReconcileCapacity(t *testing.T) {
 // so it has to be reportable before a tree exists — otherwise a management plane
 // sizing a Proportional split has nothing to read from a member with no budget
 // yet, and the bootstrap is circular.
-func TestReconcileCreatesTheRoot(t *testing.T) {
+func TestReconcile_NoRootWithDerivationOn_CreatesBareRoot(t *testing.T) {
 	tests := []struct {
 		name     string
 		existing []client.Object
@@ -252,12 +231,8 @@ func TestReconcileCreatesTheRoot(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			s := capacityScheme(t)
-			c := fake.NewClientBuilder().
-				WithScheme(s).
-				WithObjects(tc.existing...).
-				WithStatusSubresource(&v1beta1.AcceleratorQuota{}).
-				Build()
+			s := fakeclient.Scheme(t, kueuev1beta2.AddToScheme)
+			c := fakeclient.New(t, fakeclient.WithScheme(s), fakeclient.WithObjects(tc.existing...), fakeclient.WithStatusSubresource(&v1beta1.AcceleratorQuota{}))
 			r := &Reconciler{
 				Client: c, Scheme: s, Log: logf.Log.WithName("test"), APIReader: c,
 				Options:  tree.Options{RootName: rootName, MaxDepth: 5},
@@ -301,7 +276,7 @@ func TestReconcileCreatesTheRoot(t *testing.T) {
 // of its own webhook Service. That is a wait, not a failure — surfacing it would
 // answer a self-clearing condition with a stack trace per attempt — while
 // anything else the apiserver refuses still has to reach an operator.
-func TestReconcileWaitsOutItsOwnWebhook(t *testing.T) {
+func TestReconcile_OwnWebhookUnreachableOnRootCreate_RequeuesQuietly(t *testing.T) {
 	tests := []struct {
 		name             string
 		createErr        error
@@ -333,16 +308,12 @@ func TestReconcileWaitsOutItsOwnWebhook(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			s := capacityScheme(t)
-			c := fake.NewClientBuilder().
-				WithScheme(s).
-				WithStatusSubresource(&v1beta1.AcceleratorQuota{}).
-				WithInterceptorFuncs(interceptor.Funcs{
-					Create: func(context.Context, client.WithWatch, client.Object, ...client.CreateOption) error {
-						return tc.createErr
-					},
-				}).
-				Build()
+			s := fakeclient.Scheme(t, kueuev1beta2.AddToScheme)
+			c := fakeclient.New(t,
+				fakeclient.WithScheme(s),
+				fakeclient.WithStatusSubresource(&v1beta1.AcceleratorQuota{}),
+				fakeclient.FailingVerb(fakeclient.Create, fakeclient.EveryCall, tc.createErr),
+			)
 			r := &Reconciler{
 				Client: c, Scheme: s, Log: logf.Log.WithName("test"), APIReader: c,
 				Options:  tree.Options{RootName: rootName, MaxDepth: 5},
@@ -368,7 +339,7 @@ func TestReconcileWaitsOutItsOwnWebhook(t *testing.T) {
 
 // The mark is what budget checks read, so it must survive the dips that routine
 // operations cause and follow only the ones that mean hardware went away.
-func TestReconcileCapacityTracksTheHighWaterMark(t *testing.T) {
+func TestReconcileCapacity_FleetShrinksOrGrows_MarkFollowsOnlyRealLoss(t *testing.T) {
 	flavors := []client.Object{resourceFlavor(tpuFlavor, map[string]string{"accelerator": tpuFlavor})}
 
 	tests := []struct {
@@ -439,17 +410,13 @@ func TestReconcileCapacityTracksTheHighWaterMark(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			s := capacityScheme(t)
+			s := fakeclient.Scheme(t, kueuev1beta2.AddToScheme)
 			first := []client.Object{
 				cohort(rootName, ""),
 				workerNode("n1", withAllocatable(map[string]string{"google.com/tpu": "8"})),
 				workerNode("n2", withAllocatable(map[string]string{"google.com/tpu": "8"})),
 			}
-			c := fake.NewClientBuilder().
-				WithScheme(s).
-				WithObjects(append(first, flavors...)...).
-				WithStatusSubresource(&v1beta1.AcceleratorQuota{}).
-				Build()
+			c := fakeclient.New(t, fakeclient.WithScheme(s), fakeclient.WithObjects(append(first, flavors...)...), fakeclient.WithStatusSubresource(&v1beta1.AcceleratorQuota{}))
 			r := &Reconciler{
 				Client: c, Scheme: s, Log: logf.Log.WithName("test"), APIReader: c,
 				Options:  tree.Options{RootName: rootName, MaxDepth: 5},
@@ -484,7 +451,7 @@ func TestReconcileCapacityTracksTheHighWaterMark(t *testing.T) {
 // The predicate is load-bearing rather than an optimisation: node status is
 // among the highest-volume writes in a cluster, so waking on all of it would
 // rebuild the tree continuously on a large fleet.
-func TestNodeCapacityChanged(t *testing.T) {
+func TestNodeCapacityChanged_NodeEdits_TrueOnlyForCapacityOrLabelMoves(t *testing.T) {
 	base := func() *corev1.Node {
 		return workerNode("n", withAllocatable(map[string]string{"google.com/tpu": "4", "cpu": "64"}))
 	}

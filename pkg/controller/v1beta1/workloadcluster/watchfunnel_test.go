@@ -377,3 +377,32 @@ func TestFunnel_WatchClusterRegistersHandlerAfterClientReplacement(t *testing.T)
 		t.Fatal("replacement client handler did not emit an event")
 	}
 }
+
+// A derived copy deleted on a member reaches the source as an event, whether
+// the informer hands the handler the object itself or the final-state record
+// that wraps it, so the control plane re-reads the source without waiting for
+// the poll.
+func TestFunnel_DeletedOwnedObjectReachesSource(t *testing.T) {
+	remote := &fakeWatchClient{}
+	m := NewManager(runtime.NewScheme())
+	m.newClient = func(context.Context, []byte, *runtime.Scheme) (SelectivelyCachingClient, context.CancelFunc, error) {
+		return remote, func() {}, nil
+	}
+	require.NoError(t, m.Connect(t.Context(), "member-a", []byte("credentials")))
+	f := NewStatusFunnel(m, FunnelConfig{
+		NewObject:  func() client.Object { return &corev1.ConfigMap{} },
+		Resolve:    originResolver,
+		BufferSize: 3,
+	})
+	_, generation, _ := m.clientForGeneration("member-a")
+	require.NoError(t, f.registerCacheHandler(t.Context(), "member-a", generation))
+	h := remote.getHandler()
+	owned := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Namespace: "team-a", Name: "service", Labels: map[string]string{"origin": "uid-1"},
+	}}
+	unlabeled := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "local-only"}}
+	h.OnDelete(owned)
+	h.OnDelete(toolscache.DeletedFinalStateUnknown{Key: "team-a/service", Obj: owned})
+	h.OnDelete(unlabeled)
+	require.Equal(t, []string{"service", "service"}, drainNames(f))
+}

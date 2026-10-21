@@ -2,6 +2,8 @@ package status
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -9,12 +11,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clocktesting "k8s.io/utils/clock/testing"
 
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
+	fixture "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
 func TestStampStep_GuardedAndWireStable(t *testing.T) {
 	now := time.Date(2026, time.August, 15, 12, 0, 0, 123456789, time.UTC)
-	expected := terminalStatusFixture(3)
+	expected := fixture.UpdatingRowAtSurge(3)
 	persisted := cloneTerminalStatus(expected)
 	persisted.Operation.StartedAt = metav1.NewTime(persisted.Operation.StartedAt.Truncate(time.Second))
 	persisted.Operation.LastProgressAt = metav1.NewTime(persisted.Operation.LastProgressAt.Truncate(time.Second))
@@ -36,7 +40,7 @@ func TestStampStep_GuardedAndWireStable(t *testing.T) {
 		t.Fatalf("LastProgressAt=%v want %v", store.statuses[3].Operation.LastProgressAt, now)
 	}
 
-	stale := terminalStatusFixture(3)
+	stale := fixture.UpdatingRowAtSurge(3)
 	stale.Operation.ID = "stale-attempt"
 	claimed, err = StampStep(context.Background(), input, &stale, types.UpdateStepSurgeDrainSettle, true)
 	if err != nil || claimed || store.writes != 1 {
@@ -87,7 +91,7 @@ func TestStampFailed_NeverResurrectsAnEmptySlot(t *testing.T) {
 	now := time.Date(2026, time.September, 21, 0, 0, 0, 0, time.UTC)
 	termination := &types.InstanceTermination{Reason: "OOMKilled", Time: metav1.NewTime(now)}
 
-	w := newRowWriter(openRow(0, types.InstancePhaseUpdating))
+	w := newRowWriter(fixture.RowWithOperation(0, types.InstancePhaseUpdating))
 	if err := StampFailed(context.Background(), w.input(now), 0, termination); err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +195,7 @@ func TestStampFailedKeepingOperation_KeepsTheOperationOnTheRow(t *testing.T) {
 	termination := &types.InstanceTermination{Reason: "DeadlineExceeded", Time: now}
 	mutate := StampFailedKeepingOperation(termination)
 
-	row := openRow(0, types.InstancePhaseUpdating)
+	row := fixture.RowWithOperation(0, types.InstancePhaseUpdating)
 	if !mutate(&row) || row.Phase != types.InstancePhaseFailed || row.Operation == nil {
 		t.Fatalf("row = %+v, want Failed with the operation preserved", row)
 	}
@@ -220,7 +224,7 @@ func TestStampFailedOnStuckPod_NeedsNoOperation(t *testing.T) {
 	if !mutate(&settled) || settled.Phase != types.InstancePhaseFailed || settled.LastFailure == nil {
 		t.Fatalf("row = %+v, want Failed with the record and no operation required", settled)
 	}
-	inFlight := openRow(0, types.InstancePhaseUpdating)
+	inFlight := fixture.RowWithOperation(0, types.InstancePhaseUpdating)
 	if !mutate(&inFlight) || inFlight.Operation == nil {
 		t.Fatalf("row = %+v, want the operation in flight preserved", inFlight)
 	}
@@ -234,6 +238,37 @@ func TestStampFailedOnStuckPod_NeedsNoOperation(t *testing.T) {
 	untouched := types.InstanceStatus{Index: 0, Phase: types.InstancePhaseReady, LastFailure: settled.LastFailure}
 	if !StampFailedOnStuckPod(nil, 0)(&untouched) || untouched.LastFailure != settled.LastFailure {
 		t.Fatal("a nil termination leaves LastFailure alone")
+	}
+}
+
+// A row written Failed with its operation kept carries no deadline on the
+// operation: a Failed row is outside every pass that reads the clock, so a
+// time left there would be one nobody acts on, and a reader of the status
+// would see it pass. The step, the retry count and the identity stay, as
+// the repair's retry schedule reads them.
+func TestFailedWithTheOperationKept_CarriesNoDeadline(t *testing.T) {
+	now := metav1.NewTime(time.Date(2026, time.September, 21, 0, 0, 0, 0, time.UTC))
+	termination := &types.InstanceTermination{PodName: "engine-0-default-0", Reason: "CreateContainerConfigError", Time: now}
+	surgeIndex := int32(1)
+	for name, row := range map[string]types.InstanceStatus{
+		"repair": {Index: 0, Incarnation: 2, Phase: types.InstancePhaseRestarting, Operation: &types.InstanceOperation{
+			ID: "restart-0-1", Type: types.InstanceOperationRestart, Step: types.RestartStepDrain, RetryCount: 1,
+			StartedAt: now, Deadline: metav1.NewTime(now.Add(90 * time.Second))}},
+		"gang surge source": {Index: 0, Incarnation: 1, Phase: types.InstancePhaseUpdating, TargetRevision: "rev-b", Operation: &types.InstanceOperation{
+			ID: "update-0-1", Type: types.InstanceOperationUpdate, Step: types.UpdateStepSurge, TargetRevision: "rev-b", SurgeIndex: &surgeIndex,
+			StartedAt: now, Deadline: metav1.NewTime(now.Add(90 * time.Second))}},
+	} {
+		before := *row.Operation
+		if !StampFailedOnStuckPod(termination, 0)(&row) || row.Phase != types.InstancePhaseFailed || row.Operation == nil {
+			t.Fatalf("%s: row = %+v, want Failed with the operation kept", name, row)
+		}
+		if !row.Operation.Deadline.IsZero() {
+			t.Errorf("%s: deadline = %v, want none on a Failed row", name, row.Operation.Deadline)
+		}
+		if row.Operation.ID != before.ID || row.Operation.Step != before.Step || row.Operation.RetryCount != before.RetryCount ||
+			row.Operation.Type != before.Type || row.LastFailure == nil || row.LastFailure.Reason != termination.Reason {
+			t.Errorf("%s: operation = %+v, want %+v with the failure recorded", name, *row.Operation, before)
+		}
 	}
 }
 
@@ -441,7 +476,7 @@ func TestUpdateEntryStamps_OpenANewAttemptOverAParkedOne(t *testing.T) {
 	}
 
 	w := newRowWriter(parked())
-	inc, err := StampRecreating(context.Background(), w.input(now), 0, "rev-b", "revision rev-a -> rev-b", types.UpdateStrategyRecreatePod, time.Hour)
+	inc, err := StampRecreating(context.Background(), w.input(now), 0, "rev-b", "revision rev-a -> rev-b", types.UpdateStrategyRecreatePod, time.Hour, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -529,7 +564,7 @@ func TestParkedAttemptStamps_KeepTheAttemptAndFollowTheSet(t *testing.T) {
 	if !FollowParkedAttempt(false, "")(&row) || row.Phase != types.InstancePhaseFailed || row.Operation.Waiting != string(types.RolloutHoldGateHeld) {
 		t.Fatalf("follow while down = %+v, want Failed with the wait kept", row)
 	}
-	inFlight := openRow(0, types.InstancePhaseUpdating)
+	inFlight := fixture.RowWithOperation(0, types.InstancePhaseUpdating)
 	if FollowParkedAttempt(false, "")(&inFlight) || inFlight.Phase != types.InstancePhaseUpdating {
 		t.Fatal("an attempt in flight is not followed")
 	}
@@ -562,7 +597,7 @@ func TestEntryStamps_LadderFlipFollowsTheAttempt(t *testing.T) {
 			return StampSurging(context.Background(), in, 0, target, types.UpdateStrategySurgeThenDrain, time.Hour)
 		}},
 		{name: "recreate", step: types.UpdateStepDrain, stamp: func(in types.ReconcileInput) error {
-			_, err := StampRecreating(context.Background(), in, 0, target, "revision rev-a -> rev-b", types.UpdateStrategyRecreatePod, time.Hour)
+			_, err := StampRecreating(context.Background(), in, 0, target, "revision rev-a -> rev-b", types.UpdateStrategyRecreatePod, time.Hour, false)
 			return err
 		}},
 		{name: "in-place", step: types.UpdateStepInPlace, stamp: func(in types.ReconcileInput) error {
@@ -644,5 +679,42 @@ func TestStampFailedOnStuckPod_LandsOnARowPromotedSinceTheObservation(t *testing
 	deadline := promoted
 	if StampFailedKeepingOperation(termination)(&deadline) || deadline.Phase != types.InstancePhaseReady {
 		t.Fatalf("row = %+v, want the deadline stamp withheld from a row whose operation the promote cleared", deadline)
+	}
+}
+
+func TestReadyPromotions_RejectAnUnknownNamedRevision(t *testing.T) {
+	for _, revision := range []string{"", "unnamed", "example-engine-"} {
+		t.Run(revision, func(t *testing.T) {
+			before := types.InstanceStatus{
+				Index: 0, Phase: types.InstancePhaseRestarting, RunningRevision: "example-engine-v1",
+				Operation: &types.InstanceOperation{ID: "restart-0", Type: types.InstanceOperationRestart},
+			}
+			row := Clone(before)
+			if ReadyOnRevisionMutation(0, revision, time.Now()).Mutate(&row) || !reflect.DeepEqual(row, before) {
+				t.Fatalf("unknown revision changed the row: %+v", row)
+			}
+			w := newRowWriter(before)
+			if err := StampReadyOnRevision(context.Background(), w.input(time.Now()), 0, revision); !errors.Is(err, query.ErrRevisionUnknown) {
+				t.Fatalf("StampReadyOnRevision error = %v, want unknown revision", err)
+			}
+			if err := StampReadyAtOrdinal(context.Background(), w.input(time.Now()), 0, revision, 1); !errors.Is(err, query.ErrRevisionUnknown) {
+				t.Fatalf("StampReadyAtOrdinal error = %v, want unknown revision", err)
+			}
+			if w.writes != 0 || !reflect.DeepEqual(w.rows[0], before) {
+				t.Fatalf("rejected promotion wrote status: %+v", w.rows[0])
+			}
+		})
+	}
+}
+
+func TestEnterReady_UnknownRevisionLeavesLegacyReadyAndNewRowsUntouched(t *testing.T) {
+	for _, phase := range []types.InstancePhase{types.InstancePhaseCreating, types.InstancePhaseRestarting, types.InstancePhaseReady} {
+		t.Run(string(phase), func(t *testing.T) {
+			before := types.InstanceStatus{Index: 0, Phase: phase}
+			row := before
+			if EnterReady(&row, time.Now()) || !reflect.DeepEqual(row, before) {
+				t.Fatalf("unknown revision changed the row: %+v", row)
+			}
+		})
 	}
 }

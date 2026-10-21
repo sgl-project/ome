@@ -131,6 +131,37 @@ func TestISVCReconcileTriggerPredicate_DropsStatusOnlyUpdate(t *testing.T) {
 			wantPass: true,
 		},
 		{
+			// A canary record is the executor's state; a write to it, from a
+			// hand edit of the status subresource or the controller's own
+			// flush, is a fact only the next pass can read back.
+			name: "canary record written (status only) → passes",
+			mutate: func(o *v1beta1.InferenceService) {
+				o.ResourceVersion = "999"
+				o.Status.Components = map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
+					v1beta1.EngineComponent: {Canary: &v1beta1.CanaryStatus{CurrentStep: -1}},
+				}
+			},
+			wantPass: true,
+		},
+		{
+			name: "legacy canary alias written (status only) → passes",
+			mutate: func(o *v1beta1.InferenceService) {
+				o.ResourceVersion = "999"
+				o.Status.Canary = &v1beta1.CanaryStatus{StableRevisionHash: "stable"}
+			},
+			wantPass: true,
+		},
+		{
+			name: "component status without a record change (status only) → dropped",
+			mutate: func(o *v1beta1.InferenceService) {
+				o.ResourceVersion = "999"
+				o.Status.Components = map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
+					v1beta1.EngineComponent: {RolloutPhase: v1beta1.RolloutPhaseStable},
+				}
+			},
+			wantPass: false,
+		},
+		{
 			name: "annotation change (no gen bump) → passes",
 			mutate: func(o *v1beta1.InferenceService) {
 				o.Annotations["ome.io/canary"] = "promote"
@@ -480,5 +511,57 @@ func TestISVCOwnsWatch_ChildEventsEnqueueDeletingParent(t *testing.T) {
 			}
 			g.Expect(drainRequests(q)).To(gomega.ConsistOf(isvcReq), "delete must enqueue the parent")
 		})
+	}
+}
+
+// EndpointSliceToISVC, the name parse under endpointSliceToISVC, admits
+// exactly `<isvc>-<component>-headless` and spells the InferenceService
+// key from the prefix.
+func TestEndpointSliceToISVC_ParsesHeadlessServiceNames(t *testing.T) {
+	cases := []struct {
+		name        string
+		serviceName string
+		ns          string
+		wantISVC    string
+		wantOK      bool
+	}{
+		{"empty service-name", "", "prod", "", false},
+		{"non-headless", "foo-bar", "prod", "", false},
+		{"foreign suffix", "foo-bar-headless", "prod", "", false},
+		{"engine headless", "llama-70b-engine-headless", "prod", "llama-70b", true},
+		{"decoder headless", "llama-70b-decoder-headless", "prod", "llama-70b", true},
+		{"router headless", "llama-70b-router-headless", "prod", "llama-70b", true},
+		{"missing isvc name", "engine-headless", "prod", "", false},
+		{"isvc name with dashes", "my-fancy-llama-engine-headless", "prod", "my-fancy-llama", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			slice := &discoveryv1.EndpointSlice{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: tc.ns,
+					Labels:    map[string]string{discoveryv1.LabelServiceName: tc.serviceName},
+				},
+			}
+			got := EndpointSliceToISVC(context.Background(), slice)
+			if !tc.wantOK {
+				if len(got) != 0 {
+					t.Errorf("expected no requests, got %v", got)
+				}
+				return
+			}
+			want := []reconcile.Request{{
+				NamespacedName: types.NamespacedName{Namespace: tc.ns, Name: tc.wantISVC},
+			}}
+			if len(got) != 1 || got[0] != want[0] {
+				t.Errorf("request mismatch: got=%v want=%v", got, want)
+			}
+		})
+	}
+}
+
+func TestEndpointSliceToISVC_NonSliceObject(t *testing.T) {
+	got := EndpointSliceToISVC(context.Background(), &corev1.Pod{})
+	if len(got) != 0 {
+		t.Errorf("expected no requests for non-EndpointSlice object, got %v", got)
 	}
 }

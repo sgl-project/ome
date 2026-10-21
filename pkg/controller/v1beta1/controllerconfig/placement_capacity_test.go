@@ -8,7 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestPlacementCapacityConfig(t *testing.T) {
+func TestPlacementCapacityConfig_Validate_CompleteBlockPassesPartialOrBadRejected(t *testing.T) {
 	for _, tt := range []struct {
 		name          string
 		block         string

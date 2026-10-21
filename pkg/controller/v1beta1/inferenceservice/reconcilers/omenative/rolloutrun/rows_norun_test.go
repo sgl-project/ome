@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	workloadtypes "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
+	"sigs.k8s.io/ome/pkg/rollout"
 )
 
 // Fixtures shared by the run machine's state tests: one run-layer pass over a
@@ -84,6 +85,13 @@ func refCanary(name string) v1beta1.RolloutGroup {
 	}
 }
 
+func refBlueGreen(name string) v1beta1.RolloutGroup {
+	return v1beta1.RolloutGroup{
+		Components: []v1beta1.ComponentType{v1beta1.EngineComponent},
+		PolicyRef:  &v1beta1.RolloutPolicyRef{Name: name, Progression: v1beta1.RolloutProgressionBlueGreen},
+	}
+}
+
 func canaryPolicy(name string, steps ...int32) *v1beta1.RolloutPolicy {
 	if len(steps) == 0 {
 		steps = []int32{10, 100}
@@ -91,6 +99,13 @@ func canaryPolicy(name string, steps ...int32) *v1beta1.RolloutPolicy {
 	return &v1beta1.RolloutPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns", Generation: 1},
 		Spec:       v1beta1.RolloutPolicySpec{Canary: canaryBody(steps...)},
+	}
+}
+
+func blueGreenPolicy(name string) *v1beta1.RolloutPolicy {
+	return &v1beta1.RolloutPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns", Generation: 1},
+		Spec:       v1beta1.RolloutPolicySpec{BlueGreen: &v1beta1.GroupBlueGreen{}},
 	}
 }
 
@@ -116,6 +131,18 @@ func stragglingIR(rev string) *v1beta1.InferenceReplica {
 	return ir
 }
 
+// stagedIR is a replica of two Instances resting at the shape its partition
+// of one asks for: the higher Instance on the new revision, the lower held
+// on the old one, so its current revision stays unpromoted while its target
+// is the new one.
+func stagedIR() *v1beta1.InferenceReplica {
+	ir := stragglingIR(oldRev)
+	ir.Status.UpdateRevision = newRev
+	one := int32(1)
+	ir.Spec.Lifecycle = &v1beta1.LifecycleSpec{UpdateStrategy: &v1beta1.UpdateStrategy{RollingUpdate: &v1beta1.RollingUpdate{Partition: &one}}}
+	return ir
+}
+
 func setEngineUnit(isvc *v1beta1.InferenceService, phase v1beta1.RolloutPhase, cs *v1beta1.CanaryStatus) {
 	if isvc.Status.Components == nil {
 		isvc.Status.Components = map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{}
@@ -136,6 +163,63 @@ func midLadderRecord(t *testing.T) *v1beta1.CanaryStatus {
 func rejectedRecord(t *testing.T) *v1beta1.CanaryStatus {
 	t.Helper()
 	return &v1beta1.CanaryStatus{CanaryRevisionHash: hashOf(t, newRev), StableRevisionHash: hashOf(t, oldRev), RolledBackRevisionHash: hashOf(t, newRev)}
+}
+
+// A lifecycle partition holds Instances off the target by design, so a
+// member whose rows rest at the shape its partition asks for owes no roll:
+// its current revision is not promoted and its held Instances trail the
+// target, and still no run opens, whether no run was ever recorded or the
+// last one closed Completed on that rest. The pass settles RolloutPlanReady
+// True NoActiveRun and keeps the record. The rest is read on the rows, not
+// on the group's phase: a new pod losing readiness or a pause moves the
+// group off Staged and opens nothing. Clearing the partition is the spec
+// change that makes the held Instance a roll to do, and the next pass opens
+// over it.
+func TestAStagedGroupOpensNoRun(t *testing.T) {
+	staged := stagedIR
+	// The same rows once the partition is cleared: the held Instance trails
+	// a target the spec now asks every Instance to run.
+	released := func() *v1beta1.InferenceReplica {
+		ir := staged()
+		ir.Spec.Lifecycle = nil
+		return ir
+	}
+	for _, state := range []string{"NoRun", "Closed"} {
+		t.Run(state, func(t *testing.T) {
+			isvc := isvcFixture(inlineBlueGreen())
+			if state == "Closed" {
+				if out := pass(t, isvc, divergedIR(oldRev, newRev)); !out.Opened {
+					t.Fatalf("open = %+v", out)
+				}
+				setCoordinationPhase(isvc, v1beta1.CoordinationPhaseStaged)
+				if out := pass(t, isvc, staged()); !out.StateChanged || v1beta1.RolloutRunActive(isvc) {
+					t.Fatalf("close = %+v active=%v, want the staged rest to close the run", out, v1beta1.RolloutRunActive(isvc))
+				}
+			}
+			// The group reads Staged, then Waiting while the new pod is not
+			// Ready, then Paused, then Staged again; the rows never move.
+			for i, phase := range []v1beta1.CoordinationPhase{
+				v1beta1.CoordinationPhaseStaged, v1beta1.CoordinationPhaseStaged,
+				v1beta1.CoordinationPhaseWaiting, v1beta1.CoordinationPhasePaused, v1beta1.CoordinationPhaseStaged,
+			} {
+				setCoordinationPhase(isvc, phase)
+				if out := pass(t, isvc, staged()); out.Opened || out.StateChanged || out.RequeueAfter != 0 {
+					t.Fatalf("pass %d under a %s group = %+v, want the staged member to open nothing", i+1, phase, out)
+				}
+				requireNoRun(t, isvc, v1beta1.RolloutPlanReasonNoRun)
+			}
+			last := isvc.Status.Rollout.LastRun
+			if state == "Closed" && (last == nil || last.Outcome != v1beta1.RolloutRunCompleted) {
+				t.Fatalf("lastRun = %+v, want the Completed close kept", last)
+			}
+			if state == "NoRun" && last != nil {
+				t.Fatalf("lastRun = %+v, want none", last)
+			}
+			if out := pass(t, isvc, released()); !out.Opened {
+				t.Fatalf("pass after the partition is cleared = %+v, want a run over the held Instance", out)
+			}
+		})
+	}
 }
 
 func setCoordinationPhase(isvc *v1beta1.InferenceService, phase v1beta1.CoordinationPhase) {
@@ -347,6 +431,49 @@ func TestNoRunLeavesASettledServiceAlone(t *testing.T) {
 			})
 		}
 	}
+}
+
+// A policy deleted after a canary completed changes nothing. Two engines
+// rolled to version 2 under a referenced canary: the unit finished its
+// cutover and reads Stable with its record kept as the done mark, the
+// replica rests on version 2 and the run closed Completed. The policy is
+// then deleted. Nothing is left to roll, so no open is attempted and
+// RolloutPlanReady keeps reading True NoActiveRun on this pass and the next,
+// with the closed record untouched. The same record with its cutover still
+// rolling (the unit Promoting) is a canary short of its last step: its open
+// is attempted and held on the missing reference until a body resolves.
+func TestAFinishedCanaryIgnoresALostPolicy(t *testing.T) {
+	finished := func(t *testing.T, phase v1beta1.RolloutPhase) *v1beta1.InferenceService {
+		t.Helper()
+		isvc := isvcFixture(refCanary(policyName))
+		setEngineUnit(isvc, phase, &v1beta1.CanaryStatus{CanaryRevisionHash: hashOf(t, newRev), CurrentStep: 2, ObservedTrafficWeight: 100})
+		isvc.Status.Rollout = &v1beta1.RolloutStatus{LastRun: &v1beta1.RolloutRunRecord{
+			Outcome:         v1beta1.RolloutRunCompleted,
+			TargetRevisions: []v1beta1.RolloutRunTarget{{Component: v1beta1.EngineComponent, Revision: hashOf(t, newRev), StableRevision: hashOf(t, oldRev)}},
+		}}
+		return isvc
+	}
+	t.Run("the unit reads Stable", func(t *testing.T) {
+		isvc := finished(t, v1beta1.RolloutPhaseStable)
+		for i := 1; i <= 2; i++ {
+			if out := pass(t, isvc, settledIR(newRev)); !emptyOutcome(out) {
+				t.Fatalf("pass %d: outcome = %+v, want nothing to happen", i, out)
+			}
+			requireNoRun(t, isvc, v1beta1.RolloutPlanReasonNoRun)
+		}
+		if last := isvc.Status.Rollout.LastRun; last == nil || last.Outcome != v1beta1.RolloutRunCompleted {
+			t.Fatalf("the settled pass touched the record: %+v", last)
+		}
+	})
+	t.Run("the cutover is still rolling", func(t *testing.T) {
+		isvc := finished(t, v1beta1.RolloutPhasePromoting)
+		if out := pass(t, isvc, settledIR(newRev)); out.Opened || v1beta1.RolloutRunActive(isvc) {
+			t.Fatalf("outcome = %+v, want the open held on the missing policy", out)
+		}
+		if c := planReady(isvc); c == nil || c.Status != corev1.ConditionFalse || c.Reason != v1beta1.RolloutPlanReasonPolicyNotFound {
+			t.Fatalf("RolloutPlanReady = %+v, want False with reason %s", c, v1beta1.RolloutPlanReasonPolicyNotFound)
+		}
+	})
 }
 
 // A replica whose status trails its generation, or whose projection trails
@@ -771,13 +898,6 @@ func TestParkedReattemptsTheOpenEveryPass(t *testing.T) {
 			},
 		},
 		{
-			name: "coord.staged",
-			apply: func(t *testing.T, isvc *v1beta1.InferenceService) *v1beta1.InferenceReplica {
-				setCoordinationPhase(isvc, v1beta1.CoordinationPhaseStaged)
-				return divergedIR(oldRev, newRev)
-			},
-		},
-		{
 			name: "coord.settled",
 			apply: func(t *testing.T, isvc *v1beta1.InferenceService) *v1beta1.InferenceReplica {
 				setCoordinationPhase(isvc, v1beta1.CoordinationPhaseIdle)
@@ -892,10 +1012,11 @@ func TestParkedIgnoresAnEditToAPolicyThatStillResolves(t *testing.T) {
 
 // The park ends when nothing diverges any more: a target back on the
 // running revision with nothing trailing, a replica that disappeared, a
-// roll that converged on its own, a target that moved onto the revision its
-// unit rolled back, or a revert that settled on its hold. The pass then
-// settles RolloutPlanReady True NoActiveRun with no pin, keeping whatever
-// record stood.
+// roll that converged on its own, a member whose group rests Staged under
+// a partition, a target that moved onto the revision its unit rolled back,
+// or a revert that settled on its hold. The pass then settles
+// RolloutPlanReady True NoActiveRun with no pin, keeping whatever record
+// stood.
 func TestParkSettlesWhenNothingDivergesAnyMore(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -917,6 +1038,24 @@ func TestParkSettlesWhenNothingDivergesAnyMore(t *testing.T) {
 			name: "ir.converged",
 			setup: func(t *testing.T) (*v1beta1.InferenceService, []runtime.Object) {
 				return parkedOnMissingPolicy(t), []runtime.Object{settledIR(newRev)}
+			},
+		},
+		{
+			// A blueGreen group behind a reference that does not resolve,
+			// its member rolling toward a target under a partition: once the
+			// rows rest at the shape the partition asks for, the member is no
+			// divergence to hold the open on, whatever the group reads.
+			name: "coord.staged",
+			setup: func(t *testing.T) (*v1beta1.InferenceService, []runtime.Object) {
+				isvc := isvcFixture(refBlueGreen(policyName))
+				if out := pass(t, isvc, divergedIR(oldRev, newRev)); out.Opened || v1beta1.RolloutRunActive(isvc) {
+					t.Fatalf("outcome = %+v, want the open held on the missing policy", out)
+				}
+				if c := planReady(isvc); c == nil || c.Status != corev1.ConditionFalse || c.Reason != v1beta1.RolloutPlanReasonPolicyNotFound {
+					t.Fatalf("RolloutPlanReady = %+v, want False with reason %s", c, v1beta1.RolloutPlanReasonPolicyNotFound)
+				}
+				setCoordinationPhase(isvc, v1beta1.CoordinationPhaseStaged)
+				return isvc, []runtime.Object{stagedIR()}
 			},
 		},
 		{
@@ -1062,6 +1201,64 @@ func TestParkedAdoptionIsReattemptedUntilThePlanComposes(t *testing.T) {
 	})
 }
 
+// unboundProviderCanary is an inline canary whose first step samples a
+// metric through a provider this cluster does not bind, so the plan never
+// composes and every open parks with the reason ProviderUnbound. The body
+// still executes without a pin, because an inline group keeps its body in
+// the live plan.
+func unboundProviderCanary() v1beta1.RolloutGroup {
+	body := canaryBody(10, 100)
+	body.Steps[0].Analysis = &v1beta1.RolloutAnalysis{
+		Interval:     metav1.Duration{Duration: time.Minute},
+		FailureLimit: 1,
+		Metrics:      []v1beta1.AnalysisMetric{{Name: "err", Query: "q", Operator: v1beta1.ComparisonLTE, Threshold: "1"}},
+	}
+	body.Prometheus = &v1beta1.AnalysisPrometheus{ProviderRef: &v1beta1.MetricProviderRef{Name: "unbound"}}
+	return v1beta1.RolloutGroup{Components: []v1beta1.ComponentType{v1beta1.EngineComponent}, Canary: body}
+}
+
+// A parked plan settles once its unit parked for want of a stable revision.
+// A canary of version 2 is half done when the operator edits its inline
+// body to sample a metric through a provider the cluster does not bind and
+// pushes version 3: the retarget closes the run and the open that follows
+// parks on the unbound provider. The unit's record is still mid-ladder, and
+// an inline body executes without a pin, so the executor still runs the
+// unit: it holds at the run-lost hold but reads a rollback request before
+// it, and with no retained ControllerRevision for version 1 the request
+// parks the unit Failed with the reason StableRevisionMissing and version 2
+// recorded as rejected. The next pass finds the member's target on that
+// rejected revision, which is a hold and not work, so the park settles: no
+// run opens, RolloutPlanReady reads True NoActiveRun, the pass after writes
+// nothing, and the service reads RejectedSticky. A different target is work
+// again: its open is attempted and parks on the unbound provider.
+func TestAParkedPlanSettlesOnceItsUnitParkedForWantOfAStableRevision(t *testing.T) {
+	isvc := isvcFixture(unboundProviderCanary())
+	isvc.Status.Rollout = &v1beta1.RolloutStatus{LastRun: &v1beta1.RolloutRunRecord{
+		Outcome:         v1beta1.RolloutRunSuperseded,
+		TargetRevisions: []v1beta1.RolloutRunTarget{{Component: v1beta1.EngineComponent, Revision: hashOf(t, newRev), StableRevision: hashOf(t, oldRev)}},
+	}}
+	setEngineUnit(isvc, v1beta1.RolloutPhasePaused, midLadderRecord(t))
+	held := divergedIR(oldRev, newRev)
+	requireParked(t, pass(t, isvc, held), isvc, v1beta1.RolloutPlanReasonProviderUnbound)
+
+	// The executor took the rollback request and parked the unit for want
+	// of a retained stable revision.
+	parked := rejectedRecord(t)
+	parked.Failed = &v1beta1.CanaryFailure{Reason: v1beta1.CanaryFailureStableRevisionMissing}
+	setEngineUnit(isvc, v1beta1.RolloutPhaseFailed, parked)
+	for i := 1; i <= 2; i++ {
+		out := pass(t, isvc, held)
+		if !emptyOutcome(out) {
+			t.Fatalf("pass %d after the park: outcome = %+v, want the park settled with nothing opened", i, out)
+		}
+		requireNoRun(t, isvc, v1beta1.RolloutPlanReasonNoRun)
+	}
+	if cs := rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent); cs == nil || cs.RolledBackRevisionHash != hashOf(t, newRev) || cs.Failed == nil {
+		t.Fatalf("the settle touched the unit's record: %+v", cs)
+	}
+	requireParked(t, pass(t, isvc, divergedIR(oldRev, thirdRev)), isvc, v1beta1.RolloutPlanReasonProviderUnbound)
+}
+
 // A parked pass with nothing changed composes the plan again, parks for the
 // same reason, writes nothing and emits nothing; the one-minute requeue is
 // re-armed.
@@ -1096,5 +1293,27 @@ func TestPreserveNewerRunKeepsALivePinOverAParkedCopy(t *testing.T) {
 	}
 	if len(parked.Rollout.Groups) != 1 {
 		t.Fatal("the rebase dropped the pass's own resolution view")
+	}
+}
+
+// A plan that cannot compose because its referenced policy is missing holds
+// every grouped member and opens no run; the pass that finds the policy
+// composes the plan and opens the run under it, so the condition reads True
+// with the reason RolloutPlanReasonPinned from then on.
+func TestAPlanHeldForAMissingPolicyOpensOnceThePolicyExists(t *testing.T) {
+	isvc := isvcFixture(refCanary(policyName))
+	first := pass(t, isvc, divergedIR(oldRev, newRev))
+	if first.Opened || v1beta1.RolloutRunActive(isvc) {
+		t.Fatalf("outcome = %+v, want no run while the policy is missing", first)
+	}
+	if c := planReady(isvc); c == nil || c.Status != corev1.ConditionFalse || c.Reason != v1beta1.RolloutPlanReasonPolicyNotFound {
+		t.Fatalf("RolloutPlanReady = %+v, want False with reason %s", c, v1beta1.RolloutPlanReasonPolicyNotFound)
+	}
+	second := pass(t, isvc, divergedIR(oldRev, newRev), canaryPolicy(policyName))
+	if !second.Opened || !v1beta1.RolloutRunActive(isvc) {
+		t.Fatalf("outcome = %+v, want the run opened once the policy exists", second)
+	}
+	if c := planReady(isvc); c == nil || c.Status != corev1.ConditionTrue || c.Reason != v1beta1.RolloutPlanReasonPinned {
+		t.Fatalf("RolloutPlanReady = %+v, want True with reason %s", c, v1beta1.RolloutPlanReasonPinned)
 	}
 }

@@ -3,10 +3,12 @@ package coordination
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -299,9 +301,9 @@ func Reconcile(ctx context.Context, in ReconcileInputs) (*Result, error) {
 		if err != nil {
 			return nil, fmt.Errorf("build observation for group %s: %w", g.Name, err)
 		}
-		// Snapshot Original on first observation, then preserve it
-		// across reconciles via the previously-written ObservedRatio.
-		// Always refresh Current + NewPods from the live observation.
+		// Original follows the members' desired counts (rewritten whenever
+		// one changes); Current + NewPods are refreshed from the live
+		// observation.
 		ratio := buildRatioState(in.ISVC, g, obs, perRevisionPods)
 		obs.OriginalReplicas = ratio.Original
 		obs.Now = now
@@ -636,9 +638,13 @@ func buildGroupObservation(ctx context.Context, reads client.Reader, isvc *v1bet
 		Components: make(map[v1beta1.ComponentType]ComponentObservation, len(g.Components)),
 	}
 	for _, c := range g.Components {
-		summary, err := irprojector.DecodedComponentIRStatusFor(ctx, reads, isvc, c)
+		ir, _, err := irprojector.DecodedComponentIRFor(ctx, reads, isvc, c)
 		if err != nil {
 			return GroupObservation{}, err
+		}
+		var summary *v1beta1.InferenceReplicaStatus
+		if ir != nil {
+			summary = &ir.Status
 		}
 		// ResolveGroups excludes canary groups, so every Component here is
 		// coordination-owned and reads the effective partition from the
@@ -653,12 +659,31 @@ func buildGroupObservation(ctx context.Context, reads client.Reader, isvc *v1bet
 		if err != nil {
 			return GroupObservation{}, err
 		}
-		obs.Components[c] = buildComponentObservation(summary, c, perRevisionPods[c], partition)
+		co := buildComponentObservation(summary, c, perRevisionPods[c], partition)
+		co.SpecReplicas = specReplicasOf(ir)
+		obs.Components[c] = co
 	}
 	if paused, _ := constants.RolloutPauseState(isvc.Annotations); paused {
 		obs.PausedGlobal = true
 	}
 	return obs, nil
+}
+
+// specReplicasOf reads the Instance count a replica's spec asks for: nil is
+// the API default of one, and a count of zero reads as one because a zero
+// count cannot anchor a ratio. Zero when the replica does not exist.
+func specReplicasOf(ir *v1beta1.InferenceReplica) int32 {
+	if ir == nil {
+		return 0
+	}
+	n := int32(1)
+	if ir.Spec.Replicas != nil {
+		n = *ir.Spec.Replicas
+	}
+	if n <= 0 {
+		return 1
+	}
+	return n
 }
 
 // buildComponentObservation aggregates one Component's observation from
@@ -682,6 +707,7 @@ func buildComponentObservation(summary *v1beta1.InferenceReplicaStatus, c v1beta
 	out.CurrentRevisionHash = cur.Hash()
 	out.TargetRevisionHash = tgt.Hash()
 	out.RolloutInFlight = !tgt.IsZero() && !tgt.Same(cur)
+	out.ReadyAt = readyTransitionAt(summary.Conditions)
 
 	// Per-Instance failure rollup: any Instance escalated to
 	// Phase=Failed by the workload escalation pass (or any other
@@ -697,14 +723,30 @@ func buildComponentObservation(summary *v1beta1.InferenceReplicaStatus, c v1beta
 		out.FailureMessage = formatFailedInstancesMessage(c, failedInstances)
 	}
 
-	// Convergence: has the Component reached its desired staged shape —
-	// (Replicas-Partition) instances Ready on the target revision and
-	// Partition instances Ready on the prior revision? Partition=0 means
-	// this is the RolloutComplete predicate.
+	// Convergence: does the Component rest at its staged shape — every
+	// Instance Ready and the ones still on the prior revision held by the
+	// partition, at most Partition of them? Partition=0 means this is the
+	// RolloutComplete predicate.
 	out.AtDesiredShape = workloadstatus.ReachedDesiredShape(
 		v1beta1convert.InstanceStatusSliceToWorkload(summary.InstanceStatuses),
 		summary.UpdateRevision, partition, summary.Replicas)
 	return out
+}
+
+// readyTransitionAt is the instant a replica's Ready condition last turned
+// True, zero while it is absent or not True: the moment the replica recorded
+// its roll done, which the Sequential wait after it is measured from.
+func readyTransitionAt(conds []metav1.Condition) time.Time {
+	for _, cond := range conds {
+		if cond.Type != conditionReady {
+			continue
+		}
+		if cond.Status != metav1.ConditionTrue {
+			return time.Time{}
+		}
+		return cond.LastTransitionTime.Time
+	}
+	return time.Time{}
 }
 
 // collectFailedInstanceIndices returns the indices of every Instance
@@ -821,23 +863,23 @@ func gcOrphanedPerRevisionServices(ctx context.Context, c client.Client, isvc *v
 
 // buildRatioState assembles the per-group RatioState that BuildGroupStatus
 // turns into Status.RolloutCoordination.Groups[i].ObservedRatio.
-// SnapshotOriginal runs on first observation; Original is preserved
-// across reconciles via the previously-written ObservedRatio so the
-// anchor doesn't shift when MinReplicas changes mid-rollout.
+//
+// Original is the reference the ratio band measures against, and it follows
+// the spec: it is the Instance count each member's spec asks for now. When an
+// operator or an autoscaler changes a member's count, the reference is
+// rewritten to the new counts on the next pass, mid-roll or idle, so the band
+// measures against the counts the spec asks for now rather than the shape the
+// roll began with: the controller honours the operator's intent instead of
+// keeping its own. The reference written by the previous pass is carried only
+// while no member's count differs from it.
 //
 // Always populated even for non-RatioBalanced pacing (cheap; BuildGroupStatus
 // suppresses it on the status side based on policy).
 //
-// Snapshot deferral: the first reconcile of a freshly-created ISVC observes
-// every Component with status.OMENative.Replicas == 0 because the OMENative
-// status writer hasn't run yet (Create happens first; the status write lands
-// on a subsequent pass). Snapshotting from that empty status would anchor
-// Original to {Engine: 1, Decoder: 1} via SnapshotOriginal's zero-clamp,
-// which then deadlocks RatioBalanced rollouts the moment real replica counts
-// disagree (e.g., MinReplicas=4:2 produces a live 2:1 ratio that immediately
-// skews against the bogus 1:1 anchor). Defer the snapshot until every
-// Component reports non-zero status.OMENative.Replicas — by then the live
-// counts ARE the desired counts and Original anchors correctly.
+// A member whose replica does not exist yet has no count to anchor to. The
+// reference is then carried as recorded, with members that left the group
+// dropped, and rewritten once every member's replica exists, so a half-created
+// group never anchors a shape no member asked for.
 func buildRatioState(isvc *v1beta1.InferenceService, g ResolvedGroup, obs GroupObservation, perRevisionPods map[v1beta1.ComponentType]map[string]int32) *RatioState {
 	state := &RatioState{
 		Current: make(map[v1beta1.ComponentType]int32, len(g.Components)),
@@ -857,9 +899,6 @@ func buildRatioState(isvc *v1beta1.InferenceService, g ResolvedGroup, obs GroupO
 			state.NewPods[c] = hashes[cObs.TargetRevisionHash]
 		}
 	}
-	// Original: read from existing Status, snapshot from current
-	// observed replicas if not yet recorded (first observation that
-	// also has all Components populated in status).
 	state.Original = existingOriginalReplicas(isvc, g.Name)
 	// Drop anchors for members no longer in the group so a stale
 	// entry cannot keep constraining the band.
@@ -872,39 +911,18 @@ func buildRatioState(isvc *v1beta1.InferenceService, g ResolvedGroup, obs GroupO
 			delete(state.Original, c)
 		}
 	}
-	if len(state.Original) == 0 {
-		desired := make(map[v1beta1.ComponentType]int32, len(g.Components))
-		allPopulated := true
-		for _, c := range g.Components {
-			d := obs.Components[c].DesiredReplicas
-			if d <= 0 {
-				// Status hasn't been written for this Component yet. Don't
-				// snapshot — defer to the next reconcile after the status
-				// aggregator writes the real Replicas.
-				allPopulated = false
-				break
-			}
-			desired[c] = d
-		}
-		if allPopulated {
-			state.Original = SnapshotOriginal(desired)
-		}
-		return state
-	}
-	// Anchor members missing from the snapshot from observed replicas,
-	// deferring any member whose status is still unwritten (zero
-	// Replicas) — the same rule the initial snapshot applies.
-	missing := make(map[v1beta1.ComponentType]int32)
+	desired := make(map[v1beta1.ComponentType]int32, len(g.Components))
 	for _, c := range g.Components {
-		if _, ok := state.Original[c]; ok {
-			continue
+		n := obs.Components[c].SpecReplicas
+		if n <= 0 {
+			// This member's replica is not there yet: carry the recorded
+			// reference and anchor on a later pass.
+			return state
 		}
-		if d := obs.Components[c].DesiredReplicas; d > 0 {
-			missing[c] = d
-		}
+		desired[c] = n
 	}
-	for c, r := range SnapshotOriginal(missing) {
-		state.Original[c] = r
+	if !maps.Equal(state.Original, desired) {
+		state.Original = SnapshotOriginal(desired)
 	}
 	return state
 }
@@ -1074,9 +1092,13 @@ func emitPhaseEvents(recorder record.EventRecorder, isvc *v1beta1.InferenceServi
 // defer the later rollout, and the operator gets a warning event.
 //
 // Detection (pure, stateless): for each Component at index j > i
-// where i is the active rolling Component's index in Order, if the
-// later Component has RolloutInFlight=true, emit the event. No-op
-// for non-Sequential policies and for groups with no Component rolling.
+// where i is the active Component's index in Order, if the later
+// Component has RolloutInFlight=true, emit the event. The active
+// Component is the one the phase machine and the gate name
+// (activeSequentialComponent): a Component resting at its staged shape
+// under a partition is done for the next Component and defers nothing.
+// No-op for non-Sequential policies and for groups with no Component
+// rolling.
 //
 // Dedup: skips the emit when activeComponent matches the previous
 // reconcile's CurrentComponent. The first reconcile of a given
@@ -1091,21 +1113,17 @@ func emitSequentialDeferredEvent(recorder record.EventRecorder, isvc *v1beta1.In
 	if len(g.Order) == 0 {
 		return
 	}
+	activeC, ok := activeSequentialComponent(g.Order, obs.Components)
+	if !ok {
+		return
+	}
 	activeIdx := -1
 	for i, c := range g.Order {
-		comp, ok := obs.Components[c]
-		if !ok {
-			continue
-		}
-		if comp.RolloutInFlight {
+		if c == activeC {
 			activeIdx = i
 			break
 		}
 	}
-	if activeIdx < 0 {
-		return
-	}
-	activeC := g.Order[activeIdx]
 	if prevActive == activeC {
 		// Already emitted (or attempted) for this activeComponent in a
 		// prior reconcile. K8s event recorder also aggregates by

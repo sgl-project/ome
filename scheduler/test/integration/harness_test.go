@@ -17,11 +17,17 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/events"
+	"k8s.io/klog/v2"
+	fwk "k8s.io/kube-scheduler/framework"
 	"k8s.io/kubernetes/pkg/scheduler"
 	"k8s.io/kubernetes/pkg/scheduler/profile"
 
 	schedclientset "sigs.k8s.io/scheduler-plugins/pkg/generated/clientset/versioned"
 )
+
+// schedulerStopTimeout bounds the wait for the scheduling loop to exit once its
+// context is canceled; the loop returns as soon as its current cycle ends.
+const schedulerStopTimeout = 30 * time.Second
 
 // domainLabelKey is the node label the tests use as their topology dimension. It
 // is arbitrary — the plugin learns it per-workload from the PodGroup's
@@ -52,6 +58,9 @@ type testContext struct {
 	Scheduler    *scheduler.Scheduler
 	informers    informers.SharedInformerFactory
 	dynInformers dynamicinformer.DynamicSharedInformerFactory
+	// loopDone closes when the scheduling loop goroutine has returned.
+	loopDone chan struct{}
+	stopped  bool
 }
 
 // startScheduler stands up an in-process kube-scheduler wired with the given
@@ -98,35 +107,78 @@ func startScheduler(t *testing.T, cfg *restclient.Config, opts ...scheduler.Opti
 	tc.informers.WaitForCacheSync(ctx.Done())
 	tc.dynInformers.WaitForCacheSync(ctx.Done())
 
-	go sched.Run(ctx)
+	// Same steps as the scheduler's Run, except the scheduling loop goroutine is
+	// one stop can wait for: Run starts it detached, so a caller could never tell
+	// when the loop had let go of the pods it was scheduling.
+	logger := klog.FromContext(ctx)
+	sched.SchedulingQueue.Run(logger)
+	if sched.APIDispatcher != nil {
+		sched.APIDispatcher.Run(logger)
+	}
+	tc.loopDone = make(chan struct{})
+	go func() {
+		defer close(tc.loopDone)
+		wait.UntilWithContext(ctx, sched.ScheduleOne, 0)
+	}()
 	return tc
 }
 
-// teardown removes the objects this test created and stops the scheduler, so the
-// suite can reuse the shared API server without cross-test leakage. Pods and
-// PodGroups are deleted (force, across namespaces) alongside nodes — a prior test's
-// bound pods would otherwise linger on reused node names as phantom occupancy, and
-// leftover pod/PodGroup names collide on a repeated run.
+// stop halts the scheduler and returns once it has let go of every pod: the
+// scheduling loop has exited and each pod held at the Permit gate is rejected,
+// so no failure handler can meet a fresh scheduling cycle on the same pod.
+func (tc *testContext) stop(t *testing.T) {
+	t.Helper()
+	if tc.stopped {
+		return
+	}
+	tc.stopped = true
+	tc.CancelFn()
+	if tc.Scheduler.APIDispatcher != nil {
+		tc.Scheduler.APIDispatcher.Close()
+	}
+	// Pop blocks on an empty queue until Close wakes it; the loop then sees the
+	// canceled context and returns.
+	tc.Scheduler.SchedulingQueue.Close()
+	select {
+	case <-tc.loopDone:
+	case <-time.After(schedulerStopTimeout):
+		t.Errorf("scheduling loop still running %s after its context was canceled", schedulerStopTimeout)
+	}
+	if err := tc.Scheduler.Profiles.Close(); err != nil {
+		t.Errorf("close scheduler plugins: %v", err)
+	}
+	for _, f := range tc.Scheduler.Profiles {
+		f.IterateOverWaitingPods(func(wp fwk.WaitingPod) {
+			wp.Reject("test-harness", "scheduler stopped")
+		})
+	}
+}
+
+// teardown stops the scheduler, then force-deletes every pod, PodGroup and node,
+// so the suite can reuse the shared API server: a prior test's bound pods would
+// otherwise linger as phantom occupancy, and its names would collide on a rerun.
 func (tc *testContext) teardown(t *testing.T) {
 	t.Helper()
+	tc.stop(t)
+	// The scheduler's context is canceled by now; cleanup needs a live one.
+	ctx := context.Background()
 	zero := int64(0)
 	force := metav1.DeleteOptions{GracePeriodSeconds: &zero}
-	if pods, err := tc.ClientSet.CoreV1().Pods(metav1.NamespaceAll).List(tc.Ctx, metav1.ListOptions{}); err == nil {
+	if pods, err := tc.ClientSet.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{}); err == nil {
 		for i := range pods.Items {
 			p := &pods.Items[i]
-			_ = tc.ClientSet.CoreV1().Pods(p.Namespace).Delete(tc.Ctx, p.Name, force)
+			_ = tc.ClientSet.CoreV1().Pods(p.Namespace).Delete(ctx, p.Name, force)
 		}
 	}
-	if pgs, err := tc.SchedClient.SchedulingV1alpha1().PodGroups(metav1.NamespaceAll).List(tc.Ctx, metav1.ListOptions{}); err == nil {
+	if pgs, err := tc.SchedClient.SchedulingV1alpha1().PodGroups(metav1.NamespaceAll).List(ctx, metav1.ListOptions{}); err == nil {
 		for i := range pgs.Items {
 			pg := &pgs.Items[i]
-			_ = tc.SchedClient.SchedulingV1alpha1().PodGroups(pg.Namespace).Delete(tc.Ctx, pg.Name, metav1.DeleteOptions{})
+			_ = tc.SchedClient.SchedulingV1alpha1().PodGroups(pg.Namespace).Delete(ctx, pg.Name, metav1.DeleteOptions{})
 		}
 	}
-	if err := tc.ClientSet.CoreV1().Nodes().DeleteCollection(tc.Ctx, metav1.DeleteOptions{}, metav1.ListOptions{}); err != nil {
+	if err := tc.ClientSet.CoreV1().Nodes().DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{}); err != nil {
 		t.Errorf("cleanup nodes: %v", err)
 	}
-	tc.CancelFn()
 }
 
 // namespaceObj builds a bare Namespace object, for setup done before a

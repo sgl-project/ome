@@ -2,7 +2,6 @@ package servingruntime
 
 import (
 	"context"
-	"errors"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -53,12 +52,8 @@ func (r *InheritanceReconciler) reconcileCluster(ctx context.Context, name strin
 		return ctrl.Result{}, err
 	}
 
-	start := &runtimeinheritance.RuntimeRef{
-		Name:       csr.Name,
-		Spec:       &csr.Spec,
-		ParentName: csr.Annotations[constants.RuntimeInheritFromAnnotationKey],
-	}
-	_, chain, err := runtimeinheritance.Resolve(ctx, start, r.clusterFetcher(), constants.RuntimeInheritMaxDepth)
+	_, chain, err := runtimeinheritance.Resolve(ctx, runtimeinheritance.ClusterRuntimeRef(csr),
+		runtimeinheritance.ClusterRuntimeFetcher(r.Client), constants.RuntimeInheritMaxDepth)
 	if err != nil {
 		r.Log.WithValues("clusterservingruntime", name).Info("inheritance resolution failed",
 			"reason", classifyResolveError(err), "error", err.Error())
@@ -88,12 +83,8 @@ func (r *InheritanceReconciler) reconcileNamespaced(ctx context.Context, namespa
 		return ctrl.Result{}, err
 	}
 
-	start := &runtimeinheritance.RuntimeRef{
-		Name:       sr.Name,
-		Spec:       &sr.Spec,
-		ParentName: sr.Annotations[constants.RuntimeInheritFromAnnotationKey],
-	}
-	_, chain, err := runtimeinheritance.Resolve(ctx, start, r.namespacedFetcher(namespace), constants.RuntimeInheritMaxDepth)
+	_, chain, err := runtimeinheritance.Resolve(ctx, runtimeinheritance.NamespacedRuntimeRef(sr),
+		runtimeinheritance.NamespacedRuntimeFetcher(r.Client, namespace), constants.RuntimeInheritMaxDepth)
 	if err != nil {
 		r.Log.WithValues("servingruntime", name, "namespace", namespace).Info("inheritance resolution failed",
 			"reason", classifyResolveError(err), "error", err.Error())
@@ -112,52 +103,6 @@ func (r *InheritanceReconciler) reconcileNamespaced(ctx context.Context, namespa
 		return ctrl.Result{}, updateErr
 	}
 	return ctrl.Result{}, nil
-}
-
-func (r *InheritanceReconciler) clusterFetcher() runtimeinheritance.Fetcher {
-	return func(ctx context.Context, name string) (*runtimeinheritance.RuntimeRef, error) {
-		parent := &v1beta1.ClusterServingRuntime{}
-		if err := r.Get(ctx, types.NamespacedName{Name: name}, parent); err != nil {
-			if apierrors.IsNotFound(err) {
-				return nil, errors.Join(runtimeinheritance.ErrParentNotFound, err)
-			}
-			return nil, err
-		}
-		return &runtimeinheritance.RuntimeRef{
-			Name:       parent.Name,
-			Spec:       &parent.Spec,
-			ParentName: parent.Annotations[constants.RuntimeInheritFromAnnotationKey],
-		}, nil
-	}
-}
-
-func (r *InheritanceReconciler) namespacedFetcher(namespace string) runtimeinheritance.Fetcher {
-	return func(ctx context.Context, name string) (*runtimeinheritance.RuntimeRef, error) {
-		sr := &v1beta1.ServingRuntime{}
-		err := r.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, sr)
-		if err == nil {
-			return &runtimeinheritance.RuntimeRef{
-				Name:       sr.Name,
-				Spec:       &sr.Spec,
-				ParentName: sr.Annotations[constants.RuntimeInheritFromAnnotationKey],
-			}, nil
-		}
-		if !apierrors.IsNotFound(err) {
-			return nil, err
-		}
-		csr := &v1beta1.ClusterServingRuntime{}
-		if err := r.Get(ctx, types.NamespacedName{Name: name}, csr); err != nil {
-			if apierrors.IsNotFound(err) {
-				return nil, errors.Join(runtimeinheritance.ErrParentNotFound, err)
-			}
-			return nil, err
-		}
-		return &runtimeinheritance.RuntimeRef{
-			Name:       csr.Name,
-			Spec:       &csr.Spec,
-			ParentName: csr.Annotations[constants.RuntimeInheritFromAnnotationKey],
-		}, nil
-	}
 }
 
 // dependentsOfCluster enqueues self + every CSR/SR below the changed CSR

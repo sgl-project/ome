@@ -233,7 +233,7 @@ func TestReconcile_RolloutRefMissingHoldsPlacement(t *testing.T) {
 	assert.Contains(t, pre.Message, "cp-east", "message must name the control plane")
 }
 
-func TestReconcile_RolloutHoldRefreshesStandingHomeAndProvenance(t *testing.T) {
+func TestReconcile_RolloutHoldRefreshesStandingMemberAndProvenance(t *testing.T) {
 	s := testScheme(t)
 	worker := workerWithReplicaCounts(t, s, "fresh.example.com", 2, 1)
 	src := placedSrcISVCWithRolloutRef("gpu=gb300")
@@ -401,7 +401,7 @@ func TestPreflightRollout_NoRolloutIsNil(t *testing.T) {
 }
 
 // A capability verdict cannot evict the standing winner: it holds actuation
-// while the controller continues observing that home.
+// while the controller continues observing that member.
 func TestPreflightRollout_WinnerSurvivesCapabilityLoss(t *testing.T) {
 	s := testScheme(t)
 	isvc := srcISVCWithRolloutRef("gpu=gb300")
@@ -494,7 +494,7 @@ func TestLiftCandidateRollout(t *testing.T) {
 	assert.Equal(t, rolloutpolicy.CombinedDigest([]string{"rp1:old"}), got.LastRun.Digest)
 }
 
-// The funnel lift: an observed home's run provenance is attached to that
+// The funnel lift: an observed member's run provenance is attached to that
 // candidate on the next status write, and the staged condition rides along.
 func TestRolloutStatusForWrite_AttachesLift(t *testing.T) {
 	s := testScheme(t)
@@ -523,7 +523,7 @@ func TestRolloutStatusForWrite_AttachesLift(t *testing.T) {
 	require.NotNil(t, res.candidates[0].Rollout)
 	assert.Equal(t, "run-1", res.candidates[0].Rollout.ActiveRunID)
 	assert.Equal(t, testRolloutPolicyName, res.candidates[0].Rollout.ActiveGroups[0].PolicyName)
-	assert.Nil(t, res.candidates[1].Rollout, "unobserved home carries no lift")
+	assert.Nil(t, res.candidates[1].Rollout, "unobserved member carries no lift")
 
 	// A source with no policy-shaped rollout drops its bookkeeping and stages
 	// nothing (clearing the shared condition is the autoscaler side's job).

@@ -400,6 +400,15 @@ type InferenceReplicaStatus struct {
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
+	// ObservedTemplateHash is the pod-template hash (the ome.io/template-hash
+	// annotation the projector stamps beside the spec's templates) that
+	// updateRevision was last computed from. It names the roll target this
+	// status describes: a spec whose stamp differs asks for a revision the
+	// status has not recorded yet, while a spec change outside the templates
+	// leaves both unchanged.
+	// +optional
+	ObservedTemplateHash string `json:"observedTemplateHash,omitempty"`
+
 	// PlacementObservedGeneration identifies the generation reconciled with
 	// placement rollout and replica-growth guards. The control plane requires
 	// this acknowledgement before sharing surge allowance with the member.
@@ -928,7 +937,9 @@ type MigrationStatus struct {
 	StartedAt metav1.Time `json:"startedAt"`
 
 	// Deadline is when a non-terminal entry expires.
-	// Manual: accept time plus InstanceReadyTimeout.
+	// Manual: accept time plus InstanceReadyTimeout. Cleared while the
+	// Component is paused and started again, a full InstanceReadyTimeout
+	// from the pass the pause clears.
 	Deadline metav1.Time `json:"deadline"`
 
 	// CompletedAt is when the entry reached a terminal phase.

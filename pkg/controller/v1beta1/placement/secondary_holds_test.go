@@ -16,45 +16,45 @@ import (
 )
 
 func TestSecondaryFloorHolds(t *testing.T) {
-	serving := func(applied, next, ready int32) secondaryHome {
-		return secondaryHome{Applied: applied, Next: next, Ready: ready, Known: true, Serving: true}
+	serving := func(applied, next, ready int32) secondaryMember {
+		return secondaryMember{Applied: applied, Next: next, Ready: ready, Known: true, Serving: true}
 	}
 	for _, tt := range []struct {
 		name    string
 		minimum int32
-		homes   map[string]secondaryHome
+		members map[string]secondaryMember
 		want    map[string]int32
 	}{
 		{name: "a falling floor keeps its ready instances while replacements start", minimum: 12,
-			homes: map[string]secondaryHome{"member-a": serving(9, 7, 9), "member-b": serving(5, 5, 3)},
-			want:  map[string]int32{"member-a": 9}},
+			members: map[string]secondaryMember{"member-a": serving(9, 7, 9), "member-b": serving(5, 5, 3)},
+			want:    map[string]int32{"member-a": 9}},
 		{name: "ready replacements release the old floor", minimum: 12,
-			homes: map[string]secondaryHome{"member-a": serving(9, 7, 9), "member-b": serving(5, 5, 5)},
-			want:  map[string]int32{}},
+			members: map[string]secondaryMember{"member-a": serving(9, 7, 9), "member-b": serving(5, 5, 5)},
+			want:    map[string]int32{}},
 		{name: "a partly ready replacement releases part of the floor", minimum: 12,
-			homes: map[string]secondaryHome{"member-a": serving(9, 7, 9), "member-b": serving(5, 5, 4)},
-			want:  map[string]int32{"member-a": 8}},
+			members: map[string]secondaryMember{"member-a": serving(9, 7, 9), "member-b": serving(5, 5, 4)},
+			want:    map[string]int32{"member-a": 8}},
 		{name: "unready instances above the next floor leave at once", minimum: 12,
-			homes: map[string]secondaryHome{"member-a": serving(9, 7, 6), "member-b": serving(5, 5, 3)},
-			want:  map[string]int32{}},
+			members: map[string]secondaryMember{"member-a": serving(9, 7, 6), "member-b": serving(5, 5, 3)},
+			want:    map[string]int32{}},
 		{name: "a lowered fleet minimum releases ready instances", minimum: 10,
-			homes: map[string]secondaryHome{"member-a": serving(9, 8, 9), "member-b": serving(3, 2, 3)},
-			want:  map[string]int32{}},
-		{name: "an unobserved home keeps its applied floor", minimum: 12,
-			homes: map[string]secondaryHome{"member-a": {Applied: 9, Next: 7}, "member-b": serving(5, 5, 5)},
-			want:  map[string]int32{"member-a": 9}},
-		{name: "ready instances on a home that does not serve release nothing", minimum: 12,
-			homes: map[string]secondaryHome{"member-a": serving(9, 7, 9), "member-b": {Applied: 5, Next: 5, Ready: 5, Known: true}},
-			want:  map[string]int32{"member-a": 9}},
+			members: map[string]secondaryMember{"member-a": serving(9, 8, 9), "member-b": serving(3, 2, 3)},
+			want:    map[string]int32{}},
+		{name: "an unobserved member keeps its applied floor", minimum: 12,
+			members: map[string]secondaryMember{"member-a": {Applied: 9, Next: 7}, "member-b": serving(5, 5, 5)},
+			want:    map[string]int32{"member-a": 9}},
+		{name: "ready instances on a member that does not serve release nothing", minimum: 12,
+			members: map[string]secondaryMember{"member-a": serving(9, 7, 9), "member-b": {Applied: 5, Next: 5, Ready: 5, Known: true}},
+			want:    map[string]int32{"member-a": 9}},
 		{name: "releases are granted in name order", minimum: 12,
-			homes: map[string]secondaryHome{"member-a": serving(5, 4, 5), "member-b": serving(5, 4, 5), "member-c": serving(4, 4, 3)},
-			want:  map[string]int32{"member-b": 5}},
+			members: map[string]secondaryMember{"member-a": serving(5, 4, 5), "member-b": serving(5, 4, 5), "member-c": serving(4, 4, 3)},
+			want:    map[string]int32{"member-b": 5}},
 		{name: "a rising floor is never held", minimum: 12,
-			homes: map[string]secondaryHome{"member-a": serving(3, 5, 0)},
-			want:  map[string]int32{}},
+			members: map[string]secondaryMember{"member-a": serving(3, 5, 0)},
+			want:    map[string]int32{}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, secondaryFloorHolds(tt.minimum, tt.homes)); diff != "" {
+			if diff := cmp.Diff(tt.want, secondaryFloorHolds(tt.minimum, tt.members)); diff != "" {
 				t.Errorf("holds (-want +got):\n%s", diff)
 			}
 		})
@@ -62,7 +62,7 @@ func TestSecondaryFloorHolds(t *testing.T) {
 }
 
 func TestSplitSecondaryHolds(t *testing.T) {
-	type home struct {
+	type member struct {
 		current, desired, decoder, engineReady, decoderReady int32
 		drain                                                bool
 	}
@@ -72,24 +72,24 @@ func TestSplitSecondaryHolds(t *testing.T) {
 		return member
 	}
 	for _, tt := range []struct {
-		name   string
-		source func() *v1beta1.InferenceService
-		homes  map[string]home
-		want   map[string]map[v1beta1.ComponentType]int32
+		name    string
+		source  func() *v1beta1.InferenceService
+		members map[string]member
+		want    map[string]map[v1beta1.ComponentType]int32
 	}{
-		{name: "a re-apportioned floor keeps ready decoders before the engines move", homes: map[string]home{
+		{name: "a re-apportioned floor keeps ready decoders before the engines move", members: map[string]member{
 			"member-a": {current: 3, desired: 3, decoder: 9, engineReady: 3, decoderReady: 9},
 			"member-b": {current: 1, desired: 2, decoder: 3, engineReady: 1, decoderReady: 3},
 		}, want: map[string]map[v1beta1.ComponentType]int32{"member-a": {v1beta1.DecoderComponent: 9}, "member-b": {v1beta1.DecoderComponent: 3}}},
-		{name: "a moved floor keeps ready decoders until the replacements are ready", homes: map[string]home{
+		{name: "a moved floor keeps ready decoders until the replacements are ready", members: map[string]member{
 			"member-a": {current: 3, desired: 3, decoder: 9, engineReady: 3, decoderReady: 9},
 			"member-b": {current: 2, desired: 2, decoder: 5, engineReady: 2, decoderReady: 3},
 		}, want: map[string]map[v1beta1.ComponentType]int32{"member-a": {v1beta1.DecoderComponent: 9}}},
-		{name: "ready replacements release the old home", homes: map[string]home{
+		{name: "ready replacements release the old member", members: map[string]member{
 			"member-a": {current: 3, desired: 3, decoder: 9, engineReady: 3, decoderReady: 9},
 			"member-b": {current: 2, desired: 2, decoder: 5, engineReady: 2, decoderReady: 5},
 		}, want: map[string]map[v1beta1.ComponentType]int32{}},
-		{name: "a home asked to drain is not held", homes: map[string]home{
+		{name: "a member asked to drain is not held", members: map[string]member{
 			"member-a": {current: 3, desired: 3, decoder: 9, engineReady: 3, decoderReady: 9},
 			"member-b": {current: 1, desired: 2, decoder: 3, engineReady: 1, decoderReady: 3, drain: true},
 		}, want: map[string]map[v1beta1.ComponentType]int32{"member-a": {v1beta1.DecoderComponent: 9}}},
@@ -97,7 +97,7 @@ func TestSplitSecondaryHolds(t *testing.T) {
 			source := ratioSplitSource(5, nil)
 			source.Spec.Decoder = nil
 			return source
-		}, homes: map[string]home{
+		}, members: map[string]member{
 			"member-a": {current: 3, desired: 3, engineReady: 3},
 			"member-b": {current: 1, desired: 2, engineReady: 1},
 		}},
@@ -105,7 +105,7 @@ func TestSplitSecondaryHolds(t *testing.T) {
 			source := ratioSplitSource(5, ptr.To(12))
 			source.Spec.Placement.Mode = v1beta1.PlacementModeSingle
 			return source
-		}, homes: map[string]home{
+		}, members: map[string]member{
 			"member-a": {current: 3, desired: 3, decoder: 9, engineReady: 3, decoderReady: 9},
 			"member-b": {current: 1, desired: 2, decoder: 3, engineReady: 1, decoderReady: 3},
 		}},
@@ -117,15 +117,15 @@ func TestSplitSecondaryHolds(t *testing.T) {
 			}
 			source.Spec.Placement.ClusterAffinity = weightedAffinity(map[string]int32{"member-a": 2, "member-b": 1})
 			source.Status.Placement = &v1beta1.PlacementStatus{Plan: &v1beta1.PlacementPlanStatus{ID: "plan-a"}}
-			observations := map[string]plannedHomeObservation{}
+			observations := map[string]plannedMemberObservation{}
 			for _, name := range []string{"member-a", "member-b"} {
-				h := tt.homes[name]
+				h := tt.members[name]
 				source.Status.Placement.Candidates = append(source.Status.Placement.Candidates, v1beta1.CandidatePlacement{Cluster: name,
 					Allocation: &v1beta1.CandidateAllocationStatus{ClusterUID: types.UID("uid-" + name), CurrentReplicas: h.current, DesiredReplicas: h.desired, DrainRequested: h.drain}})
-				observations[name] = plannedHomeObservation{
+				observations[name] = plannedMemberObservation{
 					Member:         decoderMember(h.current, h.decoder),
 					ComponentReady: map[v1beta1.ComponentType]int32{v1beta1.EngineComponent: h.engineReady, v1beta1.DecoderComponent: h.decoderReady},
-					Home:           allocation.Home{Known: true, Routable: true},
+					MemberState:    allocation.MemberState{Known: true, Routable: true},
 				}
 			}
 			got, err := splitSecondaryHolds(source, observations)

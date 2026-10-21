@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	schedulingv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podgroup"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
@@ -156,68 +157,153 @@ func EnsurePodGroupsWithTopology(ctx context.Context, deps workload.Deps, input 
 // EnsurePodGroupsWithState reconciles planned PodGroups from one inventory.
 // It performs no eager deletion: terminal lifecycle owners delete their own
 // PodGroups after proving their Pod bucket empty.
+//
+// The pass runs in one fixed order: read the inventory, write the
+// availability condition, group the live pods by PodGroup, then for every
+// planned gang record what its PodGroup says and ensure or reset it, and
+// last the scheduler-name warning. The condition is written before any pod
+// read or PodGroup write, so a later failure cannot hide whether gang
+// scheduling is usable; the warning runs after the writes, so a PodGroup
+// write failure takes precedence over it.
 func EnsurePodGroupsWithState(ctx context.Context, deps workload.Deps, input workload.ReconcileInput, plan workload.ComponentPlan, state PodGroupReconcileState) (map[int32]string, error) {
-	effectiveTopology := make(map[int32]string)
 	if deps.Client == nil {
 		return nil, fmt.Errorf("EnsurePodGroups: nil client")
 	}
 	if input.OwnerObject == nil {
 		return nil, fmt.Errorf("EnsurePodGroups: nil owner")
 	}
+	pass := newPodGroupPass(deps, &input, plan, state.Inventory)
+	if len(pass.gangs) == 0 {
+		// A single-pod Instance needs no PodGroup, whatever the cluster offers.
+		if err := pass.writeAvailability(ctx, input.DesiredSpec.GangSchedulingAvailable); err != nil {
+			return nil, err
+		}
+		return pass.topology, nil
+	}
+	available, err := pass.readInventory(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := pass.writeAvailability(ctx, available); err != nil {
+		return nil, err
+	}
+	if err := pass.groupLivePods(ctx); err != nil {
+		return nil, err
+	}
+	if !available {
+		return pass.topologyFromLivePods()
+	}
+	pass.terminalOwned = terminalOwnedIndices(input.ObservedState.InstanceStatuses, state.TerminalOwned)
+	for _, inst := range pass.gangs {
+		if err := pass.ensureGang(ctx, inst); err != nil {
+			return nil, err
+		}
+	}
+	if err := pass.warnWhenDefaultScheduler(ctx); err != nil {
+		return nil, err
+	}
+	return pass.topology, nil
+}
 
-	anyMultiPod := false
+// podGroupPass is one Component's PodGroup pass: the gangs the plan asks
+// for, the owner's PodGroups read once, the Component's live pods keyed by
+// PodGroup name, and what the pass records per Instance.
+type podGroupPass struct {
+	deps  workload.Deps
+	input *workload.ReconcileInput
+	plan  workload.ComponentPlan
+	// gangs are the plan's multi-pod Instances, in plan order.
+	gangs []workload.InstancePlan
+	// inventory is the owner's PodGroups: the caller's when it brought one,
+	// else read once by readInventory.
+	inventory *PodGroupInventory
+	// podsByGroup holds the Component's live pods under the PodGroup name
+	// each pod carries.
+	podsByGroup map[string][]*corev1.Pod
+	// terminalOwned lists the Instances whose teardown owns the PodGroup.
+	terminalOwned map[int32]struct{}
+	// topology is the effective topology key of every gang the pass settled.
+	topology map[int32]string
+	// warningRow is the first ensured Instance that has a row. The
+	// scheduler-name warning is recorded on it, because the record lives on
+	// a row and the create pass may not have opened one for every index.
+	warningRow      int32
+	warningRowFound bool
+}
+
+func newPodGroupPass(deps workload.Deps, input *workload.ReconcileInput, plan workload.ComponentPlan, inventory *PodGroupInventory) *podGroupPass {
+	return &podGroupPass{
+		deps:      deps,
+		input:     input,
+		plan:      plan,
+		gangs:     plannedGangs(plan),
+		inventory: inventory,
+		topology:  make(map[int32]string),
+	}
+}
+
+// plannedGangs lists the plan's multi-pod Instances in plan order. A
+// single-pod Instance has nothing to gang.
+func plannedGangs(plan workload.ComponentPlan) []workload.InstancePlan {
+	var gangs []workload.InstancePlan
 	for _, inst := range plan.Instances {
 		if podgroup.IsMultiPodInstance(inst) {
-			anyMultiPod = true
-			break
+			gangs = append(gangs, inst)
 		}
 	}
+	return gangs
+}
 
-	// No multi-pod Instances in the plan? Nothing to create. (Even
-	// when input.DesiredSpec.GangSchedulingAvailable is true,
-	// single-pod Instances skip the PodGroup — no gang to enforce on
-	// a single pod.)
-	if !anyMultiPod {
-		if cerr := patchGangSchedulingCondition(ctx, input, input.DesiredSpec.GangSchedulingAvailable, false); cerr != nil {
-			return nil, fmt.Errorf("EnsurePodGroups: patch GangSchedulingUnavailable condition: %w", cerr)
-		}
-		return effectiveTopology, nil
-	}
-	reader := deps.Reader()
-	inv := state.Inventory
-	gangSchedulingAvailable := input.DesiredSpec.GangSchedulingAvailable
-	if gangSchedulingAvailable {
-		if inv == nil {
-			var err error
-			inv, err = ObservePodGroups(ctx, reader, input.OwnerObject)
-			if err != nil {
-				return nil, fmt.Errorf("EnsurePodGroups: observe PodGroups: %w", err)
-			}
-		}
-		if inv.OwnerUID() != input.OwnerObject.GetUID() {
-			return nil, fmt.Errorf("EnsurePodGroups: inventory owner UID %q does not match owner UID %q", inv.OwnerUID(), input.OwnerObject.GetUID())
-		}
-		gangSchedulingAvailable = inv.Available()
-	}
+// groupName is the deterministic PodGroup name of one Instance.
+func (p *podGroupPass) groupName(idx int32) string {
+	return query.PodGroupName(p.input.Key.OwnerName, p.plan.Component, idx)
+}
 
-	// Stamp the degradation condition before Pod observation and PodGroup
-	// writes so later failures cannot hide whether gang scheduling is usable.
-	if cerr := patchGangSchedulingCondition(ctx, input, gangSchedulingAvailable, anyMultiPod); cerr != nil {
-		return nil, fmt.Errorf("EnsurePodGroups: patch GangSchedulingUnavailable condition: %w", cerr)
+// readInventory settles whether gang scheduling is usable this pass: the
+// spec must advertise the PodGroup API, and the owner's inventory, read
+// here when the caller brought none, must have found it. An inventory
+// built for another owner is a wiring error, not a reading.
+func (p *podGroupPass) readInventory(ctx context.Context) (bool, error) {
+	if !p.input.DesiredSpec.GangSchedulingAvailable {
+		return false, nil
 	}
+	if p.inventory == nil {
+		inventory, err := ObservePodGroups(ctx, p.deps.Reader(), p.input.OwnerObject)
+		if err != nil {
+			return false, fmt.Errorf("EnsurePodGroups: observe PodGroups: %w", err)
+		}
+		p.inventory = inventory
+	}
+	if p.inventory.OwnerUID() != p.input.OwnerObject.GetUID() {
+		return false, fmt.Errorf("EnsurePodGroups: inventory owner UID %q does not match owner UID %q", p.inventory.OwnerUID(), p.input.OwnerObject.GetUID())
+	}
+	return p.inventory.Available(), nil
+}
 
+// writeAvailability writes the GangSchedulingUnavailable condition: True
+// only when the plan has a gang and the cluster cannot enforce it.
+func (p *podGroupPass) writeAvailability(ctx context.Context, available bool) error {
+	if err := patchGangSchedulingCondition(ctx, *p.input, available, len(p.gangs) > 0); err != nil {
+		return fmt.Errorf("EnsurePodGroups: patch GangSchedulingUnavailable condition: %w", err)
+	}
+	return nil
+}
+
+// groupLivePods reads the Component's pods, the adapter's live list when
+// it brought one, and keys them by the PodGroup name each pod carries.
+func (p *podGroupPass) groupLivePods(ctx context.Context) error {
 	var pods []*corev1.Pod
-	if input.AuthoritativePods != nil {
-		pods = input.AuthoritativePods.Pods
+	if p.input.AuthoritativePods != nil {
+		pods = p.input.AuthoritativePods.Pods
 	} else {
 		var err error
-		pods, err = query.ListOMENativePodsByName(ctx, reader, input.Key.Namespace,
-			input.Key.OwnerName, plan.Component, false)
+		pods, err = query.ListOMENativePodsByName(ctx, p.deps.Reader(), p.input.Key.Namespace,
+			p.input.Key.OwnerName, p.plan.Component, false)
 		if err != nil {
-			return nil, fmt.Errorf("EnsurePodGroups: list component pods: %w", err)
+			return fmt.Errorf("EnsurePodGroups: list component pods: %w", err)
 		}
 	}
-	podsByGroup := make(map[string][]*corev1.Pod)
+	p.podsByGroup = make(map[string][]*corev1.Pod)
 	for _, pod := range pods {
 		if pod == nil {
 			continue
@@ -226,112 +312,104 @@ func EnsurePodGroupsWithState(ctx context.Context, deps workload.Deps, input wor
 		if name == "" {
 			continue
 		}
-		podsByGroup[name] = append(podsByGroup[name], pod)
+		p.podsByGroup[name] = append(p.podsByGroup[name], pod)
 	}
+	return nil
+}
 
-	// Multi-pod requested but the cluster cannot enforce gangs: skip
-	// PodGroup writes, while still preserving the immutable topology carried by
-	// live pods. Missing members must not be recreated under a newer key merely
-	// because the optional PodGroup API is unavailable.
-	if !gangSchedulingAvailable {
-		for _, inst := range plan.Instances {
-			if !podgroup.IsMultiPodInstance(inst) {
-				continue
-			}
-			name := query.PodGroupName(input.Key.OwnerName, plan.Component, inst.Index)
-			key, err := podgroup.EffectiveTopologyKeyForPods(
-				plan.TopologyKeyForInstance(inst.Index), input.Key.OwnerName, plan.Component,
-				inst.Index, podsByGroup[name])
-			if err != nil {
-				return nil, fmt.Errorf("EnsurePodGroups: instance %d: %w", inst.Index, err)
-			}
-			effectiveTopology[inst.Index] = key
-		}
-		return effectiveTopology, nil
-	}
-
-	terminalOwned := terminalOwnedIndices(input.ObservedState.InstanceStatuses, state.TerminalOwned)
-	// ensuredIndex is the first Instance whose group this pass ensured AND
-	// whose row already exists: the heuristic warning below is recorded on
-	// a row, so it waits for one rather than announcing into a slot the
-	// create pass has not opened yet.
-	ensured := false
-	ensuredIndex := int32(0)
-	for _, inst := range plan.Instances {
-		if !podgroup.IsMultiPodInstance(inst) {
-			continue
-		}
-		if _, terminal := terminalOwned[inst.Index]; terminal {
-			continue
-		}
-		name := query.PodGroupName(input.Key.OwnerName, plan.Component, inst.Index)
-		existing, found := inv.ByName(name)
-		// Classify what the object says about this gang before touching
-		// it. A name this owner cannot write is a fact about one Instance,
-		// not about the Component: recording it here lets the pass finish
-		// the other gangs, keeps members off the unusable name, and hands
-		// the row itself to the escalation pass.
-		obs := podgroup.ObserveGang(name, existing, found, input.OwnerObject.GetUID())
-		input.Gangs.Record(inst.Index, obs)
-		if obs.State == workload.GangStateFailed && resettableIndex(input.ObservedState, inst.Index) {
-			// The gang scheduler's Failed verdict is absorbing: its
-			// controller stops reconciling the object, and this pass only
-			// reconciles labels, ownership and size — so the group can never
-			// be admitted again under that name. Delete it and let the next
-			// pass build a fresh one. Members are withheld meanwhile, and
-			// the row is untouched: a failure that resets itself must not
-			// end an attempt, or the reset and the rebuild would chase each
-			// other through Failed forever.
-			//
-			// A dead member still on the name holds the reset back. The
-			// group's phase is derived from its members, so rebuilding
-			// around one would hand the replacement the same verdict; the
-			// create pass recycles it first and the reset lands on the
-			// pass after.
-			if anyTerminalMember(podsByGroup[name]) {
-				continue
-			}
-			if derr := inv.DeleteOwnedName(ctx, deps.Client, name); derr != nil {
-				return nil, fmt.Errorf("EnsurePodGroups: reset instance %d: %w", inst.Index, derr)
-			}
-			if werr := warnPodGroupReset(ctx, deps, input, plan.Component, inst.Index, obs); werr != nil {
-				return nil, werr
-			}
-			continue
-		}
-		key, reconciled, err := podgroup.EnsurePodGroupForPodsFromObservation(ctx, deps.Client,
-			input.OwnerObject, input.OwnerGVK, input.Key.OwnerName, plan, inst,
-			podsByGroup[name], existing, found)
+// topologyFromLivePods is the pass when the cluster cannot enforce gangs:
+// no PodGroup is written, and each gang keeps the topology its live pods
+// already carry, so a missing member is not rebuilt under a newer key only
+// because the optional PodGroup API is absent.
+func (p *podGroupPass) topologyFromLivePods() (map[int32]string, error) {
+	for _, inst := range p.gangs {
+		key, err := podgroup.EffectiveTopologyKeyForPods(
+			p.plan.TopologyKeyForInstance(inst.Index), p.input.Key.OwnerName, p.plan.Component,
+			inst.Index, p.podsByGroup[p.groupName(inst.Index)])
 		if err != nil {
-			if errors.Is(err, podgroup.ErrPodGroupTerminating) ||
-				errors.Is(err, podgroup.ErrPodGroupOwnershipConflict) {
-				// No topology override is published for this index. The only
-				// consumers of one are the renderer and the PodGroup builder,
-				// and neither runs for an index whose members are withheld;
-				// an absent entry also reads as the Component's desired key,
-				// which is what a fresh gang at this name would get anyway.
-				continue
-			}
 			return nil, fmt.Errorf("EnsurePodGroups: instance %d: %w", inst.Index, err)
 		}
-		inv.recordReconciled(reconciled)
-		effectiveTopology[inst.Index] = key
-		if !ensured && input.ObservedState.Instance(inst.Index) != nil {
-			ensuredIndex = inst.Index
-			ensured = true
-		}
+		p.topology[inst.Index] = key
 	}
+	return p.topology, nil
+}
 
-	// Heuristic warning when the rendered pod template uses the
-	// default scheduler — see EventReasonMaybeNoGangScheduler. Wired
-	// AFTER EnsurePodGroup so PodGroup-create failures take precedence.
-	if ensured {
-		if err := maybeWarnNoGangScheduler(ctx, deps, input, plan.Component, ensuredIndex,
-			input.DesiredSpec.PodSpec, input.DesiredSpec.WorkerPodSpec); err != nil {
-			return nil, err
-		}
+// ensureGang records what one planned gang's PodGroup says, then resets a
+// group the scheduler failed or writes the group the plan asks for. A row
+// the teardown owns keeps its group. A name this owner cannot write,
+// because the object at it is terminating or another controller holds it,
+// is a fact about one Instance, not about the Component: the pass goes on
+// to the other gangs, the row's members stay withheld, the escalation pass
+// reads the recorded state, and no topology is published for the index (an
+// absent entry reads as the Component's desired key, which a fresh gang at
+// that name would get).
+func (p *podGroupPass) ensureGang(ctx context.Context, inst workload.InstancePlan) error {
+	if _, terminal := p.terminalOwned[inst.Index]; terminal {
+		return nil
 	}
-	return effectiveTopology, nil
+	name := p.groupName(inst.Index)
+	existing, found := p.inventory.ByName(name)
+	obs := podgroup.ObserveGang(name, existing, found, p.input.OwnerObject.GetUID())
+	p.input.Gangs.Record(inst.Index, obs)
+	if obs.State == workload.GangStateFailed && resettableIndex(p.input.ObservedState, inst.Index) {
+		return p.resetFailedGroup(ctx, inst.Index, obs)
+	}
+	key, reconciled, err := podgroup.EnsurePodGroupForPodsFromObservation(ctx, p.deps.Client,
+		p.input.OwnerObject, p.input.OwnerGVK, p.input.Key.OwnerName, p.plan, inst,
+		p.podsByGroup[name], existing, found)
+	if err != nil {
+		if errors.Is(err, podgroup.ErrPodGroupTerminating) ||
+			errors.Is(err, podgroup.ErrPodGroupOwnershipConflict) {
+			return nil
+		}
+		return fmt.Errorf("EnsurePodGroups: instance %d: %w", inst.Index, err)
+	}
+	p.recordEnsured(inst.Index, reconciled, key)
+	return nil
+}
+
+// resetFailedGroup deletes a group the gang scheduler failed, so the next
+// pass builds a fresh one. The scheduler's Failed phase is final for the
+// object: its controller stops reconciling it, and this pass reconciles
+// only labels, ownership and size, so the group can never be admitted
+// again under that name. The row is untouched: a failure that resets
+// itself must not end an attempt, or the reset and the rebuild would chase
+// each other through Failed forever. A member the kubelet has finished
+// with holds the reset back: the group's phase comes from its members, so
+// a group rebuilt around that pod would fail the same way; the create pass
+// replaces the pod first and the reset lands the pass after.
+func (p *podGroupPass) resetFailedGroup(ctx context.Context, idx int32, obs workload.GangObservation) error {
+	if anyTerminalMember(p.podsByGroup[obs.Name]) {
+		return nil
+	}
+	if err := p.inventory.DeleteOwnedName(ctx, p.deps.Client, obs.Name); err != nil {
+		return fmt.Errorf("EnsurePodGroups: reset instance %d: %w", idx, err)
+	}
+	return warnPodGroupReset(ctx, p.deps, *p.input, p.plan.Component, idx, obs)
+}
+
+// recordEnsured overlays the written group on the inventory, so the inline
+// surge callback sees it without a second read, publishes the gang's
+// topology key, and keeps the first ensured Instance that has a row as the
+// place for the scheduler-name warning.
+func (p *podGroupPass) recordEnsured(idx int32, reconciled *schedulingv1alpha1.PodGroup, key string) {
+	p.inventory.recordReconciled(reconciled)
+	p.topology[idx] = key
+	if !p.warningRowFound && p.input.ObservedState.Instance(idx) != nil {
+		p.warningRow = idx
+		p.warningRowFound = true
+	}
+}
+
+// warnWhenDefaultScheduler runs the scheduler-name heuristic once the
+// groups are written, so a PodGroup write failure takes precedence, and
+// only when an ensured Instance has a row to record the warning on.
+func (p *podGroupPass) warnWhenDefaultScheduler(ctx context.Context) error {
+	if !p.warningRowFound {
+		return nil
+	}
+	return maybeWarnNoGangScheduler(ctx, p.deps, *p.input, p.plan.Component, p.warningRow,
+		p.input.DesiredSpec.PodSpec, p.input.DesiredSpec.WorkerPodSpec)
 }
 
 // unusableNameError re-spells the two reasons a deterministic name

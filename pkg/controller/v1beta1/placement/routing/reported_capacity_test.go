@@ -27,7 +27,7 @@ func reportedCapacityPolicy(t *testing.T) ResolvedCapacityPolicy {
 	return testCapacityPolicy(t, cfg)
 }
 
-func TestReportedCapacityReplacesReplicaCalculation(t *testing.T) {
+func TestBuildSpec_ReportedCapacityMode_WeightsByReportNotReplicas(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		values []float64
@@ -70,7 +70,7 @@ func TestReportedCapacityReplacesReplicaCalculation(t *testing.T) {
 	}
 }
 
-func TestReportedCapacityFailureKeepsOnlyFreshEvidence(t *testing.T) {
+func TestCapacityPollerObservation_PollFailsAfterAReport_KeepsItUntilItAges(t *testing.T) {
 	poller := newTestPoller(t)
 	policy := reportedCapacityPolicy(t)
 	target := testCapacityTarget("a", "https://a.example")
@@ -98,7 +98,7 @@ func TestReportedCapacityFailureKeepsOnlyFreshEvidence(t *testing.T) {
 	assert.Empty(t, reason)
 }
 
-func TestReportedCapacityHTTPContract(t *testing.T) {
+func TestPollOne_ReportBodies_AcceptsWeightsRejectsStaleOrMalformed(t *testing.T) {
 	policy := reportedCapacityPolicy(t)
 	for _, tc := range []struct {
 		name string
@@ -128,7 +128,7 @@ func TestReportedCapacityHTTPContract(t *testing.T) {
 	}
 }
 
-func TestReportedCapacityQuorumSurvivesOnlyFreshSamples(t *testing.T) {
+func TestCapacityPoller_SamplesAgeOut_QuorumHoldsOnlyWhileTwoAreFresh(t *testing.T) {
 	poller := newTestPoller(t)
 	config := singleSampleConfig()
 	config.Mode = v1beta1.RoutingCapacityModeReported
@@ -156,7 +156,7 @@ func TestReportedCapacityQuorumSurvivesOnlyFreshSamples(t *testing.T) {
 	assert.Equal(t, kptr.To(0.0), poller.Reported(target, policy), "an accepted zero withdraws capacity")
 }
 
-func TestReportedCapacityEstimateIsLowerMedian(t *testing.T) {
+func TestCapacityStateObserve_WindowOfReports_TakesTheLowerMedian(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		mode   v1beta1.RoutingCapacityMode
@@ -186,7 +186,7 @@ func TestReportedCapacityEstimateIsLowerMedian(t *testing.T) {
 	}
 }
 
-func TestReportedCapacityFallsBackPerHome(t *testing.T) {
+func TestBuildSpec_SomeClustersWithoutReports_FallBackPerCluster(t *testing.T) {
 	// a reports more than its replicas; b and c have no report, and c has no
 	// ready replicas either.
 	isvc := splitISVC([]string{"a", "b", "c"}, []int32{60, 80, 40}, []int32{60, 50, 0})
@@ -226,7 +226,7 @@ func TestReportedCapacityFallsBackPerHome(t *testing.T) {
 	assert.Equal(t, 2, capacityFallbackCount(spec))
 }
 
-func TestReportedCapacityWithoutReportsOrReadyReplicasIsUnready(t *testing.T) {
+func TestBuildSpec_ReportedModeNoReportsNoReadyReplicas_AllHomesUnready(t *testing.T) {
 	isvc := splitISVC([]string{"a", "b"}, []int32{60, 80}, []int32{0, 0})
 	spec, status, reason := buildSpec(isvc, ResolvedProbePolicy{}, reportedCapacityPolicy(t), nil, newTestPoller(t))
 	require.Len(t, spec.Entries, 2)
@@ -234,7 +234,7 @@ func TestReportedCapacityWithoutReportsOrReadyReplicasIsUnready(t *testing.T) {
 	assert.Equal(t, v1beta1.TrafficMapReasonAllHomesUnready, reason)
 }
 
-func TestReportedCapacityStillHonorsGates(t *testing.T) {
+func TestBuildSpec_ReportedModeWithProbeAndDrainGates_ZerosGatedClusters(t *testing.T) {
 	isvc := splitISVC([]string{"a", "b"}, []int32{60, 60}, []int32{60, 60})
 	poller := newTestPoller(t)
 	policy := reportedCapacityPolicy(t)
@@ -254,7 +254,7 @@ func TestReportedCapacityStillHonorsGates(t *testing.T) {
 	assert.Zero(t, spec.Entries[1].Weight)
 }
 
-func TestReportedCapacityUnavailableSourceCannotRequestPublicationReplay(t *testing.T) {
+func TestBuildSpec_ReportedModeSourceNotPlacedOrNoEndpoint_EmptyWithReason(t *testing.T) {
 	for _, missingPlacement := range []bool{false, true} {
 		isvc := splitISVC([]string{"a"}, []int32{60}, []int32{60})
 		wantReason := v1beta1.TrafficMapReasonNoAddressableHome
@@ -272,7 +272,7 @@ func TestReportedCapacityUnavailableSourceCannotRequestPublicationReplay(t *test
 	}
 }
 
-func TestReportedCapacityAdmissionUsesPhaseRatherThanReplicaCount(t *testing.T) {
+func TestBuildSpec_ReportedModeZeroReplicas_AdmittedPhaseDecidesNotCounts(t *testing.T) {
 	isvc := splitISVC([]string{"a"}, []int32{0}, []int32{0})
 	poller := newTestPoller(t)
 	policy := reportedCapacityPolicy(t)
@@ -294,16 +294,16 @@ func TestReportedCapacityAdmissionUsesPhaseRatherThanReplicaCount(t *testing.T) 
 	assert.Empty(t, spec.Entries, "retired allocations cannot reuse an old report")
 }
 
-func TestReportedCapacityPreserveTrafficCannotInventCapacity(t *testing.T) {
-	homes := []Home{
+func TestWeights_ReportedZeroUnderPreserveTraffic_StaysZero(t *testing.T) {
+	clusters := []ClusterCapacity{
 		{Mode: v1beta1.RoutingCapacityModeReported, ReportedWeight: kptr.To(resource.MustParse("0.75")), Reachable: kptr.To(false)},
 		{Mode: v1beta1.RoutingCapacityModeReported, Allocated: 60, Ready: 0, Reachable: kptr.To(false)},
 	}
-	assert.Equal(t, []int32{1, 0}, weights(homes, AllFailedPolicyPreserveTraffic))
-	assert.Equal(t, []int32{0, 0}, weights(homes, AllFailedPolicyDrain))
+	assert.Equal(t, []int32{1, 0}, weights(clusters, AllFailedPolicyPreserveTraffic))
+	assert.Equal(t, []int32{0, 0}, weights(clusters, AllFailedPolicyDrain))
 }
 
-func TestReportedCapacityModeChangesObservationIdentity(t *testing.T) {
+func TestCapacityPollerObservation_ModeOrOwnerChanges_ReportNoLongerApplies(t *testing.T) {
 	poller := newTestPoller(t)
 	policy := reportedCapacityPolicy(t)
 	target := testCapacityTarget("a", "https://a.example")
@@ -317,7 +317,7 @@ func TestReportedCapacityModeChangesObservationIdentity(t *testing.T) {
 	assert.Nil(t, value)
 }
 
-func TestReportedCapacityConfigResolution(t *testing.T) {
+func TestResolveCapacityPolicy_ReportedGlobalMode_InlineBlocksDoNotInheritIt(t *testing.T) {
 	cfg := controllerTestConfig()
 	cfg.Capacity = reportedCapacityPolicy(t).Capacity
 	resolved, err := ResolveCapacityPolicy(cfg, nil)
@@ -338,7 +338,7 @@ func TestReportedCapacityConfigResolution(t *testing.T) {
 	assert.ErrorContains(t, err, "requires capacity polling")
 }
 
-func TestReconcileReportedWeightsFromHTTP(t *testing.T) {
+func TestReconcile_ReportedCapacityOverHTTP_WeightsFollowReportsThenExpire(t *testing.T) {
 	var unavailable [2]atomic.Bool
 	var zeroFirst atomic.Bool
 	clk := clocktesting.NewFakeClock(capacityTestNow)
@@ -387,7 +387,7 @@ func TestReconcileReportedWeightsFromHTTP(t *testing.T) {
 	require.True(t, exists)
 	require.Len(t, tm.Spec.Entries, 2)
 	assert.Zero(t, tm.Spec.Entries[0].Weight, "no report and no ready replicas")
-	assert.Positive(t, tm.Spec.Entries[1].Weight, "a home without a report keeps its replica count")
+	assert.Positive(t, tm.Spec.Entries[1].Weight, "a cluster without a report keeps its replica count")
 	assert.Nil(t, tm.Spec.Entries[1].Capacity.ReportedWeight)
 	assert.Equal(t, v1beta1.CapacitySourceControlPlane, tm.Spec.Entries[1].Capacity.Source)
 

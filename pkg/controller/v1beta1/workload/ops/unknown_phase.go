@@ -25,8 +25,10 @@ import (
 // stuck-Terminating pod. Until it is free the step withholds its create,
 // and the wait an operator reads off the row is the hold pass's
 // (holds/nodeunknown.go). The Create pass runs the sweep over every
-// planned Instance, so a serving Instance whose node dies is rebuilt
-// elsewhere by the ordinary missing-pod paths once the names are freed.
+// planned Instance at every scope it builds at, so a serving Instance
+// whose node dies is rebuilt elsewhere by the ordinary missing-pod paths
+// once the names are freed, whether or not another Instance's roll or
+// repair is in flight.
 
 // targetPodNameSet is the desired names as the evidence reading takes
 // them.
@@ -121,15 +123,18 @@ func sweepUnknownPhasePod(ctx context.Context, deps workload.Deps, input workloa
 }
 
 // recoverUnknownPhaseInstances applies recoverUnknownPhaseTargets across
-// a whole Create pass. Returns the Instances the pass must leave alone
-// this time round and the earliest policy boundary among them.
-func recoverUnknownPhaseInstances(ctx context.Context, deps workload.Deps, input workload.ReconcileInput, plan workload.ComponentPlan, keep func(int32) bool, byInstance map[int32][]*corev1.Pod) (map[int32]bool, time.Time, error) {
+// a whole Create pass: every planned Instance, whatever scope the pass
+// builds at. A Ready Instance whose pods sit on a lost node has no
+// attempt of its own to free them, so this is the one reader every such
+// pod has, and a pass narrowed to the indices it may build for (a roll
+// or a repair in flight elsewhere) must still free the names of the
+// others, or one Instance's wait would keep every other Instance on the
+// lost node. Returns the Instances the pass must leave alone this time
+// round and the earliest policy boundary among them.
+func recoverUnknownPhaseInstances(ctx context.Context, deps workload.Deps, input workload.ReconcileInput, plan workload.ComponentPlan, byInstance map[int32][]*corev1.Pod) (map[int32]bool, time.Time, error) {
 	var held map[int32]bool
 	var nextEvidenceAt time.Time
 	for _, inst := range plan.Instances {
-		if !keep(inst.Index) {
-			continue
-		}
 		holding, at, err := recoverUnknownPhaseTargets(ctx, deps, input, inst.Index,
 			byInstance[inst.Index], expectedPodNamesForInstance(input, plan, inst))
 		if err != nil {

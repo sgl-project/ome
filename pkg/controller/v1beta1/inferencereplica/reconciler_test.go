@@ -2054,6 +2054,9 @@ func TestRestart_PendingGangMemberLost_RebuildsOnceRetryBlockIsDue(t *testing.T)
 			ir := gangLossIR("llama-engine", "prod")
 			survivor := podForIR(ir, 0, string(v1beta1.RunnerNameLeader), 0, true, true)
 			worker := podForIR(ir, 0, string(v1beta1.RunnerNameWorker), 0, true, true)
+			hash := query.RevisionFromName(targetRevisionNameFor(t, ir)).Hash()
+			survivor.Labels[query.LabelRevisionHash] = hash
+			worker.Labels[query.LabelRevisionHash] = hash
 			r, c := newReconciler(t, ir, survivor, worker)
 			r.Clock = clocktesting.NewFakeClock(base)
 			r.Recorder = record.NewFakeRecorder(32)
@@ -3223,13 +3226,13 @@ func TestBumpCollisionCount_SameNameReplacementUntouched(t *testing.T) {
 func TestParseExcludedAnnotationKeys(t *testing.T) {
 	g := gomega.NewWithT(t)
 
-	g.Expect(parseExcludedAnnotationKeys(&v1beta1.InferenceReplica{})).To(gomega.BeNil(),
+	g.Expect(v1beta1convert.ExcludedAnnotationKeys(&v1beta1.InferenceReplica{})).To(gomega.BeNil(),
 		"no annotation -> nil")
 
 	ir := &v1beta1.InferenceReplica{ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
 		constants.RevisionExcludedAnnotationKeysAnnotationKey: "a,b,,c",
 	}}}
-	got := parseExcludedAnnotationKeys(ir)
+	got := v1beta1convert.ExcludedAnnotationKeys(ir)
 	g.Expect(got).To(gomega.HaveLen(3), "empty split entries are dropped")
 	g.Expect(got).To(gomega.HaveKey("a"))
 	g.Expect(got).To(gomega.HaveKey("b"))
@@ -3241,17 +3244,17 @@ func TestStripExcludedAnnotations(t *testing.T) {
 
 	// nil excluded -> same pointer, untouched.
 	meta := &metav1.ObjectMeta{Annotations: map[string]string{"a": "1"}}
-	g.Expect(stripExcludedAnnotations(meta, nil)).To(gomega.BeIdenticalTo(meta))
+	g.Expect(v1beta1convert.StripExcludedAnnotations(meta, nil)).To(gomega.BeIdenticalTo(meta))
 
 	// nil meta -> nil.
-	g.Expect(stripExcludedAnnotations(nil, map[string]struct{}{"x": {}})).To(gomega.BeNil())
+	g.Expect(v1beta1convert.StripExcludedAnnotations(nil, map[string]struct{}{"x": {}})).To(gomega.BeNil())
 
 	excluded := map[string]struct{}{"drop": {}}
 	in := &metav1.ObjectMeta{
 		Labels:      map[string]string{"l": "1"},
 		Annotations: map[string]string{"keep": "1", "drop": "2"},
 	}
-	out := stripExcludedAnnotations(in, excluded)
+	out := v1beta1convert.StripExcludedAnnotations(in, excluded)
 	g.Expect(out).NotTo(gomega.BeIdenticalTo(in), "must return a copy, not mutate in place")
 	g.Expect(out.Annotations).To(gomega.HaveKey("keep"))
 	g.Expect(out.Annotations).NotTo(gomega.HaveKey("drop"))
@@ -3260,7 +3263,7 @@ func TestStripExcludedAnnotations(t *testing.T) {
 	g.Expect(out.Labels).To(gomega.HaveKeyWithValue("l", "1"), "labels must be preserved")
 
 	// nothing to drop -> same pointer (no needless copy).
-	g.Expect(stripExcludedAnnotations(in, map[string]struct{}{"absent": {}})).
+	g.Expect(v1beta1convert.StripExcludedAnnotations(in, map[string]struct{}{"absent": {}})).
 		To(gomega.BeIdenticalTo(in))
 }
 
@@ -3285,14 +3288,14 @@ func TestRevisionHashStableUnderExcludedAnnotations(t *testing.T) {
 			"editor.example.com/resource-version": "v1beta1",
 		},
 	}
-	excluded := parseExcludedAnnotationKeys(&v1beta1.InferenceReplica{
+	excluded := v1beta1convert.ExcludedAnnotationKeys(&v1beta1.InferenceReplica{
 		ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
 			constants.RevisionExcludedAnnotationKeysAnnotationKey: "editor.example.com/resource-version",
 		}},
 	})
 
 	strippedHash, _, err := revision.HashWithWorker(
-		podSpec, nil, stripExcludedAnnotations(withAmbient, excluded), nil, "uid")
+		podSpec, nil, v1beta1convert.StripExcludedAnnotations(withAmbient, excluded), nil, "uid")
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(strippedHash).To(gomega.Equal(baseHash),
 		"an excluded inherited annotation must not change the revision hash")
@@ -3309,7 +3312,7 @@ func TestRevisionHashStableUnderExcludedAnnotations(t *testing.T) {
 		Annotations: map[string]string{"ome.io/declared": "2"},
 	}
 	declHash, _, err := revision.HashWithWorker(
-		podSpec, nil, stripExcludedAnnotations(declaredChanged, excluded), nil, "uid")
+		podSpec, nil, v1beta1convert.StripExcludedAnnotations(declaredChanged, excluded), nil, "uid")
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(declHash).NotTo(gomega.Equal(baseHash),
 		"a deliberate declared-annotation change must still produce a new revision")
@@ -3389,7 +3392,7 @@ func TestRevisionHashCacheInvalidatesWhenExcludedAnnotationsChange(t *testing.T)
 	updatedHash, _, err := r.revisionHash(ir, input, nil, "scope-uid")
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	expectedMeta := stripExcludedAnnotations(meta, map[string]struct{}{inheritedKey: {}})
+	expectedMeta := v1beta1convert.StripExcludedAnnotations(meta, map[string]struct{}{inheritedKey: {}})
 	expectedHash, _, err := revision.HashWithWorkerAndTopology(
 		podSpec, nil, expectedMeta, "", nil, "scope-uid")
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -3885,6 +3888,7 @@ func TestReconcile_TPUSlices_FailedRecoveryFailsThePass(t *testing.T) {
 	r, c := newSliceReconciler(t, ir)
 	name := seedSlice(t, r, c, ir, sliceprovision.Slot{Instance: 0}, sliceStateReady)
 	pod := podForIR(ir, 0, string(v1beta1.RunnerNameDefault), 0, true, true)
+	pod.Labels[query.LabelRevisionHash] = query.RevisionFromName(targetRevisionNameFor(t, ir)).Hash()
 	pod.Spec.NodeSelector = map[string]string{sliceKeyAccelerator: "tpu-a", sliceKeyTopology: "2x2x1", sliceKeySlice: name}
 	if err := c.Create(ctx, pod); err != nil {
 		t.Fatalf("create pod: %v", err)
@@ -5255,7 +5259,7 @@ func revisionWithoutWidthFor(t *testing.T, ir *v1beta1.InferenceReplica) *appsv1
 	}
 	hash, raw, err := revision.HashWithWorkerTopologyAndPairing(
 		desired.PodSpec, desired.WorkerPodSpec,
-		stripExcludedAnnotations(desired.PodTemplateObjectMeta, hashExcludedAnnotationKeys(ir)),
+		v1beta1convert.StripExcludedAnnotations(desired.PodTemplateObjectMeta, hashExcludedAnnotationKeys(ir)),
 		desired.TopologyKey, desired.PairingProtocol, nil, scopeUID)
 	if err != nil {
 		t.Fatal(err)
@@ -5414,5 +5418,48 @@ func TestGangWidth_RevisionWithoutWidthRollsWhenTheWidthIsEdited(t *testing.T) {
 	}
 	if got := pods["1"]; len(got) != 4 || countOnRevision(got, fresh.Status.UpdateRevision) != 4 {
 		t.Fatalf("the replacement gang must be created whole at the new width on %s, got %v", fresh.Status.UpdateRevision, pods)
+	}
+}
+
+// TestRunPassSteps_StopsAtTheFirstStepThatEndsThePass holds the step runner
+// to the order of a pass: every step runs while each lets the pass go on,
+// and the first step that ends the pass, or fails, is the last one run. A
+// step that ends the pass leaves the result the pass returns on the record.
+func TestRunPassSteps_StopsAtTheFirstStepThatEndsThePass(t *testing.T) {
+	var ran []string
+	step := func(name string, next bool, err error) passStep {
+		return func(context.Context) (bool, error) {
+			ran = append(ran, name)
+			return next, err
+		}
+	}
+	run := func(steps ...passStep) (done bool, order string, err error) {
+		ran = nil
+		done, err = runPassSteps(context.Background(), steps)
+		return done, strings.Join(ran, ","), err
+	}
+
+	done, order, err := run(step("first", true, nil), step("second", true, nil))
+	if err != nil || !done || order != "first,second" {
+		t.Fatalf("every step went on: done=%v err=%v ran=%q, want done=true err=nil ran=first,second", done, err, order)
+	}
+	done, order, err = run(step("first", true, nil), step("ends", false, nil), step("never", true, nil))
+	if err != nil || done || order != "first,ends" {
+		t.Fatalf("a step ended the pass: done=%v err=%v ran=%q, want done=false err=nil ran=first,ends", done, err, order)
+	}
+	writeFailed := errors.New("write the status")
+	done, order, err = run(step("fails", true, writeFailed), step("never", true, nil))
+	if !errors.Is(err, writeFailed) || done || order != "fails" {
+		t.Fatalf("a step failed: done=%v err=%v ran=%q, want done=false the step's error ran=fails", done, err, order)
+	}
+
+	pass := &replicaPass{}
+	requeue := ctrl.Result{Requeue: true}
+	done, order, err = run(step("first", true, nil), func(context.Context) (bool, error) {
+		ran = append(ran, "ends")
+		return pass.end(requeue, nil)
+	}, step("never", true, nil))
+	if err != nil || done || order != "first,ends" || pass.result != requeue {
+		t.Fatalf("a step ended the pass with a result: done=%v err=%v ran=%q result=%+v, want done=false err=nil ran=first,ends result=%+v", done, err, order, pass.result, requeue)
 	}
 }
