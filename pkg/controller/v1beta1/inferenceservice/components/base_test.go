@@ -1,6 +1,7 @@
 package components
 
 import (
+	"context"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -18,6 +19,21 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/status"
 	"sigs.k8s.io/ome/pkg/render"
 )
+
+func TestCoordinatorFollowerDefaultAutoscalerOwnership(t *testing.T) {
+	ext := &v1beta1.ComponentExtensionSpec{}
+	fields := &BaseComponentFields{}
+	service := &v1beta1.InferenceService{}
+	resolved, err := resolveComponentAutoscaling(context.Background(), fields, service, v1beta1.DecoderComponent, ext)
+	if err != nil || resolved.Resolved == nil || resolved.Resolved.Class != v1beta1.AutoscalerHPA {
+		t.Fatalf("unowned follower should retain its default HPA: %+v, %v", resolved, err)
+	}
+	fields.CoordinatorFollower = true
+	resolved, err = resolveComponentAutoscaling(context.Background(), fields, service, v1beta1.DecoderComponent, ext)
+	if err != nil || resolved.Resolved == nil || resolved.Resolved.Class != v1beta1.AutoscalerNone {
+		t.Fatalf("coordinator-owned follower should suppress its default HPA: %+v, %v", resolved, err)
+	}
+}
 
 func TestUpdatePodSpecNodeSelector(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)

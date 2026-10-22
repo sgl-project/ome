@@ -61,10 +61,10 @@ func peerRevisionPredicate() predicate.Predicate {
 
 // peerRevisionInputsChanged reports whether an old→new InferenceReplica
 // transition moved one of the fields a sibling's peer-revision resolution
-// reads: the parent generation its projection reflects, its own generation
-// (the spec target and the rollback pin travel with it), and the status
-// that reports the roll it observed (ObservedGeneration, UpdateRevision,
-// CurrentRevision).
+// reads: the parent generation and the template hash its projection
+// carries, its own generation (the spec target and the rollback pin travel
+// with it), and the status that reports the roll it observed
+// (ObservedGeneration, ObservedTemplateHash, UpdateRevision, CurrentRevision).
 func peerRevisionInputsChanged(oldIR, newIR *v1beta1.InferenceReplica) bool {
 	if oldIR == nil || newIR == nil {
 		return true
@@ -72,11 +72,13 @@ func peerRevisionInputsChanged(oldIR, newIR *v1beta1.InferenceReplica) bool {
 	if oldIR.Generation != newIR.Generation {
 		return true
 	}
-	key := constants.InferenceReplicaParentGenerationAnnotationKey
-	if oldIR.Annotations[key] != newIR.Annotations[key] {
-		return true
+	for _, key := range []string{constants.InferenceReplicaParentGenerationAnnotationKey, constants.InferenceReplicaTemplateHashAnnotationKey} {
+		if oldIR.Annotations[key] != newIR.Annotations[key] {
+			return true
+		}
 	}
 	return oldIR.Status.ObservedGeneration != newIR.Status.ObservedGeneration ||
+		oldIR.Status.ObservedTemplateHash != newIR.Status.ObservedTemplateHash ||
 		oldIR.Status.UpdateRevision != newIR.Status.UpdateRevision ||
 		oldIR.Status.CurrentRevision != newIR.Status.CurrentRevision
 }

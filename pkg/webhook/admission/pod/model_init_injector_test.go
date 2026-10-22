@@ -126,6 +126,18 @@ func TestModelInitInjector_injectModelInit(t *testing.T) {
 	}
 }
 
+func TestModelInitInjector_createInitContainer_InvalidResourceQuantity_ReturnsError(t *testing.T) {
+	_, err := (&ModelInitInjector{
+		CpuLimit:      "bad-cpu",
+		MemoryLimit:   "1Gi",
+		CpuRequest:    "1",
+		MemoryRequest: "1Gi",
+	}).createInitContainer(nil, nil, nil)
+	if err == nil {
+		t.Fatalf("expected invalid resource quantity error")
+	}
+}
+
 func TestModelInitInjector_containerExists(t *testing.T) {
 	tests := []struct {
 		name string

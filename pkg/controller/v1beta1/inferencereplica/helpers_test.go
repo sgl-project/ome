@@ -273,13 +273,14 @@ func decisionsFor(t *testing.T, r *Reconciler, key client.ObjectKey) readerDecis
 	ready.LastTransitionTime, stalled.LastTransitionTime = metav1.Time{}, metav1.Time{}
 	live := revision.CollectLiveRevisionNames(ir.Status.CurrentRevision, ir.Status.UpdateRevision, observedFromIR(ir).InstanceStatuses)
 	sort.Strings(live)
+	staged, _ := stagedAtPartition(&ir.Status, ir.Spec.Lifecycle, ir.Spec.Pacing)
 	return readerDecisions{
 		observed:       observedFromIR(ir),
 		anyFailed:      hasFailedInstance(ir.Status.InstanceStatuses),
 		ready:          ready,
 		stalled:        stalled,
 		liveRevisions:  live,
-		stagedAtPartit: stagedAtPartition(&ir.Status, ir.Spec.Lifecycle, ir.Spec.Pacing),
+		stagedAtPartit: staged,
 	}
 }
 

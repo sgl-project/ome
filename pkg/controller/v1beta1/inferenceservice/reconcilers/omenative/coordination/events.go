@@ -39,6 +39,17 @@ const (
 	// see this event explaining why the band did not fire.
 	EventReasonRatioGateBypassed = "RatioGateBypassed"
 
+	// EventReasonRatioStepOutsideTolerance fires when the RatioBalanced
+	// serving band admits a drain that leaves the serving ratio outside the
+	// tolerance, because no single step of that side can stay inside it at
+	// the group's shape (8 prefill beside 2 decode under tolerance 20: one
+	// decode pod out reads 8:1, 100 points off). The band admits one such
+	// step at a time from a fleet serving its reference in band, instead of
+	// holding the roll for good; the message carries the counts and the
+	// tolerance, so the operator can widen the tolerance or resize the
+	// group to a shape one step keeps inside it.
+	EventReasonRatioStepOutsideTolerance = "RatioStepOutsideTolerance"
+
 	// EventReasonMixedPairingObserved fires when a RollingUpdate
 	// group sees distinct (vN, vM) revision pairs in flight.
 	// Informational — helps operators audit back-compat assertions.

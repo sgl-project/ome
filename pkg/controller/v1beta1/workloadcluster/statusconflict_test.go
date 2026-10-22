@@ -10,10 +10,10 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
@@ -64,20 +64,14 @@ func TestFinishStatusWriteOutcome(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			s := scheme(t)
+			s := fakeclient.Scheme(t)
 			wc := wcWithSecret("m1")
 
-			builder := fakeclient.NewClientBuilder().WithScheme(s).
-				WithObjects(wc).
-				WithStatusSubresource(&v1beta1.WorkloadCluster{})
+			opts := []fakeclient.Option{fakeclient.WithScheme(s), fakeclient.WithObjects(wc), fakeclient.WithStatusSubresource(&v1beta1.WorkloadCluster{})}
 			if tc.updateErr != nil {
-				builder = builder.WithInterceptorFuncs(interceptor.Funcs{
-					SubResourceUpdate: func(context.Context, client.Client, string, client.Object, ...client.SubResourceUpdateOption) error {
-						return tc.updateErr
-					},
-				})
+				opts = append(opts, fakeclient.FailingVerb(fakeclient.StatusUpdate, fakeclient.EveryCall, tc.updateErr))
 			}
-			c := builder.Build()
+			c := fakeclient.New(t, opts...)
 			r := &Reconciler{Client: c, Scheme: s, Log: log.Log}
 
 			got, err := r.finish(context.Background(), wc, DefaultHealthInterval)

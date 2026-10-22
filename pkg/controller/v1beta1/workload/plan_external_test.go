@@ -187,27 +187,62 @@ func TestBuildPlan_ScaleDownRemovesTheCordonedInstanceFirst(t *testing.T) {
 	healthy := func(idx int32) types.InstanceStatus {
 		return types.InstanceStatus{Index: idx, Phase: types.InstancePhaseReady, PodCount: 1, ServingPodCount: 1}
 	}
-	rows := []types.InstanceStatus{healthy(0), {Index: 1, Phase: types.InstancePhaseCreating, PodCount: 1}, healthy(2), healthy(3)}
+	creating := types.InstanceStatus{Index: 1, Phase: types.InstancePhaseCreating, PodCount: 1,
+		Operation: &types.InstanceOperation{Type: types.InstanceOperationCreate, Step: "CreatePods"}}
+	rows := []types.InstanceStatus{healthy(0), creating, healthy(2), healthy(3)}
 	cases := []struct {
 		name     string
+		rows     []types.InstanceStatus
 		cordoned map[int32]struct{}
 		replicas int32
 		extras   []int32
 	}{
-		{"no cordoned node: the Creating row and then the highest index leave", nil, 2, []int32{1, 3}},
-		{"the healthy lowest index on a cordoned node leaves first", map[int32]struct{}{0: {}}, 3, []int32{0}},
-		{"then the usual order among the rest", map[int32]struct{}{0: {}}, 2, []int32{0, 1}},
+		{"no cordoned node: the Creating row and then the highest index leave", rows, nil, 2, []int32{1, 3}},
+		{"the healthy lowest index on a cordoned node leaves first", rows, map[int32]struct{}{0: {}}, 3, []int32{0}},
+		{"then the usual order among the rest", rows, map[int32]struct{}{0: {}}, 2, []int32{0, 1}},
+		{"a Creating row with no operation leaves before the cordoned row: nothing drives it",
+			[]types.InstanceStatus{healthy(0), {Index: 1, Phase: types.InstancePhaseCreating, PodCount: 1}, healthy(2), healthy(3)},
+			map[int32]struct{}{0: {}}, 3, []int32{1}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			observed := types.WorkloadObservedState{InstanceStatuses: rows, CordonedInstances: tc.cordoned}
+			observed := types.WorkloadObservedState{InstanceStatuses: tc.rows, CordonedInstances: tc.cordoned}
 			plan, err := workload.BuildPlan(types.ComponentEngine, types.WorkloadDesiredSpec{Replicas: tc.replicas}, observed)
 			if err != nil {
 				t.Fatalf("BuildPlan: %v", err)
 			}
-			if diff := cmp.Diff(tc.extras, workload.ScaleDownExtras(rows, plan)); diff != "" {
+			if diff := cmp.Diff(tc.extras, workload.ScaleDownExtras(tc.rows, plan)); diff != "" {
 				t.Fatalf("scale-down extras (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+// A move that expires restores its source and releases its replacement
+// index, leaving that row Creating with no operation. The plan that
+// follows reads the released row as the one extra to retire, whatever
+// else stands beside it: a Failed attempt on a revision in backoff keeps
+// its place in the count, and with it the pod that could serve again.
+func TestBuildPlan_ExpiredMoveReleasesTheExtraBesideAFailedAttempt(t *testing.T) {
+	const running, pushed = "comp-rev-v1aaaaaa", "comp-rev-v2bbbbbb"
+	serving := func(idx int32) types.InstanceStatus {
+		return types.InstanceStatus{Index: idx, Phase: types.InstancePhaseReady, RunningRevision: running, PodCount: 1, ServingPodCount: 1}
+	}
+	rows := []types.InstanceStatus{
+		{Index: 0, Phase: types.InstancePhaseFailed, RunningRevision: running, TargetRevision: pushed, PodCount: 1},
+		serving(1),
+		serving(2),
+		{Index: 3, Phase: types.InstancePhaseCreating, PodCount: 1},
+	}
+	observed := types.WorkloadObservedState{
+		InstanceStatuses: rows,
+		RetryBlocks:      []types.RetryBlock{{TargetRevision: pushed, State: types.RetryBlockBackoff}},
+	}
+	plan, err := workload.BuildPlan(types.ComponentEngine, types.WorkloadDesiredSpec{Replicas: 3}, observed)
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	if diff := cmp.Diff([]int32{3}, workload.ScaleDownExtras(rows, plan)); diff != "" {
+		t.Fatalf("the released replacement must be the extra, not the Failed attempt whose pod still runs (-want +got):\n%s", diff)
 	}
 }

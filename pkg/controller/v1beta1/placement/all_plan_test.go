@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/placement/allocation"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workloadcluster"
 	"sigs.k8s.io/ome/pkg/placement/plan"
@@ -63,7 +64,7 @@ func TestAllPlanSurvivesMemberStatusUpdates(t *testing.T) {
 				}
 				for name, assignment := range proposal.Assignments {
 					if diff := cmp.Diff(false, assignment.HomeInputsPending); diff != "" {
-						t.Fatalf("%s home resolution (-want +got):\n%s", name, diff)
+						t.Fatalf("%s member resolution (-want +got):\n%s", name, diff)
 					}
 				}
 				source, err = (plan.Store{Client: f.reconciler.Client, Reader: f.reconciler.APIReader}).Persist(t.Context(), source, proposal)
@@ -84,15 +85,15 @@ func TestAllPlanInitialApplication(t *testing.T) {
 		edit func(*testing.T, *backendFixture)
 		want map[string]int32
 	}{
-		{name: "full source policy on every home", want: map[string]int32{"member-a": 3, "member-b": 3}},
-		{name: "zero floor retains every full home", edit: func(_ *testing.T, f *backendFixture) {
+		{name: "full source policy on every member", want: map[string]int32{"member-a": 3, "member-b": 3}},
+		{name: "zero floor retains every full-policy member", edit: func(_ *testing.T, f *backendFixture) {
 			f.source.Spec.Engine.MinReplicas = ptr.To(0)
 		}, want: map[string]int32{"member-a": 0, "member-b": 0}},
 		{name: "zero floor progresses independently of an unreachable peer", edit: func(_ *testing.T, f *backendFixture) {
 			f.source.Spec.Engine.MinReplicas = ptr.To(0)
 			delete(f.connections.m, "member-b")
 		}, want: map[string]int32{"member-a": 0}},
-		{name: "mixed inherited floors retain the full per-home policy", edit: func(t *testing.T, f *backendFixture) {
+		{name: "mixed inherited floors retain the full per-member policy", edit: func(t *testing.T, f *backendFixture) {
 			f.source.Spec.Engine.MinReplicas = nil
 			for name, cl := range f.workers {
 				rt := backendTestRuntime()
@@ -123,7 +124,7 @@ func TestAllPlanInitialApplication(t *testing.T) {
 				}
 			}
 		}, want: map[string]int32{"member-a": 3, "member-b": 3}},
-		{name: "unresolved home floor holds only that home", edit: func(t *testing.T, f *backendFixture) {
+		{name: "unresolved member floor holds only that member", edit: func(t *testing.T, f *backendFixture) {
 			b := f.workers["member-b"]
 			unresolved := backendTestRuntime()
 			if err := b.Get(t.Context(), client.ObjectKeyFromObject(unresolved), unresolved); err != nil {
@@ -197,7 +198,7 @@ func TestAllPlanInitialApplication(t *testing.T) {
 				}
 				p, err := protocol.FromDerived(member)
 				if err != nil || p == nil {
-					t.Fatalf("missing full-home authority: %v", err)
+					t.Fatalf("missing full-policy authority: %v", err)
 				}
 				count, err := protocol.ValidateReplicaFloors(p.ReplicaFloors)
 				if err != nil {
@@ -218,44 +219,44 @@ func TestAllPlanInitialApplication(t *testing.T) {
 	}
 }
 
-func TestAllPlanWholeHomeBudget(t *testing.T) {
+func TestAllPlanWholeMemberBudget(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
-		edit   func(*v1beta1.InferenceService, map[string]plannedHomeObservation)
+		edit   func(*v1beta1.InferenceService, map[string]plannedMemberObservation)
 		wantB  int32
 		reason string
 	}{
-		{name: "complete home fits", wantB: 3, reason: "AwaitingMemberConvergence"},
-		{name: "existing rollout shares allowance", edit: func(_ *v1beta1.InferenceService, o map[string]plannedHomeObservation) {
+		{name: "complete member fits", wantB: 3, reason: "AwaitingMemberConvergence"},
+		{name: "existing rollout shares allowance", edit: func(_ *v1beta1.InferenceService, o map[string]plannedMemberObservation) {
 			h := o["a"]
 			h.RolloutReserved = 1
 			o["a"] = h
 		}, reason: "SurgeBudgetExhausted"},
-		{name: "pause required on standing home", edit: func(_ *v1beta1.InferenceService, o map[string]plannedHomeObservation) {
+		{name: "pause required on standing member", edit: func(_ *v1beta1.InferenceService, o map[string]plannedMemberObservation) {
 			h := o["a"]
 			h.PauseAcknowledged = false
 			o["a"] = h
 		}, reason: "AwaitingSurgePause"},
-		{name: "unknown inventory cannot fund movement", edit: func(s *v1beta1.InferenceService, _ map[string]plannedHomeObservation) {
+		{name: "unknown inventory cannot fund movement", edit: func(s *v1beta1.InferenceService, _ map[string]plannedMemberObservation) {
 			s.Status.Placement.Candidates[0].Allocation.InventoryPending = true
 		}, reason: "AwaitingHomeInputs"},
-		{name: "unreadable runtime retains authority but holds movement", edit: func(s *v1beta1.InferenceService, _ map[string]plannedHomeObservation) {
+		{name: "unreadable runtime retains authority but holds movement", edit: func(s *v1beta1.InferenceService, _ map[string]plannedMemberObservation) {
 			s.Status.Placement.Candidates[1].Allocation.HomeInputsPending = true
 		}, reason: "AwaitingHomeInputs"},
-		{name: "unresolved target holds movement", edit: func(s *v1beta1.InferenceService, _ map[string]plannedHomeObservation) {
+		{name: "unresolved target holds movement", edit: func(s *v1beta1.InferenceService, _ map[string]plannedMemberObservation) {
 			s.Status.Placement.Candidates[1].Allocation.DesiredHome.InputDigest = "old-intent"
 		}, reason: "AwaitingHomeInputs"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			home := &v1beta1.PlacementHomePolicy{InputDigest: "intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.EngineComponent, Replicas: 3}}}
+			policy := &v1beta1.PlacementHomePolicy{InputDigest: "intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.EngineComponent, Replicas: 3}}}
 			s := srcISVCMode(v1beta1.PlacementModeAll, "")
 			s.Status.Placement = &v1beta1.PlacementStatus{Plan: &v1beta1.PlacementPlanStatus{Mode: v1beta1.PlacementModeAll, InputDigest: "intent", AssignedReplicas: 3, PauseSurge: true}, Candidates: []v1beta1.CandidatePlacement{
-				{Cluster: "a", Allocation: &v1beta1.CandidateAllocationStatus{CurrentHome: home.DeepCopy(), OriginalReplicas: 3, CurrentReplicas: 3}},
-				{Cluster: "b", Allocation: &v1beta1.CandidateAllocationStatus{DesiredHome: home.DeepCopy(), DesiredReplicas: 3, Matched: true}},
+				{Cluster: "a", Allocation: &v1beta1.CandidateAllocationStatus{CurrentHome: policy.DeepCopy(), OriginalReplicas: 3, CurrentReplicas: 3}},
+				{Cluster: "b", Allocation: &v1beta1.CandidateAllocationStatus{DesiredHome: policy.DeepCopy(), DesiredReplicas: 3, Matched: true}},
 			}}
-			o := map[string]plannedHomeObservation{
-				"a": {Home: allocation.Home{Known: true, Applied: true, Routable: true, Ready: 3, Occupied: 3}, PauseAcknowledged: true},
-				"b": {Home: allocation.Home{Known: true, Absent: true, Eligible: true}},
+			o := map[string]plannedMemberObservation{
+				"a": {MemberState: allocation.MemberState{Known: true, Applied: true, Routable: true, Ready: 3, Occupied: 3}, PauseAcknowledged: true},
+				"b": {MemberState: allocation.MemberState{Known: true, Absent: true, Eligible: true}},
 			}
 			if tt.edit != nil {
 				tt.edit(s, o)
@@ -300,10 +301,10 @@ func TestAllInventoryRecoveryAcceptsRetarget(t *testing.T) {
 			initial := f.reconcile(t)
 			original := initial.Status.Placement.Plan.AdoptionDigest
 			if original == "" {
-				t.Fatal("unknown home inventory was treated as complete")
+				t.Fatal("unknown member inventory was treated as complete")
 			}
 			if err := f.workers["member-a"].Get(t.Context(), client.ObjectKeyFromObject(f.source), &v1beta1.InferenceService{}); err != nil {
-				t.Fatalf("independent home was not provisioned: %v", err)
+				t.Fatalf("independent member was not provisioned: %v", err)
 			}
 			wc := readyWC("member-c", nil)
 			if err := f.reconciler.Create(t.Context(), wc); err != nil {
@@ -331,7 +332,7 @@ func TestAllInventoryRecoveryAcceptsRetarget(t *testing.T) {
 			for _, candidate := range recovered.Status.Placement.Candidates {
 				allocation := candidate.Allocation
 				if allocation == nil || allocation.DesiredHome == nil {
-					t.Fatalf("%s has no desired home policy", candidate.Cluster)
+					t.Fatalf("%s has no desired member policy", candidate.Cluster)
 				}
 				if diff := cmp.Diff(recovered.Status.Placement.Plan.InputDigest, allocation.DesiredHome.InputDigest); diff != "" {
 					t.Fatal(diff)
@@ -354,7 +355,7 @@ func TestAllInventoryRecoveryAcceptsRetarget(t *testing.T) {
 	}
 }
 
-func TestFullHomePausePreservesAcceptedFloor(t *testing.T) {
+func TestFullPolicyPausePreservesAcceptedFloor(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		pause   bool
@@ -439,9 +440,9 @@ func TestAllUnknownRuntimeRetainsDesiredAuthority(t *testing.T) {
 	}
 }
 
-// settleAllServingHomes converges two serving homes on an All source and
+// settleAllServingMembers converges two serving members on an All source and
 // returns the fixture with its settled status.
-func settleAllServingHomes(t *testing.T, replicas int32) (*backendFixture, *v1beta1.InferenceService) {
+func settleAllServingMembers(t *testing.T, replicas int32) (*backendFixture, *v1beta1.InferenceService) {
 	t.Helper()
 	names := []string{"member-a", "member-b"}
 	f := newBackendFixture(t, v1beta1.PlacementModeAll)
@@ -454,14 +455,14 @@ func settleAllServingHomes(t *testing.T, replicas int32) (*backendFixture, *v1be
 	}
 	f.reconcile(t)
 	for _, name := range names {
-		projectAllHome(t, f, name, replicas)
-		serveAllHome(t, f, name, replicas)
+		projectAllModeMember(t, f, name, replicas)
+		serveAllModeMember(t, f, name, replicas)
 	}
 	weights := map[string]int32{"member-a": replicas, "member-b": replicas}
 	var settled *v1beta1.InferenceService
 	for range 8 {
 		for _, name := range names {
-			projectAllHome(t, f, name, replicas)
+			projectAllModeMember(t, f, name, replicas)
 		}
 		publishAllRouting(t, f, weights)
 		settled = f.reconcile(t)
@@ -470,22 +471,22 @@ func settleAllServingHomes(t *testing.T, replicas int32) (*backendFixture, *v1be
 		}
 	}
 	if condition := settled.Status.GetCondition(v1beta1.PlacementConverged); condition == nil || condition.Status != corev1.ConditionTrue {
-		t.Fatalf("serving homes did not settle: %+v", condition)
+		t.Fatalf("serving members did not settle: %+v", condition)
 	}
 	return f, settled
 }
 
 // TestAllUnreadableObservationKeepsAcknowledgedCandidate settles two serving
-// homes, then fails one home's inventory read for a single pass. That pass
-// reports the gap through the observation flag alone: the home keeps its
+// members, then fails one member's inventory read for a single pass. That pass
+// reports the gap through the observation flag alone: the member keeps its
 // acknowledged plan, endpoint and admission, every decision holds, and the
 // next readable pass restores the known observation.
 func TestAllUnreadableObservationKeepsAcknowledgedCandidate(t *testing.T) {
 	const replicas = 3
-	f, settled := settleAllServingHomes(t, replicas)
+	f, settled := settleAllServingMembers(t, replicas)
 	before := candidateOf(t, settled, "member-a")
 	if !before.ObservationKnown || before.AppliedPlanID != settled.Status.Placement.Plan.ID || before.ReadyReplicas != replicas || before.Endpoint == nil {
-		t.Fatalf("settled home is not serving its acknowledged plan: %+v", before)
+		t.Fatalf("settled member is not serving its acknowledged plan: %+v", before)
 	}
 
 	f.connections.m["member-a"] = unreadableAllMember(f, "member-a")
@@ -536,19 +537,19 @@ func TestAllUnreadableObservationKeepsAcknowledgedCandidate(t *testing.T) {
 }
 
 // TestAllAbsentMemberWithUnreadableInventoryIsUnknown settles two serving
-// homes, then removes one home's member copy while its component inventory
+// members, then removes one member's placed copy while its component inventory
 // cannot be listed. The standing read is conclusively absent and the planned
-// read is unknown: the pass keeps the home's acknowledged plan behind an
+// read is unknown: the pass keeps the member's acknowledged plan behind an
 // unknown observation instead of carrying the flag of the last readable pass.
 func TestAllAbsentMemberWithUnreadableInventoryIsUnknown(t *testing.T) {
-	f, settled := settleAllServingHomes(t, 3)
+	f, settled := settleAllServingMembers(t, 3)
 	before := candidateOf(t, settled, "member-a")
 	if !before.ObservationKnown || before.AppliedPlanID != settled.Status.Placement.Plan.ID {
-		t.Fatalf("settled home has not acknowledged the accepted plan: %+v", before)
+		t.Fatalf("settled member has not acknowledged the accepted plan: %+v", before)
 	}
 	member, present := allMemberOn(t, f, "member-a")
 	if !present {
-		t.Fatal("settled home has no member")
+		t.Fatal("settled member has no placed copy")
 	}
 	if err := f.workers["member-a"].Delete(t.Context(), member); err != nil {
 		t.Fatal(err)
@@ -586,7 +587,7 @@ func ratioAllSource(t *testing.T, f *backendFixture) {
 	}
 }
 
-func TestAllPlanPlacesRatioFloorsOnEveryHome(t *testing.T) {
+func TestAllPlanPlacesRatioFloorsOnEveryMember(t *testing.T) {
 	f := newBackendFixture(t, v1beta1.PlacementModeAll)
 	ratioAllSource(t, f)
 	live := f.reconcile(t)
@@ -594,12 +595,12 @@ func TestAllPlanPlacesRatioFloorsOnEveryHome(t *testing.T) {
 	if live.Status.Placement == nil || live.Status.Placement.Plan == nil {
 		t.Fatalf("no accepted plan: %+v", live.Status)
 	}
-	// Every full home requests its own 60 primary units.
+	// Every full-policy member requests its own 60 primary units.
 	if diff := cmp.Diff(int64(60*len(live.Status.Placement.Candidates)), live.Status.Placement.Plan.RequestedReplicas); diff != "" {
 		t.Errorf("requested primary units (-want +got):\n%s", diff)
 	}
 	if diff := cmp.Diff(2, len(live.Status.Placement.Candidates)); diff != "" {
-		t.Errorf("planned homes (-want +got):\n%s", diff)
+		t.Errorf("planned members (-want +got):\n%s", diff)
 	}
 	if condition := live.Status.GetCondition(v1beta1.PlacementConverged); condition == nil || condition.Reason == "AwaitingHomeInputs" {
 		t.Errorf("ratio floors held as unresolved: %+v", condition)
@@ -607,7 +608,7 @@ func TestAllPlanPlacesRatioFloorsOnEveryHome(t *testing.T) {
 	for _, candidate := range live.Status.Placement.Candidates {
 		a := candidate.Allocation
 		if a == nil || a.HomeInputsPending || a.DesiredHome == nil {
-			t.Fatalf("%s home is unresolved: %+v", candidate.Cluster, a)
+			t.Fatalf("%s member is unresolved: %+v", candidate.Cluster, a)
 		}
 		if diff := cmp.Diff(want, a.DesiredHome.ReplicaFloors); diff != "" {
 			t.Errorf("%s desired floors (-want +got):\n%s", candidate.Cluster, diff)
@@ -621,7 +622,7 @@ func TestAllPlanPlacesRatioFloorsOnEveryHome(t *testing.T) {
 		}
 		policy, err := protocol.FromDerived(member)
 		if err != nil || policy == nil {
-			t.Fatalf("%s full-home authority: %v", candidate.Cluster, err)
+			t.Fatalf("%s full-policy authority: %v", candidate.Cluster, err)
 		}
 		if diff := cmp.Diff(want, policy.ReplicaFloors); diff != "" {
 			t.Errorf("%s member floors (-want +got):\n%s", candidate.Cluster, diff)
@@ -632,7 +633,7 @@ func TestAllPlanPlacesRatioFloorsOnEveryHome(t *testing.T) {
 	}
 }
 
-func TestAllPlanReportsUnresolvedHomePolicy(t *testing.T) {
+func TestAllPlanReportsUnresolvedMemberPolicy(t *testing.T) {
 	f := newBackendFixture(t, v1beta1.PlacementModeAll)
 	if err := f.reconciler.Get(t.Context(), client.ObjectKeyFromObject(f.source), f.source); err != nil {
 		t.Fatal(err)
@@ -652,14 +653,125 @@ func TestAllPlanReportsUnresolvedHomePolicy(t *testing.T) {
 	live := f.reconcile(t)
 	condition := live.Status.GetCondition(v1beta1.PlacementConverged)
 	if condition == nil || condition.Reason != "AwaitingHomeInputs" {
-		t.Fatalf("unresolved home did not hold inputs: %+v", condition)
+		t.Fatalf("unresolved member did not hold inputs: %+v", condition)
 	}
 	if !strings.Contains(condition.Message, "home policy is unresolved on member-b: ") {
-		t.Fatalf("condition message does not name the unresolved home: %q", condition.Message)
+		t.Fatalf("condition message does not name the unresolved member: %q", condition.Message)
 	}
 	for _, candidate := range live.Status.Placement.Candidates {
 		if candidate.Cluster == "member-b" && !candidate.Allocation.HomeInputsPending {
 			t.Fatalf("member-b inputs were not held: %+v", candidate.Allocation)
+		}
+	}
+}
+
+// TestAllLowerMinimumOnRetainedMembersIsLocalScaling authors lower minimums
+// on an All-mode service whose members all stay: no cluster is added,
+// released or drained, so no capacity moves between clusters. Each member
+// takes the new minimums at once and the plan does not pause member growth;
+// the members' autoscalers stay authoritative above them. A raised minimum
+// on any component grows each member, so it keeps the surge pause, also when
+// another component's minimum falls.
+func TestAllLowerMinimumOnRetainedMembersIsLocalScaling(t *testing.T) {
+	for _, tt := range []struct {
+		name            string
+		pd              bool
+		engine, decoder int
+		wantPause       bool
+	}{
+		{name: "lower engine minimum", engine: 1},
+		{name: "lower prefill and decode minimums", pd: true, engine: 1, decoder: 1},
+		{name: "raised engine minimum keeps the pause", engine: 5, wantPause: true},
+		{name: "raised decode minimum keeps the pause beside a lower prefill minimum", pd: true, engine: 1, decoder: 5, wantPause: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := singleFixture(t, tt.pd)
+			f.source.Spec.Placement.Mode = v1beta1.PlacementModeAll
+			if err := f.reconciler.Update(t.Context(), f.source); err != nil {
+				t.Fatal(err)
+			}
+			f.reconcile(t)
+			for name := range f.workers {
+				seedSingleAdmission(t, f, name, declaredComponents(f.source)...)
+				acknowledgeMemberAt(t, f, name, 3, false)
+			}
+			stored := f.reconcile(t)
+			for pass := 0; stored.Status.Placement.Plan.PauseSurge && pass < 5; pass++ {
+				for name := range f.workers {
+					acknowledgeMemberAt(t, f, name, 3, true)
+				}
+				stored = f.reconcile(t)
+			}
+			if stored.Status.Placement.Plan.PauseSurge {
+				t.Fatalf("the initial application never released its pause: %+v (%s)", stored.Status.Placement.Plan, stored.Status.GetCondition(v1beta1.PlacementConverged).Reason)
+			}
+			before := map[string]int32{}
+			for _, candidate := range stored.Status.Placement.Candidates {
+				before[candidate.Cluster] = candidate.Allocation.CurrentReplicas
+			}
+
+			if err := f.reconciler.Get(t.Context(), client.ObjectKeyFromObject(f.source), f.source); err != nil {
+				t.Fatal(err)
+			}
+			f.source.Spec.Engine.MinReplicas = ptr.To(tt.engine)
+			if f.source.Spec.Decoder != nil {
+				f.source.Spec.Decoder.MinReplicas = ptr.To(tt.decoder)
+			}
+			if err := f.reconciler.Update(t.Context(), f.source); err != nil {
+				t.Fatal(err)
+			}
+			got := f.reconcile(t)
+			if tt.wantPause {
+				if !got.Status.Placement.Plan.PauseSurge {
+					t.Fatalf("a raised minimum must keep the surge pause: %+v", got.Status.Placement.Plan)
+				}
+				return
+			}
+			if got.Status.Placement.Plan.PauseSurge {
+				t.Fatalf("a lower minimum on retained members paused member growth: %+v", got.Status.Placement.Plan)
+			}
+			for _, candidate := range got.Status.Placement.Candidates {
+				a := candidate.Allocation
+				if a.CurrentHome == nil || a.DesiredHome == nil || a.DrainRequested {
+					t.Fatalf("member %s lost its retained policy: %+v", candidate.Cluster, a)
+				}
+				if a.CurrentReplicas != a.DesiredReplicas || a.OriginalReplicas != a.DesiredReplicas || a.CurrentReplicas == before[candidate.Cluster] {
+					t.Fatalf("member %s did not take the new minimum at once: original %d, current %d, desired %d (before %d)", candidate.Cluster, a.OriginalReplicas, a.CurrentReplicas, a.DesiredReplicas, before[candidate.Cluster])
+				}
+			}
+		})
+	}
+}
+
+// acknowledgeMemberAt acknowledges the member's current policy at the given
+// count the way its replicas do. With limit set, each paused component also
+// persists a placement replica limit at its count, as a member does while
+// placement pauses growth.
+func acknowledgeMemberAt(t *testing.T, f *backendFixture, name string, replicas int32, limit bool) {
+	t.Helper()
+	worker := f.workers[name]
+	member := &v1beta1.InferenceService{}
+	if err := worker.Get(t.Context(), client.ObjectKeyFromObject(f.source), member); err != nil {
+		t.Fatal(err)
+	}
+	p, err := protocol.FromDerived(member)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, component := range declaredComponents(f.source) {
+		ir := &v1beta1.InferenceReplica{}
+		if err := worker.Get(t.Context(), client.ObjectKey{Namespace: member.Namespace, Name: member.Name + "-" + string(component)}, ir); err != nil {
+			t.Fatal(err)
+		}
+		ir.Generation++
+		ir.Spec.Replicas, ir.Spec.PlacementExecution = ptr.To(replicas), p.DeepCopy()
+		if limit && p != nil && p.PauseSurge {
+			ir.Spec.PlacementReplicaLimit = ptr.To(replicas)
+		}
+		ir.Annotations = map[string]string{constants.InferenceReplicaParentGenerationAnnotationKey: strconv.FormatInt(member.Generation, 10)}
+		ir.Status.ObservedGeneration, ir.Status.PlacementObservedGeneration = ir.Generation, ir.Generation
+		if err := worker.Update(t.Context(), ir); err != nil {
+			t.Fatal(err)
 		}
 	}
 }

@@ -41,11 +41,37 @@ func ratioGroupISVC(engineReplicas, decoderReplicas int, tolerance *int32) *v1be
 }
 
 // mixedRatioGroupISVC is ratioGroupISVC with a SurgeThenDrain engine beside
-// the RecreatePod decoder: one member surges, so the ratio check, not the
-// batch step, paces the decoder's drains.
+// the RecreatePod decoder: the engine steps on its surges and the decoder on
+// its drains, so the batch step paces the pair.
 func mixedRatioGroupISVC(engineReplicas, decoderReplicas int, tolerance *int32) *v1beta1.InferenceService {
 	isvc := ratioGroupISVC(engineReplicas, decoderReplicas, tolerance)
 	isvc.Spec.Engine.Lifecycle.UpdateStrategy.Type = v1beta1.UpdateStrategySurgeThenDrain
+	return isvc
+}
+
+// inPlaceEngineRatioGroupISVC is ratioGroupISVC with an engine that patches
+// its single pods in place beside the RecreatePod decoder: the engine does
+// not step, so the ratio check, not the batch step, paces the decoder's
+// drains.
+func inPlaceEngineRatioGroupISVC(engineReplicas, decoderReplicas int, tolerance *int32) *v1beta1.InferenceService {
+	isvc := ratioGroupISVC(engineReplicas, decoderReplicas, tolerance)
+	isvc.Spec.Engine.Lifecycle.UpdateStrategy.Type = v1beta1.UpdateStrategyInPlaceIfPossible
+	return isvc
+}
+
+// withSurgingRouters adds two routers under SurgeThenDrain to the group. A
+// router does not decide whether the batch step paces the engine and the
+// decoder: one that surges rolls on the ratio and surge gates.
+func withSurgingRouters(isvc *v1beta1.InferenceService) *v1beta1.InferenceService {
+	isvc.Spec.Router = &v1beta1.RouterSpec{
+		ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+			Annotations: map[string]string{constants.DeploymentMode: string(constants.OMENative)},
+			MinReplicas: ptr.To(2), MaxReplicas: 2,
+			Lifecycle: &v1beta1.LifecycleSpec{UpdateStrategy: &v1beta1.UpdateStrategy{Type: v1beta1.UpdateStrategySurgeThenDrain}},
+		},
+		Runner: &v1beta1.RunnerSpec{Container: v1.Container{Image: "runtime-image:v1"}},
+	}
+	isvc.Spec.Rollout.Groups[0].Components = append(isvc.Spec.Rollout.Groups[0].Components, v1beta1.RouterComponent)
 	return isvc
 }
 
@@ -70,23 +96,45 @@ func TestValidateCreate_RatioDrainFeasibility(t *testing.T) {
 			isvc: ratioGroupISVC(6, 2, ptr.To[int32](20)),
 		},
 		{
-			name:    "6:2 with a SurgeThenDrain engine and a RecreatePod decoder at tolerance 20 is refused on create",
-			isvc:    mixedRatioGroupISVC(6, 2, ptr.To[int32](20)),
+			name: "6:2 with a SurgeThenDrain engine and a RecreatePod decoder at tolerance 20 is admitted: the batch step paces the mixed pair",
+			isvc: mixedRatioGroupISVC(6, 2, ptr.To[int32](20)),
+		},
+		{
+			name:    "6:2 with an in-place single-pod engine and a RecreatePod decoder at tolerance 20 is refused on create: the engine does not step",
+			isvc:    inPlaceEngineRatioGroupISVC(6, 2, ptr.To[int32](20)),
 			wantErr: true,
 		},
 		{
-			name: "the same mixed group at tolerance 50 is admitted",
-			isvc: mixedRatioGroupISVC(6, 2, ptr.To[int32](50)),
+			name: "the same in-place pair at tolerance 50 is admitted",
+			isvc: inPlaceEngineRatioGroupISVC(6, 2, ptr.To[int32](50)),
+		},
+		{
+			name: "6:2 RecreatePod on both sides with two SurgeThenDrain routers in the group at tolerance 20 is admitted: the routers do not decide the batch step",
+			isvc: withSurgingRouters(ratioGroupISVC(6, 2, ptr.To[int32](20))),
+		},
+		{
+			name: "the mixed group with two SurgeThenDrain routers at tolerance 20 is admitted: the batch step paces the pair and the routers join",
+			isvc: withSurgingRouters(mixedRatioGroupISVC(6, 2, ptr.To[int32](20))),
+		},
+		{
+			name:    "the in-place pair with two SurgeThenDrain routers at tolerance 20 is refused: the engine does not step, so the ratio check keeps the decoder",
+			isvc:    withSurgingRouters(inPlaceEngineRatioGroupISVC(6, 2, ptr.To[int32](20))),
+			wantErr: true,
 		},
 		{
 			name: "omitted tolerance with no operator default is admitted",
-			isvc: mixedRatioGroupISVC(6, 2, nil),
+			isvc: inPlaceEngineRatioGroupISVC(6, 2, nil),
 		},
 		{
-			name:             "omitted tolerance under an operator default of 20 refuses the mixed group",
-			isvc:             mixedRatioGroupISVC(6, 2, nil),
+			name:             "omitted tolerance under an operator default of 20 refuses the in-place pair",
+			isvc:             inPlaceEngineRatioGroupISVC(6, 2, nil),
 			defaultTolerance: ptr.To[int32](20),
 			wantErr:          true,
+		},
+		{
+			name:             "omitted tolerance under an operator default of 20 admits the mixed pair",
+			isvc:             mixedRatioGroupISVC(6, 2, nil),
+			defaultTolerance: ptr.To[int32](20),
 		},
 		{
 			name:             "omitted tolerance under an operator default of 20 admits the all-RecreatePod group",
@@ -94,17 +142,21 @@ func TestValidateCreate_RatioDrainFeasibility(t *testing.T) {
 			defaultTolerance: ptr.To[int32](20),
 		},
 		{
-			name:    "a RecreatePod decoder with no replica fields beside a SurgeThenDrain engine is sized at one and refused",
-			isvc:    withoutDecoderReplicas(mixedRatioGroupISVC(6, 2, ptr.To[int32](50))),
+			name:    "a RecreatePod decoder with no replica fields beside an in-place single-pod engine is sized at one and refused",
+			isvc:    withoutDecoderReplicas(inPlaceEngineRatioGroupISVC(6, 2, ptr.To[int32](50))),
 			wantErr: true,
+		},
+		{
+			name: "a RecreatePod decoder with no replica fields beside a SurgeThenDrain engine is sized at one and admitted: the batch step takes the side of one in its first batch",
+			isvc: withoutDecoderReplicas(mixedRatioGroupISVC(6, 2, ptr.To[int32](50))),
 		},
 		{
 			name: "a RecreatePod decoder with no replica fields beside a RecreatePod engine is sized at one and admitted: the batch step takes the side of one in its first batch",
 			isvc: withoutDecoderReplicas(ratioGroupISVC(6, 2, ptr.To[int32](50))),
 		},
 		{
-			name:               "the mixed group's decoder under a configured minReplicas default of 2 is sized at 2 and admitted at tolerance 50",
-			isvc:               withoutDecoderReplicas(mixedRatioGroupISVC(6, 2, ptr.To[int32](50))),
+			name:               "the in-place pair's decoder under a configured minReplicas default of 2 is sized at 2 and admitted at tolerance 50",
+			isvc:               withoutDecoderReplicas(inPlaceEngineRatioGroupISVC(6, 2, ptr.To[int32](50))),
 			defaultMinReplicas: ptr.To(2),
 		},
 	}
@@ -124,20 +176,25 @@ func TestValidateCreate_RatioDrainFeasibility(t *testing.T) {
 
 func TestValidateUpdate_RatioDrainFeasibilityScaleDown(t *testing.T) {
 	v := &InferenceServiceValidator{}
-	old := mixedRatioGroupISVC(4, 4, ptr.To[int32](20))
+	old := inPlaceEngineRatioGroupISVC(4, 4, ptr.To[int32](20))
 	_, err := v.ValidateCreate(context.Background(), old)
 	require.NoError(t, err, "4:4 at tolerance 20 is admitted on create")
 
-	scaled := mixedRatioGroupISVC(4, 1, ptr.To[int32](20))
+	scaled := inPlaceEngineRatioGroupISVC(4, 1, ptr.To[int32](20))
 	_, err = v.ValidateUpdate(context.Background(), old, scaled)
-	require.Error(t, err, "scaling the decoder to one under RecreatePod beside a surging engine leaves it no admissible drain")
+	require.Error(t, err, "scaling the decoder to one under RecreatePod beside an in-place single-pod engine leaves it no admissible drain")
 	assert.Contains(t, err.Error(), validation.ReasonRatioDrainInfeasible)
 
-	unchanged := mixedRatioGroupISVC(4, 4, ptr.To[int32](20))
+	unchanged := inPlaceEngineRatioGroupISVC(4, 4, ptr.To[int32](20))
 	_, err = v.ValidateUpdate(context.Background(), old, unchanged)
 	assert.NoError(t, err)
 
-	batched := ratioGroupISVC(4, 4, ptr.To[int32](20))
-	_, err = v.ValidateUpdate(context.Background(), batched, ratioGroupISVC(4, 1, ptr.To[int32](20)))
-	assert.NoError(t, err, "under RecreatePod on both sides the batch step paces the group, so the scale to one is admitted")
+	for name, pair := range map[string]func(int, int, *int32) *v1beta1.InferenceService{
+		"RecreatePod on both sides":                       ratioGroupISVC,
+		"a surging engine beside the RecreatePod decoder": mixedRatioGroupISVC,
+	} {
+		batched := pair(4, 4, ptr.To[int32](20))
+		_, err = v.ValidateUpdate(context.Background(), batched, pair(4, 1, ptr.To[int32](20)))
+		assert.NoError(t, err, "under %s the batch step paces the group, so the scale to one is admitted", name)
+	}
 }

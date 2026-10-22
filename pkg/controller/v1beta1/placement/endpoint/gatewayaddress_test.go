@@ -8,11 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workloadcluster"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 type fakeRemoteClusterClients map[string]workloadcluster.SelectivelyCachingClient
@@ -22,17 +22,12 @@ func (f fakeRemoteClusterClients) ClientFor(cluster string) (workloadcluster.Sel
 	return c, ok
 }
 
-func remoteClient(t *testing.T, scheme *runtime.Scheme, objects ...runtime.Object) workloadcluster.SelectivelyCachingClient {
+func remoteClient(t *testing.T, objects ...client.Object) workloadcluster.SelectivelyCachingClient {
 	t.Helper()
-	builder := fakeclient.NewClientBuilder().WithScheme(scheme)
-	for _, object := range objects {
-		builder = builder.WithRuntimeObjects(object)
-	}
-	return workloadcluster.NewNeverCachingClient(builder.Build())
+	return workloadcluster.NewNeverCachingClient(fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(objects...)))
 }
 
 func TestGatewayAddressResolver_SelectsGatewayForBackendHost(t *testing.T) {
-	scheme := pubScheme(t)
 	gwGroup := gatewayapiv1.Group(gatewayapiv1.GroupVersion.Group)
 	gwKind := gatewayapiv1.Kind("Gateway")
 	gwNamespace := gatewayapiv1.Namespace("gateway-system")
@@ -58,10 +53,10 @@ func TestGatewayAddressResolver_SelectsGatewayForBackendHost(t *testing.T) {
 		}},
 	}
 	resolver := NewGatewayAddressResolver(fakeRemoteClusterClients{
-		"cluster-a": remoteClient(t, scheme, route, gateway),
+		"cluster-a": remoteClient(t, route, gateway),
 	})
 
-	addresses, err := resolver.Resolve(context.Background(), testISVC(), Home{
+	addresses, err := resolver.Resolve(context.Background(), testISVC(), ServingCluster{
 		Cluster: "cluster-a", BackendHost: "svc.external.example",
 	})
 	require.NoError(t, err)
@@ -72,7 +67,6 @@ func TestGatewayAddressResolver_SelectsGatewayForBackendHost(t *testing.T) {
 }
 
 func TestGatewayAddressResolver_DefaultsParentNamespaceAndAddressType(t *testing.T) {
-	scheme := pubScheme(t)
 	route := &gatewayapiv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "prod"},
 		Spec: gatewayapiv1.HTTPRouteSpec{
@@ -85,10 +79,10 @@ func TestGatewayAddressResolver_DefaultsParentNamespaceAndAddressType(t *testing
 		Status:     gatewayapiv1.GatewayStatus{Addresses: []gatewayapiv1.GatewayStatusAddress{{Value: "192.0.2.1"}}},
 	}
 	resolver := NewGatewayAddressResolver(fakeRemoteClusterClients{
-		"cluster-a": remoteClient(t, scheme, route, gateway),
+		"cluster-a": remoteClient(t, route, gateway),
 	})
 
-	addresses, err := resolver.Resolve(context.Background(), testISVC(), Home{
+	addresses, err := resolver.Resolve(context.Background(), testISVC(), ServingCluster{
 		Cluster: "cluster-a", BackendHost: "SVC.EXAMPLE.",
 	})
 	require.NoError(t, err)
@@ -96,7 +90,6 @@ func TestGatewayAddressResolver_DefaultsParentNamespaceAndAddressType(t *testing
 }
 
 func TestGatewayAddressResolver_RejectsAmbiguousRoute(t *testing.T) {
-	scheme := pubScheme(t)
 	route := &gatewayapiv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "prod"},
 		Spec: gatewayapiv1.HTTPRouteSpec{
@@ -107,10 +100,10 @@ func TestGatewayAddressResolver_RejectsAmbiguousRoute(t *testing.T) {
 		},
 	}
 	resolver := NewGatewayAddressResolver(fakeRemoteClusterClients{
-		"cluster-a": remoteClient(t, scheme, route),
+		"cluster-a": remoteClient(t, route),
 	})
 
-	_, err := resolver.Resolve(context.Background(), testISVC(), Home{
+	_, err := resolver.Resolve(context.Background(), testISVC(), ServingCluster{
 		Cluster: "cluster-a", BackendHost: "svc.example",
 	})
 	require.Error(t, err)
@@ -119,12 +112,12 @@ func TestGatewayAddressResolver_RejectsAmbiguousRoute(t *testing.T) {
 
 func TestGatewayAddressResolver_DisconnectedCluster(t *testing.T) {
 	resolver := NewGatewayAddressResolver(fakeRemoteClusterClients{})
-	_, err := resolver.Resolve(context.Background(), testISVC(), Home{Cluster: "missing", BackendHost: "svc.example"})
+	_, err := resolver.Resolve(context.Background(), testISVC(), ServingCluster{Cluster: "missing", BackendHost: "svc.example"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not connected")
 }
 
-func TestGatewayParentForHostRejectsUnsupportedParent(t *testing.T) {
+func TestGatewayParentForHost_ParentOfUnsupportedGroup_ReturnsError(t *testing.T) {
 	group := gatewayapiv1.Group("example.io")
 	route := &gatewayapiv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "prod"},

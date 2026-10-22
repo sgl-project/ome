@@ -9,8 +9,6 @@ import (
 
 // InferenceServiceSpec is the desired state of an InferenceService.
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.placement) || !has(oldSelf.placement.policy) || (has(self.placement) && has(self.placement.policy))",message="the placement policy cannot be removed; drain and recreate the service to change placement ownership"
-// +kubebuilder:validation:XValidation:rule="!has(self.placement) || !has(self.placement.componentAffinity) || (has(self.placement.componentAffinity.engine) == has(self.engine) && has(self.placement.componentAffinity.decoder) == has(self.decoder))",message="componentAffinity needs an entry for each declared engine and decoder, and none for undeclared ones"
-// +kubebuilder:validation:XValidation:rule="!has(self.placement) || !has(self.placement.componentAffinity) || !has(self.placement.componentAffinity.router) || has(self.router)",message="componentAffinity.router requires a declared router"
 type InferenceServiceSpec struct {
 	// DeploymentMode selects the dispatch backend that drives every
 	// Component on this InferenceService. When set, it propagates to

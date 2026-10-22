@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
 func TestResolveRuntimeClass(t *testing.T) {
@@ -40,7 +39,7 @@ func TestResolveRuntimeClass(t *testing.T) {
 			class.Handler = "sandbox-handler"
 			f.extra = append(f.extra, class)
 			pod := tt.pod.DeepCopy()
-			observed, err := resolveRuntimeClass(t.Context(), unitClient(t, f, interceptor.Funcs{}), pod)
+			observed, err := resolveRuntimeClass(t.Context(), unitClient(t, f), pod)
 			if diff := cmp.Diff(tt.wantErr, err != nil); diff != "" {
 				t.Fatalf("runtime class error (-want +got):\n%s\n%v", diff, err)
 			}

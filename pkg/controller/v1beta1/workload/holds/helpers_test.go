@@ -132,17 +132,3 @@ func refused(row types.InstanceStatus) types.InstanceStatus {
 	row.Operation.CapacityRefusedAt = &at
 	return row
 }
-
-// unschedulablePod is a live pod the scheduler reports it cannot place.
-func unschedulablePod(name, message string, since metav1.Time) *corev1.Pod {
-	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns"},
-		Status: corev1.PodStatus{Conditions: []corev1.PodCondition{{
-			Type:               corev1.PodScheduled,
-			Status:             corev1.ConditionFalse,
-			Reason:             types.WaitingReasonUnschedulable,
-			Message:            message,
-			LastTransitionTime: since,
-		}}},
-	}
-}

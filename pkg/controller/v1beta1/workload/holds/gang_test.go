@@ -2,10 +2,11 @@ package holds
 
 import (
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	fixture "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -80,7 +81,7 @@ func TestGang_RecordsAndReleasesTheNameWait(t *testing.T) {
 
 	t.Run("the scheduler keeps a row it reached first", func(t *testing.T) {
 		store, in := newStore(creatingRow(types.WaitingReasonUnschedulable))
-		pods := map[int32][]*corev1.Pod{0: {unschedulablePod("svc-a-engine-0-default-0", schedulerMessage, metav1.Now())}}
+		pods := map[int32][]*corev1.Pod{0: {fixture.UnschedulablePod("svc-a-engine-0-default-0", schedulerMessage, time.Now())}}
 		apply(t, gangInput(in, 0, types.GangStateTerminating, message), types.ComponentPlan{}, pods)
 		if got := store.waiting(0); got != types.WaitingReasonUnschedulable {
 			t.Errorf("waiting = %q, want the incumbent token kept", got)

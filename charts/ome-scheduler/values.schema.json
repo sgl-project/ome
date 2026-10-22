@@ -15,6 +15,15 @@
         },
         "replicaCount": {"type": "integer", "minimum": 1},
         "leaderElect": {"type": "boolean"},
+        "leaderElection": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "leaseDuration": {"type": "string"},
+            "renewDeadline": {"type": "string"},
+            "retryPeriod": {"type": "string"}
+          }
+        },
         "omeControllerIntegration": {
           "type": "object",
           "required": ["enabled"],

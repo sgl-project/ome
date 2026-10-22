@@ -8,12 +8,13 @@ import (
 	"github.com/google/go-cmp/cmp"
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ownedscaler"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestCalculateMinMaxReplicas(t *testing.T) {
@@ -35,7 +36,7 @@ func TestCalculateMinMaxReplicas(t *testing.T) {
 		{
 			name: "Custom min/max replicas",
 			componentExt: &v1beta1.ComponentExtensionSpec{
-				MinReplicas: intPtr(2),
+				MinReplicas: ptr.To(2),
 				MaxReplicas: 10,
 			},
 			expectedMinReplica: 2,
@@ -44,7 +45,7 @@ func TestCalculateMinMaxReplicas(t *testing.T) {
 		{
 			name: "Max replicas less than min - should use min",
 			componentExt: &v1beta1.ComponentExtensionSpec{
-				MinReplicas: intPtr(5),
+				MinReplicas: ptr.To(5),
 				MaxReplicas: 3,
 			},
 			expectedMinReplica: 5,
@@ -227,7 +228,7 @@ func TestCreateScaledObject_ComponentExtShim_Identical(t *testing.T) {
 		PollingInterval: &polling,
 	}
 	componentExt := &v1beta1.ComponentExtensionSpec{
-		MinReplicas: intPtr(2),
+		MinReplicas: ptr.To(2),
 		MaxReplicas: 6,
 		Autoscaler: &v1beta1.ComponentAutoscaler{
 			Class: v1beta1.AutoscalerKEDA,
@@ -264,7 +265,7 @@ func TestCreateScaledObject_ComponentExtShim_Identical(t *testing.T) {
 	}
 }
 
-func TestSemanticScaledObjectEquals_ControllerOwner(t *testing.T) {
+func TestMatchesComparesTheControllerOwner(t *testing.T) {
 	controller := true
 	desiredOwner := metav1.OwnerReference{
 		APIVersion: "ome.io/v1beta1",
@@ -278,19 +279,19 @@ func TestSemanticScaledObjectEquals_ControllerOwner(t *testing.T) {
 
 	desired := &kedav1.ScaledObject{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{desiredOwner}}}
 	existing := &kedav1.ScaledObject{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{staleOwner}}}
-	if semanticScaledObjectEquals(desired, existing) {
+	if kind.Matches(desired, existing) {
 		t.Fatal("ScaledObjects with different controller metadata must not be equal")
 	}
 
 	nonControllerOwner := desiredOwner
 	nonControllerOwner.Controller = nil
 	existing.OwnerReferences = []metav1.OwnerReference{desiredOwner, nonControllerOwner}
-	if !semanticScaledObjectEquals(desired, existing) {
+	if !kind.Matches(desired, existing) {
 		t.Fatal("unrelated non-controller owner references must not force an update")
 	}
 }
 
-func TestSemanticScaledObjectEquals_Metadata(t *testing.T) {
+func TestMatchesComparesManagedMetadata(t *testing.T) {
 	desired := &kedav1.ScaledObject{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      map[string]string{"component": "engine"},
@@ -298,25 +299,25 @@ func TestSemanticScaledObjectEquals_Metadata(t *testing.T) {
 		},
 	}
 	existing := desired.DeepCopy()
-	if !semanticScaledObjectEquals(desired, existing) {
+	if !kind.Matches(desired, existing) {
 		t.Fatal("identical ScaledObject metadata must compare equal")
 	}
 
 	existing.Labels["component"] = "decoder"
-	if semanticScaledObjectEquals(desired, existing) {
+	if kind.Matches(desired, existing) {
 		t.Fatal("different ScaledObject labels must force an update")
 	}
 
 	existing = desired.DeepCopy()
 	existing.Annotations["example.com/control"] = "disabled"
-	if semanticScaledObjectEquals(desired, existing) {
+	if kind.Matches(desired, existing) {
 		t.Fatal("different ScaledObject annotations must force an update")
 	}
 
 	existing = desired.DeepCopy()
 	existing.Labels["example.com/injected"] = "keep"
 	existing.Annotations["example.com/injected"] = "keep"
-	if !semanticScaledObjectEquals(desired, existing) {
+	if !kind.Matches(desired, existing) {
 		t.Fatal("injected ScaledObject metadata must not force an update")
 	}
 }
@@ -369,13 +370,9 @@ func TestKEDAReconcilerUpdatePreservesUnmanagedMetadata(t *testing.T) {
 		},
 	}
 
-	scheme := runtime.NewScheme()
-	if err := kedav1.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
-	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	r := &KEDAReconciler{client: cl, ScaledObject: desired}
-	if err := r.Reconcile(); err != nil {
+	cl := fakeclient.New(t, fakeclient.WithTypes(kedav1.AddToScheme), fakeclient.WithObjects(existing))
+	r := ownedscaler.New(cl, kind, desired)
+	if err := r.Reconcile(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -443,14 +440,10 @@ func TestKEDAReconcilerRejectsForeignController(t *testing.T) {
 			existing.UID = types.UID("scaledobject-uid")
 			existing.OwnerReferences = tt.owners
 
-			scheme := runtime.NewScheme()
-			if err := kedav1.AddToScheme(scheme); err != nil {
-				t.Fatal(err)
-			}
-			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-			r := &KEDAReconciler{client: cl, ScaledObject: desired}
+			cl := fakeclient.New(t, fakeclient.WithTypes(kedav1.AddToScheme), fakeclient.WithObjects(existing))
+			r := ownedscaler.New(cl, kind, desired)
 
-			err := r.Reconcile()
+			err := r.Reconcile(context.Background())
 			if err == nil || !strings.Contains(err.Error(), "not controlled by expected owner") {
 				t.Fatalf("expected ownership error, got %v", err)
 			}
@@ -464,10 +457,6 @@ func TestKEDAReconcilerRejectsForeignController(t *testing.T) {
 			}
 		})
 	}
-}
-
-func intPtr(i int) *int {
-	return &i
 }
 
 func TestConfiguredHPAName(t *testing.T) {

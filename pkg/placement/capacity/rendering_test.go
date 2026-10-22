@@ -12,14 +12,12 @@ import (
 	nodev1 "k8s.io/api/node/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func renderingFixture() ([]PodSet, *nodev1.RuntimeClass) {
@@ -33,13 +31,9 @@ func renderingFixture() ([]PodSet, *nodev1.RuntimeClass) {
 	}
 }
 
-func renderingClient(t *testing.T, class *nodev1.RuntimeClass, funcs interceptor.Funcs) client.Client {
+func renderingClient(t *testing.T, class *nodev1.RuntimeClass, opts ...fakeclient.Option) client.Client {
 	t.Helper()
-	scheme := runtime.NewScheme()
-	if err := nodev1.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
-	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(class).WithInterceptorFuncs(funcs).Build()
+	return fakeclient.New(t, append([]fakeclient.Option{fakeclient.WithTypes(nodev1.AddToScheme), fakeclient.WithObjects(class)}, opts...)...)
 }
 
 func TestComponentFingerprint(t *testing.T) {
@@ -84,7 +78,7 @@ func TestComponentFingerprint(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			pods, class := renderingFixture()
-			baseline, err := ComponentFingerprint(t.Context(), renderingClient(t, class, interceptor.Funcs{}), v1beta1.EngineComponent, constants.OMENative, pods)
+			baseline, err := ComponentFingerprint(t.Context(), renderingClient(t, class), v1beta1.EngineComponent, constants.OMENative, pods)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -99,7 +93,7 @@ func TestComponentFingerprint(t *testing.T) {
 			if component == "" {
 				component = v1beta1.EngineComponent
 			}
-			got, err := ComponentFingerprint(t.Context(), renderingClient(t, class, interceptor.Funcs{}), component, mode, pods)
+			got, err := ComponentFingerprint(t.Context(), renderingClient(t, class), component, mode, pods)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -154,7 +148,7 @@ func TestComponentFingerprintRejectsIncompleteRendering(t *testing.T) {
 				component = v1beta1.EngineComponent
 			}
 			before := demandJSON(t, pods)
-			got, err := ComponentFingerprint(t.Context(), renderingClient(t, class, interceptor.Funcs{}), component, mode, pods)
+			got, err := ComponentFingerprint(t.Context(), renderingClient(t, class), component, mode, pods)
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("error = %v, want %q", err, tt.wantErr)
 			}
@@ -193,24 +187,21 @@ func TestComponentFingerprintRuntimeClassFence(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			reads := 0
-			cl := renderingClient(t, class, interceptor.Funcs{Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			var fault fakeclient.Option = fakeclient.EditedRead(func(live *nodev1.RuntimeClass) {
 				reads++
-				if reads == tt.read && tt.fail {
-					return errors.New("class read failed")
-				}
-				if err := cl.Get(ctx, key, obj, opts...); err != nil {
-					return err
-				}
 				if reads == tt.read {
 					if tt.edit != nil {
-						tt.edit(obj.(*nodev1.RuntimeClass))
+						tt.edit(live)
 					}
 					if tt.cancel {
 						cancel()
 					}
 				}
-				return nil
-			}})
+			})
+			if tt.fail {
+				fault = fakeclient.FailingVerb(fakeclient.Get, tt.read, errors.New("class read failed"))
+			}
+			cl := renderingClient(t, class, fault)
 			got, err := ComponentFingerprint(ctx, cl, v1beta1.EngineComponent, constants.OMENative, pods)
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("error = %v, want %q", err, tt.wantErr)

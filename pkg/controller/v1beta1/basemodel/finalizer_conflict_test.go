@@ -8,15 +8,12 @@ import (
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel/shared"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 type finalizerTestBackend struct{ reconciled bool }
@@ -31,12 +28,7 @@ func (b *finalizerTestBackend) HandleDeletion(_ context.Context, _ shared.Backen
 	return ctrl.Result{}, nil
 }
 
-func TestReconcileModelFinalizerWriteOutcome(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(scheme); err != nil {
-		t.Fatalf("add scheme: %v", err)
-	}
-
+func TestReconcileModel_FinalizerWriteOutcome_OnlyConflictRequeuesQuietly(t *testing.T) {
 	conflict := apierrors.NewConflict(
 		schema.GroupResource{Group: "ome.io", Resource: "clusterbasemodels"},
 		"model", errors.New("the object has been modified"))
@@ -70,19 +62,17 @@ func TestReconcileModelFinalizerWriteOutcome(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			obj := &v1beta1.ClusterBaseModel{ObjectMeta: metav1.ObjectMeta{Name: "model"}}
-			builder := ctrlclientfake.NewClientBuilder().WithScheme(scheme).WithObjects(obj)
+			opts := []fakeclient.Option{fakeclient.WithObjects(obj)}
 			if test.updateErr != nil {
-				builder = builder.WithInterceptorFuncs(interceptor.Funcs{
-					Update: func(context.Context, client.WithWatch, client.Object, ...client.UpdateOption) error {
-						return test.updateErr
-					},
-				})
+				opts = append(opts, fakeclient.FailingVerb(fakeclient.Update, fakeclient.EveryCall, test.updateErr))
 			}
+			c := fakeclient.New(t, opts...)
 
 			backend := &finalizerTestBackend{}
 			result, err := reconcileModel(
-				context.Background(), builder.Build(), scheme, logr.Discard(),
-				[]shared.Backend{backend}, obj.DeepCopy(), "test.ome.io/finalizer", true, "ClusterBaseModel",
+				context.Background(), c, c.Scheme(), logr.Discard(),
+				[]shared.Backend{backend}, obj.DeepCopy(),
+				modelKind{name: "ClusterBaseModel", finalizer: "test.ome.io/finalizer", clusterScoped: true},
 			)
 
 			if result != test.wantResult {

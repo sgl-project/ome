@@ -17,7 +17,6 @@ func TestInvalidPlacementCannotAcquireFinalizer(t *testing.T) {
 	for _, tt := range []struct {
 		name, placement  string
 		legacyAnnotation bool
-		policy           v1beta1.PlacementPolicy
 		router           bool
 		wantMessage      string
 	}{
@@ -26,8 +25,8 @@ func TestInvalidPlacementCannotAcquireFinalizer(t *testing.T) {
 		{name: "empty affinity", placement: `{"mode":"Single","clusterAffinity":[]}`},
 		{name: "unsupported mode", placement: `{"mode":"Unexpected"}`},
 		{name: "obsolete annotation beside typed intent", placement: `{"mode":"Single"}`, legacyAnnotation: true},
-		{name: "a Split router entry needs a router minimum", placement: `{"mode":"Split","componentAffinity":{"engine":[{"matchFields":[{"key":"metadata.name","operator":"In","values":["cluster-a"]}]}],"router":[{"matchFields":[{"key":"metadata.name","operator":"In","values":["cluster-a"]}]}]}}`,
-			policy: v1beta1.PlacementPolicyComponentAffinity, router: true, wantMessage: "set a positive router.minReplicas"},
+		{name: "a Split router weight needs a router minimum", placement: `{"mode":"Split","clusterAffinity":[{"weights":{"router":2},"matchFields":[{"key":"metadata.name","operator":"In","values":["cluster-a"]}]}]}`,
+			router: true, wantMessage: "set a positive router.minReplicas"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			source := srcISVC("")
@@ -36,9 +35,6 @@ func TestInvalidPlacementCannotAcquireFinalizer(t *testing.T) {
 			}
 			if source.Spec.Placement != nil {
 				source.Spec.Placement.Policy = v1beta1.PlacementPolicyClusterAffinity
-				if tt.policy != "" {
-					source.Spec.Placement.Policy = tt.policy
-				}
 			}
 			if tt.legacyAnnotation {
 				source.Annotations[ClusterSelectorAnnotation] = ""

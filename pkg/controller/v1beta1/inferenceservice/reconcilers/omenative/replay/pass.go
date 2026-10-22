@@ -71,7 +71,7 @@ func (d *driver) runPass(ctx context.Context) error {
 		if err != nil {
 			return d.endPass(ctrl.Result{}, err)
 		}
-		pending.RequeueAfter = out.RequeueAfter
+		pending = inferenceservice.SoonestRequeue(pending, ctrl.Result{RequeueAfter: out.RequeueAfter})
 		policies = out.Policies
 		if out.Opened {
 			d.stage = "bind"
@@ -125,14 +125,12 @@ func (d *driver) runPass(ctx context.Context) error {
 				return d.endPass(ctrl.Result{}, err)
 			}
 			d.traceDispatch(isvc, g, out)
-			if out.RequeueAfter > pending.RequeueAfter {
-				pending.RequeueAfter = out.RequeueAfter
-			}
-			if out.Requeue {
-				pending.Requeue = true
-			}
+			pending = inferenceservice.SoonestRequeue(pending, ctrl.Result{Requeue: out.Requeue, RequeueAfter: out.RequeueAfter})
 			consume = append(consume, out.Consume...)
 		}
+	}
+	if released := canary.ReleaseUndeclaredUnits(isvc, policies); len(released) > 0 {
+		d.traceRelease(released)
 	}
 
 	d.stage = "coordination"
@@ -223,14 +221,12 @@ func (d *driver) cadences() (requeue, parked, readyTimeout time.Duration, err er
 }
 
 // partitionFor is the rollout-control partition the controller projects for
-// one Component: the canary step's when a canary plan is effective, the
-// full plan-gate hold when a canary-kind group has no executable body.
-func (d *driver) partitionFor(isvc *v1beta1.InferenceService, policies rollout.Policies, c v1beta1.ComponentType) *int32 {
-	ext := d.componentExt(c)
-	if len(rollout.CanaryGroups(isvc, policies)) > 0 {
-		return canary.StepPartition(isvc, policies, c, ext)
-	}
-	return canary.PlanGateHoldPartition(isvc, policies, c, ext)
+// one Component, sized by the projector against the replica count it
+// stamps: the canary step's when a canary plan is effective, the full
+// plan-gate hold when a canary-kind group has no executable body, nil when
+// no canary governs the Component.
+func (d *driver) partitionFor(isvc *v1beta1.InferenceService, policies rollout.Policies, c v1beta1.ComponentType) irprojector.PartitionResolver {
+	return canary.PartitionResolver(isvc, policies, c)
 }
 
 // flush enters the controller's status flush and records what it did: the
@@ -657,6 +653,16 @@ func (d *driver) traceRevisions(isvc *v1beta1.InferenceService) {
 			orNil(revisionHashOfService(cs.LatestReadyRevision)), orNil(revisionHashOfService(cs.LatestRolledoutRevision)),
 			orNil(revisionHashOfService(cs.PreviousRolledoutRevision)), orNil(string(cs.RolloutPhase)))
 	}
+}
+
+// traceRelease records the Components whose canary-projected status the
+// pass dropped because no group of the effective plan names them.
+func (d *driver) traceRelease(released []v1beta1.ComponentType) {
+	names := make([]string, 0, len(released))
+	for _, c := range released {
+		names = append(names, string(c))
+	}
+	d.trace.line("release components=[%s]", strings.Join(names, " "))
 }
 
 // revisionHashOfService is the revision hash a per-revision Service name

@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/placement"
 )
 
-func TestCapacityPlacementWiring(t *testing.T) {
+func TestResolveMCWiring_PlacementCapacity_BlockLandsOnTheWiring(t *testing.T) {
 	for _, tt := range []struct {
 		name, config  string
 		want          *placement.CapacityConfig

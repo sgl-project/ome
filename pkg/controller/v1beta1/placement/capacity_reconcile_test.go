@@ -208,7 +208,7 @@ func TestCapacityHoldKeepsAcknowledgedPlan(t *testing.T) {
 	}
 	for pass := 0; pass < 8 && !acknowledged(settled); pass++ {
 		for name, floor := range floors {
-			projectAllHome(t, bf, name, floor)
+			projectAllModeMember(t, bf, name, floor)
 		}
 		settled = bf.reconcile(t)
 	}

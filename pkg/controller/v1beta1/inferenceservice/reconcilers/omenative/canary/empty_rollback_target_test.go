@@ -305,6 +305,7 @@ func TestDispatch_AutomaticRollbackToAnEmptyStableLeavesTheReplicaUnsignaled(t *
 	ctx := context.Background()
 
 	// The first pass kicks the query and holds; the sample lands for the next.
+	syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 	if _, err := Dispatch(ctx, deps); err != nil {
 		t.Fatal(err)
 	}

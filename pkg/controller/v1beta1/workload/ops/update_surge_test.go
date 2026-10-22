@@ -888,13 +888,14 @@ func TestSurgeUpdate_SupersededSurge_AbandonGraceBoundsUnservedReplacement(t *te
 // of a Ready replacement whose pinned revision the desired state has
 // withdrawn while the source still serves. The row is at Step=Surge, the
 // replacement is runtime-ready, in rotation and past the promote bar, and
-// the drain gate denies the source's drain, as the floor hold does for the
-// whole of a roll-back after a broken Instance. The abandon never consults
-// the gate: one pass takes the replacement out of rotation, the next
-// deletes it on its own grace, and the pass that observes it gone resets
-// the row to Ready on its running revision with the source untouched and
-// names the abandon in an event. A roll-back to the running revision and a
-// move to a newer revision take the same path.
+// the drain gate answers every question with the Budget hold the floor
+// returns for the whole of a roll-back after a broken Instance. The
+// abandon asks the gate once, about the replacement in rotation, and a
+// Budget hold does not keep it: one pass takes the replacement out of
+// rotation, the next deletes it on its own grace, and the pass that
+// observes it gone resets the row to Ready on its running revision with
+// the source untouched and names the abandon in an event. A roll-back to
+// the running revision and a move to a newer revision take the same path.
 func TestSurgeUpdate_WithdrawnTargetAbandonsReadyReplacement(t *testing.T) {
 	const running, pinned, newer = "llama-70b-engine-rev-v1hash", "llama-70b-engine-rev-v2hash", "llama-70b-engine-rev-v3hash"
 	cases := []struct {
@@ -945,14 +946,14 @@ func TestSurgeUpdate_WithdrawnTargetAbandonsReadyReplacement(t *testing.T) {
 			plan := surgePlan()
 			plan.MinReadySeconds = 10
 
-			gateAsked := 0
+			var asked [][]string
 			pass := func() {
 				t.Helper()
 				input := legacyTestInput(isvc, c, workload.ComponentEngine)
 				input.Clock = clocktesting.NewFakeClock(minReadyWindowStart)
 				input.DrainHolds = &workload.DrainHolds{}
-				input.DrainGate = func([]string) (bool, workload.RolloutHoldGate, string) {
-					gateAsked++
+				input.DrainGate = func(pods []string) (bool, workload.RolloutHoldGate, string) {
+					asked = append(asked, pods)
 					return false, workload.RolloutHoldGateBudget, "no source leaves rotation"
 				}
 				pods, err := query.LiveListPodsForInstance(context.Background(), c, "prod", "llama-70b", workload.ComponentEngine, 0)
@@ -1009,8 +1010,8 @@ func TestSurgeUpdate_WithdrawnTargetAbandonsReadyReplacement(t *testing.T) {
 				t.Fatalf("the row must settle Ready on %s at ordinal 0 with no operation, got phase=%s running=%s target=%q activeOrdinal=%d op=%+v",
 					running, s.Phase, s.RunningRevision, s.TargetRevision, s.ActiveOrdinal, s.Operation)
 			}
-			if gateAsked != 0 {
-				t.Fatalf("the abandon must not wait on the drain gate; it was asked %d time(s)", gateAsked)
+			if len(asked) != 1 || len(asked[0]) != 1 || asked[0][0] != replacement.Name {
+				t.Fatalf("the abandon must ask the drain gate once, about the replacement in rotation, and not wait on a Budget hold; asked %v", asked)
 			}
 			events := drainRecorderEvents(rec)
 			want := corev1.EventTypeNormal + " " + string(workload.EventReasonSurgeAbandoned)
@@ -1075,13 +1076,218 @@ func TestSurgeUpdate_WithdrawnTargetKeepsReadyReplacementWhoseSourceIsGone(t *te
 	}
 }
 
+// TestSurgeUpdate_SupersededSurge_PairingHoldKeepsTheReplacementAndHandsOver
+// pins the one shape in which a surge whose pinned revision the desired
+// state has withdrawn is not abandoned while its source stands: the
+// replacement is in rotation and the pairing drain gate holds it there,
+// because the other pairing Component's serving pods pair with it and with
+// nothing else. Taking it out would leave those pods without a partner for
+// as long as a pod takes to start. The redirect asks the gate about the
+// replacement before withdrawing it; on a Pairing hold the surge finishes
+// its hand-over onto the pinned revision instead: the source leaves rotation
+// when the gate admits it, the row moves to SurgeDrain still pinned to that
+// revision, an event names the choice, and once the source is gone the row
+// promotes on the pinned revision, from where the newer target rolls.
+func TestSurgeUpdate_SupersededSurge_PairingHoldKeepsTheReplacementAndHandsOver(t *testing.T) {
+	const running, pinned, newer = "llama-70b-engine-rev-v1hash", "llama-70b-engine-rev-v2hash", "llama-70b-engine-rev-v3hash"
+	legacyResetExpectations(t)
+	isvc, ir := surgeISVCReady("llama-70b", "prod", 1)
+	ir.Status.InstanceStatuses[0] = v1beta1.OMENativeInstanceStatus{
+		Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceUpdating,
+		RunningRevision: running, TargetRevision: pinned,
+		Operation: &v1beta1.InstanceOperation{
+			ID:             "update-0-1",
+			Type:           v1beta1.InstanceOperationType(workload.InstanceOperationUpdate),
+			Step:           workload.UpdateStepSurge,
+			TargetRevision: pinned,
+			Strategy:       string(workload.UpdateStrategySurgeThenDrain),
+		},
+	}
+	source := surgePodAtOrdinal(isvc, 0, 1, 0, true, true)
+	source.Labels[query.LabelRevisionHash] = query.RevisionHashFromControllerRevisionName(running)
+	replacement := surgePodAtOrdinal(isvc, 0, 1, 1, true, true)
+	replacement.Labels[query.LabelRevisionHash] = query.RevisionHashFromControllerRevisionName(pinned)
+	podReadyAt(replacement, minReadyWindowStart.Add(-time.Minute))
+	c := legacyNewFakeClient(t, isvc, ir, source, replacement)
+	makeCR(t, c, isvc, running)
+	makeCR(t, c, isvc, pinned)
+	target := makeCR(t, c, isvc, newer)
+	rec := record.NewFakeRecorder(8)
+	deps := legacyTestDeps(c)
+	deps.Recorder = rec
+	plan := surgePlan()
+	plan.MinReadySeconds = 10
+
+	const holdReason = "the replacement is the only partner of the serving decoder"
+	var asked [][]string
+	pass := func() {
+		t.Helper()
+		input := legacyTestInput(isvc, c, workload.ComponentEngine)
+		input.Clock = clocktesting.NewFakeClock(minReadyWindowStart)
+		input.DrainHolds = &workload.DrainHolds{}
+		// The replacement may not leave rotation; the source may.
+		input.DrainGate = func(pods []string) (bool, workload.RolloutHoldGate, string) {
+			asked = append(asked, pods)
+			for _, name := range pods {
+				if name == replacement.Name {
+					return false, workload.RolloutHoldGatePairing, holdReason
+				}
+			}
+			return true, "", ""
+		}
+		pods, err := query.LiveListPodsForInstance(context.Background(), c, "prod", "llama-70b", workload.ComponentEngine, 0)
+		if err != nil {
+			t.Fatalf("list pods: %v", err)
+		}
+		if _, err := surgeUpdate(context.Background(), deps, input, plan, plan.Instances[0], target, pods); err != nil {
+			t.Fatalf("surgeUpdate: %v", err)
+		}
+	}
+	podState := func(pod *corev1.Pod) (present, serving bool) {
+		t.Helper()
+		fresh := &corev1.Pod{}
+		err := c.Get(context.Background(), client.ObjectKeyFromObject(pod), fresh)
+		if apierrors.IsNotFound(err) {
+			return false, false
+		}
+		if err != nil {
+			t.Fatalf("read %s: %v", pod.Name, err)
+		}
+		return true, podreadiness.IsServing(fresh)
+	}
+	row := func() v1beta1.OMENativeInstanceStatus {
+		return legacyInstanceStatusesOnIR(c, isvc, workload.ComponentEngine)[0]
+	}
+
+	// The gate holds the replacement, so the hand-over runs instead of the
+	// abandon: the source leaves rotation and the replacement keeps serving.
+	pass()
+	if len(asked) != 2 || len(asked[0]) != 1 || asked[0][0] != replacement.Name || len(asked[1]) != 1 || asked[1][0] != source.Name {
+		t.Fatalf("the pass must ask the gate about the replacement first and then about the source, got %v", asked)
+	}
+	if present, serving := podState(replacement); !present || !serving {
+		t.Fatalf("a replacement the pairing gate holds must stay in rotation; present=%v serving=%v", present, serving)
+	}
+	// With nothing routed in the fixture the drain is complete at once, so
+	// the pass that takes the source out of rotation also deletes it.
+	if present, serving := podState(source); present && serving {
+		t.Fatalf("the hand-over must take the source out of rotation; present=%v serving=%v", present, serving)
+	}
+	if s := row(); s.Operation == nil || s.Operation.Step != workload.UpdateStepSurgeDrain || s.Operation.TargetRevision != pinned {
+		t.Fatalf("the row must move to SurgeDrain still pinned to %s, got %+v", pinned, s.Operation)
+	}
+	events := drainRecorderEvents(rec)
+	want := corev1.EventTypeNormal + " " + string(workload.EventReasonSurgeKeptForPairing)
+	matched := 0
+	for _, e := range events {
+		if strings.HasPrefix(e, want) && strings.Contains(e, pinned) && strings.Contains(e, newer) && strings.Contains(e, holdReason) {
+			matched++
+		}
+	}
+	if matched != 1 {
+		t.Fatalf("want one %q event naming the pinned revision, the newer target and the gate's reason, got %v", want, events)
+	}
+
+	// The drained source is gone: the row promotes on the pinned revision
+	// at the replacement's slot, and the newer target rolls from there.
+	if err := c.Delete(context.Background(), source); err != nil && !apierrors.IsNotFound(err) {
+		t.Fatalf("remove the drained source: %v", err)
+	}
+	pass()
+	if s := row(); s.Phase != v1beta1.OMENativeInstanceReady || s.RunningRevision != pinned || s.ActiveOrdinal != 1 || s.Operation != nil {
+		t.Fatalf("the row must promote on %s at ordinal 1 with no operation, got phase=%s running=%s activeOrdinal=%d op=%+v",
+			pinned, s.Phase, s.RunningRevision, s.ActiveOrdinal, s.Operation)
+	}
+	if present, serving := podState(replacement); !present || !serving {
+		t.Fatalf("the promoted replacement must stay in rotation; present=%v serving=%v", present, serving)
+	}
+	if len(asked) != 2 {
+		t.Fatalf("the promote asks the gate nothing more, got %v", asked)
+	}
+}
+
+// TestSurgeUpdate_PausedReplacedSurge_PairingHoldStillKeepsTheReplacement
+// covers the same shape under a pause. A pause holds back the next step of
+// a roll. Removing a replacement pod whose target version was replaced by a
+// newer one is not a step, so the pass still asks the drain gate whether the
+// replacement, which is in rotation, may go, and a Pairing hold keeps it.
+// Draining the source pod is the step after, which the pause holds back, so
+// the gate is never asked about the source. The source keeps serving beside
+// the kept replacement, and the row stays at the surge step with the
+// replaced target version, until the pause ends.
+func TestSurgeUpdate_PausedReplacedSurge_PairingHoldStillKeepsTheReplacement(t *testing.T) {
+	const running, recorded, newer = "llama-70b-engine-rev-v1hash", "llama-70b-engine-rev-v2hash", "llama-70b-engine-rev-v3hash"
+	legacyResetExpectations(t)
+	isvc, ir := surgeISVCReady("llama-70b", "prod", 1)
+	ir.Status.InstanceStatuses[0] = v1beta1.OMENativeInstanceStatus{
+		Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceUpdating,
+		RunningRevision: running, TargetRevision: recorded,
+		Operation: &v1beta1.InstanceOperation{
+			ID:             "update-0-1",
+			Type:           v1beta1.InstanceOperationType(workload.InstanceOperationUpdate),
+			Step:           workload.UpdateStepSurge,
+			TargetRevision: recorded,
+			Strategy:       string(workload.UpdateStrategySurgeThenDrain),
+		},
+	}
+	source := surgePodAtOrdinal(isvc, 0, 1, 0, true, true)
+	source.Labels[query.LabelRevisionHash] = query.RevisionHashFromControllerRevisionName(running)
+	replacement := surgePodAtOrdinal(isvc, 0, 1, 1, true, true)
+	replacement.Labels[query.LabelRevisionHash] = query.RevisionHashFromControllerRevisionName(recorded)
+	podReadyAt(replacement, minReadyWindowStart.Add(-time.Minute))
+	c := legacyNewFakeClient(t, isvc, ir, source, replacement)
+	makeCR(t, c, isvc, running)
+	makeCR(t, c, isvc, recorded)
+	target := makeCR(t, c, isvc, newer)
+	plan := surgePlan()
+	plan.MinReadySeconds = 10
+	plan.Paused = true
+
+	const holdReason = "draining the serving engine pods of cohort pair-v2 would leave no pairable serving engine+decoder pair"
+	var asked [][]string
+	input := legacyTestInput(isvc, c, workload.ComponentEngine)
+	input.Clock = clocktesting.NewFakeClock(minReadyWindowStart)
+	input.DrainHolds = &workload.DrainHolds{}
+	input.DrainGate = func(pods []string) (bool, workload.RolloutHoldGate, string) {
+		asked = append(asked, pods)
+		return false, workload.RolloutHoldGatePairing, holdReason
+	}
+	pods, err := query.LiveListPodsForInstance(context.Background(), c, "prod", "llama-70b", workload.ComponentEngine, 0)
+	if err != nil {
+		t.Fatalf("list pods: %v", err)
+	}
+	done, err := surgeUpdate(context.Background(), legacyTestDeps(c), input, plan, plan.Instances[0], target, pods)
+	if err != nil {
+		t.Fatalf("surgeUpdate paused: %v", err)
+	}
+	if done {
+		t.Fatalf("a held surge must not report the roll complete")
+	}
+	if len(asked) != 1 || len(asked[0]) != 1 || asked[0][0] != replacement.Name {
+		t.Fatalf("under a pause the pass asks the gate about the replacement and about nothing else, got %v", asked)
+	}
+	for _, pod := range []*corev1.Pod{source, replacement} {
+		fresh := &corev1.Pod{}
+		if err := c.Get(context.Background(), client.ObjectKeyFromObject(pod), fresh); err != nil {
+			t.Fatalf("%s must survive the paused pass: %v", pod.Name, err)
+		}
+		if !podreadiness.IsServing(fresh) {
+			t.Errorf("%s left rotation under the pause; the kept replacement and the source both keep serving", pod.Name)
+		}
+	}
+	if s := legacyInstanceStatusesOnIR(c, isvc, workload.ComponentEngine)[0]; s.Operation == nil || s.Operation.Step != workload.UpdateStepSurge || s.Operation.TargetRevision != recorded {
+		t.Fatalf("the row must stay at the surge step moving to %s until the pause ends, got %+v", recorded, s.Operation)
+	}
+}
+
 // TestGangSurgeUpdate_WithdrawnTargetAbandonsReadyReplacementGang pins the
 // gang twin: the replacement gang is complete, runtime-ready and in rotation
 // at the surge index while the source gang still serves, and the desired
-// revision is the source's own again. The abandon takes the replacement
-// members out of rotation, deletes them, and on the pass that observes them
-// gone drops the surge index and resets the source to Ready on its running
-// revision, without consulting the drain gate.
+// revision is the source's own again. The abandon asks the drain gate once,
+// about the replacement members in rotation, and the Budget hold it answers
+// does not keep them: it takes the replacement members out of rotation,
+// deletes them, and on the pass that observes them gone drops the surge
+// index and resets the source to Ready on its running revision.
 func TestGangSurgeUpdate_WithdrawnTargetAbandonsReadyReplacementGang(t *testing.T) {
 	legacyResetExpectations(t)
 	isvc, _ := surgeISVCReady("llama-70b", "prod", 1)
@@ -1106,13 +1312,13 @@ func TestGangSurgeUpdate_WithdrawnTargetAbandonsReadyReplacementGang(t *testing.
 	deps := legacyTestDeps(c)
 	deps.Recorder = rec
 
-	gateAsked := 0
+	var asked [][]string
 	pass := func() {
 		t.Helper()
 		input := gangInputWithRemove(isvc, c)
 		input.DrainHolds = &workload.DrainHolds{}
-		input.DrainGate = func([]string) (bool, workload.RolloutHoldGate, string) {
-			gateAsked++
+		input.DrainGate = func(pods []string) (bool, workload.RolloutHoldGate, string) {
+			asked = append(asked, pods)
 			return false, workload.RolloutHoldGateBudget, "no source leaves rotation"
 		}
 		if _, err := surgeUpdate(context.Background(), deps, input, plan, plan.Instances[0], v1, nil); err != nil {
@@ -1162,8 +1368,8 @@ func TestGangSurgeUpdate_WithdrawnTargetAbandonsReadyReplacementGang(t *testing.
 	if present, serving := gangAt(0); present != 2 || serving != 2 {
 		t.Fatalf("the source gang must be untouched at the end; present=%d serving=%d", present, serving)
 	}
-	if gateAsked != 0 {
-		t.Fatalf("the abandon must not wait on the drain gate; it was asked %d time(s)", gateAsked)
+	if len(asked) != 1 || !sameNames(asked[0], gangPodNames(isvc, 1)) {
+		t.Fatalf("the abandon must ask the drain gate once, about the replacement gang in rotation, and not wait on a Budget hold; asked %v", asked)
 	}
 	events := drainRecorderEvents(rec)
 	want := corev1.EventTypeNormal + " " + string(eventReasonGangSurgeAbandoned)

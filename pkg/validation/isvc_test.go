@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 )
 
-func TestValidateInferenceServiceName(t *testing.T) {
+func TestValidateInferenceServiceName_NameForms_AcceptsLowercaseLetterLedNames(t *testing.T) {
 	tests := []struct {
 		name     string
 		isvcName string
@@ -46,7 +46,7 @@ func TestValidateInferenceServiceName(t *testing.T) {
 	}
 }
 
-func TestValidateEngineDecoderConfig(t *testing.T) {
+func TestValidateEngineDecoderConfig_DecoderWithoutEngine_Rejected(t *testing.T) {
 	tests := []struct {
 		name    string
 		spec    *v1beta1.InferenceServiceSpec
@@ -87,7 +87,7 @@ func TestValidateEngineDecoderConfig(t *testing.T) {
 	}
 }
 
-func TestValidateEngineDecoderDeploymentMode(t *testing.T) {
+func TestValidateEngineDecoderDeploymentMode_OneSideOMENative_RejectsTheMismatch(t *testing.T) {
 	withMode := func(mode string) *v1beta1.ComponentExtensionSpec {
 		return &v1beta1.ComponentExtensionSpec{
 			Annotations: map[string]string{constants.DeploymentMode: mode},
@@ -206,7 +206,7 @@ func TestValidateEngineDecoderDeploymentMode(t *testing.T) {
 	}
 }
 
-func TestValidateLeaderWorkerPairing(t *testing.T) {
+func TestValidateLeaderWorkerPairing_LeaderOrWorkerAlone_RejectsUnpairedOrZeroSize(t *testing.T) {
 	sizePtr := func(v int) *int { return &v }
 	withWorker := func(size *int) *v1beta1.WorkerSpec { return &v1beta1.WorkerSpec{Size: size} }
 
@@ -315,7 +315,7 @@ func TestValidateLeaderWorkerPairing(t *testing.T) {
 	}
 }
 
-func TestValidateReplicaBounds(t *testing.T) {
+func TestValidateReplicaBounds_MinMaxPairs_RejectsNegativeZeroMaxOrInverted(t *testing.T) {
 	intPtr := func(v int) *int { return &v }
 
 	tests := []struct {
@@ -346,7 +346,7 @@ func TestValidateReplicaBounds(t *testing.T) {
 	}
 }
 
-func TestValidateAutoscalerConfig(t *testing.T) {
+func TestValidateAutoscalerConfig_ClassAnnotation_RejectsUnknownClassOrMetric(t *testing.T) {
 	tests := []struct {
 		name        string
 		annotations map[string]string
@@ -473,12 +473,12 @@ func TestValidateLeaderWorkerPairing_ReasonConstants(t *testing.T) {
 	}
 }
 
-// TestValidateLeaderSize is structurally a no-op against the current
+// TestValidateLeaderSize_EveryShape_PassesWhileLeadersHaveNoSizeField is structurally a no-op against the current
 // API surface (LeaderSpec has no Size field; see ValidateLeaderSize
 // doc). The test pins the reason constant + entry point so any
 // future API evolution that adds a leader Size field surfaces a test
 // failure rather than silently passing.
-func TestValidateLeaderSize(t *testing.T) {
+func TestValidateLeaderSize_EveryShape_PassesWhileLeadersHaveNoSizeField(t *testing.T) {
 	sizePtr := func(v int) *int { return &v }
 
 	tests := []struct {
@@ -528,11 +528,11 @@ func TestValidateLeaderSize(t *testing.T) {
 	}
 }
 
-// TestValidateMultiPodLeanRunner covers the rule
+// TestValidateMultiPodLeanRunner_LeanMultiPod_RequiresLeaderAndWorkerImages covers the rule
 // that a lean (no spec.model, no spec.runtime) multi-pod ISVC must
 // declare both leader.runner.image and worker.runner.image. The
 // controller has no defaulting source for those images.
-func TestValidateMultiPodLeanRunner(t *testing.T) {
+func TestValidateMultiPodLeanRunner_LeanMultiPod_RequiresLeaderAndWorkerImages(t *testing.T) {
 	sizePtr := func(v int) *int { return &v }
 	withRunner := func(img string) *v1beta1.RunnerSpec {
 		if img == "" {
@@ -654,7 +654,7 @@ func TestValidateMultiPodLeanRunner(t *testing.T) {
 	}
 }
 
-// TestValidateComponentAutoscaler is the table-driven coverage for
+// TestValidateComponentAutoscaler_ClassShapes_AcceptsCompleteBlocksOnly is the table-driven coverage for
 // Webhook validation of the per-Component Autoscaler block. Two
 // invariants the cases pin:
 //
@@ -662,7 +662,7 @@ func TestValidateMultiPodLeanRunner(t *testing.T) {
 //     both mean the controller does not manage scaling itself.
 //   - No KEDA-installed check — KEDA is always required for class=KEDA,
 //     and the webhook does not probe the cluster.
-func TestValidateComponentAutoscaler(t *testing.T) {
+func TestValidateComponentAutoscaler_ClassShapes_AcceptsCompleteBlocksOnly(t *testing.T) {
 	cpu80 := resource.MustParse("80")
 	validHPAMetrics := []autoscalingv2.MetricSpec{{
 		Type: autoscalingv2.ResourceMetricSourceType,
@@ -864,15 +864,15 @@ func TestValidateComponentAutoscaler(t *testing.T) {
 	}
 }
 
-// TestValidateAutoscaler covers the (autoscaler, minReplicas) core
+// TestValidateAutoscaler_KedaIdleCountVsMinReplicas_RejectsIdleAtOrAboveMin covers the (autoscaler, minReplicas) core
 // signature that lets callers without a parent ComponentExtensionSpec
 // (notably the InferenceReplica webhook) validate without synthesizing
 // one to fit the ValidateComponentAutoscaler shape.
 //
 // The behaviour parity with ValidateComponentAutoscaler is covered by
-// TestValidateComponentAutoscaler above — this test asserts the cases
+// TestValidateComponentAutoscaler_ClassShapes_AcceptsCompleteBlocksOnly above — this test asserts the cases
 // that are only reachable through the direct signature.
-func TestValidateAutoscaler(t *testing.T) {
+func TestValidateAutoscaler_KedaIdleCountVsMinReplicas_RejectsIdleAtOrAboveMin(t *testing.T) {
 	validKedaTriggers := []kedav1.ScaleTriggers{{
 		Type:     "prometheus",
 		Metadata: map[string]string{"serverAddress": "x", "query": "y", "threshold": "1"},
@@ -938,14 +938,14 @@ func TestValidateAutoscaler(t *testing.T) {
 	}
 }
 
-// TestValidateComponentsAutoscalers covers the slice-driven dispatch
+// TestValidateComponentsAutoscalers_ManyChecks_FirstFailureStopsWithNamePrefix covers the slice-driven dispatch
 // shared by the ISVC, ServingRuntime, and IR webhooks. Asserts that
 // (a) the first failure short-circuits, (b) the per-Component Name is
 // prepended via %w (so callers can unwrap to ReasonXxx), (c) nil/empty
 // slice + nil Autoscaler entries are no-ops, and (d) an empty Name
 // returns the inner error unwrapped (so the IR site with a single check
 // reads naturally).
-func TestValidateComponentsAutoscalers(t *testing.T) {
+func TestValidateComponentsAutoscalers_ManyChecks_FirstFailureStopsWithNamePrefix(t *testing.T) {
 	badKEDA := &v1beta1.ComponentAutoscaler{Class: v1beta1.AutoscalerKEDA}
 	validHPA := &v1beta1.ComponentAutoscaler{Class: v1beta1.AutoscalerHPA}
 
@@ -1056,12 +1056,12 @@ func TestValidateComponentsAutoscalers(t *testing.T) {
 	})
 }
 
-// TestValidateAutoscalerAnnotationConflict covers the rule
+// TestValidateAutoscalerAnnotationConflict_AnnotationBesideBlock_Rejected covers the rule
 // that the legacy ome.io/autoscalerClass annotation cannot coexist
 // with a per-Component Autoscaler block; the validator preempts the
 // confused "two sources of truth" state by forcing operators to pick
 // one.
-func TestValidateAutoscalerAnnotationConflict(t *testing.T) {
+func TestValidateAutoscalerAnnotationConflict_AnnotationBesideBlock_Rejected(t *testing.T) {
 	hpaBlock := &v1beta1.ComponentAutoscaler{Class: v1beta1.AutoscalerHPA}
 
 	tests := []struct {
@@ -1161,7 +1161,7 @@ func TestValidateAutoscalerAnnotationConflict(t *testing.T) {
 	}
 }
 
-func TestValidateAutoscalerTargetUtilizationPercentage(t *testing.T) {
+func TestValidateAutoscalerTargetUtilizationPercentage_Values_OneToHundredOnly(t *testing.T) {
 	tests := []struct {
 		name        string
 		annotations map[string]string
@@ -1192,13 +1192,13 @@ func TestValidateAutoscalerTargetUtilizationPercentage(t *testing.T) {
 	}
 }
 
-// TestValidateLegacyAutoscalerFieldsRaw exercises the
+// TestValidateLegacyAutoscalerFieldsRaw_RawJson_RejectsScaleTargetOrMetric exercises the
 // defense-in-depth check that rejects requests carrying the deleted
 // scaleTarget / scaleMetric fields with a friendly migration message.
 // Most paths NEVER trigger in practice (CRD schema pruning drops the
 // unknown fields server-side), so the test is the canonical operator-
 // facing record of what error a stale client would see.
-func TestValidateLegacyAutoscalerFieldsRaw(t *testing.T) {
+func TestValidateLegacyAutoscalerFieldsRaw_RawJson_RejectsScaleTargetOrMetric(t *testing.T) {
 	tests := []struct {
 		name      string
 		raw       string
@@ -1277,7 +1277,7 @@ func TestValidateLegacyAutoscalerFieldsRaw(t *testing.T) {
 	}
 }
 
-// TestValidateScaleToZero covers the MinReplicas=0 KEDA gate. The two
+// TestValidateScaleToZero_ZeroMinReplicas_RequiresKedaOnThatComponent covers the MinReplicas=0 KEDA gate. The two
 // accept-paths are (a) the legacy whole-ISVC ome.io/autoscalerClass=keda
 // annotation and (b) the typed per-Component
 // spec.<component>.autoscaler.class=KEDA block. The typed path is
@@ -1285,7 +1285,7 @@ func TestValidateLegacyAutoscalerFieldsRaw(t *testing.T) {
 // KEDA-autoscaled — a KEDA block on a *different* Component does not
 // excuse it. Note the deliberate case mismatch: typed enum "KEDA" vs
 // legacy annotation value "keda".
-func TestValidateScaleToZero(t *testing.T) {
+func TestValidateScaleToZero_ZeroMinReplicas_RequiresKedaOnThatComponent(t *testing.T) {
 	kedaAutoscaler := func() *v1beta1.ComponentAutoscaler {
 		return &v1beta1.ComponentAutoscaler{Class: v1beta1.AutoscalerKEDA}
 	}

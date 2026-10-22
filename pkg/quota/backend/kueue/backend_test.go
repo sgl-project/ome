@@ -8,30 +8,23 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/quota/backend"
 	"sigs.k8s.io/ome/pkg/quota/tree"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 const manager = "ome-quota"
 
-func backendScheme(t *testing.T) *runtime.Scheme {
+// kueueClient is the shared fake client with the Kueue API group registered
+// beside the built-in types and ome.io.
+func kueueClient(t *testing.T, opts ...fakeclient.Option) client.WithWatch {
 	t.Helper()
-	s := runtime.NewScheme()
-	if err := kueuev1beta2.AddToScheme(s); err != nil {
-		t.Fatalf("add kueue scheme: %v", err)
-	}
-	if err := v1beta1.AddToScheme(s); err != nil {
-		t.Fatalf("add ome scheme: %v", err)
-	}
-	return s
+	return fakeclient.New(t, append([]fakeclient.Option{fakeclient.WithTypes(kueuev1beta2.AddToScheme)}, opts...)...)
 }
 
 func ownedLabels(node string) map[string]string {
@@ -126,8 +119,7 @@ func TestMaterializeRefusesForeignObjects(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			c := fake.NewClientBuilder().WithScheme(backendScheme(t)).
-				WithObjects(tc.existing...).Build()
+			c := kueueClient(t, fakeclient.WithObjects(tc.existing...))
 			b := &Backend{Writer: c, Reader: c, Options: testOptions()}
 
 			got, err := b.Materialize(context.Background(), planFor(t, simpleTree(), "root", "team-a"))
@@ -215,8 +207,7 @@ func TestMaterializeToleratesPerNodeFailure(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			c := fake.NewClientBuilder().WithScheme(backendScheme(t)).
-				WithObjects(tc.existing...).Build()
+			c := kueueClient(t, fakeclient.WithObjects(tc.existing...))
 			b := &Backend{Writer: c, Reader: c, Options: testOptions()}
 
 			got, err := b.Materialize(context.Background(),
@@ -247,34 +238,24 @@ func TestMaterializeSeparatesTransientFailureFromConflict(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		intercept  interceptor.Funcs
+		refuse     fakeclient.Option
 		wantReason string
 	}{
 		{
-			name: "a read failure is transient",
-			intercept: interceptor.Funcs{
-				Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
-					return boom
-				},
-			},
+			name:       "a read failure is transient",
+			refuse:     fakeclient.FailingVerb(fakeclient.Get, fakeclient.EveryCall, boom),
 			wantReason: v1beta1.AcceleratorQuotaReasonMaterializationFailed,
 		},
 		{
-			name: "an apply failure is transient",
-			intercept: interceptor.Funcs{
-				Apply: func(context.Context, client.WithWatch, runtime.ApplyConfiguration, ...client.ApplyOption) error {
-					return boom
-				},
-			},
+			name:       "an apply failure is transient",
+			refuse:     fakeclient.FailingVerb(fakeclient.Apply, fakeclient.EveryCall, boom),
 			wantReason: v1beta1.AcceleratorQuotaReasonMaterializationFailed,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			c := fake.NewClientBuilder().WithScheme(backendScheme(t)).
-				WithObjects(withFlavor()...).
-				WithInterceptorFuncs(tc.intercept).Build()
+			c := kueueClient(t, fakeclient.WithObjects(withFlavor()...), tc.refuse)
 			b := &Backend{Writer: c, Reader: c, Options: testOptions()}
 
 			got, err := b.Materialize(context.Background(), planFor(t, simpleTree(), "root", "team-a"))
@@ -347,8 +328,7 @@ func TestSweep(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			c := fake.NewClientBuilder().WithScheme(backendScheme(t)).
-				WithObjects(tc.existing...).Build()
+			c := kueueClient(t, fakeclient.WithObjects(tc.existing...))
 			b := &Backend{Writer: c, Reader: c, Options: testOptions()}
 
 			keep := sets.New[string](tc.keep...)

@@ -14,11 +14,11 @@ import (
 	"sigs.k8s.io/ome/scheduler/pkg/placement"
 )
 
-// TestEventsToRegister: the plugin must register the cluster events that unblock
+// TestEventsToRegister_Always_CoversPodNodeAndPodGroupWithHints: the plugin must register the cluster events that unblock
 // a rejected gang — Pod (siblings / capacity), Node (capacity), and the PodGroup
 // CR (minMember). Without these, QueueingHints leaves a rejected member waiting
 // out the scheduler's slow periodic flush.
-func TestEventsToRegister(t *testing.T) {
+func TestEventsToRegister_Always_CoversPodNodeAndPodGroupWithHints(t *testing.T) {
 	g := &GangPack{}
 	events, err := g.EventsToRegister(context.Background())
 	if err != nil {
@@ -48,7 +48,7 @@ func TestEventsToRegister(t *testing.T) {
 	}
 }
 
-func TestPodAddHintQueuesOnlySibling(t *testing.T) {
+func TestPodAddHint_SiblingOrOtherPodAdded_QueuesOnlyForSibling(t *testing.T) {
 	g := &GangPack{}
 	target := gangGPUPod("team", "gang", "4")
 	for name, added := range map[string]struct {
@@ -69,7 +69,7 @@ func TestPodAddHintQueuesOnlySibling(t *testing.T) {
 	}
 }
 
-func TestPodCapacityHintRequiresScheduledMatchingResource(t *testing.T) {
+func TestPodCapacityHint_PodDeleted_QueuesOnlyWhenItWasScheduled(t *testing.T) {
 	g := &GangPack{}
 	target := gangGPUPod("team", "gang", "4")
 	matching := gpuPod("4")
@@ -96,7 +96,7 @@ func TestPodCapacityHintRequiresScheduledMatchingResource(t *testing.T) {
 	}
 }
 
-func TestPodCapacityHintQueuesTargetScaleDown(t *testing.T) {
+func TestPodCapacityHint_TargetRequestsShrink_Queues(t *testing.T) {
 	g := &GangPack{}
 	oldPod := gangGPUPod("team", "gang", "8")
 	oldPod.Name, oldPod.UID = "target", types.UID("target")
@@ -107,7 +107,7 @@ func TestPodCapacityHintQueuesTargetScaleDown(t *testing.T) {
 	}
 }
 
-func TestPodCapacityHintUsesHeterogeneousSiblingRequests(t *testing.T) {
+func TestPodCapacityHint_SiblingsOtherResourceFreed_Queues(t *testing.T) {
 	otherResource := v1.ResourceName("example.com/other-accelerator")
 	target := gangGPUPod("team", "gang", "1")
 	target.Name = "target"
@@ -124,7 +124,7 @@ func TestPodCapacityHintUsesHeterogeneousSiblingRequests(t *testing.T) {
 	}
 }
 
-func TestPodTolerationHintQueuesTargetAndSibling(t *testing.T) {
+func TestPodTolerationHint_TargetOrSiblingChanges_Queues(t *testing.T) {
 	target := gangPod("team", "gang")
 	target.Name, target.UID = "target", types.UID("target")
 	g := &GangPack{}
@@ -138,7 +138,7 @@ func TestPodTolerationHintQueuesTargetAndSibling(t *testing.T) {
 	}
 }
 
-func TestPodLabelHintQueuesTargetAndNewSibling(t *testing.T) {
+func TestPodLabelHint_TargetOrNewSiblingLabelled_QueuesUnrelatedSkips(t *testing.T) {
 	g := &GangPack{}
 	target := gangGPUPod("team", "gang", "4")
 	target.UID = types.UID("target")
@@ -157,7 +157,7 @@ func TestPodLabelHintQueuesTargetAndNewSibling(t *testing.T) {
 	}
 }
 
-func TestNodeHintQueuesOnlyUsefulDomainCapacity(t *testing.T) {
+func TestNodeHint_NodeAdded_QueuesOnlyWithDomainLabel(t *testing.T) {
 	g := &GangPack{pgReader: fakeReader{"team/gang": {min: 2, topo: testKey}}}
 	target := gangGPUPod("team", "gang", "4")
 	if got, _ := g.isSchedulableAfterNodeChange(klog.Background(), target, nil, gpuNode("new", "a", "4")); got != framework.Queue {
@@ -171,33 +171,33 @@ func TestNodeHintQueuesOnlyUsefulDomainCapacity(t *testing.T) {
 	}
 }
 
-func TestNodeDeleteHintQueuesAnyRelevantTopologyDomain(t *testing.T) {
-	pins := placement.New()
-	pins.SetReservation("team/gang", testKey, "a", 0)
-	g := &GangPack{pins: pins, pgReader: fakeReader{"team/gang": {min: 2, topo: testKey}}}
+func TestNodeDeleteHint_NodeInAnyDomainDeleted_Queues(t *testing.T) {
+	assignments := placement.New()
+	assignments.SetReservation("team/gang", testKey, "a", 0)
+	g := &GangPack{assignments: assignments, pgReader: fakeReader{"team/gang": {min: 2, topo: testKey}}}
 	target := gangGPUPod("team", "gang", "4")
 	if got, _ := g.isSchedulableAfterNodeDelete(klog.Background(), target, gpuNode("a1", "a", "4"), nil); got != framework.Queue {
-		t.Fatalf("pinned-domain delete hint = %v, want Queue", got)
+		t.Fatalf("assigned-domain delete hint = %v, want Queue", got)
 	}
 	if got, _ := g.isSchedulableAfterNodeDelete(klog.Background(), target, gpuNode("b1", "b", "4"), nil); got != framework.Queue {
 		t.Fatalf("other-domain delete hint = %v, want conservative Queue", got)
 	}
 }
 
-func TestNodeLabelRemovalQueuesPinnedGang(t *testing.T) {
-	pins := placement.New()
-	pins.SetReservationOnNodes("team/gang", testKey, "a", 1, []string{"a1"})
-	g := &GangPack{pins: pins, pgReader: fakeReader{"team/gang": {min: 2, topo: testKey}}}
+func TestNodeHint_AssignedDomainLabelRemoved_Queues(t *testing.T) {
+	assignments := placement.New()
+	assignments.SetReservationOnNodes("team/gang", testKey, "a", 1, []string{"a1"})
+	g := &GangPack{assignments: assignments, pgReader: fakeReader{"team/gang": {min: 2, topo: testKey}}}
 	target := gangGPUPod("team", "gang", "4")
 	oldNode := gpuNode("a1", "a", "4")
 	newNode := oldNode.DeepCopy()
 	delete(newNode.Labels, testKey)
 	if got, _ := g.isSchedulableAfterNodeChange(klog.Background(), target, oldNode, newNode); got != framework.Queue {
-		t.Fatalf("pinned-domain label removal hint = %v, want Queue", got)
+		t.Fatalf("assigned-domain label removal hint = %v, want Queue", got)
 	}
 }
 
-func TestPodGroupHintQueuesOnlyTargetGroup(t *testing.T) {
+func TestPodGroupHint_OwnGroupChangedOrDeleted_QueuesOthersSkip(t *testing.T) {
 	g := &GangPack{}
 	target := gangPod("team", "gang")
 	object := func(namespace, name string) *unstructured.Unstructured {
@@ -217,7 +217,7 @@ func TestPodGroupHintQueuesOnlyTargetGroup(t *testing.T) {
 	}
 }
 
-func TestPodCapacityHintQueuesUnscheduledSiblingChange(t *testing.T) {
+func TestPodCapacityHint_UnscheduledSiblingShrinks_Queues(t *testing.T) {
 	target := gangGPUPod("team", "gang", "4")
 	target.Name = "target"
 	oldSibling := gangGPUPod("team", "gang", "8")
@@ -229,7 +229,7 @@ func TestPodCapacityHintQueuesUnscheduledSiblingChange(t *testing.T) {
 	}
 }
 
-func TestUnrelatedAssignedPodStatusUpdateDoesNotRegisterGenericWakeup(t *testing.T) {
+func TestEventsToRegister_UnrelatedPodStatusUpdate_IsNotRegisteredAndSkips(t *testing.T) {
 	events, err := (&GangPack{}).EventsToRegister(context.Background())
 	if err != nil {
 		t.Fatal(err)

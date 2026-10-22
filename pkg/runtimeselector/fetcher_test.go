@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestFetchRuntimes(t *testing.T) {
@@ -56,7 +57,7 @@ func TestFetchRuntimes(t *testing.T) {
 		},
 	}
 
-	fakeClient := createFakeClient()
+	fakeClient := fakeclient.New(t)
 	for _, rt := range runtimes {
 		assert.NoError(t, fakeClient.Create(ctx, &rt))
 	}
@@ -138,7 +139,7 @@ func TestGetRuntime(t *testing.T) {
 		},
 	}
 
-	fakeClient := createFakeClient()
+	fakeClient := fakeclient.New(t)
 	assert.NoError(t, fakeClient.Create(ctx, namespaceRuntime))
 	assert.NoError(t, fakeClient.Create(ctx, clusterRuntime))
 	assert.NoError(t, fakeClient.Create(ctx, collidingNamespaced))

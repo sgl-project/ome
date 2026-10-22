@@ -9,13 +9,13 @@ import (
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"knative.dev/pkg/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ownedscaler"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 	"sigs.k8s.io/ome/pkg/webhook/admission/isvc"
 )
 
@@ -468,8 +468,8 @@ func TestCreateHPA_ComponentExtShim_Identical(t *testing.T) {
 	}
 }
 
-func TestSemanticHPAEquals(t *testing.T) {
-	assert.True(t, semanticHPAEquals(
+func TestMatchesComparesManagedMetadataSpecAndController(t *testing.T) {
+	assert.True(t, kind.Matches(
 		&autoscalingv2.HorizontalPodAutoscaler{
 			Spec: autoscalingv2.HorizontalPodAutoscalerSpec{},
 		},
@@ -477,7 +477,7 @@ func TestSemanticHPAEquals(t *testing.T) {
 			Spec: autoscalingv2.HorizontalPodAutoscalerSpec{},
 		}))
 
-	assert.False(t, semanticHPAEquals(
+	assert.False(t, kind.Matches(
 		&autoscalingv2.HorizontalPodAutoscaler{
 			Spec: autoscalingv2.HorizontalPodAutoscalerSpec{MinReplicas: ptr.Int32(3)},
 		},
@@ -485,7 +485,7 @@ func TestSemanticHPAEquals(t *testing.T) {
 			Spec: autoscalingv2.HorizontalPodAutoscalerSpec{MinReplicas: ptr.Int32(4)},
 		}))
 
-	assert.False(t, semanticHPAEquals(
+	assert.False(t, kind.Matches(
 		&autoscalingv2.HorizontalPodAutoscaler{
 			ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{constants.AutoscalerClass: "hpa"}},
 			Spec:       autoscalingv2.HorizontalPodAutoscalerSpec{MinReplicas: ptr.Int32(3)},
@@ -495,7 +495,7 @@ func TestSemanticHPAEquals(t *testing.T) {
 			Spec:       autoscalingv2.HorizontalPodAutoscalerSpec{MinReplicas: ptr.Int32(3)},
 		}))
 
-	assert.False(t, semanticHPAEquals(
+	assert.False(t, kind.Matches(
 		&autoscalingv2.HorizontalPodAutoscaler{
 			ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{}},
 			Spec:       autoscalingv2.HorizontalPodAutoscalerSpec{MinReplicas: ptr.Int32(3)},
@@ -505,7 +505,7 @@ func TestSemanticHPAEquals(t *testing.T) {
 			Spec:       autoscalingv2.HorizontalPodAutoscalerSpec{MinReplicas: ptr.Int32(3)},
 		}))
 
-	assert.True(t, semanticHPAEquals(
+	assert.True(t, kind.Matches(
 		&autoscalingv2.HorizontalPodAutoscaler{
 			ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{constants.AutoscalerClass: "hpa"}},
 			Spec:       autoscalingv2.HorizontalPodAutoscalerSpec{MinReplicas: ptr.Int32(3)},
@@ -515,7 +515,7 @@ func TestSemanticHPAEquals(t *testing.T) {
 			Spec:       autoscalingv2.HorizontalPodAutoscalerSpec{MinReplicas: ptr.Int32(3)},
 		}))
 
-	assert.True(t, semanticHPAEquals(
+	assert.True(t, kind.Matches(
 		&autoscalingv2.HorizontalPodAutoscaler{
 			ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{}},
 			Spec:       autoscalingv2.HorizontalPodAutoscalerSpec{MinReplicas: ptr.Int32(3)},
@@ -525,7 +525,7 @@ func TestSemanticHPAEquals(t *testing.T) {
 			Spec:       autoscalingv2.HorizontalPodAutoscalerSpec{MinReplicas: ptr.Int32(3)},
 		}))
 
-	assert.False(t, semanticHPAEquals(
+	assert.False(t, kind.Matches(
 		&autoscalingv2.HorizontalPodAutoscaler{
 			ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{"unrelated": "true"}},
 			Spec:       autoscalingv2.HorizontalPodAutoscalerSpec{MinReplicas: ptr.Int32(3)},
@@ -535,7 +535,7 @@ func TestSemanticHPAEquals(t *testing.T) {
 			Spec:       autoscalingv2.HorizontalPodAutoscalerSpec{MinReplicas: ptr.Int32(3)},
 		}))
 
-	assert.False(t, semanticHPAEquals(
+	assert.False(t, kind.Matches(
 		&autoscalingv2.HorizontalPodAutoscaler{
 			ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"component": "engine"}},
 			Spec:       autoscalingv2.HorizontalPodAutoscalerSpec{MinReplicas: ptr.Int32(3)},
@@ -545,7 +545,7 @@ func TestSemanticHPAEquals(t *testing.T) {
 			Spec:       autoscalingv2.HorizontalPodAutoscalerSpec{MinReplicas: ptr.Int32(3)},
 		}))
 
-	assert.True(t, semanticHPAEquals(
+	assert.True(t, kind.Matches(
 		&autoscalingv2.HorizontalPodAutoscaler{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels:      map[string]string{"component": "engine"},
@@ -577,14 +577,14 @@ func TestSemanticHPAEquals(t *testing.T) {
 	}
 	staleOwner := desiredOwner
 	staleOwner.Name = "stale"
-	assert.False(t, semanticHPAEquals(
+	assert.False(t, kind.Matches(
 		&autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{desiredOwner}}},
 		&autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{staleOwner}}},
 	))
 
 	nonControllerOwner := desiredOwner
 	nonControllerOwner.Controller = nil
-	assert.True(t, semanticHPAEquals(
+	assert.True(t, kind.Matches(
 		&autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{desiredOwner}}},
 		&autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{desiredOwner, nonControllerOwner}}},
 	))
@@ -630,13 +630,9 @@ func TestHPAReconcilerUpdatePreservesUnmanagedMetadata(t *testing.T) {
 		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{MaxReplicas: 5},
 	}
 
-	scheme := runtime.NewScheme()
-	if err := autoscalingv2.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
-	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	r := &HPAReconciler{client: cl, HPA: desired}
-	if err := r.Reconcile(); err != nil {
+	cl := fakeclient.New(t, fakeclient.WithObjects(existing))
+	r := ownedscaler.New(cl, kind, desired)
+	if err := r.Reconcile(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -687,14 +683,10 @@ func TestHPAReconcilerRejectsForeignController(t *testing.T) {
 			existing.UID = types.UID("hpa-uid")
 			existing.OwnerReferences = tt.owners
 
-			scheme := runtime.NewScheme()
-			if err := autoscalingv2.AddToScheme(scheme); err != nil {
-				t.Fatal(err)
-			}
-			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-			r := &HPAReconciler{client: cl, HPA: desired}
+			cl := fakeclient.New(t, fakeclient.WithObjects(existing))
+			r := ownedscaler.New(cl, kind, desired)
 
-			err := r.Reconcile()
+			err := r.Reconcile(context.Background())
 			assert.ErrorContains(t, err, "not controlled by expected owner")
 
 			got := &autoscalingv2.HorizontalPodAutoscaler{}
@@ -706,13 +698,12 @@ func TestHPAReconcilerRejectsForeignController(t *testing.T) {
 	}
 }
 
-// TestSemanticHPAEquals_ServerDefaultedBehavior pins the no-op-write
-// guard: OME's generated HPA carries a nil or empty-stub
-// spec.behavior, while the live HPA always has the apiserver-defaulted
-// scaleUp/scaleDown policies populated. semanticHPAEquals must treat that as
-// equal (so the reconciler reports Existed, not Update) yet still catch a real
-// spec diff.
-func TestSemanticHPAEquals_ServerDefaultedBehavior(t *testing.T) {
+// TestMatchesIgnoresServerDefaultedBehavior holds the no-write rule: OME's
+// HPA carries a nil or empty spec.behavior, while the live HPA always has the
+// apiserver-defaulted scaleUp and scaleDown policies. kind.Matches must read
+// that as equal (the reconciler reports Existed, not Update) and still catch a
+// real spec difference.
+func TestMatchesIgnoresServerDefaultedBehavior(t *testing.T) {
 	stab := int32(300)
 	selectPolicy := autoscalingv2.MaxChangePolicySelect
 	// The block the apiserver injects when behavior is omitted.
@@ -734,7 +725,7 @@ func TestSemanticHPAEquals_ServerDefaultedBehavior(t *testing.T) {
 	t.Run("nil desired behavior ignores server default -> equal", func(t *testing.T) {
 		desired := &autoscalingv2.HorizontalPodAutoscaler{Spec: baseSpec(nil)}
 		existing := &autoscalingv2.HorizontalPodAutoscaler{Spec: baseSpec(serverDefaulted)}
-		assert.True(t, semanticHPAEquals(desired, existing),
+		assert.True(t, kind.Matches(desired, existing),
 			"a steady HPA with only server-defaulted behavior must report Existed")
 	})
 
@@ -743,7 +734,7 @@ func TestSemanticHPAEquals_ServerDefaultedBehavior(t *testing.T) {
 			Spec: baseSpec(&autoscalingv2.HorizontalPodAutoscalerBehavior{}),
 		}
 		existing := &autoscalingv2.HorizontalPodAutoscaler{Spec: baseSpec(serverDefaulted)}
-		assert.True(t, semanticHPAEquals(desired, existing),
+		assert.True(t, kind.Matches(desired, existing),
 			"empty-stub behavior (createHPA default) must still report Existed")
 	})
 
@@ -756,7 +747,7 @@ func TestSemanticHPAEquals_ServerDefaultedBehavior(t *testing.T) {
 				Behavior:    serverDefaulted,
 			},
 		}
-		assert.False(t, semanticHPAEquals(desired, existing),
+		assert.False(t, kind.Matches(desired, existing),
 			"a real MinReplicas drift must report Update even when behavior is server-defaulted")
 	})
 
@@ -767,14 +758,14 @@ func TestSemanticHPAEquals_ServerDefaultedBehavior(t *testing.T) {
 				ScaleDown: &autoscalingv2.HPAScalingRules{StabilizationWindowSeconds: ptr.Int32(60)},
 			}),
 		}
-		assert.False(t, semanticHPAEquals(desired, existing),
+		assert.False(t, kind.Matches(desired, existing),
 			"a managed (non-empty) behavior block must still be compared")
 	})
 
 	t.Run("does not mutate inputs", func(t *testing.T) {
 		desired := &autoscalingv2.HorizontalPodAutoscaler{Spec: baseSpec(nil)}
 		existing := &autoscalingv2.HorizontalPodAutoscaler{Spec: baseSpec(serverDefaulted)}
-		_ = semanticHPAEquals(desired, existing)
-		assert.NotNil(t, existing.Spec.Behavior, "semanticHPAEquals must not mutate the existing HPA")
+		_ = kind.Matches(desired, existing)
+		assert.NotNil(t, existing.Spec.Behavior, "kind.Matches must not mutate the existing HPA")
 	})
 }

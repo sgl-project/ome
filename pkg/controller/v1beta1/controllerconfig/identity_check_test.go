@@ -32,7 +32,7 @@ func identityClientset(t *testing.T, block string, whoami authenticationv1.UserI
 	return cs
 }
 
-func TestCheckControllerIdentity(t *testing.T) {
+func TestCheckControllerIdentity_ConfiguredOrNot_ModeFollowsConfigMismatchErrors(t *testing.T) {
 	ctx := context.Background()
 	usernameBlock := `{"controllerIdentity":{"usernames":["` + identityCheckUser + `"]}}`
 	mode, err := CheckControllerIdentity(ctx, identityClientset(t, usernameBlock, authenticationv1.UserInfo{Username: identityCheckUser}))

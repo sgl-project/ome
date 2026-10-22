@@ -17,12 +17,12 @@ import (
 	schedinformers "sigs.k8s.io/scheduler-plugins/pkg/generated/informers/externalversions"
 )
 
-// TestNewInformerReaderDoesNotHangWithoutPodGroupAPI: the PodGroup CRD is an
+// TestNewInformerReader_PodGroupAPIUnreachable_ReturnsAfterSyncTimeout: the PodGroup CRD is an
 // optional dependency, so building the reader must NOT block forever when the
 // PodGroup API is unavailable (CRD absent, or apiserver unreachable). The initial
 // cache sync is time-bounded; newInformerReader returns after the timeout so the
 // scheduler still boots. Simulated with an unreachable apiserver + a short bound.
-func TestNewInformerReaderDoesNotHangWithoutPodGroupAPI(t *testing.T) {
+func TestNewInformerReader_PodGroupAPIUnreachable_ReturnsAfterSyncTimeout(t *testing.T) {
 	cfg := &rest.Config{Host: "https://127.0.0.1:1"} // nothing listening -> never syncs
 
 	done := make(chan error, 1)
@@ -41,7 +41,7 @@ func TestNewInformerReaderDoesNotHangWithoutPodGroupAPI(t *testing.T) {
 	}
 }
 
-func TestFactsFromPodGroup(t *testing.T) {
+func TestFactsFromPodGroup_WithOrWithoutAnnotationAndTimeout_ReadsOrDefaults(t *testing.T) {
 	pg := &schedv1alpha1.PodGroup{
 		ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{topologyKeyAnnotation: "nvidia.com/gpu.clique"}},
 		Spec:       schedv1alpha1.PodGroupSpec{MinMember: 18, ScheduleTimeoutSeconds: ptr.To[int32](120)},
@@ -59,7 +59,7 @@ func TestFactsFromPodGroup(t *testing.T) {
 	}
 }
 
-func TestInformerReaderGet(t *testing.T) {
+func TestInformerReaderGet_PresentMissingOrNilPodGroup_FoundOnlyWhenPresent(t *testing.T) {
 	pg := &schedv1alpha1.PodGroup{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "team", Name: "pf", UID: types.UID("pg-uid"), Annotations: map[string]string{topologyKeyAnnotation: "clique"}},
 		Spec:       schedv1alpha1.PodGroupSpec{MinMember: 8},
@@ -85,11 +85,11 @@ func TestInformerReaderGet(t *testing.T) {
 	}
 }
 
-// TestPlacementChanged: only edits to the facts placement reads — spec,
+// TestPlacementChanged_SpecLabelOrAnnotationEdit_TrueStatusOnlyFalse: only edits to the facts placement reads — spec,
 // annotations, labels — count as a change. Status and metadata-only writes do
 // not, so a controller refreshing status cannot wake parked members through the
 // backoff-bypassing activation.
-func TestPlacementChanged(t *testing.T) {
+func TestPlacementChanged_SpecLabelOrAnnotationEdit_TrueStatusOnlyFalse(t *testing.T) {
 	base := func() *schedv1alpha1.PodGroup {
 		return &schedv1alpha1.PodGroup{
 			ObjectMeta: metav1.ObjectMeta{
@@ -124,12 +124,12 @@ func TestPlacementChanged(t *testing.T) {
 	}
 }
 
-// TestInformerReaderOnChangeReportsNewAndEditedPodGroups: the reader reports a
+// TestInformerReaderOnChange_PodGroupStoredOrSpecEdited_ReportsStoredVersion: the reader reports a
 // PodGroup when its informer stores it and when a stored one's placement facts
 // change, and stays quiet on a status-only write. Each report arrives after the
 // store holds the version that triggered it, so a get from the handler returns
 // that version.
-func TestInformerReaderOnChangeReportsNewAndEditedPodGroups(t *testing.T) {
+func TestInformerReaderOnChange_PodGroupStoredOrSpecEdited_ReportsStoredVersion(t *testing.T) {
 	// The fake clientset's watch never ends its initial events, so a streaming
 	// list would leave the informer unsynced; list then watch instead. The
 	// simple fake is used because the field-managed one needs an OpenAPI model

@@ -432,10 +432,11 @@ func TestResume_ClearsRolledBackHoldAndTakesTheRollbackVerb(t *testing.T) {
 	setPhase(isvc, v1beta1.EngineComponent, v1beta1.RolloutPhaseRolledBack)
 
 	in := baseInputs(isvc, map[string]int32{"old": 4})
-	// A completed rollback has already pointed the IR back at stable, so the
-	// observed target names the STABLE revision, not the parked canary — and
-	// it closed the run, which is why this terminal needs no pinned plan.
-	in.CanaryRevisionHash = "old"
+	// A completed rollback moved every Instance back to the stable revision,
+	// but the replica keeps reporting the spec's revision as its target, so
+	// the observed target still names the parked canary. The rollback closed
+	// the run, which is why this terminal needs no pinned plan.
+	in.CanaryRevisionHash = "new"
 	in.RunActive = false
 
 	res, err := Reconcile(context.Background(), in)
@@ -462,11 +463,12 @@ func TestResume_ClearsRolledBackHoldAndTakesTheRollbackVerb(t *testing.T) {
 	}
 }
 
-// TestResume_RolledBackDoesNotRunTheLadderOnTheInvertedTarget is why a resume
-// returns instead of falling through. Until the IR's rollback target clears,
-// the observed target still names the stable revision; running the step
-// machine against it would program stable as its own canary.
-func TestResume_RolledBackDoesNotRunTheLadderOnTheInvertedTarget(t *testing.T) {
+// TestResume_RolledBackDoesNotRunTheStepsOnTheResumePass is why a resume
+// returns instead of falling through: the pass that clears the rejection
+// writes the re-armed record and drops the replica's rollback target, and
+// the steps run from the record the next pass reads back. No traffic moves
+// on the resume pass.
+func TestResume_RolledBackDoesNotRunTheStepsOnTheResumePass(t *testing.T) {
 	isvc := pinActiveRun(canaryISVC(twoStep(), nil))
 	isvc.Annotations = map[string]string{constants.RolloutResumeAnnotation: "new"}
 	isvc.Status.Canary = &v1beta1.CanaryStatus{
@@ -477,13 +479,108 @@ func TestResume_RolledBackDoesNotRunTheLadderOnTheInvertedTarget(t *testing.T) {
 	setPhase(isvc, v1beta1.EngineComponent, v1beta1.RolloutPhaseRolledBack)
 
 	in := baseInputs(isvc, map[string]int32{"old": 4})
-	in.CanaryRevisionHash = "old"
 	in.RunActive = false
 	if _, err := Reconcile(context.Background(), in); err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	if got := isvc.Status.Components[v1beta1.EngineComponent].Traffic; len(got) != 0 {
 		t.Fatalf("no traffic may be programmed on the resume pass, got %+v", got)
+	}
+}
+
+// TestResume_RefusedWhenNoMemberTargetsTheParkedRevision: a resume that
+// arrives after the operator set the spec back to the stable revision has
+// nothing to re-enter. Four engine Instances, version 2 rolled back, the spec
+// back on version 1, then a resume naming version 2: the verb is refused with
+// a warning that names the value and each member's target, the hold keeps
+// its revert signal, the annotation is removed, and the next pass changes
+// nothing. Without the refusal the record re-armed toward version 2 and the
+// run layer then recorded a canary of version 1 over itself.
+func TestResume_RefusedWhenNoMemberTargetsTheParkedRevision(t *testing.T) {
+	cases := []struct {
+		name        string
+		members     []v1beta1.ComponentType
+		secondaries map[v1beta1.ComponentType]MemberRevisions
+		wantTargets string
+	}{
+		{
+			name:        "an engine alone",
+			members:     []v1beta1.ComponentType{v1beta1.EngineComponent},
+			wantTargets: "engine targets old",
+		},
+		{
+			name:    "an engine with a decoder",
+			members: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+			secondaries: map[v1beta1.ComponentType]MemberRevisions{
+				v1beta1.DecoderComponent: {CanaryRevisionHash: "dec-old", StableRevisionHash: "dec-old"},
+			},
+			wantTargets: "engine targets old, decoder targets dec-old",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			isvc := canaryISVC(twoStep(), nil)
+			isvc.Namespace = "ns"
+			isvc.Spec.Rollout.Groups[0].Components = tc.members
+			isvc.Annotations = map[string]string{constants.RolloutResumeAnnotation: "new"}
+			isvc.Status.Canary = &v1beta1.CanaryStatus{
+				CanaryRevisionHash:     "new",
+				StableRevisionHash:     "old",
+				RolledBackRevisionHash: "new",
+			}
+			setPhase(isvc, v1beta1.EngineComponent, v1beta1.RolloutPhaseRolledBack)
+
+			in := baseInputs(isvc, map[string]int32{"old": 4})
+			// The spec went back to the stable revision: every member reports
+			// it as its target, and the run that presented version 2 closed.
+			in.CanaryRevisionHash = "old"
+			in.RunActive = false
+			in.Secondaries = tc.secondaries
+			rec := record.NewFakeRecorder(8)
+			in.Recorder = rec
+			rejected := resumeCount(isvc, resumeRejected)
+
+			res, err := Reconcile(context.Background(), in)
+			if err != nil {
+				t.Fatalf("Reconcile: %v", err)
+			}
+			if phaseOf(isvc) != v1beta1.RolloutPhaseRolledBack || !res.RolledBack {
+				t.Fatalf("a refused resume must leave the hold and its revert signal in place, got phase %q rolledBack=%v", phaseOf(isvc), res.RolledBack)
+			}
+			cs := isvc.Status.Canary
+			if cs.RolledBackRevisionHash != "new" || cs.CanaryRevisionHash != "new" || cs.CurrentStep != 0 {
+				t.Fatalf("a refused resume must not touch the record, got %+v", cs)
+			}
+			if _, still := isvc.Annotations[constants.RolloutResumeAnnotation]; still {
+				t.Fatal("a refused resume must be removed, or it is read again on every pass")
+			}
+			if len(res.Consume) != 1 || res.Consume[0] != constants.RolloutResumeAnnotation {
+				t.Fatalf("the refusal must hand the verb back for removal after the flush, got %v", res.Consume)
+			}
+			events := eventsFrom(rec)
+			named := false
+			for _, e := range events {
+				if strings.Contains(e, EventReasonRolloutResumeRejected) && strings.Contains(e, `"new"`) && strings.Contains(e, tc.wantTargets) {
+					named = true
+				}
+			}
+			if !named {
+				t.Fatalf("the warning must name the value and every member's target, got %v", events)
+			}
+			if got := resumeCount(isvc, resumeRejected); got != rejected+1 {
+				t.Fatalf("the refusal must count as a rejected resume, got %v, want %v", got, rejected+1)
+			}
+
+			// The next pass finds the same hold: nothing re-entered the steps.
+			in.Now = in.Now.Add(reconcileRequeue)
+			res, err = Reconcile(context.Background(), in)
+			if err != nil {
+				t.Fatalf("Reconcile after the refusal: %v", err)
+			}
+			if phaseOf(isvc) != v1beta1.RolloutPhaseRolledBack || !res.RolledBack || res.Stepped {
+				t.Fatalf("the hold must stand on the pass after a refused resume, got phase %q %+v", phaseOf(isvc), res)
+			}
+		})
 	}
 }
 
@@ -512,10 +609,11 @@ func TestDispatch_ResumeUnpinsTheIRRollbackTarget(t *testing.T) {
 	engineIR := &v1beta1.InferenceReplica{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "resumed-engine", Generation: 3}}
 	engineIR.Spec.Runners = []v1beta1.Runner{{Name: v1beta1.RunnerNameDefault, Size: 1}}
 	engineIR.Spec.Pacing = &v1beta1.InferenceReplicaPacing{RollbackToRevision: &stableCR}
-	// The revert completed: the IR names stable as both its current and its
-	// update revision, so the observed target reports stable.
+	// The revert completed: every Instance runs the stable revision, so the
+	// replica's current revision is stable, while its update revision keeps
+	// reporting the spec's revision, the one the operator resumes.
 	engineIR.Status.CurrentRevision = stableCR
-	engineIR.Status.UpdateRevision = stableCR
+	engineIR.Status.UpdateRevision = "resumed-engine-target"
 	engineIR.Status.ObservedGeneration = 3
 
 	c := fake.NewClientBuilder().
@@ -530,6 +628,7 @@ func TestDispatch_ResumeUnpinsTheIRRollbackTarget(t *testing.T) {
 		).
 		Build()
 	ctx := context.Background()
+	syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 	if _, err := Dispatch(ctx, DispatchDeps{
 		Client: c, Reader: c, ISVC: isvc,
 		ComponentRunnerPorts: canaryRunnerPorts(),

@@ -60,11 +60,7 @@ func (s EventRecorderSettings) CorrelatorOptions() record.CorrelatorOptions {
 // inferenceservice ConfigMap. An absent or empty key yields (nil, nil):
 // unconfigured, never an error and never a fabricated default.
 func NewEventRecorderConfig(clientset kubernetes.Interface) (*EventRecorderConfig, error) {
-	configMap, err := getInferenceServiceConfigMap(clientset)
-	if err != nil {
-		return nil, err
-	}
-	return parseEventRecorderConfig(configMap)
+	return loadBlock(clientset, parseEventRecorderConfig)
 }
 
 func parseEventRecorderConfig(configMap *v1.ConfigMap) (*EventRecorderConfig, error) {
@@ -87,10 +83,8 @@ func (c *EventRecorderConfig) ToBurstSize() (int, error) {
 	if c == nil || c.BurstSize == nil {
 		return 0, nil
 	}
-	if *c.BurstSize <= 0 {
-		return 0, fmt.Errorf("invalid eventRecorder.burstSize: must be > 0, got %d", *c.BurstSize)
-	}
-	return int(*c.BurstSize), nil
+	burst, err := readPositiveCount("eventRecorder.burstSize", *c.BurstSize)
+	return int(burst), err
 }
 
 // ToRefillInterval validates and parses the configured refill interval. A
@@ -100,14 +94,7 @@ func (c *EventRecorderConfig) ToRefillInterval() (time.Duration, error) {
 	if c == nil || c.RefillInterval == nil {
 		return 0, nil
 	}
-	interval, err := time.ParseDuration(*c.RefillInterval)
-	if err != nil {
-		return 0, fmt.Errorf("invalid eventRecorder.refillInterval %q: %w", *c.RefillInterval, err)
-	}
-	if interval <= 0 {
-		return 0, fmt.Errorf("invalid eventRecorder.refillInterval: must be > 0, got %s", interval)
-	}
-	return interval, nil
+	return readPositiveDuration("eventRecorder.refillInterval", *c.RefillInterval)
 }
 
 // LoadEventRecorderSettings reads one ConfigMap snapshot and validates the

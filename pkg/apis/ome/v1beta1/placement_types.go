@@ -29,26 +29,18 @@ const (
 )
 
 // PlacementPolicy selects the matching and allocation contract.
-// +kubebuilder:validation:Enum=ClusterAffinity;ComponentAffinity
+// +kubebuilder:validation:Enum=ClusterAffinity
 type PlacementPolicy string
 
 const (
 	// PlacementPolicyClusterAffinity uses affinity and persisted allocation plans.
 	PlacementPolicyClusterAffinity PlacementPolicy = "ClusterAffinity"
-
-	// PlacementPolicyComponentAffinity uses the same plans, with separate affinity
-	// terms per component read from componentAffinity. A controller that does not
-	// recognize this value holds the service instead of placing it without them.
-	PlacementPolicyComponentAffinity PlacementPolicy = "ComponentAffinity"
 )
 
 // PlacementSpec declares explicit multi-cluster matching and allocation intent.
-// +kubebuilder:validation:XValidation:rule="!has(self.replacementTimeout) || (has(self.policy) && self.policy in ['ClusterAffinity', 'ComponentAffinity'] && has(self.mode) && self.mode == 'Single')",message="replacementTimeout requires Single placement"
-// +kubebuilder:validation:XValidation:rule="has(self.componentAffinity) == (has(self.policy) && self.policy == 'ComponentAffinity')",message="componentAffinity is required by, and only valid with, the ComponentAffinity policy"
-// +kubebuilder:validation:XValidation:rule="!has(self.policy) || self.policy != 'ComponentAffinity' || !has(self.clusterAffinity)",message="the ComponentAffinity policy reads componentAffinity, not clusterAffinity"
+// +kubebuilder:validation:XValidation:rule="!has(self.replacementTimeout) || (has(self.policy) && self.policy == 'ClusterAffinity' && has(self.mode) && self.mode == 'Single')",message="replacementTimeout requires Single placement"
 type PlacementSpec struct {
 	// Policy selects affinity matching and persisted allocation plans.
-	// ComponentAffinity reads per-component terms from componentAffinity.
 	// +required
 	Policy PlacementPolicy `json:"policy"`
 
@@ -56,9 +48,9 @@ type PlacementSpec struct {
 	// +required
 	Mode PlacementMode `json:"mode"`
 
-	// ClusterAffinity ORs terms whose requirements are ANDed, for every
-	// component. Requires the ClusterAffinity policy; omission then matches
-	// every registration.
+	// ClusterAffinity ORs terms whose requirements are ANDed. The engine's
+	// clusters are every component's clusters; in Split, each term's weights
+	// set the components' shares. Omission matches every registration.
 	// An explicit empty or null list is invalid.
 	// +optional
 	// +nullable
@@ -66,14 +58,6 @@ type PlacementSpec struct {
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=64
 	ClusterAffinity []ClusterAffinityTerm `json:"clusterAffinity,omitempty"`
-
-	// ComponentAffinity holds one affinity term list per component and requires
-	// the ComponentAffinity policy. Every component must match the same
-	// clusters; in Split, each component's weights set its own shares. An
-	// explicit null is invalid.
-	// +optional
-	// +nullable
-	ComponentAffinity *ComponentClusterAffinity `json:"componentAffinity,omitempty"`
 
 	// Deprecated: MaxSurge is ignored. A placement move may hold one extra full
 	// copy of the desired allocation; admission warns when this is set.
@@ -116,16 +100,4 @@ type SplitSpec struct {
 // from selector presence, mode, or member state.
 func (p *PlacementSpec) UsesClusterAffinity() bool {
 	return p != nil && p.Policy == PlacementPolicyClusterAffinity
-}
-
-// UsesComponentAffinity reports the explicit opt-in to per-component affinity
-// terms read from componentAffinity.
-func (p *PlacementSpec) UsesComponentAffinity() bool {
-	return p != nil && p.Policy == PlacementPolicyComponentAffinity
-}
-
-// UsesAffinityPolicy reports an explicit opt-in to either affinity policy.
-// Both make the source the owner of its placed member copies.
-func (p *PlacementSpec) UsesAffinityPolicy() bool {
-	return p.UsesClusterAffinity() || p.UsesComponentAffinity()
 }

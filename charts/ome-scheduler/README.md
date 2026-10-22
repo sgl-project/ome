@@ -139,6 +139,7 @@ suite still uses the default scheduler and does not duplicate that coverage.
 | `scheduler.image.repository` / `.tag` | `ome-scheduler` / `latest` | Image (prefixed by `global.hub` if set). |
 | `scheduler.replicaCount` | `2` | Leader plus warm standby for HA. |
 | `scheduler.leaderElect` | `true` | Only the leader schedules. |
+| `scheduler.leaderElection` | `60s` / `30s` / `6s` | Lease duration, renew deadline and retry period; rendered only when all three are set. |
 | `scheduler.omeControllerIntegration.enabled` | `true` | Enforce OME's fixed PodGroup topology annotation contract. |
 | `scheduler.deploymentStrategy` | one unavailable, no surge | Roll on two eligible nodes without violating required anti-affinity. |
 | `scheduler.verbosity` | `2` | klog `-v` level. |

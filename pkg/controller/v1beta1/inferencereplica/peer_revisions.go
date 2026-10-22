@@ -60,13 +60,16 @@ func (p *peerRevisions) hashFor(peer v1beta1.ComponentType, podRevisionHash stri
 //
 // A peer's roll target is read from its authoritative status, so the
 // resolution is only trustworthy once the peer reflects the same parent
-// ISVC generation as ir (its projection has landed) and its status
-// reflects its own current generation (its reconciler has stamped the
-// target for that projection). Until both hold the returned hold reason
-// is non-empty and the caller must not render: a pod paired against the
-// peer's previous target would carry the stale pairing for its whole
-// life. Every pass that holds still writes this Component's own status,
-// so two peers waiting on each other converge instead of deadlocking.
+// ISVC generation as ir (its projection has landed) and its status was
+// written for the pod templates its spec holds (its reconciler has
+// recorded the target of that projection, coordination.StatusObservedTemplates).
+// Until both hold the returned hold reason is non-empty and the caller
+// must not render: a pod paired against the peer's previous target would
+// carry the stale pairing for its whole life. A spec write that changes no
+// template (an annotation value the revision leaves out, a count, a pause)
+// leaves the peer fresh. Every pass that holds still writes this
+// Component's own status, so two peers waiting on each other converge
+// instead of deadlocking.
 //
 // A peer with no IR (not IR-managed, or not projected yet) resolves to no
 // revision: its pods get only the generic endpoint and nothing holds.
@@ -95,8 +98,8 @@ func (r *Reconciler) resolvePeerRevisions(ctx context.Context, ir *v1beta1.Infer
 		if peerGeneration := peerIR.Annotations[constants.InferenceReplicaParentGenerationAnnotationKey]; peerGeneration != ownGeneration {
 			return nil, fmt.Sprintf("%s IR projection reflects parent generation %q, this Component's reflects %q", peer, peerGeneration, ownGeneration), nil
 		}
-		if peerIR.Status.ObservedGeneration < peerIR.Generation || peerIR.Status.UpdateRevision == "" {
-			return nil, fmt.Sprintf("%s IR status has not observed generation %d yet", peer, peerIR.Generation), nil
+		if !coordination.StatusObservedTemplates(peerIR) || peerIR.Status.UpdateRevision == "" {
+			return nil, fmt.Sprintf("%s IR status has not recorded the roll target of its spec yet (generation %d)", peer, peerIR.Generation), nil
 		}
 		target, err := r.peerRollTargetHash(ctx, peerIR)
 		if err != nil {

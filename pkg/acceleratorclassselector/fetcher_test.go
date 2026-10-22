@@ -7,11 +7,10 @@ import (
 	"github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 // Helper function to create resource.Quantity
@@ -27,12 +26,7 @@ func TestNewDefaultAcceleratorFetcher(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
 	// Create a fake client
-	scheme := runtime.NewScheme()
-	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
-
-	c := ctrlclientfake.NewClientBuilder().
-		WithScheme(scheme).
-		Build()
+	c := fakeclient.New(t)
 
 	// Create fetcher
 	fetcher := NewDefaultAcceleratorFetcher(c)
@@ -129,10 +123,6 @@ func TestDefaultAcceleratorFetcher_FetchAcceleratorClasses(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create scheme
-			scheme := runtime.NewScheme()
-			g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
-
 			// Create objects for fake client
 			objects := make([]client.Object, 0)
 			for i := range tt.clusterAcceleratorClasses {
@@ -140,10 +130,7 @@ func TestDefaultAcceleratorFetcher_FetchAcceleratorClasses(t *testing.T) {
 			}
 
 			// Create fake client
-			c := ctrlclientfake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(objects...).
-				Build()
+			c := fakeclient.New(t, fakeclient.WithObjects(objects...))
 
 			// Create fetcher
 			fetcher := NewDefaultAcceleratorFetcher(c)
@@ -307,10 +294,6 @@ func TestDefaultAcceleratorFetcher_GetAcceleratorClass(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create scheme
-			scheme := runtime.NewScheme()
-			g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
-
 			// Create objects for fake client
 			objects := make([]client.Object, 0)
 			for i := range tt.clusterAcceleratorClasses {
@@ -318,10 +301,7 @@ func TestDefaultAcceleratorFetcher_GetAcceleratorClass(t *testing.T) {
 			}
 
 			// Create fake client
-			c := ctrlclientfake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(objects...).
-				Build()
+			c := fakeclient.New(t, fakeclient.WithObjects(objects...))
 
 			// Create fetcher
 			fetcher := NewDefaultAcceleratorFetcher(c)
@@ -353,14 +333,8 @@ func TestDefaultAcceleratorFetcher_GetAcceleratorClass(t *testing.T) {
 func TestDefaultAcceleratorFetcher_GetAcceleratorClass_NotFoundContract(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
-	// Create scheme
-	scheme := runtime.NewScheme()
-	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
-
 	// Create fake client with no accelerator classes
-	c := ctrlclientfake.NewClientBuilder().
-		WithScheme(scheme).
-		Build()
+	c := fakeclient.New(t)
 
 	// Create fetcher
 	fetcher := NewDefaultAcceleratorFetcher(c)

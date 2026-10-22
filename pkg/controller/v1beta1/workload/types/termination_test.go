@@ -379,6 +379,16 @@ func TestInstanceTermination_ShortStringNil(t *testing.T) {
 	}
 }
 
+// A runner whose exit the kubelet had not published when the record was
+// made reads as restarted, not stuck: the record names the container and
+// carries no exit code.
+func TestInstanceTermination_ShortStringRunnerExitUnobserved(t *testing.T) {
+	got := &InstanceTermination{PodName: "engine-0", ContainerName: "main", Reason: RunnerExitUnobservedReason, Message: RunnerExitUnobservedMessage}
+	if got.ShortString() != "pod engine-0 container main restarted (exit unobserved)" {
+		t.Errorf("ShortString: %q", got.ShortString())
+	}
+}
+
 func TestInstanceTermination_ShortStringUnknownPod(t *testing.T) {
 	tm := &InstanceTermination{Reason: "OOMKilled", ExitCode: int32p(137)}
 	if got := tm.ShortString(); got != "pod <unknown> failed (OOMKilled, exit 137)" {

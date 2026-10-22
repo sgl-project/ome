@@ -43,7 +43,7 @@ func observerTestCapacityConfig() CapacityConfig {
 	}
 }
 
-func TestObserverConfigValidate(t *testing.T) {
+func TestObserverConfigValidate_EachLimitNonPositive_NamesTheField(t *testing.T) {
 	tests := []struct {
 		name   string
 		mutate func(*ObserverConfig)
@@ -98,7 +98,7 @@ func TestObserverConfigValidate(t *testing.T) {
 	}
 }
 
-func TestConfigValidateRequiresObserverLimitsOnlyWhenEnabled(t *testing.T) {
+func TestConfigValidate_ObserverLimitsMissing_FailsOnlyWhenEnabled(t *testing.T) {
 	if err := (Config{}).Validate(); err != nil {
 		t.Fatalf("disabled Config.Validate() = %v, want nil", err)
 	}
@@ -114,7 +114,7 @@ func TestConfigValidateRequiresObserverLimitsOnlyWhenEnabled(t *testing.T) {
 	}
 }
 
-func TestConfigValidateRequiresPublisherResyncOnlyWhenEnabled(t *testing.T) {
+func TestConfigValidate_PublisherResyncUnset_FailsOnlyWhenEnabledNegativeAlways(t *testing.T) {
 	if err := (Config{Publisher: PublisherConfig{Name: "custom"}}).Validate(); err != nil {
 		t.Fatalf("disabled Config.Validate() = %v, want nil", err)
 	}
@@ -135,7 +135,7 @@ func TestConfigValidateRequiresPublisherResyncOnlyWhenEnabled(t *testing.T) {
 	}
 }
 
-func TestConfigValidateEnforcesObserverPeriodFloor(t *testing.T) {
+func TestConfigValidate_ProbeOrCapacityPeriodBelowMinimum_NamesObserverMinPeriod(t *testing.T) {
 	t.Run("probe", func(t *testing.T) {
 		probe := observerTestProbeConfig()
 		probe.Period = 500 * time.Millisecond
@@ -178,7 +178,7 @@ func TestConfigValidateEnforcesObserverPeriodFloor(t *testing.T) {
 	})
 }
 
-func TestConfigValidateCapsEffectiveCapacitySamples(t *testing.T) {
+func TestConfigValidate_CapacitySamplesAboveObserverMax_NamesObserverMaxSamples(t *testing.T) {
 	capacity := observerTestCapacityConfig()
 	cfg := Config{
 		Enabled:   true,

@@ -125,24 +125,17 @@ func reconcile(ctx context.Context, in Inputs, policies rollout.Policies) (Outco
 	}
 
 	active := activeRun(isvc)
-	retargeting := false
+	// closedRun is the run a retarget closed on this pass. Its close event
+	// is written once the pass knows what follows it: a fresh run, a plan
+	// that does not compose, or nothing left to roll.
+	var closedRun *v1beta1.RolloutRun
 
-	// Every group deleted mid-run: the pinned plan continues (an inert edit,
-	// like any other); deleting a group never aborts a run, so point at the
-	// verbs that do.
-	if specGroups == 0 {
-		if active != nil {
-			if setPlanDrift(isvc, true, v1beta1.RolloutPlanDriftReasonSpecNewerThanRun,
-				"spec.rollout removed mid-run; the pinned plan continues — abort with ome.io/rollout-rollback, or repin to the empty plan with ome.io/rollout-repin", now) {
-				emit(in.Recorder, isvc, corev1.EventTypeWarning, EventGroupRemoved,
-					"spec.rollout was removed while run %s is pinned; the run continues on its pinned plan (use ome.io/rollout-rollback or ome.io/rollout-repin to abort)", active.RunID)
-			}
-			return Outcome{RequeueAfter: shortRequeue}, nil
-		}
+	// Nothing declared and nothing open: there is nothing to decide.
+	if specGroups == 0 && active == nil {
 		return Outcome{}, nil
 	}
 
-	targets, fresh, err := observeGroupTargets(ctx, in.Reader, isvc)
+	targets, fresh, err := observeGroupTargets(ctx, in.Reader, isvc, active)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -160,7 +153,6 @@ func reconcile(ctx context.Context, in Inputs, policies rollout.Policies) (Outco
 			return Outcome{RequeueAfter: shortRequeue}, nil
 		}
 		if retargeted(isvc, active, targets) {
-			retargeting = true
 			for _, target := range active.TargetRevisions {
 				// An unknown stable stays unknown only for a component that
 				// moved. A component still on its pinned revision is on its
@@ -171,22 +163,25 @@ func reconcile(ctx context.Context, in Inputs, policies rollout.Policies) (Outco
 					stableOverrides[target.Component] = target.StableRevision
 				}
 			}
+			if specGroups == 0 {
+				// The spec declares no rollout any more, so no run opens
+				// toward the new target: the Components roll on their own.
+				closeAndRest(in, active, v1beta1.RolloutRunSuperseded, now,
+					"run %s superseded by a new target revision; spec.rollout is gone, so no run opens", active.RunID)
+				return Outcome{StateChanged: true}, nil
+			}
 			closeRun(isvc, active, v1beta1.RolloutRunSuperseded, now)
 			recordRunClosed(isvc, v1beta1.RolloutRunSuperseded)
-			emit(in.Recorder, isvc, corev1.EventTypeNormal, EventRunClosed,
-				"run %s superseded by a new target revision; opening a fresh run", active.RunID)
-			active = nil
+			closedRun, active = active, nil
 			// fall through to the open path with a fresh render.
 		} else if outcome, done := closedOutcome(isvc, active, targets); done {
-			closeRun(isvc, active, outcome, now)
-			recordRunClosed(isvc, outcome)
-			recordDrift(isvc, false)
-			emit(in.Recorder, isvc, corev1.EventTypeNormal, EventRunClosed, "run %s closed: %s", active.RunID, outcome)
-			setPlanReady(isvc, corev1.ConditionTrue, v1beta1.RolloutPlanReasonNoRun,
-				fmt.Sprintf("last run closed %s", outcome), now)
-			setPlanDrift(isvc, false, v1beta1.RolloutPlanDriftReasonInSync, "", now)
+			closeAndRest(in, active, outcome, now, "run %s closed: %s", active.RunID, outcome)
 			return Outcome{StateChanged: true}, nil
 		} else {
+			if specGroups == 0 {
+				reportGroupsRemoved(in, active, now)
+				return Outcome{RequeueAfter: shortRequeue}, nil
+			}
 			if err := updateDrift(in, policies, active, now); err != nil {
 				return Outcome{}, err
 			}
@@ -200,10 +195,16 @@ func reconcile(ctx context.Context, in Inputs, policies rollout.Policies) (Outco
 		return Outcome{RequeueAfter: shortRequeue}, nil
 	}
 	diverged := divergedMember(isvc, targets)
-	midFlight := canaryMidFlight(isvc, policies)
+	midFlight := canaryMidFlight(isvc, policies, targets)
 	if !diverged && !midFlight {
 		settleNoRun(isvc, now)
-		return Outcome{}, nil
+		if closedRun == nil {
+			return Outcome{}, nil
+		}
+		// The close is a run boundary like any other: it is flushed before
+		// anything fallible runs, and nothing follows it.
+		emitRetargetClose(in, closedRun, "nothing diverges, so no run opens")
+		return Outcome{StateChanged: true}, nil
 	}
 
 	// The plan is pinned from a live reading of the referenced policies: a
@@ -217,14 +218,20 @@ func reconcile(ctx context.Context, in Inputs, policies rollout.Policies) (Outco
 		return Outcome{}, err
 	}
 	if parkReason != "" {
+		if closedRun != nil {
+			emitRetargetClose(in, closedRun, "the plan for the new target does not compose, so no run opens")
+		}
 		if setPlanReady(isvc, corev1.ConditionFalse, parkReason, parkMsg, now) {
 			recordParked(isvc, parkReason)
 			emit(in.Recorder, isvc, corev1.EventTypeWarning, EventPlanParked,
 				"rollout parked (%s): %s — the new revision is held, the previous revision keeps serving", parkReason, parkMsg)
 		}
-		return Outcome{Parked: true, RequeueAfter: parkRequeue}, nil
+		return Outcome{Parked: true, StateChanged: closedRun != nil, RequeueAfter: parkRequeue}, nil
 	}
-	adopting := !retargeting && midFlight
+	if closedRun != nil {
+		emitRetargetClose(in, closedRun, "opening a fresh run")
+	}
+	adopting := closedRun == nil && midFlight
 	openRun(isvc, plan, targets, stableOverrides, adopting, now)
 	recordRunOpened(isvc, plan, adopting)
 	setPlanReady(isvc, corev1.ConditionTrue, v1beta1.RolloutPlanReasonPinned,
@@ -238,6 +245,43 @@ func reconcile(ctx context.Context, in Inputs, policies rollout.Policies) (Outco
 			"run %s opened (%s)", isvc.Status.Rollout.ActiveRun.RunID, combinedPlanDigest(plan.digests))
 	}
 	return Outcome{StateChanged: true, RequeueAfter: shortRequeue, Opened: true, Adopted: adopting}, nil
+}
+
+// emitRetargetClose records the close of a run whose target moved on, with
+// what the pass decided follows it.
+func emitRetargetClose(in Inputs, closed *v1beta1.RolloutRun, then string) {
+	emit(in.Recorder, in.ISVC, corev1.EventTypeNormal, EventRunClosed,
+		"run %s superseded by a new target revision; %s", closed.RunID, then)
+}
+
+// closeAndRest closes the run with its outcome and records that nothing is
+// open any more: the plan conditions read NoActiveRun and InSync.
+func closeAndRest(in Inputs, active *v1beta1.RolloutRun, outcome v1beta1.RolloutRunOutcome, now metav1.Time, messageFmt string, args ...interface{}) {
+	isvc := in.ISVC
+	closeRun(isvc, active, outcome, now)
+	recordRunClosed(isvc, outcome)
+	recordDrift(isvc, false)
+	emit(in.Recorder, isvc, corev1.EventTypeNormal, EventRunClosed, messageFmt, args...)
+	setPlanReady(isvc, corev1.ConditionTrue, v1beta1.RolloutPlanReasonNoRun,
+		fmt.Sprintf("last run closed %s", outcome), now)
+	setPlanDrift(isvc, false, v1beta1.RolloutPlanDriftReasonInSync, "", now)
+}
+
+// reportGroupsRemoved records the drift of a run whose spec declares no
+// rollout group any more. The run keeps executing the plan it recorded and
+// closes when that plan finishes, rolls back or is superseded by a new
+// target; the rollback verb ends it sooner and the repin verb closes it at
+// once.
+func reportGroupsRemoved(in Inputs, active *v1beta1.RolloutRun, now metav1.Time) {
+	isvc := in.ISVC
+	recordDrift(isvc, true)
+	if setPlanDrift(isvc, true, v1beta1.RolloutPlanDriftReasonSpecNewerThanRun,
+		"spec.rollout removed mid-run; the run continues on its recorded plan and closes when that plan finishes or rolls back — end it sooner with ome.io/rollout-rollback, or close it at once with ome.io/rollout-repin", now) {
+		emit(in.Recorder, isvc, corev1.EventTypeWarning, EventGroupRemoved,
+			"spec.rollout was removed while run %s is open; the run continues on its recorded plan and closes when that plan finishes or rolls back (ome.io/rollout-rollback ends it sooner, ome.io/rollout-repin closes it at once)", active.RunID)
+	}
+	setPlanReady(isvc, corev1.ConditionTrue, v1beta1.RolloutPlanReasonPinned,
+		fmt.Sprintf("run %s pinned", active.RunID), now)
 }
 
 // settleNoRun records the idle state: no run is pinned and none is needed.
@@ -256,11 +300,15 @@ func activeRun(isvc *v1beta1.InferenceService) *v1beta1.RolloutRun {
 // composePlan renders the effective plan from the live spec: per group, the
 // resolver's body and provenance, then composed-body re-validation and
 // provider resolution. A non-empty parkReason means the plan is unresolvable
-// — the caller parks instead of opening.
+// — the caller parks instead of opening. A spec with no rollout block
+// renders the empty plan.
 func composePlan(in Inputs, policies rollout.Policies) (composedPlan, string, string, error) {
 	isvc := in.ISVC
-	inflated := derivedProvenance(isvc)
 	var plan composedPlan
+	if isvc.Spec.Rollout == nil {
+		return plan, "", "", nil
+	}
+	inflated := derivedProvenance(isvc)
 	for gi := range isvc.Spec.Rollout.Groups {
 		resolved, rerr := rollout.ResolveGroup(gi, &isvc.Spec.Rollout.Groups[gi], policies)
 		if rerr != nil {
@@ -520,12 +568,15 @@ func closedOutcome(isvc *v1beta1.InferenceService, active *v1beta1.RolloutRun, t
 			if primaryPhase(isvc, g) != v1beta1.RolloutPhaseStable {
 				return "", false
 			}
-			// The done sentinel can lead the IR counters by a pass; closing
-			// with stragglers would immediately reopen via the straggler
-			// trigger — wait for real convergence instead of churning.
+			// The Stable read can lead the replica by a pass: Instances may still
+			// trail, and current is promoted only once every Instance is Ready on
+			// the pin. A close before the pair agrees would reopen at once.
 			for _, comp := range g.Components {
 				obs := targets[comp]
-				if obs.replicas > 0 && obs.updated < obs.replicas {
+				if obs.straggling() {
+					return "", false
+				}
+				if pinnedRev := pinnedFor[comp]; pinnedRev != "" && obs.current != pinnedRev {
 					return "", false
 				}
 			}
@@ -699,10 +750,8 @@ func handleRepin(ctx context.Context, in Inputs, active *v1beta1.RolloutRun, now
 	// An empty re-render (no groups) closes the run instead of pinning an
 	// empty plan.
 	if len(plan.groups) == 0 {
-		closeRun(isvc, active, v1beta1.RolloutRunSuperseded, now)
 		recordRepin(isvc, true)
-		recordRunClosed(isvc, v1beta1.RolloutRunSuperseded)
-		emit(in.Recorder, isvc, corev1.EventTypeNormal, EventRunClosed,
+		closeAndRest(in, active, v1beta1.RolloutRunSuperseded, now,
 			"run %s closed by repin to an empty plan", active.RunID)
 		return true, consumeAnnotation(ctx, in.Client, isvc, constants.RolloutRepinAnnotation)
 	}

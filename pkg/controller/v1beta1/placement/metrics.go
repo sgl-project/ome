@@ -96,7 +96,7 @@ func recordPlacement(isvc *v1beta1.InferenceService, res placementResult) {
 	}
 
 	// Winner: reset so a re-placement onto a different cluster does not leave
-	// the previous home reporting 1 alongside the new one.
+	// the previous member reporting 1 alongside the new one.
 	placementWinner.DeletePartialMatch(match)
 	if res.winner != "" {
 		placementWinner.WithLabelValues(ns, name, res.winner).Set(1)

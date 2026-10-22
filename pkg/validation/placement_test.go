@@ -2,6 +2,7 @@ package validation
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -12,7 +13,7 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 )
 
-func TestValidatePlacement(t *testing.T) {
+func TestValidatePlacement_ModeAndAffinityShapes_RejectsWhatTheModeForbids(t *testing.T) {
 	for _, tt := range []struct{ name, placement, wantError string }{
 		{name: "local service", placement: `null`},
 		{name: "unconstrained single", placement: `{"mode":"Single"}`},
@@ -53,7 +54,39 @@ func TestValidatePlacement(t *testing.T) {
 	}
 }
 
-func TestValidatePlacementIntent(t *testing.T) {
+// A service that still applies the removed ComponentAffinity policy is refused
+// with the policy named and the weights block pointed at, whether or not it
+// already holds an accepted placement plan.
+func TestValidatePlacementIntent_RemovedPolicy_NamesTheReplacement(t *testing.T) {
+	const remedy = "the ComponentAffinity policy was removed, set each component's weight in the weights block of each clusterAffinity term"
+	for _, tt := range []struct {
+		name      string
+		plan      *v1beta1.PlacementPlanStatus
+		wantError string
+	}{
+		{name: "before any plan", wantError: "spec.placement.policy must be ClusterAffinity; " + remedy},
+		{name: "with an accepted plan", plan: &v1beta1.PlacementPlanStatus{ID: "plan-1", Revision: 1}, wantError: "an accepted placement plan requires spec.placement.policy ClusterAffinity; " + remedy},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			source := &v1beta1.InferenceService{
+				Spec: v1beta1.InferenceServiceSpec{
+					Engine:    &v1beta1.EngineSpec{},
+					Placement: &v1beta1.PlacementSpec{Policy: "ComponentAffinity", Mode: v1beta1.PlacementModeSplit},
+				},
+				Status: v1beta1.InferenceServiceStatus{Placement: &v1beta1.PlacementStatus{Plan: tt.plan}},
+			}
+			err := ValidatePlacementIntent(source)
+			if err == nil || err.Error() != tt.wantError {
+				t.Fatalf("want %q, got %v", tt.wantError, err)
+			}
+			if tt.plan != nil && !errors.Is(err, ErrAcceptedPlanRequiresClusterAffinity) {
+				t.Fatalf("the plan refusal is not the shared sentinel: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidatePlacementIntent_ObsoleteAnnotations_RejectsWithoutMutating(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
 		annotations map[string]string
@@ -76,4 +109,52 @@ func TestValidatePlacementIntent(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestValidatePlacementModeUpdate_ModeChanges_RejectsEveryChangeNamingBothModes walks every ordered pair of the four
+// modes and the absent block: a pair that keeps the effective mode is
+// admitted whatever else changed, every other pair is refused with both
+// values named.
+func TestValidatePlacementModeUpdate_ModeChanges_RejectsEveryChangeNamingBothModes(t *testing.T) {
+	modes := []v1beta1.PlacementMode{"", v1beta1.PlacementModeSingle, v1beta1.PlacementModeAll, v1beta1.PlacementModeSplit, v1beta1.PlacementModeSplitByCapacity}
+	spec := func(mode v1beta1.PlacementMode, terms []v1beta1.ClusterAffinityTerm) *v1beta1.InferenceServiceSpec {
+		if mode == "" {
+			return &v1beta1.InferenceServiceSpec{}
+		}
+		return &v1beta1.InferenceServiceSpec{Placement: &v1beta1.PlacementSpec{Policy: v1beta1.PlacementPolicyClusterAffinity, Mode: mode, ClusterAffinity: terms}}
+	}
+	terms := []v1beta1.ClusterAffinityTerm{{MatchFields: []v1beta1.ClusterSelectorRequirement{{Key: "metadata.name", Operator: "In", Values: []string{"cluster-a"}}}}}
+	word := func(mode v1beta1.PlacementMode) string {
+		if mode == "" {
+			return "unset (no spec.placement block)"
+		}
+		return string(mode)
+	}
+	for _, before := range modes {
+		for _, after := range modes {
+			t.Run(word(before)+" to "+word(after), func(t *testing.T) {
+				// The affinity changes alongside, so the mode alone decides.
+				err := ValidatePlacementModeUpdate(spec(before, nil), spec(after, terms))
+				if before == after {
+					if err != nil {
+						t.Fatalf("the mode is kept, want no error, got %v", err)
+					}
+					return
+				}
+				if err == nil {
+					t.Fatalf("the mode changes from %s to %s, want a refusal", word(before), word(after))
+				}
+				for _, want := range []string{"spec.placement.mode is fixed for the life of the service", "from " + word(before) + " to " + word(after)} {
+					if !strings.Contains(err.Error(), want) {
+						t.Fatalf("want %q in %v", want, err)
+					}
+				}
+			})
+		}
+	}
+	t.Run("a block without a mode reads as no mode", func(t *testing.T) {
+		if err := ValidatePlacementModeUpdate(&v1beta1.InferenceServiceSpec{Placement: &v1beta1.PlacementSpec{}}, &v1beta1.InferenceServiceSpec{}); err != nil {
+			t.Fatal(err)
+		}
+	})
 }

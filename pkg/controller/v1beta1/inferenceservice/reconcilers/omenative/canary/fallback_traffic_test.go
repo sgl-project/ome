@@ -457,8 +457,8 @@ func TestReconcile_HeldFinalStepTimeoutParkAgreesWithTheFallback(t *testing.T) {
 	if cs.Failed == nil || cs.Failed.Reason != v1beta1.CanaryFailureCapacityTimeout || phaseOf(isvc) != v1beta1.RolloutPhaseFailed || cs.CurrentStep != 1 {
 		t.Fatalf("the hold must park at the final step on the ready timeout, got phase %q status %+v", phaseOf(isvc), cs)
 	}
-	if !res.Active || res.Partition != 1 || res.RequeueAfter != failedRequeue {
-		t.Fatalf("the park keeps the stable instance held at the parked cadence, got %+v", res)
+	if !res.Active || res.Partition != in.DesiredReplicas || res.RequeueAfter != failedRequeue {
+		t.Fatalf("the stop holds every Instance where it stands at the parked cadence, got %+v", res)
 	}
 	expectTargets(t, isvc, v1beta1.EngineComponent, map[string]trafficWant{"old": {percent: 100}})
 	if cs.ObservedTrafficWeight != 0 {
@@ -753,6 +753,7 @@ func TestDispatch_StableGangLosesItsLeaderWhileItsWorkerStillReads(t *testing.T)
 	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}
 	dispatch := func(pass string) {
 		t.Helper()
+		syncInstanceRows(t, c, isvc, eng)
 		if _, err := Dispatch(context.Background(), deps); err != nil {
 			t.Fatalf("Dispatch (%s): %v", pass, err)
 		}

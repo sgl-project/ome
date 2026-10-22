@@ -342,8 +342,7 @@ func TestDeclaredWebhooksAreRegistered(t *testing.T) {
 		if !ok {
 			return true
 		}
-		receiver, ok := selector.X.(*ast.Ident)
-		if path, isLit := call.Args[0].(*ast.BasicLit); isLit && ok && receiver.Name == "hookServer" && selector.Sel.Name == "Register" {
+		if path, isLit := call.Args[0].(*ast.BasicLit); isLit && selector.Sel.Name == "Register" && isWebhookServer(selector.X) {
 			registered[strings.Trim(path.Value, `"`)] = true
 		}
 		if selector.Sel.Name == "NewWebhookManagedBy" && len(call.Args) == 2 {
@@ -374,6 +373,19 @@ func TestDeclaredWebhooksAreRegistered(t *testing.T) {
 		}
 	}
 	require.NotZero(t, declared, "no webhook paths found in the manifests")
+}
+
+// isWebhookServer reports whether expr is the webhook server a registration
+// goes to: the hookServer variable or the manager's GetWebhookServer call.
+func isWebhookServer(expr ast.Expr) bool {
+	switch x := expr.(type) {
+	case *ast.Ident:
+		return x.Name == "hookServer"
+	case *ast.CallExpr:
+		selector, ok := x.Fun.(*ast.SelectorExpr)
+		return ok && selector.Sel.Name == "GetWebhookServer"
+	}
+	return false
 }
 
 func TestMetricsConfiguration(t *testing.T) {
@@ -797,5 +809,37 @@ func TestCRDSetup(t *testing.T) {
 				assert.NoError(t, err)
 			}
 		})
+	}
+}
+
+func TestRunStartupSteps_StopsAtTheFirstStepThatDoesNotGoOn(t *testing.T) {
+	var ran []string
+	step := func(name string, next bool) startupStep {
+		return func() bool {
+			ran = append(ran, name)
+			return next
+		}
+	}
+	run := func(steps ...startupStep) (bool, string) {
+		ran = nil
+		return runStartupSteps(steps), strings.Join(ran, ",")
+	}
+
+	if next, order := run(step("first", true), step("second", true)); !next || order != "first,second" {
+		t.Fatalf("every step went on: next=%v ran=%q, want next=true ran=first,second", next, order)
+	}
+	if next, order := run(step("first", true), step("stops", false), step("never", true)); next || order != "first,stops" {
+		t.Fatalf("a step stopped start-up: next=%v ran=%q, want next=false ran=first,stops", next, order)
+	}
+	if next, order := run(); !next || order != "" {
+		t.Fatalf("no steps: next=%v ran=%q, want next=true and nothing run", next, order)
+	}
+
+	stops := func() bool {
+		ran = append(ran, "stops")
+		return stop(errors.New("the apiserver refused the connection"), "Failed to create Kubernetes client set")
+	}
+	if next, order := run(step("first", true), stops, step("never", true)); next || order != "first,stops" {
+		t.Fatalf("a step stopped start-up through stop: next=%v ran=%q, want next=false ran=first,stops", next, order)
 	}
 }

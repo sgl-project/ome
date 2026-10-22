@@ -368,6 +368,86 @@ func TestPodSetUnavailableOnParkedMember(t *testing.T) {
 	}
 }
 
+// TestPodSetShortOfMember: a set is out of the gate's serving count on a
+// missing member only when fewer live pods than desired remain and at
+// least one does, whichever member is missing; a member being deleted or
+// in a terminal phase is missing. A set at its desired count, booting or
+// parked members included, a set with no live pod left, and a set with
+// more pods than desired all keep the count's own answer.
+func TestPodSetShortOfMember(t *testing.T) {
+	hash := query.RevisionFromName(clRevision).Hash()
+	runner := func(pod *corev1.Pod, name string) *corev1.Pod {
+		pod.Labels = map[string]string{query.LabelRevisionHash: hash, query.LabelRunner: name}
+		return pod
+	}
+	servingLeader := runner(servingPod("engine-0-leader-0"), "leader")
+	servingWorker := runner(servingPod("engine-0-worker-0"), "worker")
+	wedgedWorker := runner(crashLoopPod("engine-0-worker-0", 10*time.Minute, hash), "worker")
+	deletingWorker := runner(servingPod("engine-0-worker-0"), "worker")
+	ts := metav1.NewTime(tNow)
+	deletingWorker.DeletionTimestamp = &ts
+	terminalWorker := runner(servingPod("engine-0-worker-0"), "worker")
+	terminalWorker.Status.Phase = corev1.PodFailed
+	for _, tc := range []struct {
+		name    string
+		pods    []*corev1.Pod
+		desired int32
+		want    bool
+	}{
+		{name: "worker missing beside a serving leader", pods: []*corev1.Pod{servingLeader}, desired: 2, want: true},
+		{name: "leader missing beside a serving worker", pods: []*corev1.Pod{servingWorker}, desired: 2, want: true},
+		{name: "worker being deleted beside a serving leader", pods: []*corev1.Pod{servingLeader, deletingWorker}, desired: 2, want: true},
+		{name: "worker in a terminal phase beside a serving leader", pods: []*corev1.Pod{servingLeader, terminalWorker}, desired: 2, want: true},
+		{name: "one of three members missing", pods: []*corev1.Pod{servingLeader, servingWorker}, desired: 3, want: true},
+		{name: "both members present, one parked", pods: []*corev1.Pod{servingLeader, wedgedWorker}, desired: 2, want: false},
+		{name: "both members serving", pods: []*corev1.Pod{servingLeader, servingWorker}, desired: 2, want: false},
+		{name: "more pods than desired", pods: []*corev1.Pod{servingLeader, servingWorker}, desired: 1, want: false},
+		{name: "single pod present", pods: []*corev1.Pod{servingLeader}, desired: 1, want: false},
+		{name: "every member gone", pods: []*corev1.Pod{deletingWorker}, desired: 2, want: false},
+		{name: "no pods", pods: nil, desired: 2, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := evidence.PodSetShortOfMember(tc.pods, tc.desired); got != tc.want {
+				t.Fatalf("PodSetShortOfMember = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestPodSetLost: a set is lost when nothing in it could serve, whatever
+// the set's desired size: no pod at all, or every pod being deleted or in
+// a terminal phase. One live pod, serving or not, keeps the set.
+func TestPodSetLost(t *testing.T) {
+	live := servingPod("engine-0-default-0")
+	booting := servingPod("engine-0-default-0")
+	booting.Status.Conditions = nil
+	terminal := servingPod("engine-0-default-0")
+	terminal.Status.Phase = corev1.PodFailed
+	leaving := servingPod("engine-0-default-0")
+	ts := metav1.NewTime(tNow)
+	leaving.DeletionTimestamp = &ts
+	for _, tc := range []struct {
+		name string
+		pods []*corev1.Pod
+		want bool
+	}{
+		{name: "no pod", pods: nil, want: true},
+		{name: "a nil entry only", pods: []*corev1.Pod{nil}, want: true},
+		{name: "only a pod in a terminal phase", pods: []*corev1.Pod{terminal}, want: true},
+		{name: "only a pod being deleted", pods: []*corev1.Pod{leaving}, want: true},
+		{name: "a pod being deleted beside one in a terminal phase", pods: []*corev1.Pod{leaving, terminal}, want: true},
+		{name: "a live pod beside a terminal one", pods: []*corev1.Pod{terminal, live}, want: false},
+		{name: "a pod still booting", pods: []*corev1.Pod{booting}, want: false},
+		{name: "a serving pod", pods: []*corev1.Pod{live}, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := evidence.PodSetLost(tc.pods); got != tc.want {
+				t.Fatalf("PodSetLost = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // A row the roll promoted onto the update revision runs that revision
 // ahead of the Component's current one. Read against the revision it
 // runs, a wedged pod of that revision is the row's own and a pod of the

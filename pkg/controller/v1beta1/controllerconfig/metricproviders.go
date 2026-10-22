@@ -48,22 +48,14 @@ type MetricProvidersConfig map[string]MetricProviderBinding
 // NewMetricProvidersConfig loads the effective provider bindings once
 // (startup paths).
 func NewMetricProvidersConfig(clientset kubernetes.Interface) (MetricProvidersConfig, error) {
-	configMap, err := getInferenceServiceConfigMap(clientset)
-	if err != nil {
-		return nil, err
-	}
-	return parseMetricProvidersConfig(configMap)
+	return loadBlock(clientset, parseMetricProvidersConfig)
 }
 
 // NewMetricProvidersConfigCached loads the effective provider bindings through
 // the TTL config cache, so binding edits take effect without a controller
 // restart.
 func NewMetricProvidersConfigCached(cache *ConfigCache, clientset kubernetes.Interface) (MetricProvidersConfig, error) {
-	configMap, err := cache.get(clientset)
-	if err != nil {
-		return nil, err
-	}
-	return parseMetricProvidersConfig(configMap)
+	return loadBlockCached(cache, clientset, parseMetricProvidersConfig)
 }
 
 // parseMetricProvidersConfig resolves the effective bindings from the

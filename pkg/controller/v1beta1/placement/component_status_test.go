@@ -72,7 +72,7 @@ func TestComponentFloorsShowAHeldFloor(t *testing.T) {
 		return copied
 	}
 	// member-b still holds the 6 decoders of the previous even split.
-	got := componentFloorsFor(source, map[string]plannedHomeObservation{"member-a": {Member: member(3, 8)}, "member-b": {Member: member(1, 6)}})
+	got := componentFloorsFor(source, map[string]plannedMemberObservation{"member-a": {Member: member(3, 8)}, "member-b": {Member: member(1, 6)}})
 	want := map[string][]v1beta1.CandidateComponentFloor{
 		"member-a": {{Component: v1beta1.EngineComponent, Current: 3, Desired: 3}, {Component: v1beta1.DecoderComponent, Current: 8, Desired: 8}},
 		"member-b": {{Component: v1beta1.EngineComponent, Current: 1, Desired: 1}, {Component: v1beta1.DecoderComponent, Current: 6, Desired: 4}},

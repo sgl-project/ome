@@ -162,7 +162,7 @@ func (c PlacementMemberReadRetryConfig) Validate() error {
 		{"initialBackoff", c.InitialBackoff},
 		{"maxBackoff", c.MaxBackoff},
 	} {
-		if d, err := time.ParseDuration(field.value); err != nil || d <= 0 {
+		if positiveDurationOrZero(field.value) == 0 {
 			errs = append(errs, fmt.Errorf("placement.memberReadRetry.%s: %q must be a positive duration when maxAttempts exceeds 1", field.name, field.value))
 		}
 	}
@@ -174,12 +174,12 @@ func (c PlacementMemberReadRetryConfig) Validate() error {
 
 // InitialBackoffDuration returns the parsed InitialBackoff (0 if absent/unparsable).
 func (c PlacementMemberReadRetryConfig) InitialBackoffDuration() time.Duration {
-	return parseDurationOrZero(c.InitialBackoff)
+	return positiveDurationOrZero(c.InitialBackoff)
 }
 
 // MaxBackoffDuration returns the parsed MaxBackoff (0 if absent/unparsable).
 func (c PlacementMemberReadRetryConfig) MaxBackoffDuration() time.Duration {
-	return parseDurationOrZero(c.MaxBackoff)
+	return positiveDurationOrZero(c.MaxBackoff)
 }
 
 // +kubebuilder:object:generate=false
@@ -198,7 +198,7 @@ func (c PlacementCapacityConfig) Validate() error {
 		errs = append(errs, errors.New("placement.capacity: rootName is required"))
 	}
 	for _, field := range []struct{ name, value string }{{"maxAge", c.MaxAge}, {"stabilityWindow", c.StabilityWindow}, {"refreshInterval", c.RefreshInterval}} {
-		if d, err := time.ParseDuration(field.value); err != nil || d <= 0 {
+		if positiveDurationOrZero(field.value) == 0 {
 			errs = append(errs, fmt.Errorf("placement.capacity.%s: must be an explicit positive duration", field.name))
 		}
 	}
@@ -208,12 +208,14 @@ func (c PlacementCapacityConfig) Validate() error {
 	return errors.Join(errs...)
 }
 
-func (c PlacementCapacityConfig) MaxAgeDuration() time.Duration { return parseDurationOrZero(c.MaxAge) }
+func (c PlacementCapacityConfig) MaxAgeDuration() time.Duration {
+	return positiveDurationOrZero(c.MaxAge)
+}
 func (c PlacementCapacityConfig) StabilityWindowDuration() time.Duration {
-	return parseDurationOrZero(c.StabilityWindow)
+	return positiveDurationOrZero(c.StabilityWindow)
 }
 func (c PlacementCapacityConfig) RefreshIntervalDuration() time.Duration {
-	return parseDurationOrZero(c.RefreshInterval)
+	return positiveDurationOrZero(c.RefreshInterval)
 }
 
 // +kubebuilder:object:generate=false
@@ -277,7 +279,7 @@ type EndpointGatewayBackendEndpointSliceConfig struct {
 // when absent or malformed. MultiClusterConfig.Validate rejects a malformed or
 // missing value when EndpointSlice publication is enabled.
 func (c EndpointGatewayBackendEndpointSliceConfig) AddressRefreshIntervalDuration() time.Duration {
-	return parseDurationOrZero(c.AddressRefreshInterval)
+	return positiveDurationOrZero(c.AddressRefreshInterval)
 }
 
 // +kubebuilder:object:generate=false
@@ -332,7 +334,7 @@ type RoutingObserverConfig struct {
 // MinPeriodDuration parses MinPeriod, yielding zero when it is absent or
 // malformed so the routing package can reject an enabled invalid config.
 func (c RoutingObserverConfig) MinPeriodDuration() time.Duration {
-	return parseDurationOrZero(c.MinPeriod)
+	return positiveDurationOrZero(c.MinPeriod)
 }
 
 // TrafficMapPublisherConfig configures the TrafficMap publication backend.
@@ -353,7 +355,7 @@ type TrafficMapPublisherConfig struct {
 // absent or malformed so the routing package can reject an enabled invalid
 // config.
 func (c TrafficMapPublisherConfig) ResyncIntervalDuration() time.Duration {
-	return parseDurationOrZero(c.ResyncInterval)
+	return positiveDurationOrZero(c.ResyncInterval)
 }
 
 // +kubebuilder:object:generate=false
@@ -501,11 +503,7 @@ func (p ProbeConfig) TimeoutDuration() time.Duration {
 // ConfigCache-backed variant. An absent block yields a zero-valued config and
 // every consumer applies its own in-package default.
 func NewMultiClusterConfig(clientset kubernetes.Interface) (*MultiClusterConfig, error) {
-	configMap, err := getInferenceServiceConfigMap(clientset)
-	if err != nil {
-		return nil, err
-	}
-	return parseMultiClusterConfig(configMap)
+	return loadBlock(clientset, parseMultiClusterConfig)
 }
 
 func parseMultiClusterConfig(configMap *v1.ConfigMap) (*MultiClusterConfig, error) {
@@ -628,93 +626,80 @@ func (c MultiClusterConfig) Validate() error {
 
 // PerCallTimeoutDuration returns the parsed PerCallTimeout (0 if absent/unparsable).
 func (c WorkloadClusterConfig) PerCallTimeoutDuration() time.Duration {
-	return parseDurationOrZero(c.PerCallTimeout)
+	return positiveDurationOrZero(c.PerCallTimeout)
 }
 
 // HealthIntervalDuration returns the parsed HealthInterval (0 if absent/unparsable).
 func (c WorkloadClusterConfig) HealthIntervalDuration() time.Duration {
-	return parseDurationOrZero(c.HealthInterval)
+	return positiveDurationOrZero(c.HealthInterval)
 }
 
 // ConnectionGraceDuration returns the parsed ConnectionGrace (0 if absent/unparsable).
 func (c WorkloadClusterConfig) ConnectionGraceDuration() time.Duration {
-	return parseDurationOrZero(c.ConnectionGrace)
+	return positiveDurationOrZero(c.ConnectionGrace)
 }
 
 // EventsBatchPeriodDuration returns the parsed EventsBatchPeriod (0 if absent/unparsable).
 func (c WorkloadClusterConfig) EventsBatchPeriodDuration() time.Duration {
-	return parseDurationOrZero(c.EventsBatchPeriod)
+	return positiveDurationOrZero(c.EventsBatchPeriod)
 }
 
 // EstablishInitialDuration returns the parsed EstablishInitial (0 if absent/unparsable).
 func (c WorkloadClusterConfig) EstablishInitialDuration() time.Duration {
-	return parseDurationOrZero(c.EstablishInitial)
+	return positiveDurationOrZero(c.EstablishInitial)
 }
 
 // EstablishMaxDuration returns the parsed EstablishMax (0 if absent/unparsable).
 func (c WorkloadClusterConfig) EstablishMaxDuration() time.Duration {
-	return parseDurationOrZero(c.EstablishMax)
+	return positiveDurationOrZero(c.EstablishMax)
 }
 
 // ReconnectRetryMaxDuration returns the parsed ReconnectRetryMax (0 if absent/unparsable).
 func (c WorkloadClusterConfig) ReconnectRetryMaxDuration() time.Duration {
-	return parseDurationOrZero(c.ReconnectRetryMax)
+	return positiveDurationOrZero(c.ReconnectRetryMax)
 }
 
 // FunnelResyncIntervalDuration returns the parsed FunnelResyncInterval (0 if absent/unparsable).
 func (c WorkloadClusterConfig) FunnelResyncIntervalDuration() time.Duration {
-	return parseDurationOrZero(c.FunnelResyncInterval)
+	return positiveDurationOrZero(c.FunnelResyncInterval)
 }
 
 // RequeueIntervalDuration returns the parsed RequeueInterval (0 if absent/unparsable).
 func (c PlacementConfig) RequeueIntervalDuration() time.Duration {
-	return parseDurationOrZero(c.RequeueInterval)
+	return positiveDurationOrZero(c.RequeueInterval)
 }
 
 // GCIntervalDuration returns the parsed GCInterval (0 if absent/unparsable).
 func (c PlacementConfig) GCIntervalDuration() time.Duration {
-	return parseDurationOrZero(c.GCInterval)
+	return positiveDurationOrZero(c.GCInterval)
 }
 
 // FanoutTimeoutDuration returns the parsed FanoutTimeout (0 if absent/unparsable).
 func (c PlacementConfig) FanoutTimeoutDuration() time.Duration {
-	return parseDurationOrZero(c.FanoutTimeout)
+	return positiveDurationOrZero(c.FanoutTimeout)
 }
 
 // WinnerLostGraceDuration returns the parsed WinnerLostGrace (0 if absent/unparsable).
 func (c PlacementConfig) WinnerLostGraceDuration() time.Duration {
-	return parseDurationOrZero(c.WinnerLostGrace)
+	return positiveDurationOrZero(c.WinnerLostGrace)
 }
 
 // ObservationGraceDuration returns the parsed ObservationGrace (0 if absent/unparsable).
 func (c PlacementConfig) ObservationGraceDuration() time.Duration {
-	return parseDurationOrZero(c.ObservationGrace)
+	return positiveDurationOrZero(c.ObservationGrace)
 }
 
 // StatusBatchPeriodDuration returns the parsed StatusBatchPeriod (0 if absent/unparsable).
 func (c PlacementConfig) StatusBatchPeriodDuration() time.Duration {
-	return parseDurationOrZero(c.StatusBatchPeriod)
+	return positiveDurationOrZero(c.StatusBatchPeriod)
 }
 
 // StatusSafetyRequeueDuration returns the parsed StatusSafetyRequeue (0 if absent/unparsable).
 func (c PlacementConfig) StatusSafetyRequeueDuration() time.Duration {
-	return parseDurationOrZero(c.StatusSafetyRequeue)
+	return positiveDurationOrZero(c.StatusSafetyRequeue)
 }
 
 // DispatcherRoundTimeoutDuration returns the parsed DispatcherRoundTimeout (0 if absent/unparsable).
 func (c PlacementConfig) DispatcherRoundTimeoutDuration() time.Duration {
-	return parseDurationOrZero(c.DispatcherRoundTimeout)
-}
-
-// parseDurationOrZero parses s, returning 0 when it is empty, malformed, or
-// non-positive. Callers hand the zero to a workloadcluster/placement option,
-// which then applies its own in-package default — so the fallback stays
-// single-sourced in the consuming package, not duplicated here. Validate
-// rejects malformed values at startup; explicitly supported inactive zero
-// values also resolve to zero.
-func parseDurationOrZero(s string) time.Duration {
-	if d, err := time.ParseDuration(s); err == nil && d > 0 {
-		return d
-	}
-	return 0
+	return positiveDurationOrZero(c.DispatcherRoundTimeout)
 }

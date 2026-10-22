@@ -109,6 +109,14 @@ const (
 	// fail.
 	EventReasonSurgeAbandoned EventReason = "SurgeAbandoned"
 
+	// EventReasonSurgeKeptForPairing fires when a surge pinned to a revision
+	// the desired state has withdrawn finishes its hand-over anyway: its
+	// replacement is in rotation and the pairing drain gate holds it there,
+	// because the other pairing Component's serving pods pair with it and
+	// with nothing else. The Instance promotes on the pinned revision and
+	// rolls toward the newer target from there. Normal, not a failure.
+	EventReasonSurgeKeptForPairing EventReason = "SurgeKeptForPairing"
+
 	// Restart (workload/ops/restart.go).
 	EventReasonRestartTriggered EventReason = "RestartTriggered"
 	EventReasonRestartCompleted EventReason = "RestartCompleted"

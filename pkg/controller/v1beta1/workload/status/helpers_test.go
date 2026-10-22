@@ -9,6 +9,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	clocktesting "k8s.io/utils/clock/testing"
 
+	fixture "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -167,35 +168,10 @@ func cloneTerminalStatus(row types.InstanceStatus) types.InstanceStatus {
 	out.Announced = append([]string(nil), row.Announced...)
 	return out
 }
-func terminalStatusFixture(index int32) types.InstanceStatus {
-	surge := int32(9)
-	started := metav1.NewTime(time.Date(2026, time.August, 15, 10, 0, 0, 987654321, time.UTC))
-	return types.InstanceStatus{
-		Index:           index,
-		Incarnation:     7,
-		Phase:           types.InstancePhaseUpdating,
-		RunningRevision: "rev-old",
-		TargetRevision:  "rev-new",
-		ActiveOrdinal:   1,
-		PodCount:        8,
-		ReadyPodCount:   7,
-		Operation: &types.InstanceOperation{
-			ID:              "gang-update-7",
-			Type:            types.InstanceOperationUpdate,
-			Step:            types.UpdateStepSurge,
-			RequestUUID:     "request-a",
-			TargetRevision:  "rev-new",
-			RetryCount:      2,
-			Reason:          "rollout",
-			FromNode:        "node-a",
-			HintTargetNodes: []string{"node-b", "node-c"},
-			SurgeIndex:      &surge,
-			StartedAt:       started,
-			LastProgressAt:  started,
-			Deadline:        metav1.NewTime(started.Add(time.Hour)),
-		},
-	}
-}
+
+// terminalStatusFixture is the migration tests' name for the fixture
+// package's Updating row at its surge step.
+var terminalStatusFixture = fixture.UpdatingRowAtSurge
 
 // rowWriter is a one-row status store over ReconcileInput. It records how
 // many writes actually landed, which is how the evidence stamps' no-op
@@ -232,13 +208,6 @@ func (w *rowWriter) input(now time.Time) types.ReconcileInput {
 			}
 			return nil
 		},
-	}
-}
-
-func openRow(idx int32, phase types.InstancePhase) types.InstanceStatus {
-	return types.InstanceStatus{
-		Index: idx, Phase: phase,
-		Operation: &types.InstanceOperation{ID: "op-1", Type: types.InstanceOperationUpdate},
 	}
 }
 

@@ -63,6 +63,10 @@ type ServiceState struct {
 	Groups []v1beta1.RolloutGroup `json:"groups,omitempty"`
 	// PairingProtocol is spec.rollout.pairingProtocol.
 	PairingProtocol *string `json:"pairingProtocol,omitempty"`
+	// RevisionProtocols is the pairing protocol the revision minted from
+	// each image carries, keyed by image. An image absent from the map
+	// mints a protocol-free revision, which pairs with anything.
+	RevisionProtocols map[string]string `json:"revisionProtocols,omitempty"`
 	// Annotations are the service's operator annotations at the start.
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
@@ -111,6 +115,9 @@ type ConfigState struct {
 type ReplicaState struct {
 	// Current and Target are the replica's current and update revisions.
 	// Empty Target reads as Current; empty Current reads as the image.
+	// Current "none" is a replica that has promoted no current revision yet,
+	// as a replica reads before its first Instance is Ready: its rows are
+	// Pending on the target with pods that are not Ready.
 	Current string `json:"current,omitempty"`
 	Target  string `json:"target,omitempty"`
 	// Rows are the dense per-Instance rows; absent rows are one Ready row
@@ -172,8 +179,18 @@ type EventArgs struct {
 	Image string `json:"image,omitempty"`
 	// Index names an Instance.
 	Index *int32 `json:"index,omitempty"`
+	// Replacement is the index a gang surge builds its replacement at: the
+	// replacement gang is a row of its own beside its source until the old
+	// gang leaves, as the engine publishes a gang surge.
+	Replacement *int32 `json:"replacement,omitempty"`
+	// Protocol is the pairing protocol the revision a push mints carries;
+	// spec.rollout.pairingProtocol moves to it.
+	Protocol string `json:"protocol,omitempty"`
 	// To is the new count of a replica or partition edit.
 	To *int32 `json:"to,omitempty"`
+	// Gone removes the pods a capacity loss names instead of taking them
+	// out of readiness; their rows keep their revision with no pod.
+	Gone bool `json:"gone,omitempty"`
 	// Count is how many writes a refusal answers.
 	Count int `json:"count,omitempty"`
 	// Write is the ordinal, within the pass, of the status write a
@@ -193,6 +210,10 @@ type EventArgs struct {
 	Groups []v1beta1.RolloutGroup `json:"groups,omitempty"`
 	// Trailing is how many Instances still trail the target.
 	Trailing int32 `json:"trailing,omitempty"`
+	// Lag is what part of a member's published status trails its spec on
+	// ir.stale: the observed generation alone (the default), or the whole
+	// status, which the last publish then stands for.
+	Lag string `json:"lag,omitempty"`
 	// Verb and Resource scope an armed apiserver refusal.
 	Verb     string `json:"verb,omitempty"`
 	Resource string `json:"resource,omitempty"`

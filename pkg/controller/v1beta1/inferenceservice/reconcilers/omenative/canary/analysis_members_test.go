@@ -308,6 +308,7 @@ func TestDispatch_DecoderOnlyPushIsSampledOnTheDecoder(t *testing.T) {
 	ctx := context.Background()
 
 	// The first pass serves the split and kicks the decoder's query.
+	syncInstanceRows(t, c, isvc, v1beta1.EngineComponent, v1beta1.DecoderComponent)
 	if _, err := Dispatch(ctx, deps); err != nil {
 		t.Fatal(err)
 	}

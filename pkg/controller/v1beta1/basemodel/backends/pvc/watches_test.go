@@ -7,15 +7,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
-	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
-func TestMapToBaseModels(t *testing.T) {
-	scheme := newPVCTestScheme(t)
+func TestMapToBaseModels_PVCEvent_RequestsOnlyModelsOnThatPVC(t *testing.T) {
 	ctx := context.Background()
 	log := logf.Log.WithName("test")
 
@@ -37,7 +36,7 @@ func TestMapToBaseModels(t *testing.T) {
 			StorageUri: ptr.To("oci://n/ns/b/bucket/o/path"),
 		}},
 	}
-	c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).WithObjects(matching, otherPVC, notPVC).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(matching, otherPVC, notPVC))
 
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-pvc", Namespace: "models"},
@@ -51,8 +50,7 @@ func TestMapToBaseModels(t *testing.T) {
 	}
 }
 
-func TestMapToClusterBaseModels(t *testing.T) {
-	scheme := newPVCTestScheme(t)
+func TestMapToClusterBaseModels_PVCEvent_RequestsOnlyModelsOnThatPVCAndNamespace(t *testing.T) {
 	ctx := context.Background()
 	log := logf.Log.WithName("test")
 
@@ -68,7 +66,7 @@ func TestMapToClusterBaseModels(t *testing.T) {
 			StorageUri: ptr.To("pvc://other-ns:my-pvc/sub"),
 		}},
 	}
-	c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).WithObjects(matching, wrongNs).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(matching, wrongNs))
 
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-pvc", Namespace: "shared"},
@@ -82,7 +80,7 @@ func TestMapToClusterBaseModels(t *testing.T) {
 	}
 }
 
-func TestCreatePhasePredicate(t *testing.T) {
+func TestCreatePhasePredicate_PhaseChangeOrNot_SkipsOnlySamePhaseUpdates(t *testing.T) {
 	p := CreatePhasePredicate()
 	pending := &corev1.PersistentVolumeClaim{Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending}}
 	bound := &corev1.PersistentVolumeClaim{Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound}}

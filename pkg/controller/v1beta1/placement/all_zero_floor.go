@@ -14,14 +14,14 @@ import (
 
 func allHasZeroFloor(proposal plan.Proposal) bool {
 	for _, a := range proposal.Assignments {
-		if zeroHomeFloor(a.CurrentHome) || zeroHomeFloor(a.DesiredHome) {
+		if hasZeroReplicaFloor(a.CurrentHome) || hasZeroReplicaFloor(a.DesiredHome) {
 			return true
 		}
 	}
 	return false
 }
 
-// prepareAllZeroFloors preserves full homes independently of their replica
+// prepareAllZeroFloors preserves full-policy members independently of their replica
 // count. Zero floors cannot reserve availability or join a shared surge pause.
 func (r *Reconciler) prepareAllZeroFloors(ctx context.Context, source *v1beta1.InferenceService, proposal *plan.Proposal) (bool, error) {
 	if !allHasZeroFloor(*proposal) {
@@ -51,7 +51,7 @@ func (r *Reconciler) prepareAllZeroFloors(ctx context.Context, source *v1beta1.I
 		if a.InventoryPending || a.HomeInputsPending || !a.Matched || a.DesiredHome == nil || a.DesiredHome.InputDigest != proposal.InputDigest {
 			continue
 		}
-		// An authored floor change on a retained home is local scaling. Its
+		// An authored floor change on a retained member is local scaling. Its
 		// autoscaler remains authoritative while no placement move is active.
 		if a.CurrentHome != nil && a.CurrentReplicas != a.DesiredReplicas {
 			a.OriginalReplicas = a.DesiredReplicas
@@ -76,20 +76,20 @@ func (r *Reconciler) prepareAllMovementFloors(ctx context.Context, source *v1bet
 		if err := positiveMovementFloor(a.DesiredHome); err != nil {
 			return false, err
 		}
-		if !zeroHomeFloor(a.CurrentHome) {
+		if !hasZeroReplicaFloor(a.CurrentHome) {
 			continue
 		}
 		cctx, cancel := context.WithTimeout(ctx, r.placeTimeout())
-		home, err := r.resolveFullHome(cctx, source, desired, name, a.ClusterUID, proposal.InputDigest)
+		policy, err := r.resolveFullPolicy(cctx, source, desired, name, a.ClusterUID, proposal.InputDigest)
 		cancel()
 		if err != nil {
 			return false, err
 		}
-		if err := positiveMovementFloor(home); err != nil {
+		if err := positiveMovementFloor(policy); err != nil {
 			return false, err
 		}
-		a.CurrentHome, a.DesiredHome = home.DeepCopy(), home.DeepCopy()
-		a.CurrentReplicas, _ = protocol.ValidateReplicaFloors(home.ReplicaFloors)
+		a.CurrentHome, a.DesiredHome = policy.DeepCopy(), policy.DeepCopy()
+		a.CurrentReplicas, _ = protocol.ValidateReplicaFloors(policy.ReplicaFloors)
 		a.OriginalReplicas, a.DesiredReplicas = a.CurrentReplicas, a.CurrentReplicas
 		proposal.Assignments[name] = a
 		refreshed = true
@@ -97,7 +97,7 @@ func (r *Reconciler) prepareAllMovementFloors(ctx context.Context, source *v1bet
 	return refreshed, nil
 }
 
-// applyAllMovementFloors publishes authored positive floors on retained homes
+// applyAllMovementFloors publishes authored positive floors on retained members
 // before movement can pause growth and count those floors as availability.
 func (r *Reconciler) applyAllMovementFloors(ctx context.Context, source *v1beta1.InferenceService, eligible []string, standing *placementObservations, proposal plan.Proposal) (ctrl.Result, error) {
 	accepted, err := (plan.Store{Client: r.Client, Reader: r.APIReader}).Persist(ctx, source, proposal)
@@ -119,15 +119,15 @@ func (r *Reconciler) applyAllMovementFloors(ctx context.Context, source *v1beta1
 }
 
 // advanceAllZeroFloors acknowledges retained policy without treating autoscaled
-// replicas as orphaned resources. Home removal uses positive-floor accounting.
-func advanceAllZeroFloors(source *v1beta1.InferenceService, observations map[string]plannedHomeObservation) allocation.Step {
+// replicas as orphaned resources. Member removal uses positive-floor accounting.
+func advanceAllZeroFloors(source *v1beta1.InferenceService, observations map[string]plannedMemberObservation) allocation.Step {
 	out := allocation.Step{Targets: map[string]int32{}, Complete: true}
 	for _, candidate := range source.Status.Placement.Candidates {
 		a, observed := candidate.Allocation, observations[candidate.Cluster]
 		out.Targets[candidate.Cluster] = a.CurrentReplicas
 		if a.DrainRequested || a.CurrentReplicas != a.DesiredReplicas || (a.CurrentHome != nil) != (a.DesiredHome != nil) {
 			out.Complete, out.Reason = false, "PositiveFloorRequired"
-		} else if (a.CurrentHome != nil && (!observed.Home.Known || !observed.Home.Applied)) || (a.CurrentHome == nil && !observed.Home.Absent) {
+		} else if (a.CurrentHome != nil && (!observed.MemberState.Known || !observed.MemberState.Applied)) || (a.CurrentHome == nil && !observed.MemberState.Absent) {
 			out.Complete = false
 			if out.Reason == "" {
 				out.Reason = "AwaitingMemberConvergence"

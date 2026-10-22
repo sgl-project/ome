@@ -16,17 +16,17 @@ import (
 // planning intentionally evaluates only resources and hard node constraints;
 // other framework filters (for example volumes, ports, and inter-pod affinity)
 // may still reject the domain. Without this hook no Reserve/Unreserve callback
-// runs and the pin's exclusive reservation could persist indefinitely.
+// runs and the assignment's exclusive reservation could persist indefinitely.
 //
 // A member vetoed in a domain new to its gang is activated here while another
 // domain is untried: the vetoing filters register no event for a retry that only
-// the plugin's failed-domain memory changes, and parked siblings cannot plan for it.
+// the plugin's failed-domain memory changes, and waiting siblings cannot plan for it.
 func (g *GangPack) PostFilter(ctx context.Context, state framework.CycleState, pod *v1.Pod, _ framework.NodeToStatusReader) (*framework.PostFilterResult, *framework.Status) {
-	pin := readPin(state)
-	if pin == nil {
+	assignment := readAssignment(state)
+	if assignment == nil {
 		return nil, framework.NewStatus(framework.Unschedulable)
 	}
-	if _, newDomain := g.releaseAttempt(pin, pod, true); newDomain && !pin.soleFit && g.handle != nil {
+	if _, newDomain := g.releaseAttempt(assignment, pod, true); newDomain && !assignment.soleFit && g.handle != nil {
 		gangActivationTotal.WithLabelValues(activationTriggerDomainFailed).Inc()
 		g.handle.Activate(klog.Background(), map[string]*v1.Pod{pod.Namespace + "/" + pod.Name: pod})
 	}

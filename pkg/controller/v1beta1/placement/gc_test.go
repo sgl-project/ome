@@ -154,6 +154,50 @@ func TestGCSweep_EmptyLiveSet_NoDeletes(t *testing.T) {
 	require.NoError(t, worker.Get(context.Background(), types.NamespacedName{Namespace: "prod", Name: "b"}, &v1beta1.InferenceService{}), "b kept")
 }
 
+// A source created after the sweep read the control plane and before it read
+// the member reads as missing from the first list. Its derived must survive:
+// the sweep confirms a missing source against a fresh read before it deletes.
+func TestGCSweep_KeepsADerivedWhoseSourceAppearedDuringTheSweep(t *testing.T) {
+	s := testScheme(t)
+	lists := 0
+	cp := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(
+		&v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Namespace: "prod", Name: "keeper", UID: "uid-keeper"}},
+		&v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Namespace: "prod", Name: "fresh", UID: "uid-fresh"}},
+	).WithInterceptorFuncs(interceptor.Funcs{
+		List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+			if err := c.List(ctx, list, opts...); err != nil {
+				return err
+			}
+			lists++
+			// The first read of the control plane happens before the source
+			// exists; every later read sees it.
+			if ml, ok := list.(*metav1.PartialObjectMetadataList); ok && lists == 1 {
+				kept := ml.Items[:0]
+				for _, item := range ml.Items {
+					if item.UID != "uid-fresh" {
+						kept = append(kept, item)
+					}
+				}
+				ml.Items = kept
+			}
+			return nil
+		},
+	}).Build()
+	worker := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(
+		derivedWithOrigin("fresh", "uid-fresh"),
+	).Build()
+	clusters := fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{
+		"w": workloadcluster.NewNeverCachingClient(worker),
+	}}
+	gc := &GCReconciler{APIReader: cp, Log: log.Log, Clusters: clusters}
+
+	require.NoError(t, gc.sweep(context.Background()))
+
+	require.NoError(t, worker.Get(context.Background(), types.NamespacedName{Namespace: "prod", Name: "fresh"}, &v1beta1.InferenceService{}),
+		"a derived whose source exists by the time the sweep reads the member must be kept")
+	assert.GreaterOrEqual(t, lists, 2, "the sweep confirms a missing source with a second read")
+}
+
 // Two control planes sharing a workload cluster: each GC, scoped by its own
 // ControlPlaneID, must reap ONLY its own orphans and never the other's
 // deriveds — without the scoping, cp-east would reap cp-west's live derived

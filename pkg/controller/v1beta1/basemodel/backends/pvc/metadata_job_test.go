@@ -13,9 +13,10 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/utils/storage"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
-func TestMetadataJobName(t *testing.T) {
+func TestMetadataJobName_SameModelDifferentURI_PrefixPlusDistinctHash(t *testing.T) {
 	tests := []struct {
 		name        string
 		modelName   string
@@ -82,7 +83,7 @@ func TestMetadataJobName_EmptyAfterTrimGuard(t *testing.T) {
 }
 
 func TestBuildMetadataJob_BaseModel(t *testing.T) {
-	scheme := newPVCTestScheme(t)
+	scheme := fakeclient.Scheme(t)
 	bm := &v1beta1.BaseModel{
 		ObjectMeta: metav1.ObjectMeta{Name: "llama-7b", Namespace: "models", UID: "uid-1"},
 		Spec: v1beta1.BaseModelSpec{Storage: &v1beta1.StorageSpec{
@@ -102,66 +103,61 @@ func TestBuildMetadataJob_BaseModel(t *testing.T) {
 		t.Fatalf("buildMetadataJob: %v", err)
 	}
 
-	if job.Namespace != "models" {
-		t.Errorf("job namespace = %q, want models", job.Namespace)
-	}
-	if got := job.Labels[constants.PVCMetadataScopeLabel]; got != metadataJobScopeNamespaced {
-		t.Errorf("scope label = %q, want %q", got, metadataJobScopeNamespaced)
-	}
-	if got := job.Labels[constants.PVCMetadataModelNameLabel]; got != "llama-7b" {
-		t.Errorf("model-name label = %q, want llama-7b", got)
-	}
-
-	if got := len(job.OwnerReferences); got != 1 {
-		t.Fatalf("expected 1 owner ref, got %d", got)
-	}
-	or := job.OwnerReferences[0]
-	if or.Kind != "BaseModel" {
-		t.Errorf("owner kind = %q, want BaseModel", or.Kind)
-	}
-
-	if *job.Spec.BackoffLimit != 2 {
-		t.Errorf("backoff limit = %d, want 2", *job.Spec.BackoffLimit)
-	}
-	if *job.Spec.TTLSecondsAfterFinished != 3600 {
-		t.Errorf("ttl = %d, want 3600", *job.Spec.TTLSecondsAfterFinished)
-	}
-
 	pod := job.Spec.Template.Spec
-	if pod.RestartPolicy != corev1.RestartPolicyNever {
-		t.Errorf("restartPolicy = %q, want Never", pod.RestartPolicy)
+	if len(job.OwnerReferences) != 1 || len(pod.Volumes) != 1 || len(pod.Containers) != 1 {
+		t.Fatalf("job has %d owner refs, %d volumes and %d containers, want 1 of each",
+			len(job.OwnerReferences), len(pod.Volumes), len(pod.Containers))
 	}
-	if pod.ServiceAccountName != cfg.ServiceAccount {
-		t.Errorf("SA = %q, want %q", pod.ServiceAccountName, cfg.ServiceAccount)
+	claim := pod.Volumes[0].PersistentVolumeClaim
+	container := pod.Containers[0]
+	if claim == nil || len(container.VolumeMounts) != 1 {
+		t.Fatalf("volume source = %+v with %d mounts, want one PVC volume with one mount",
+			pod.Volumes[0].VolumeSource, len(container.VolumeMounts))
 	}
-	if got := len(pod.Volumes); got != 1 {
-		t.Fatalf("expected 1 volume, got %d", got)
-	}
-	if pvc := pod.Volumes[0].PersistentVolumeClaim; pvc == nil {
-		t.Fatalf("expected PVC volume source")
-	} else {
-		if pvc.ClaimName != "my-pvc" {
-			t.Errorf("claim name = %q, want my-pvc", pvc.ClaimName)
+	mount := container.VolumeMounts[0]
+	podNamespace := func() string {
+		for _, env := range container.Env {
+			if env.Name == "POD_NAMESPACE" {
+				return env.Value
+			}
 		}
-		if !pvc.ReadOnly {
-			t.Errorf("expected PVC mount to be read-only")
+		return ""
+	}
+
+	for _, check := range []struct {
+		field string
+		got   any
+		want  any
+	}{
+		{"job namespace", job.Namespace, "models"},
+		{"scope label", job.Labels[constants.PVCMetadataScopeLabel], metadataJobScopeNamespaced},
+		{"model-name label", job.Labels[constants.PVCMetadataModelNameLabel], "llama-7b"},
+		{"owner kind", job.OwnerReferences[0].Kind, "BaseModel"},
+		{"backoff limit", *job.Spec.BackoffLimit, int32(2)},
+		{"ttl", *job.Spec.TTLSecondsAfterFinished, int32(3600)},
+		{"restart policy", pod.RestartPolicy, corev1.RestartPolicyNever},
+		{"service account", pod.ServiceAccountName, cfg.ServiceAccount},
+		{"claim name", claim.ClaimName, "my-pvc"},
+		{"claim read-only", claim.ReadOnly, true},
+		{"image", container.Image, cfg.Image},
+		{"mount path", mount.MountPath, metadataJobModelMountPath},
+		{"sub path", mount.SubPath, "models/llama"},
+		{"mount read-only", mount.ReadOnly, true},
+		{"cpu request", container.Resources.Requests.Cpu().String(), "100m"},
+		{"memory request", container.Resources.Requests.Memory().String(), "128Mi"},
+		// POD_NAMESPACE carries the controller's own namespace into the Job pod,
+		// so the agent writes its status ConfigMap where the controller reads it.
+		{"POD_NAMESPACE env", podNamespace(), constants.OMENamespace},
+	} {
+		if check.got != check.want {
+			t.Errorf("%s = %#v, want %#v", check.field, check.got, check.want)
 		}
 	}
 
-	if got := len(pod.Containers); got != 1 {
-		t.Fatalf("expected 1 container, got %d", got)
-	}
-	c := pod.Containers[0]
-	if c.Image != cfg.Image {
-		t.Errorf("image = %q, want %q", c.Image, cfg.Image)
-	}
-	args := strings.Join(c.Args, " ")
+	args := strings.Join(container.Args, " ")
 	for _, want := range []string{
 		"model-metadata",
-		// --config satisfies the agent's gratuitous configFilePath != ""
-		// check (cmd/ome-agent/config.go:28). Without it the Job pod
-		// crash-loops with "no config file provided" before reaching
-		// model-metadata logic.
+		// The agent refuses to start without a config file path.
 		"--config " + metadataJobAgentConfigPath,
 		"--model-path " + metadataJobModelMountPath,
 		"--basemodel-name llama-7b",
@@ -174,49 +170,10 @@ func TestBuildMetadataJob_BaseModel(t *testing.T) {
 	if strings.Contains(args, "--cluster-scoped") {
 		t.Errorf("namespaced BaseModel must not pass --cluster-scoped")
 	}
-
-	if got := len(c.VolumeMounts); got != 1 {
-		t.Fatalf("expected 1 volume mount, got %d", got)
-	}
-	vm := c.VolumeMounts[0]
-	if vm.MountPath != metadataJobModelMountPath {
-		t.Errorf("mount path = %q, want %q", vm.MountPath, metadataJobModelMountPath)
-	}
-	if vm.SubPath != "models/llama" {
-		t.Errorf("sub path = %q, want models/llama", vm.SubPath)
-	}
-	if !vm.ReadOnly {
-		t.Errorf("volume mount must be read-only")
-	}
-
-	if c.Resources.Requests.Cpu().String() != "100m" {
-		t.Errorf("cpu request = %q, want 100m", c.Resources.Requests.Cpu().String())
-	}
-	if c.Resources.Requests.Memory().String() != "128Mi" {
-		t.Errorf("memory request = %q, want 128Mi", c.Resources.Requests.Memory().String())
-	}
-
-	// POD_NAMESPACE must propagate the controller's resolved OME ns
-	// to the Job pod so the agent's writeStatus targets the SAME
-	// namespace the controller reads ConfigMaps from. Otherwise an
-	// install in any namespace except the literal "ome" produces a
-	// permanent ConfigMap-not-found loop.
-	var foundPodNamespace bool
-	for _, env := range c.Env {
-		if env.Name == "POD_NAMESPACE" {
-			foundPodNamespace = true
-			if env.Value != constants.OMENamespace {
-				t.Errorf("POD_NAMESPACE = %q, want %q (controller's resolved OME ns)", env.Value, constants.OMENamespace)
-			}
-		}
-	}
-	if !foundPodNamespace {
-		t.Error("Job container must set POD_NAMESPACE env so the agent writes status ConfigMaps in the controller's OME namespace")
-	}
 }
 
 func TestBuildMetadataJob_ClusterBaseModel(t *testing.T) {
-	scheme := newPVCTestScheme(t)
+	scheme := fakeclient.Scheme(t)
 	cbm := &v1beta1.ClusterBaseModel{
 		ObjectMeta: metav1.ObjectMeta{Name: "shared-llama", UID: "uid-2"},
 		Spec: v1beta1.BaseModelSpec{Storage: &v1beta1.StorageSpec{
@@ -258,7 +215,7 @@ func TestBuildMetadataJob_ClusterBaseModel(t *testing.T) {
 }
 
 func TestBuildMetadataJob_SchedulingHints_PassedThrough(t *testing.T) {
-	scheme := newPVCTestScheme(t)
+	scheme := fakeclient.Scheme(t)
 	bm := &v1beta1.BaseModel{
 		ObjectMeta: metav1.ObjectMeta{Name: "llama-7b", Namespace: "models"},
 		Spec: v1beta1.BaseModelSpec{Storage: &v1beta1.StorageSpec{
@@ -318,7 +275,7 @@ func TestBuildMetadataJob_SchedulingHints_PassedThrough(t *testing.T) {
 // the assertions below fire — without this test those mismatches would
 // silently render the corresponding override unusable.
 func TestOmeAgentConfig_RoundTrip_ChartJSONIntoPodSpec(t *testing.T) {
-	scheme := newPVCTestScheme(t)
+	scheme := fakeclient.Scheme(t)
 
 	// Mirror the keys+shapes the Helm template renders. Keep this in
 	// sync with charts/ome-resources/templates/ome-controller/configmap.yaml
@@ -408,7 +365,7 @@ func TestOmeAgentConfig_RoundTrip_ChartJSONIntoPodSpec(t *testing.T) {
 }
 
 func TestBuildMetadataJob_PodSecurityContext_Restricted(t *testing.T) {
-	scheme := newPVCTestScheme(t)
+	scheme := fakeclient.Scheme(t)
 	bm := &v1beta1.BaseModel{
 		ObjectMeta: metav1.ObjectMeta{Name: "llama-7b", Namespace: "models"},
 		Spec: v1beta1.BaseModelSpec{Storage: &v1beta1.StorageSpec{
@@ -455,7 +412,7 @@ func TestBuildMetadataJob_PodSecurityContext_Restricted(t *testing.T) {
 }
 
 func TestBuildMetadataJob_RejectsMissingImage(t *testing.T) {
-	scheme := newPVCTestScheme(t)
+	scheme := fakeclient.Scheme(t)
 	bm := &v1beta1.BaseModel{
 		ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "models"},
 		Spec: v1beta1.BaseModelSpec{Storage: &v1beta1.StorageSpec{

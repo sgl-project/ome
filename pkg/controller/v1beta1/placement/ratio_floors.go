@@ -9,10 +9,11 @@ import (
 	"slices"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/placement/affinity"
 	"sigs.k8s.io/ome/pkg/placement/protocol"
 )
 
-// plannedBound fixes one component's replica band on a split home. A zero
+// plannedBound fixes one component's replica band on a split member. A zero
 // ceiling pins the component at its floor.
 type plannedBound struct {
 	Floor   int32
@@ -42,7 +43,7 @@ func (m splitMinimums) secondaries() map[v1beta1.ComponentType]int32 {
 // the engine minimum in their declared ratio, scaled to the primary floor and
 // rounded up; without a declared ratio it is used as declared. An undeclared
 // decoder minimum pairs one decoder with each primary unit. A router divided
-// across homes contributes its minimum, scaled the same way.
+// across members contributes its minimum, scaled the same way.
 func splitComponentMinimums(source *v1beta1.InferenceService) (splitMinimums, error) {
 	primaryFloor := splitDesiredReplicas(source)
 	if primaryFloor <= 0 {
@@ -94,21 +95,19 @@ func splitComponentMinimums(source *v1beta1.InferenceService) (splitMinimums, er
 }
 
 // routerDivided reports whether the source divides its routers across Split
-// homes: it gives the router its own terms. Otherwise every home runs the
-// source's full router policy.
+// members: an affinity term sets a router weight. Otherwise every member runs
+// the source's full router policy.
 func routerDivided(source *v1beta1.InferenceService) bool {
-	p := source.Spec.Placement
-	mode := placementMode(source)
-	return source.Spec.Router != nil && p.UsesComponentAffinity() && p.ComponentAffinity != nil && p.ComponentAffinity.Router != nil &&
-		(mode == v1beta1.PlacementModeSplit || mode == v1beta1.PlacementModeSplitByCapacity)
+	return source.Spec.Router != nil && placementMode(source) == v1beta1.PlacementModeSplit &&
+		affinity.DividesRouters(source.Spec.Placement.ClusterAffinity)
 }
 
-// splitHomeFloors apportions every secondary component's minimum over the
-// homes' current primary targets, in the fleet ratio of whatever those targets
-// sum to, and returns the named home's floors. The home's own allocation is
+// splitMemberFloors apportions every secondary component's minimum over the
+// members' current primary targets, in the fleet ratio of whatever those targets
+// sum to, and returns the named member's floors. The member's own allocation is
 // authoritative for its target.
-func splitHomeFloors(source *v1beta1.InferenceService, candidates []v1beta1.CandidatePlacement, home v1beta1.CandidatePlacement) ([]v1beta1.PlacementComponentFloor, error) {
-	if home.Cluster == "" || home.Allocation == nil {
+func splitMemberFloors(source *v1beta1.InferenceService, candidates []v1beta1.CandidatePlacement, member v1beta1.CandidatePlacement) ([]v1beta1.PlacementComponentFloor, error) {
+	if member.Cluster == "" || member.Allocation == nil {
 		return nil, fmt.Errorf("split home floors require an identified allocation")
 	}
 	minimums, err := splitComponentMinimums(source)
@@ -123,29 +122,29 @@ func splitHomeFloors(source *v1beta1.InferenceService, candidates []v1beta1.Cand
 			allocations[candidate.Cluster] = *candidate.Allocation
 		}
 	}
-	targets[home.Cluster] = home.Allocation.CurrentReplicas
-	allocations[home.Cluster] = *home.Allocation
+	targets[member.Cluster] = member.Allocation.CurrentReplicas
+	allocations[member.Cluster] = *member.Allocation
 	floors, err := apportionSplitFloors(minimums, targets, splitWeightsOf(source, allocations))
 	if err != nil {
 		return nil, err
 	}
-	return floors[home.Cluster], nil
+	return floors[member.Cluster], nil
 }
 
 // splitWeights holds the accepted static weights of a split plan: the primary
-// component's, and under ComponentAffinity each other component's own. Only
-// matched homes carry weights.
+// component's, and each other component's that the plan records. Only matched
+// members carry weights.
 type splitWeights struct {
 	primary    map[string]int64
 	components map[v1beta1.ComponentType]map[string]int64
 }
 
 // splitWeightsOf reads the weights an accepted or proposed allocation records.
-// Only static Split under ComponentAffinity gives a component its own weights;
-// every other plan apportions by the primary targets alone.
+// Only static Split gives a component its own weights; every other plan
+// apportions by the primary targets alone.
 func splitWeightsOf(source *v1beta1.InferenceService, allocations map[string]v1beta1.CandidateAllocationStatus) splitWeights {
 	out := splitWeights{primary: map[string]int64{}, components: map[v1beta1.ComponentType]map[string]int64{}}
-	if !source.Spec.Placement.UsesComponentAffinity() || placementMode(source) != v1beta1.PlacementModeSplit {
+	if placementMode(source) != v1beta1.PlacementModeSplit {
 		return out
 	}
 	for name, allocation := range allocations {
@@ -209,10 +208,10 @@ func proportionalWeights(a, b map[string]int64) bool {
 	return true
 }
 
-// servingFloors returns the floors a home's ready count is measured against
-// for routing. A component apportioned by its own weights gives homes
-// different mixes, so every home is then measured against the service's ratio
-// instead of its own floors, and traffic follows what each home can serve.
+// servingFloors returns the floors a member's ready count is measured against
+// for routing. A component apportioned by its own weights gives members
+// different mixes, so every member is then measured against the service's ratio
+// instead of its own floors, and traffic follows what each member can serve.
 func servingFloors(source *v1beta1.InferenceService, floors map[v1beta1.ComponentType]int32) map[v1beta1.ComponentType]int32 {
 	if source == nil || source.Status.Placement == nil {
 		return floors
@@ -234,10 +233,10 @@ func servingFloors(source *v1beta1.InferenceService, floors map[v1beta1.Componen
 }
 
 // apportionSplitFloors apportions every secondary component's minimum over the
-// homes' primary targets. A component without its own weights, or whose
+// members' primary targets. A component without its own weights, or whose
 // weights are proportional to the primary component's, follows the primary
 // targets. Any other component is apportioned by its own weights over the
-// homes that hold the primary component, at least one each.
+// members that hold the primary component, at least one each.
 func apportionSplitFloors(minimums splitMinimums, targets map[string]int32, weights splitWeights) (map[string][]v1beta1.PlacementComponentFloor, error) {
 	own := weights.ownWeights()
 	following := map[v1beta1.ComponentType]int32{}
@@ -269,11 +268,11 @@ func apportionSplitFloors(minimums splitMinimums, targets map[string]int32, weig
 }
 
 // splitPlannedBounds derives the member replica band of each scalable
-// component on a split home. The local ceiling is declared in primary
+// component on a split member. The local ceiling is declared in primary
 // replicas; a secondary component's ceiling is that ceiling in its own ratio,
 // rounded up.
-func splitPlannedBounds(source *v1beta1.InferenceService, candidates []v1beta1.CandidatePlacement, home v1beta1.CandidatePlacement) (map[v1beta1.ComponentType]plannedBound, error) {
-	floors, err := splitHomeFloors(source, candidates, home)
+func splitPlannedBounds(source *v1beta1.InferenceService, candidates []v1beta1.CandidatePlacement, member v1beta1.CandidatePlacement) (map[v1beta1.ComponentType]plannedBound, error) {
+	floors, err := splitMemberFloors(source, candidates, member)
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +334,7 @@ func floorMap(floors []v1beta1.PlacementComponentFloor) map[v1beta1.ComponentTyp
 }
 
 // primaryUnits expresses per-component counts in whole primary units: each
-// component covers count/floor of its share and the home has the smallest
+// component covers count/floor of its share and the member has the smallest
 // coverage. Equal or unknown floors reduce to the minimum count; a component
 // with a zero floor is skipped.
 func primaryUnits(comps []v1beta1.ComponentType, counts map[v1beta1.ComponentType]int32, floors map[v1beta1.ComponentType]int32) int32 {
@@ -359,7 +358,7 @@ func primaryUnits(comps []v1beta1.ComponentType, counts map[v1beta1.ComponentTyp
 	return units
 }
 
-// everyRequiredComponentPresent reports whether a home has an instance of every
+// everyRequiredComponentPresent reports whether a member has an instance of every
 // component primaryUnits measures: the primary component, and each other
 // component without a known zero floor. It is false when the primary floor is
 // not positive, because primaryUnits then already counts whole instances.

@@ -54,5 +54,5 @@ func (b perNodeBackend) Reconcile(ctx context.Context, a shared.BackendArgs) (ct
 }
 
 func (b perNodeBackend) HandleDeletion(ctx context.Context, a shared.BackendArgs) (ctrl.Result, error) {
-	return pernode.HandleModelDeletion(ctx, a.Client, b.nodeReader, a.Obj, a.Finalizer)
+	return pernode.HandleModelDeletion(ctx, a.Client, b.nodeReader, a.Obj, a.IsClusterScoped, a.Finalizer)
 }

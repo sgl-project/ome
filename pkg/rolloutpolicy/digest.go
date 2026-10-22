@@ -5,13 +5,12 @@
 package rolloutpolicy
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/digest"
 )
 
 const (
@@ -64,6 +63,5 @@ func CombinedDigest(digests []string) string {
 // ShortHash is the digest core, exported so run identity and combined-digest
 // callers hash with the exact same truncation the portable digest uses.
 func ShortHash(data []byte) string {
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])[:digestHexLength]
+	return digest.Short(data, digestHexLength)
 }

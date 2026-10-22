@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -51,6 +52,42 @@ func pinActiveRun(isvc *v1beta1.InferenceService) *v1beta1.InferenceService {
 // whose status is derived from the ISVC component lifecycle fixtures.
 func fakeClientForISVC(isvc *v1beta1.InferenceService) client.Client {
 	return fakeClientForISVCWithInstances(isvc, nil)
+}
+
+// withRouterForDecoder turns a fixture's engine+decoder group into an
+// engine+router group, a pair the batch step does not govern, so a start
+// reaches the ratio band through the full gate stack.
+func withRouterForDecoder(isvc *v1beta1.InferenceService) *v1beta1.InferenceService {
+	dec, rtr := v1beta1.DecoderComponent, v1beta1.RouterComponent
+	swap := func(comps []v1beta1.ComponentType) {
+		for i := range comps {
+			if comps[i] == dec {
+				comps[i] = rtr
+			}
+		}
+	}
+	if isvc.Spec.Rollout != nil {
+		for i := range isvc.Spec.Rollout.Groups {
+			swap(isvc.Spec.Rollout.Groups[i].Components)
+		}
+	}
+	if isvc.Status.RolloutCoordination != nil {
+		for i := range isvc.Status.RolloutCoordination.Groups {
+			gs := &isvc.Status.RolloutCoordination.Groups[i]
+			swap(gs.Components)
+			if gs.ObservedRatio != nil {
+				if n, ok := gs.ObservedRatio.Original[dec]; ok {
+					gs.ObservedRatio.Original[rtr] = n
+					delete(gs.ObservedRatio.Original, dec)
+				}
+			}
+		}
+	}
+	if cs, ok := isvc.Status.Components[dec]; ok {
+		isvc.Status.Components[rtr] = cs
+		delete(isvc.Status.Components, dec)
+	}
+	return pinActiveRun(isvc)
 }
 
 // fakeClientForISVCWithInstances is fakeClientForISVC plus per-component
@@ -1310,18 +1347,20 @@ func TestEvaluateUpdateGate_RatioBalancedSurgeNotDeadlocked(t *testing.T) {
 	// tiebreaker — see TestEvaluateUpdateGate_RecreatePodSymmetricCleared.)
 }
 
-// mkRatioProgressFixture builds a 2-member [engine, decoder] RatioBalanced
+// mkRatioProgressFixture builds a 2-member [engine, router] RatioBalanced
 // group with per-Component (original, new-revision, serving) counts so the
 // surge-path new-revision lockstep can be exercised end-to-end through
 // EvaluateUpdateGate. Serving is held at the original for both Components —
 // the SurgeThenDrain steady state — so the serving-capacity band alone
 // would authorize every surge; only the new-revision lockstep can pace it.
-func mkRatioProgressFixture(tol, origE, newE, origD, newD int32) *v1beta1.InferenceService {
+// The pair is an engine beside a router because the batch step does not
+// govern it; an engine beside a decoder is paced by the step instead.
+func mkRatioProgressFixture(tol, origE, newE, origR, newR int32) *v1beta1.InferenceService {
 	return pinActiveRun(&v1beta1.InferenceService{
 		Spec: v1beta1.InferenceServiceSpec{
 			Rollout: &v1beta1.RolloutSpec{
 				Groups: []v1beta1.RolloutGroup{{
-					Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+					Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.RouterComponent},
 					RollingUpdate: &v1beta1.GroupRollingUpdate{},
 					MaintainRatio: &v1beta1.MaintainRatio{Tolerance: &tol},
 				}},
@@ -1331,12 +1370,12 @@ func mkRatioProgressFixture(tol, origE, newE, origD, newD int32) *v1beta1.Infere
 			RolloutCoordination: &v1beta1.RolloutCoordinationStatus{
 				Groups: []v1beta1.RolloutCoordinationGroupStatus{{
 					Name:       "0",
-					Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+					Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.RouterComponent},
 					Policy:     v1beta1.CoordinationPolicyRollingUpdate,
 					ObservedRatio: &v1beta1.RolloutCoordinationRatio{
 						Original: map[v1beta1.ComponentType]int32{
-							v1beta1.EngineComponent:  origE,
-							v1beta1.DecoderComponent: origD,
+							v1beta1.EngineComponent: origE,
+							v1beta1.RouterComponent: origR,
 						},
 					},
 				}},
@@ -1345,8 +1384,8 @@ func mkRatioProgressFixture(tol, origE, newE, origD, newD int32) *v1beta1.Infere
 				v1beta1.EngineComponent: {Lifecycle: &v1beta1.LifecycleStatus{
 					Replicas: origE, ServingReplicas: origE, UpdatedReplicas: newE,
 				}},
-				v1beta1.DecoderComponent: {Lifecycle: &v1beta1.LifecycleStatus{
-					Replicas: origD, ServingReplicas: origD, UpdatedReplicas: newD,
+				v1beta1.RouterComponent: {Lifecycle: &v1beta1.LifecycleStatus{
+					Replicas: origR, ServingReplicas: origR, UpdatedReplicas: newR,
 				}},
 			},
 		},
@@ -1355,70 +1394,72 @@ func mkRatioProgressFixture(tol, origE, newE, origD, newD int32) *v1beta1.Infere
 
 // TestEvaluateUpdateGate_RatioBalancedHoldsLeadingComponent is the
 // leading-Component regression: a
-// multinode SurgeThenDrain RatioBalanced roll let the engine rotate its
-// Instances onto the new revision while the decoder lagged, holding the
+// multinode SurgeThenDrain RatioBalanced roll let one Component rotate its
+// Instances onto the new revision while its peer lagged, holding the
 // live ready-capacity ratio off band for the whole gap. The serving
 // counts stay at the original N for both Components throughout a
 // SurgeThenDrain roll (surge rotates IN before the source drains OUT), so
 // the serving-capacity band — and its deadlock-breaking tiebreaker —
 // authorize every surge and never pace the leader. The new-revision
-// lockstep is what holds it.
+// lockstep is what holds it, in a pair the batch step does not govern: an
+// engine beside a router here; an engine beside a decoder is paced by the
+// batch step instead (batch_step_test.go).
 //
-// Each row reads "engine at newE/origE rolled, decoder at newD/origD; may
+// Each row reads "engine at newE/origE rolled, router at newR/origR; may
 // `comp` start its next surge?" through the production decision site
 // (EvaluateUpdateGate with SurgeThenDrain).
 func TestEvaluateUpdateGate_RatioBalancedHoldsLeadingComponent(t *testing.T) {
-	eng, dec := v1beta1.EngineComponent, v1beta1.DecoderComponent
+	eng, rtr := v1beta1.EngineComponent, v1beta1.RouterComponent
 	cases := []struct {
 		name                     string
 		tol                      int32
-		origE, newE, origD, newD int32
+		origE, newE, origR, newR int32
 		comp                     v1beta1.ComponentType
 		wantAllowed              bool
 	}{
 		{ // Start of roll: nobody is ahead → opening surge proceeds.
 			name: "N=2 tol=25 both at 0 new — first surge allowed", tol: 25,
-			origE: 2, newE: 0, origD: 2, newD: 0, comp: eng, wantAllowed: true,
+			origE: 2, newE: 0, origR: 2, newR: 0, comp: eng, wantAllowed: true,
 		},
-		{ // The leading-Component bug: engine already 1/2 (50%), decoder 0/2 (0%);
+		{ // The leading-Component bug: engine already 1/2 (50%), router 0/2 (0%);
 			// engine's NEXT surge would extend a 50pp lead > 25% → HELD.
-			name: "N=2 tol=25 engine 1 ahead of decoder 0 — engine held", tol: 25,
-			origE: 2, newE: 1, origD: 2, newD: 0, comp: eng, wantAllowed: false,
+			name: "N=2 tol=25 engine 1 ahead of router 0 — engine held", tol: 25,
+			origE: 2, newE: 1, origR: 2, newR: 0, comp: eng, wantAllowed: false,
 		},
-		{ // …while the lagging decoder (0/2, behind engine's 50%) proceeds,
+		{ // …while the lagging router (0/2, behind engine's 50%) proceeds,
 			// so the pair converges instead of deadlocking.
-			name: "N=2 tol=25 decoder behind — decoder catches up", tol: 25,
-			origE: 2, newE: 1, origD: 2, newD: 0, comp: dec, wantAllowed: true,
+			name: "N=2 tol=25 router behind — router catches up", tol: 25,
+			origE: 2, newE: 1, origR: 2, newR: 0, comp: rtr, wantAllowed: true,
 		},
 		{ // Both level at 1/2 → neither leads → both may take the next step.
 			name: "N=2 tol=25 both at 1 new — level, engine proceeds", tol: 25,
-			origE: 2, newE: 1, origD: 2, newD: 1, comp: eng, wantAllowed: true,
+			origE: 2, newE: 1, origR: 2, newR: 1, comp: eng, wantAllowed: true,
 		},
-		{ // Tight band at N=4: engine 1/4 (25%) vs decoder 0 (0%) is a
+		{ // Tight band at N=4: engine 1/4 (25%) vs router 0 (0%) is a
 			// 25pp lead > 10% tol → engine held one step earlier than at 25%.
 			name: "N=4 tol=10 engine 1 ahead — engine held", tol: 10,
-			origE: 4, newE: 1, origD: 4, newD: 0, comp: eng, wantAllowed: false,
+			origE: 4, newE: 1, origR: 4, newR: 0, comp: eng, wantAllowed: false,
 		},
 		{ // Asymmetric 4:2 rolls in FRACTION lockstep: engine 2/4 (50%) and
-			// decoder 1/2 (50%) are level, so engine's next surge proceeds —
+			// router 1/2 (50%) are level, so engine's next surge proceeds —
 			// the guard is ratio-correct, not a raw equal-count rule.
 			name: "asymmetric 4:2 both at 50% — engine proceeds", tol: 25,
-			origE: 4, newE: 2, origD: 2, newD: 1, comp: eng, wantAllowed: true,
+			origE: 4, newE: 2, origR: 2, newR: 1, comp: eng, wantAllowed: true,
 		},
-		{ // Asymmetric 4:2: engine 2/4 (50%) ahead of decoder 0/2 (0%) →
+		{ // Asymmetric 4:2: engine 2/4 (50%) ahead of router 0/2 (0%) →
 			// 50pp lead > 25% → engine held.
-			name: "asymmetric 4:2 engine 50% ahead of decoder 0% — held", tol: 25,
-			origE: 4, newE: 2, origD: 2, newD: 0, comp: eng, wantAllowed: false,
+			name: "asymmetric 4:2 engine 50% ahead of router 0% — held", tol: 25,
+			origE: 4, newE: 2, origR: 2, newR: 0, comp: eng, wantAllowed: false,
 		},
-		{ // No false hold at the finish: once the decoder is fully rolled it
+		{ // No false hold at the finish: once the router is fully rolled it
 			// stops pacing, so the engine's trailing surges complete.
-			name: "decoder done — engine final surge allowed", tol: 25,
-			origE: 2, newE: 1, origD: 2, newD: 2, comp: eng, wantAllowed: true,
+			name: "router done — engine final surge allowed", tol: 25,
+			origE: 2, newE: 1, origR: 2, newR: 2, comp: eng, wantAllowed: true,
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			isvc := mkRatioProgressFixture(tc.tol, tc.origE, tc.newE, tc.origD, tc.newD)
+			isvc := mkRatioProgressFixture(tc.tol, tc.origE, tc.newE, tc.origR, tc.newR)
 			client := fakeClientForISVC(isvc)
 			allowed, _, reason := EvaluateUpdateGate(context.Background(), client, isvc, tc.comp, "", forwardTarget(isvc, tc.comp), nil, GroupDefaults{},
 				workloadtypes.UpdateStrategySurgeThenDrain, 0, 0)
@@ -1427,6 +1468,116 @@ func TestEvaluateUpdateGate_RatioBalancedHoldsLeadingComponent(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestEvaluateUpdateGate_RatioLockstepDecidesWhileTheGroupReadsScalingDown
+// asks the ratio gate between two steps of a pair the batch step does not
+// govern (an engine beside a router, both SurgeThenDrain, maintainRatio at
+// 20): 12 engines with 4 on the new version beside 8 routers with 1, every
+// pod of both sides serving. The group reads ScalingDown under RollingUpdate,
+// the engine's next surge is held because it runs ahead of the router by
+// more than the tolerance, and the router's next surge is admitted. The
+// group's RatioSkewRejected event fires only while the group reads Surging
+// or Waiting, so between steps the hold is visible on the replica alone.
+func TestEvaluateUpdateGate_RatioLockstepDecidesWhileTheGroupReadsScalingDown(t *testing.T) {
+	eng, rtr := v1beta1.EngineComponent, v1beta1.RouterComponent
+	surge := v1beta1.UpdateStrategySurgeThenDrain
+	members := map[v1beta1.ComponentType]batchMemberFixture{
+		eng: {desired: 12, surge: "10%", strategy: surge, promoted: 4},
+		rtr: {desired: 8, surge: "10%", strategy: surge, promoted: 1},
+	}
+	if got := batchGroupPhase(members, eng, rtr); got != v1beta1.CoordinationPhaseScalingDown {
+		t.Fatalf("group phase %q, want %q", got, v1beta1.CoordinationPhaseScalingDown)
+	}
+	isvc := batchService(batchGroupFixture{tolerance: ptr.To(int32(20)), components: []v1beta1.ComponentType{eng, rtr}}, members)
+	c := batchClient(t, members)
+	t.Run("the-leading-engine-is-held", func(t *testing.T) {
+		allowed, gate, reason := batchGate(t, isvc, c, eng, workloadtypes.UpdateStrategySurgeThenDrain, 0)
+		if allowed || gate != v1beta1.RolloutHoldGateRatio {
+			t.Fatalf("allowed=%v gate=%q reason=%q, want a Ratio hold", allowed, gate, reason)
+		}
+		if !strings.Contains(reason, "outpace") {
+			t.Errorf("reason=%q, want the lockstep's", reason)
+		}
+	})
+	t.Run("the-lagging-router-is-admitted", func(t *testing.T) {
+		if allowed, gate, reason := batchGate(t, isvc, c, rtr, workloadtypes.UpdateStrategySurgeThenDrain, 0); !allowed {
+			t.Fatalf("held under %q with %q, want the surge admitted", gate, reason)
+		}
+	})
+}
+
+// TestEvaluateUpdateGate_RatioLockstepDecidesWhileTheGroupReadsShifting is
+// the same picture under the blueGreen progression: 12 engines with 4 on the
+// new version beside 8 routers with 1, every new pod Ready and the old pods
+// still serving. BlueGreen reads a surge pair between two steps as Shifting,
+// the engine's next surge is held because it runs ahead of the router by
+// more than the tolerance, and the router's next surge is admitted.
+func TestEvaluateUpdateGate_RatioLockstepDecidesWhileTheGroupReadsShifting(t *testing.T) {
+	eng, rtr := v1beta1.EngineComponent, v1beta1.RouterComponent
+	surge := v1beta1.UpdateStrategySurgeThenDrain
+	members := map[v1beta1.ComponentType]batchMemberFixture{
+		eng: {desired: 12, surge: "10%", strategy: surge, promoted: 4},
+		rtr: {desired: 8, surge: "10%", strategy: surge, promoted: 1},
+	}
+	if got := batchGroupPhaseUnder(v1beta1.CoordinationPolicyBlueGreen, members, eng, rtr); got != v1beta1.CoordinationPhaseShifting {
+		t.Fatalf("group phase %q, want %q", got, v1beta1.CoordinationPhaseShifting)
+	}
+	isvc := batchService(batchGroupFixture{tolerance: ptr.To(int32(20)), components: []v1beta1.ComponentType{eng, rtr}, blueGreen: true}, members)
+	c := batchClient(t, members)
+	t.Run("the-leading-engine-is-held", func(t *testing.T) {
+		allowed, gate, reason := batchGate(t, isvc, c, eng, workloadtypes.UpdateStrategySurgeThenDrain, 0)
+		if allowed || gate != v1beta1.RolloutHoldGateRatio {
+			t.Fatalf("allowed=%v gate=%q reason=%q, want a Ratio hold", allowed, gate, reason)
+		}
+		if !strings.Contains(reason, "outpace") {
+			t.Errorf("reason=%q, want the lockstep's", reason)
+		}
+	})
+	t.Run("the-lagging-router-is-admitted", func(t *testing.T) {
+		if allowed, gate, reason := batchGate(t, isvc, c, rtr, workloadtypes.UpdateStrategySurgeThenDrain, 0); !allowed {
+			t.Fatalf("held under %q with %q, want the surge admitted", gate, reason)
+		}
+	})
+}
+
+// TestEvaluateUpdateGate_RatioGateDecidesBesideAFailedMember asks the ratio
+// gate while the group reads Failed: 12 engines with 4 on the new version
+// beside 8 routers with 1, both SurgeThenDrain under maintainRatio at 20,
+// and one router Instance whose surge toward the new version ended Failed
+// (the retry schedule holds it). The group phase is the Failed rollup under
+// every policy. The gate still answers the other starts: the engine's next
+// surge is held because it runs ahead of the router by more than the
+// tolerance, with the failed Instance counting for nothing on the router's
+// side, and the router's next surge on another Instance is admitted.
+func TestEvaluateUpdateGate_RatioGateDecidesBesideAFailedMember(t *testing.T) {
+	eng, rtr := v1beta1.EngineComponent, v1beta1.RouterComponent
+	surge := v1beta1.UpdateStrategySurgeThenDrain
+	members := map[v1beta1.ComponentType]batchMemberFixture{
+		eng: {desired: 12, surge: "10%", strategy: surge, promoted: 4},
+		rtr: {desired: 8, surge: "10%", strategy: surge, promoted: 1, failed: 1},
+	}
+	for _, policy := range []v1beta1.CoordinationPolicy{v1beta1.CoordinationPolicyRollingUpdate, v1beta1.CoordinationPolicyBlueGreen} {
+		if got := batchGroupPhaseUnder(policy, members, eng, rtr); got != v1beta1.CoordinationPhaseFailed {
+			t.Fatalf("%s group phase %q, want %q", policy, got, v1beta1.CoordinationPhaseFailed)
+		}
+	}
+	isvc := batchService(batchGroupFixture{tolerance: ptr.To(int32(20)), components: []v1beta1.ComponentType{eng, rtr}}, members)
+	c := batchClient(t, members)
+	t.Run("the-leading-engine-is-held", func(t *testing.T) {
+		allowed, gate, reason := batchGate(t, isvc, c, eng, workloadtypes.UpdateStrategySurgeThenDrain, 0)
+		if allowed || gate != v1beta1.RolloutHoldGateRatio {
+			t.Fatalf("allowed=%v gate=%q reason=%q, want a Ratio hold", allowed, gate, reason)
+		}
+		if !strings.Contains(reason, "outpace") {
+			t.Errorf("reason=%q, want the lockstep's", reason)
+		}
+	})
+	t.Run("the-lagging-router-is-admitted", func(t *testing.T) {
+		if allowed, gate, reason := batchGate(t, isvc, c, rtr, workloadtypes.UpdateStrategySurgeThenDrain, 0); !allowed {
+			t.Fatalf("held under %q with %q, want the surge admitted", gate, reason)
+		}
+	})
 }
 
 // mkRatioLockstepFixture is mkRatioProgressFixture with the group's
@@ -1443,16 +1594,17 @@ func mkRatioLockstepFixture(tol, origE, newE, origD, newD int32) *v1beta1.Infere
 // TestEvaluateUpdateGate_LockstepHoldsEveryStrategy pins the new-revision
 // lockstep on the drain-first and in-place paths, beside the surge path
 // TestEvaluateUpdateGate_RatioBalancedHoldsLeadingComponent covers. The
-// story: 8 engine and 8 decoder Instances in one RatioBalanced group with a
-// tolerance of 20 percent, both rolling one pod at a time; the engine's
-// replacements are Ready in seconds, the decoder's in minutes. Between two
-// steps serving is back at 8:8 for both Components, so the serving band
-// alone admits every engine step; only the lockstep can hold the engine
-// while the decoder lags. Each row reads "engine at newE/origE rolled,
-// decoder at newD/origD; may `comp` start its next step?" through the
-// production decision site, once per lifecycle strategy.
+// story: 8 engine and 8 router Instances in one RatioBalanced group with a
+// tolerance of 20 percent, a pair the batch step does not govern, both
+// rolling one pod at a time; the engine's replacements are Ready in
+// seconds, the router's in minutes. Between two steps serving is back at
+// 8:8 for both Components, so the serving band alone admits every engine
+// step; only the lockstep can hold the engine while the router lags. Each
+// row reads "engine at newE/origE rolled, router at newR/origR; may `comp`
+// start its next step?" through the production decision site, once per
+// lifecycle strategy.
 func TestEvaluateUpdateGate_LockstepHoldsEveryStrategy(t *testing.T) {
-	eng, dec := v1beta1.EngineComponent, v1beta1.DecoderComponent
+	eng, rtr := v1beta1.EngineComponent, v1beta1.RouterComponent
 	strategies := []workloadtypes.UpdateStrategyType{
 		workloadtypes.UpdateStrategyRecreatePod,
 		workloadtypes.UpdateStrategyInPlaceIfPossible,
@@ -1462,51 +1614,51 @@ func TestEvaluateUpdateGate_LockstepHoldsEveryStrategy(t *testing.T) {
 	cases := []struct {
 		name                     string
 		tol                      int32
-		origE, newE, origD, newD int32
+		origE, newE, origR, newR int32
 		comp                     v1beta1.ComponentType
 		wantAllowed              bool
 	}{
-		{ // The story's end state: the engine finished while the decoder is at 3 of 8.
-			name: "8:8 tol=20 engine 8 of 8 ahead of decoder 3 of 8 - engine held", tol: 20,
-			origE: 8, newE: 8, origD: 8, newD: 3, comp: eng, wantAllowed: false,
+		{ // The story's end state: the engine finished while the router is at 3 of 8.
+			name: "8:8 tol=20 engine 8 of 8 ahead of router 3 of 8 - engine held", tol: 20,
+			origE: 8, newE: 8, origR: 8, newR: 3, comp: eng, wantAllowed: false,
 		},
-		{ // The lagging decoder always proceeds, so the pair converges.
-			name: "8:8 tol=20 decoder 3 of 8 behind engine 8 of 8 - decoder proceeds", tol: 20,
-			origE: 8, newE: 8, origD: 8, newD: 3, comp: dec, wantAllowed: true,
+		{ // The lagging router always proceeds, so the pair converges.
+			name: "8:8 tol=20 router 3 of 8 behind engine 8 of 8 - router proceeds", tol: 20,
+			origE: 8, newE: 8, origR: 8, newR: 3, comp: rtr, wantAllowed: true,
 		},
 		{ // One step ahead (12.5 points) is inside a 20 percent band.
-			name: "8:8 tol=20 engine 4 of 8 vs decoder 3 of 8 - engine proceeds", tol: 20,
-			origE: 8, newE: 4, origD: 8, newD: 3, comp: eng, wantAllowed: true,
+			name: "8:8 tol=20 engine 4 of 8 vs router 3 of 8 - engine proceeds", tol: 20,
+			origE: 8, newE: 4, origR: 8, newR: 3, comp: eng, wantAllowed: true,
 		},
 		{ // Two steps ahead (25 points) is past it: the engine waits here.
-			name: "8:8 tol=20 engine 5 of 8 vs decoder 3 of 8 - engine held", tol: 20,
-			origE: 8, newE: 5, origD: 8, newD: 3, comp: eng, wantAllowed: false,
+			name: "8:8 tol=20 engine 5 of 8 vs router 3 of 8 - engine held", tol: 20,
+			origE: 8, newE: 5, origR: 8, newR: 3, comp: eng, wantAllowed: false,
 		},
 		{ // Symmetric start: nobody leads, so either side may go first.
 			name: "8:8 tol=20 both at 0 of 8 - engine's first step allowed", tol: 20,
-			origE: 8, newE: 0, origD: 8, newD: 0, comp: eng, wantAllowed: true,
+			origE: 8, newE: 0, origR: 8, newR: 0, comp: eng, wantAllowed: true,
 		},
 		{
-			name: "8:8 tol=20 both at 0 of 8 - decoder's first step allowed", tol: 20,
-			origE: 8, newE: 0, origD: 8, newD: 0, comp: dec, wantAllowed: true,
+			name: "8:8 tol=20 both at 0 of 8 - router's first step allowed", tol: 20,
+			origE: 8, newE: 0, origR: 8, newR: 0, comp: rtr, wantAllowed: true,
 		},
 		{ // Asymmetric 4:2 rolls in FRACTION lockstep: 2 of 4 and 1 of 2 are level.
 			name: "4:2 tol=25 both at 50 percent - engine proceeds", tol: 25,
-			origE: 4, newE: 2, origD: 2, newD: 1, comp: eng, wantAllowed: true,
+			origE: 4, newE: 2, origR: 2, newR: 1, comp: eng, wantAllowed: true,
 		},
 		{
-			name: "4:2 tol=25 engine 50 percent ahead of decoder 0 - engine held", tol: 25,
-			origE: 4, newE: 2, origD: 2, newD: 0, comp: eng, wantAllowed: false,
+			name: "4:2 tol=25 engine 50 percent ahead of router 0 - engine held", tol: 25,
+			origE: 4, newE: 2, origR: 2, newR: 0, comp: eng, wantAllowed: false,
 		},
 		{ // No false hold at the finish: a fully rolled peer stops pacing.
-			name: "8:8 tol=20 decoder done - engine's last step allowed", tol: 20,
-			origE: 8, newE: 7, origD: 8, newD: 8, comp: eng, wantAllowed: true,
+			name: "8:8 tol=20 router done - engine's last step allowed", tol: 20,
+			origE: 8, newE: 7, origR: 8, newR: 8, comp: eng, wantAllowed: true,
 		},
 	}
 	for _, strategy := range strategies {
 		for _, tc := range cases {
 			t.Run(string(strategy)+"/"+tc.name, func(t *testing.T) {
-				isvc := mkRatioLockstepFixture(tc.tol, tc.origE, tc.newE, tc.origD, tc.newD)
+				isvc := mkRatioLockstepFixture(tc.tol, tc.origE, tc.newE, tc.origR, tc.newR)
 				client := fakeClientForISVC(isvc)
 				allowed, gate, reason := EvaluateUpdateGate(context.Background(), client, isvc, tc.comp, "", forwardTarget(isvc, tc.comp), nil, GroupDefaults{},
 					strategy, 0, 0)
@@ -1666,31 +1818,51 @@ func TestEvaluateSurge_SurgeTiebreaker(t *testing.T) {
 	}
 }
 
-// TestEvaluateSurge_DrainStaysStrictAfterSurgeTiebreaker guards that the
-// surge tiebreaker did NOT loosen the DRAIN direction: a -1 drain that
-// exceeds 2x band on a small asymmetric side stays denied — a drain is the
-// real capacity-shortfall risk the band exists for. (4:2, decoder drains to
-// 1 → 4:1 = 4.0 > 2x-band ceiling 3.0.)
-func TestEvaluateSurge_DrainStaysStrictAfterSurgeTiebreaker(t *testing.T) {
+// TestEvaluateSurge_DrainKeepsItsOwnBounds guards that the surge tiebreaker
+// did not loosen the drain direction: a drain has its own one-step rule,
+// bounded to one pod of the side at a time from a fleet serving its
+// reference in band. On 4:2 at tolerance 25 the decoder's drain reads 4:1,
+// past twice the tolerance, and is admitted as the one step no single step
+// could keep inside the tolerance, read as outside it; the same drain with
+// the decoder already a pod short, or with one drain open, stays refused.
+func TestEvaluateSurge_DrainKeepsItsOwnBounds(t *testing.T) {
 	eng, dec := v1beta1.EngineComponent, v1beta1.DecoderComponent
 	pacing := v1beta1.CoordinationPacing{
 		Type:                  v1beta1.CoordinationPacingRatioBalanced,
 		RatioTolerancePercent: int32Ptr(25),
 	}
-	d := EvaluateSurge(pacing, RatioState{
+	full := RatioState{
 		Original: map[v1beta1.ComponentType]int32{eng: 4, dec: 2},
 		Serving:  map[v1beta1.ComponentType]int32{eng: 4, dec: 2},
-	}, dec, -1)
-	if d.AllowedSurgeDelta != 0 {
-		t.Errorf("a drain exceeding 2x band (4:1 from orig 2:1) must stay DENIED; the surge tiebreaker must not loosen drains; got allowed (reason=%q)", d.Reason)
+	}
+	if d := EvaluateSurge(pacing, full, dec, -1); d.AllowedSurgeDelta != -1 || !d.OutsideTolerance {
+		t.Errorf("the decoder's drain on 4:2 (4:1, past twice the tolerance) is the one step the band admits when none fits, read as outside the tolerance: got %+v", d)
+	}
+	short := RatioState{
+		Original: map[v1beta1.ComponentType]int32{eng: 4, dec: 2},
+		Serving:  map[v1beta1.ComponentType]int32{eng: 4, dec: 1},
+	}
+	if d := EvaluateSurge(pacing, short, dec, -1); d.AllowedSurgeDelta != 0 {
+		t.Errorf("a decoder already a pod short is below its reference; its drain must stay refused: got %+v", d)
+	}
+	open := RatioState{
+		Original:        map[v1beta1.ComponentType]int32{eng: 4, dec: 2},
+		Serving:         map[v1beta1.ComponentType]int32{eng: 4, dec: 2},
+		InFlightUnavail: map[v1beta1.ComponentType]int32{dec: 1},
+	}
+	if d := EvaluateSurge(pacing, open, dec, -1); d.AllowedSurgeDelta != 0 {
+		t.Errorf("a decoder with one drain open has a pod out of rotation; a second must stay refused: got %+v", d)
 	}
 }
 
-// TestEvaluateSurge_DrainTiebreaker pins the Part-2 discrete-granularity
-// tiebreaker: a drain-first roll (RecreatePod / in-place) gets exactly ONE
-// rounding-error pod through when a tight band otherwise permits zero
-// whole-pod moves, but large asymmetric skews stay denied and a second
-// pod (from an already-skewed baseline) is refused.
+// TestEvaluateSurge_DrainTiebreaker pins the one-pod allowance of the drain
+// path: a drain-first roll (RecreatePod / in-place) gets exactly ONE pod
+// through when a tight band otherwise permits zero whole-pod moves. Within
+// twice the tolerance it is the rounding-error overshoot; past that the one
+// step is admitted as outside the tolerance, a side of one included, since
+// no single step of the side could ever fit. A second pod, from an
+// already-skewed baseline, and a drain on a side of two short of a pod,
+// which would empty it, are refused.
 func TestEvaluateSurge_DrainTiebreaker(t *testing.T) {
 	eng, dec := v1beta1.EngineComponent, v1beta1.DecoderComponent
 	pacing := v1beta1.CoordinationPacing{
@@ -1703,6 +1875,7 @@ func TestEvaluateSurge_DrainTiebreaker(t *testing.T) {
 		serving     map[v1beta1.ComponentType]int32
 		comp        v1beta1.ComponentType
 		wantAllowed bool
+		wantOutside bool
 	}{
 		{
 			// 4/3 = 1.333 > 1.25 (strict) but <= 1.5 (2x band) from a
@@ -1714,13 +1887,15 @@ func TestEvaluateSurge_DrainTiebreaker(t *testing.T) {
 			wantAllowed: true,
 		},
 		{
-			// 4:1 = 4.0 > 3.0 (2x band on orig 2.0) → too large an overshoot,
-			// stays an honest deadlock (operator widens tolerance).
-			name:        "asymmetric 4:2 decoder drain — large skew denied",
+			// 4:1 = 4.0 > 3.0 (2x band on orig 2.0): no single step of the
+			// decoder fits, so the one step is admitted and read as outside
+			// the tolerance, for the event.
+			name:        "asymmetric 4:2 decoder drain — the one step, outside the tolerance",
 			original:    map[v1beta1.ComponentType]int32{eng: 4, dec: 2},
 			serving:     map[v1beta1.ComponentType]int32{eng: 4, dec: 2},
 			comp:        dec,
-			wantAllowed: false,
+			wantAllowed: true,
+			wantOutside: true,
 		},
 		{
 			// Baseline already 3:4 (one pod out) → not in band → tiebreaker
@@ -1732,11 +1907,21 @@ func TestEvaluateSurge_DrainTiebreaker(t *testing.T) {
 			wantAllowed: false,
 		},
 		{
-			// Draining the last pod would zero a side → always refused
-			// (mass-drain guard), even from a balanced 1:1 baseline.
-			name:        "zero-guard — draining the last pod denied",
+			// A side of one has no step that keeps a pod serving; its one
+			// drain is the drain-first step the operator chose for it.
+			name:        "a side of one takes its one drain, outside the tolerance",
 			original:    map[v1beta1.ComponentType]int32{eng: 1, dec: 1},
 			serving:     map[v1beta1.ComponentType]int32{eng: 1, dec: 1},
+			comp:        eng,
+			wantAllowed: true,
+			wantOutside: true,
+		},
+		{
+			// A side of two serving one pod is below its reference; the
+			// drain that would empty it is refused (mass-drain guard).
+			name:        "zero-guard — a side of two short of a pod is never emptied",
+			original:    map[v1beta1.ComponentType]int32{eng: 2, dec: 2},
+			serving:     map[v1beta1.ComponentType]int32{eng: 1, dec: 2},
 			comp:        eng,
 			wantAllowed: false,
 		},
@@ -1745,9 +1930,9 @@ func TestEvaluateSurge_DrainTiebreaker(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			d := EvaluateSurge(pacing, RatioState{Original: tc.original, Serving: tc.serving}, tc.comp, -1)
 			gotAllowed := d.AllowedSurgeDelta != 0
-			if gotAllowed != tc.wantAllowed {
-				t.Errorf("allowed=%v want %v (delta=%d, skewRejected=%v, reason=%q)",
-					gotAllowed, tc.wantAllowed, d.AllowedSurgeDelta, d.SkewRejected, d.Reason)
+			if gotAllowed != tc.wantAllowed || d.OutsideTolerance != tc.wantOutside {
+				t.Errorf("allowed=%v want %v, outsideTolerance=%v want %v (delta=%d, skewRejected=%v, reason=%q)",
+					gotAllowed, tc.wantAllowed, d.OutsideTolerance, tc.wantOutside, d.AllowedSurgeDelta, d.SkewRejected, d.Reason)
 			}
 		})
 	}
@@ -1772,12 +1957,13 @@ func TestEvaluateUpdateGate_RecreatePodSymmetricCleared(t *testing.T) {
 }
 
 // TestEvaluateUpdateGate_RatioWaiverFollowsTheMechanism pins the ratio
-// waiver to the mechanism the caller reports. On an asymmetric 4:2 pair
-// (tol 25%, band [1.5, 2.5]) a decoder recreate projects 4:1 = 4.0, past
+// waiver to the mechanism the caller reports, on an engine beside a router,
+// a pair the batch step does not govern. On an asymmetric 4:2 pair
+// (tol 25%, band [1.5, 2.5]) a router recreate projects 4:1 = 4.0, past
 // even the 2x-band tiebreaker, so a RecreatePod consult — the consult a
 // gang's in-place fallback arrives as — is held on Ratio. The same
 // consult as an in-place mechanism is waived, since a same-pod patch
-// keeps the decoder's capacity, and passes on the unavailability budget.
+// keeps the router's capacity, and passes on the unavailability budget.
 // A recreate that stays in band (the engine's, 3:2 = 1.5) is admitted,
 // so the mechanism decides which check runs, not whether the start runs.
 func TestEvaluateUpdateGate_RatioWaiverFollowsTheMechanism(t *testing.T) {
@@ -1786,23 +1972,54 @@ func TestEvaluateUpdateGate_RatioWaiverFollowsTheMechanism(t *testing.T) {
 	isvc.Spec.Rollout.Groups[0].RollingUpdate.MaxUnavailable = &mu
 	pinActiveRun(isvc) // re-pin: the budget edit must be part of the pinned plan
 	client := fakeClientForISVC(isvc)
-
-	allowed, gate, reason := EvaluateUpdateGate(context.Background(), client, isvc, v1beta1.DecoderComponent, "", forwardTarget(isvc, v1beta1.DecoderComponent), nil, GroupDefaults{},
-		workloadtypes.UpdateStrategyRecreatePod, 0, 0)
-	if allowed || gate != v1beta1.RolloutHoldGateRatio {
-		t.Errorf("decoder RecreatePod on 4:2 tol=25%% must be held on Ratio (4:1 = 4.0 leaves the band); got allowed=%v gate=%q reason=%q", allowed, gate, reason)
+	rec := record.NewFakeRecorder(10)
+	event := func() string {
+		select {
+		case e := <-rec.Events:
+			return e
+		default:
+			return ""
+		}
 	}
+
+	// RecreatePod consults the band. On 4:2 at tolerance 25 one router pod
+	// out reads 4:1, past twice the tolerance, so the router's drain is the
+	// one step the band admits when none fits, announced on the service; a
+	// second router pod in the same pass would leave the side serving
+	// nothing and is the band's to refuse.
+	if allowed, gate, reason := EvaluateUpdateGate(context.Background(), client, isvc, v1beta1.RouterComponent, "", forwardTarget(isvc, v1beta1.RouterComponent), rec, GroupDefaults{},
+		workloadtypes.UpdateStrategyRecreatePod, 0, 0); !allowed {
+		t.Errorf("router RecreatePod on 4:2 tol=25%% is the one step the band admits when none fits; got held gate=%q reason=%q", gate, reason)
+	}
+	if e := event(); !strings.Contains(e, EventReasonRatioStepOutsideTolerance) {
+		t.Errorf("the band's step outside the tolerance must be announced; got event %q", e)
+	}
+	if allowed, gate, reason := EvaluateUpdateGate(context.Background(), client, isvc, v1beta1.RouterComponent, "", forwardTarget(isvc, v1beta1.RouterComponent), rec, GroupDefaults{},
+		workloadtypes.UpdateStrategyRecreatePod, 0, 1); allowed || gate != v1beta1.RolloutHoldGateRatio {
+		t.Errorf("a second router pod in the same pass must be held on Ratio (nothing would serve); got allowed=%v gate=%q reason=%q", allowed, gate, reason)
+	}
+	if e := event(); e != "" {
+		t.Errorf("a held start announces nothing; got %q", e)
+	}
+	// An in-place start never consults the band: it is waived past it with
+	// its own event, whatever the shape.
 	for _, mechanism := range []workloadtypes.UpdateStrategyType{
 		workloadtypes.UpdateStrategyInPlaceIfPossible, workloadtypes.UpdateStrategyInPlaceOnly,
 	} {
-		if allowed, gate, reason := EvaluateUpdateGate(context.Background(), client, isvc, v1beta1.DecoderComponent, "", forwardTarget(isvc, v1beta1.DecoderComponent), nil, GroupDefaults{},
+		if allowed, gate, reason := EvaluateUpdateGate(context.Background(), client, isvc, v1beta1.RouterComponent, "", forwardTarget(isvc, v1beta1.RouterComponent), rec, GroupDefaults{},
 			mechanism, 0, 0); !allowed {
-			t.Errorf("decoder %s on 4:2 tol=25%% must be waived past the ratio gate; got held gate=%q reason=%q", mechanism, gate, reason)
+			t.Errorf("router %s on 4:2 tol=25%% must be waived past the ratio gate; got held gate=%q reason=%q", mechanism, gate, reason)
+		}
+		if e := event(); !strings.Contains(e, EventReasonRatioGateBypassed) {
+			t.Errorf("router %s: the waiver must be announced as RatioGateBypassed; got event %q", mechanism, e)
 		}
 	}
-	if allowed, gate, reason := EvaluateUpdateGate(context.Background(), client, isvc, v1beta1.EngineComponent, "", forwardTarget(isvc, v1beta1.EngineComponent), nil, GroupDefaults{},
+	if allowed, gate, reason := EvaluateUpdateGate(context.Background(), client, isvc, v1beta1.EngineComponent, "", forwardTarget(isvc, v1beta1.EngineComponent), rec, GroupDefaults{},
 		workloadtypes.UpdateStrategyRecreatePod, 0, 0); !allowed {
 		t.Errorf("engine RecreatePod on 4:2 tol=25%% must be admitted (3:2 = 1.5 stays in band); got held gate=%q reason=%q", gate, reason)
+	}
+	if e := event(); e != "" {
+		t.Errorf("a drain inside the band announces nothing; got %q", e)
 	}
 }
 
@@ -1999,12 +2216,16 @@ func mkGangSurgeFixture() (*v1beta1.InferenceService, []v1beta1.OMENativeInstanc
 			PodCount: 2, ServingPodCount: 2,
 			Operation: &v1beta1.InstanceOperation{
 				Type: v1beta1.InstanceOperationUpdate, Step: "Surge",
-				SurgeIndex: int32Ptr(2)}},
+				SurgeIndex: int32Ptr(3)}},
 		{Index: 1, Phase: v1beta1.OMENativeInstanceReady,
 			PodCount: 2, ServingPodCount: 2},
+		// A gang short of a serving member: not counted in ServingReplicas,
+		// so the engine's steady serving is one below its reference.
+		{Index: 2, Phase: v1beta1.OMENativeInstanceReady,
+			PodCount: 2, ServingPodCount: 1},
 		// Surge-target gang: full pod set, all serving →
 		// counted in ServingReplicas (the N+1 peak).
-		{Index: 2, Phase: v1beta1.OMENativeInstanceCreating,
+		{Index: 3, Phase: v1beta1.OMENativeInstanceCreating,
 			PodCount: 2, ServingPodCount: 2,
 			Operation: &v1beta1.InstanceOperation{
 				Type: v1beta1.InstanceOperationUpdate,
@@ -2024,14 +2245,14 @@ func mkGangSurgeFixture() (*v1beta1.InferenceService, []v1beta1.OMENativeInstanc
 			Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
 				v1beta1.EngineComponent: {
 					Lifecycle: &v1beta1.LifecycleStatus{
-						Replicas:        2,
-						ServingReplicas: 3, // N=2 source + 1 surge gang = peak
+						Replicas:        3,
+						ServingReplicas: 3, // two steady gangs + the surge gang = peak; the third gang is short
 					},
 				},
 				v1beta1.DecoderComponent: {
 					Lifecycle: &v1beta1.LifecycleStatus{
-						Replicas:        2,
-						ServingReplicas: 2,
+						Replicas:        3,
+						ServingReplicas: 3,
 					},
 				},
 			},
@@ -2041,8 +2262,8 @@ func mkGangSurgeFixture() (*v1beta1.InferenceService, []v1beta1.OMENativeInstanc
 					Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
 					ObservedRatio: &v1beta1.RolloutCoordinationRatio{
 						Original: map[v1beta1.ComponentType]int32{
-							v1beta1.EngineComponent:  2,
-							v1beta1.DecoderComponent: 2,
+							v1beta1.EngineComponent:  3,
+							v1beta1.DecoderComponent: 3,
 						},
 					},
 				}},
@@ -2053,23 +2274,26 @@ func mkGangSurgeFixture() (*v1beta1.InferenceService, []v1beta1.OMENativeInstanc
 
 // TestCheckRatioGate_GangSurgePeakDoesNotAuthorizeDrain pins multi-node
 // RatioBalanced pacing during a gang surge. Engine is mid gang
-// SurgeThenDrain so its ServingReplicas reads the transient PEAK N+1=3
-// against decoder's steady N=2. A drain of one engine Instance would, once
-// the surge settles back to N, leave engine at 1 : decoder 2 = ratio 2.0 vs
-// the 1:1 anchor — far past the 25% band. The gate must REJECT the drain.
+// SurgeThenDrain with one of its three gangs short of a serving member, so
+// its ServingReplicas reads 3 (two steady gangs and the surge gang, the
+// transient PEAK) against decoder's steady 3: the inflated count looks like
+// a full fleet at its reference. A drain of one engine Instance would, once
+// the surge settles, leave engine at 1 : decoder 3 = ratio 3.0 vs the 1:1
+// anchor — far past the 25% band. The gate must REJECT the drain.
 //
-// Counting the surge peak as durable serving would read 3:2, project 2:2
-// for a -1 drain (in band) and ALLOW it. The gate nets the in-flight
-// gang-surge peak out, sees the steady 2:2, and a -1 drain projects 1:2
-// (out of band) → DENIED. Single-pod is unaffected: it has no
+// Counting the surge peak as durable serving would read 3:3 at the
+// reference and let the one-pod allowance take the drain (2:3 = 1.5 is
+// within twice the tolerance). The gate nets the in-flight gang-surge peak
+// out, sees the engine at 2 of its 3, below its reference, and a -1 drain
+// projects 1:3 (out of band) → DENIED. Single-pod is unaffected: it has no
 // GangSurgeTarget Instance, so nothing is netted.
 func TestCheckRatioGate_GangSurgePeakDoesNotAuthorizeDrain(t *testing.T) {
 	isvc, engInsts := mkGangSurgeFixture()
 	allowed, reason := CheckRatioGate(isvc, v1beta1.EngineComponent, 0, engInsts...)
 	if allowed {
 		t.Fatalf("a drain on an engine whose serving is inflated by an in-flight "+
-			"gang surge (peak 3 over steady 2) must be DENIED — once the surge "+
-			"settles the drain leaves 1:2 (ratio 2.0 vs 1:1 anchor, >25%% band); "+
+			"gang surge (peak 3 over steady 2 of 3) must be DENIED — once the surge "+
+			"settles the drain leaves 1:3 (ratio 3.0 vs 1:1 anchor, >25%% band); "+
 			"got allowed (reason=%q)", reason)
 	}
 }
@@ -2167,15 +2391,17 @@ func mkGangSurgeDrainedFixture() (*v1beta1.InferenceService, []v1beta1.OMENative
 // staggered times, that N-1 read swings the live ratio to 2:1 / 1:2.
 //
 // Here engine is in that window: source drained (0/2), target serving (2/2) →
-// engine's STEADY serving is N=2, equal to decoder. A DECODER drain would take
-// the true 2:2 to engine 2 : decoder 1 = ratio 2.0 vs the 1:1 anchor — past the
-// 25% band — and MUST be denied.
+// engine's STEADY serving is N=2, equal to decoder. A DECODER drain takes the
+// true 2:2 to engine 2 : decoder 1 = ratio 2.0 vs the 1:1 anchor — past twice
+// the 25% band — so it is the one step the band admits when no single step
+// fits, read as outside the tolerance and named at 2:2.
 //
 // Netting the still-marked target out of engine's serving would read
-// engine=1, and a decoder -1 would project 1:1 (in band) → ALLOWED, driving
-// the very trough this proves. Because the target's source is not serving,
-// nothing is netted: engine reads the steady 2, and the decoder drain
-// projects 2:1 (out of band) → DENIED.
+// engine=1, and a decoder -1 would project 1:1 (in band) → admitted as a
+// drain within tolerance, driving the very trough this proves. Because the
+// target's source is not serving, nothing is netted: engine reads the steady
+// 2, and the decoder drain is admitted by the one-step rule at 2:2, not read
+// as within tolerance.
 func TestCheckRatioGate_DrainedGangSurgeNotANetTrough(t *testing.T) {
 	isvc, engInsts := mkGangSurgeDrainedFixture()
 	if got := servingSurgePeakInFlight(engInsts); got != 0 {
@@ -2186,12 +2412,12 @@ func TestCheckRatioGate_DrainedGangSurgeNotANetTrough(t *testing.T) {
 	// (not the queried decoder) so the gate nets engine's serving correctly.
 	client := fakeClientForISVCWithInstances(isvc, map[v1beta1.ComponentType][]v1beta1.OMENativeInstanceStatus{v1beta1.EngineComponent: engInsts})
 	allowed, reason := ResolveGateContext(context.Background(), client, isvc, v1beta1.DecoderComponent).CheckRatio(0, 0, -1)
-	if allowed {
+	want := "decoder 1 of 2 serving after the drain; no single step fits tolerance 25 at 2:2; admitting one"
+	if !allowed || reason != want {
 		t.Fatalf("a decoder drain against an engine at its STEADY N=2 (surge "+
-			"source already drained) projects 2:1 (ratio 2.0 vs 1:1 anchor, "+
-			">25%% band) and must be DENIED; the gate wrongly netted the still-"+
-			"marked surge target out of engine serving (phantom N-1 trough) and "+
-			"allowed it (reason=%q)", reason)
+			"source already drained) is the one step the band admits at 2:2; "+
+			"a phantom N-1 trough would read it as within tolerance at 1:2: "+
+			"got allowed=%v reason=%q, want %q", allowed, reason, want)
 	}
 }
 

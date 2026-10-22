@@ -10,13 +10,13 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-// CapacityFormat names the response shape a home's capacity endpoint answers
+// CapacityFormat names the response shape a cluster's capacity endpoint answers
 // with.
 type CapacityFormat string
 
 // FormatReport carries a whole replica count (servable) for Ceiling mode or a
 // replica weight that may be fractional (weight) for Reported mode, plus an
-// observedAt stamp the home sets itself.
+// observedAt stamp the cluster sets itself.
 const FormatReport CapacityFormat = "Report"
 
 // CapacityFormatPlugin is one response shape the poller can read.

@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-func TestPlacementRequiresExplicitPolicy(t *testing.T) {
+func TestValidatePlacementIntent_PolicyMissingOrUnknown_Rejected(t *testing.T) {
 	for _, tt := range []struct {
 		name, payload string
 		invalid       bool
@@ -40,7 +40,7 @@ func TestPlacementRequiresExplicitPolicy(t *testing.T) {
 	}
 }
 
-func TestPlacementPolicyHandoff(t *testing.T) {
+func TestValidatePlacementPolicyUpdate_PolicyRemovedOrDowngraded_Rejected(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
 		old, new *v1beta1.PlacementSpec
@@ -54,9 +54,6 @@ func TestPlacementPolicyHandoff(t *testing.T) {
 		{name: "block placement removal", old: &v1beta1.PlacementSpec{Policy: v1beta1.PlacementPolicyClusterAffinity}, invalid: true},
 		{name: "block policy removal", old: &v1beta1.PlacementSpec{Policy: v1beta1.PlacementPolicyClusterAffinity}, new: &v1beta1.PlacementSpec{}, invalid: true},
 		{name: "block explicit downgrade", old: &v1beta1.PlacementSpec{Policy: v1beta1.PlacementPolicyClusterAffinity}, new: &v1beta1.PlacementSpec{Policy: v1beta1.PlacementPolicy("Legacy")}, invalid: true},
-		{name: "switch to per-component terms", old: &v1beta1.PlacementSpec{Policy: v1beta1.PlacementPolicyClusterAffinity}, new: &v1beta1.PlacementSpec{Policy: v1beta1.PlacementPolicyComponentAffinity}},
-		{name: "switch back to one shared list", old: &v1beta1.PlacementSpec{Policy: v1beta1.PlacementPolicyComponentAffinity}, new: &v1beta1.PlacementSpec{Policy: v1beta1.PlacementPolicyClusterAffinity}},
-		{name: "block per-component policy removal", old: &v1beta1.PlacementSpec{Policy: v1beta1.PlacementPolicyComponentAffinity}, new: &v1beta1.PlacementSpec{}, invalid: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidatePlacementPolicyUpdate(&v1beta1.InferenceServiceSpec{Placement: tt.old}, &v1beta1.InferenceServiceSpec{Placement: tt.new})

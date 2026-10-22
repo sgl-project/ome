@@ -499,15 +499,15 @@ func TestPolicyStatusForWrite_Detectors(t *testing.T) {
 		pp.now = func() time.Time { return base }
 		return pp
 	}
-	readyObs := policyHomeObservation{
+	readyObs := policyMemberObservation{
 		autoscaling: &v1beta1.CandidateAutoscalingStatus{Ready: true},
 		placedSince: base.Add(-10 * time.Minute),
 		allReported: true,
 	}
 
-	t.Run("all homes resolved", func(t *testing.T) {
+	t.Run("all members resolved", func(t *testing.T) {
 		r := &Reconciler{policy: newState()}
-		r.policy.recordHome(isvc.UID, "a", readyObs)
+		r.policy.recordMember(isvc.UID, "a", readyObs)
 		res := &placementResult{candidates: []v1beta1.CandidatePlacement{{Cluster: "a"}}}
 		agg := condOfType(r.policyStatusForWrite(isvc, res), v1beta1.AutoscalerPolicyAggregateCondition)
 		require.NotNil(t, agg)
@@ -522,7 +522,7 @@ func TestPolicyStatusForWrite_Detectors(t *testing.T) {
 		// The skew clock anchors at the first observation, so drive the
 		// injectable clock: observe 2 minutes before the evaluation pass.
 		r.policy.now = func() time.Time { return base.Add(-2 * time.Minute) }
-		r.policy.recordHome(isvc.UID, "a", policyHomeObservation{
+		r.policy.recordMember(isvc.UID, "a", policyMemberObservation{
 			autoscaling: &v1beta1.CandidateAutoscalingStatus{},
 		})
 		r.policy.now = func() time.Time { return base }
@@ -537,7 +537,7 @@ func TestPolicyStatusForWrite_Detectors(t *testing.T) {
 	t.Run("within the deadline stays true", func(t *testing.T) {
 		r := &Reconciler{policy: newState()}
 		r.policy.now = func() time.Time { return base.Add(-10 * time.Second) }
-		r.policy.recordHome(isvc.UID, "a", policyHomeObservation{
+		r.policy.recordMember(isvc.UID, "a", policyMemberObservation{
 			autoscaling: &v1beta1.CandidateAutoscalingStatus{},
 		})
 		r.policy.now = func() time.Time { return base }
@@ -551,7 +551,7 @@ func TestPolicyStatusForWrite_Detectors(t *testing.T) {
 		r := &Reconciler{policy: newState()}
 		obs := readyObs
 		obs.failedClosed = true
-		r.policy.recordHome(isvc.UID, "a", obs)
+		r.policy.recordMember(isvc.UID, "a", obs)
 		res := &placementResult{candidates: []v1beta1.CandidatePlacement{{Cluster: "a"}}}
 		agg := condOfType(r.policyStatusForWrite(isvc, res), v1beta1.AutoscalerPolicyAggregateCondition)
 		require.NotNil(t, agg)
@@ -561,7 +561,7 @@ func TestPolicyStatusForWrite_Detectors(t *testing.T) {
 
 	t.Run("field pruned outranks the rest", func(t *testing.T) {
 		r := &Reconciler{policy: newState()}
-		r.policy.recordHome(isvc.UID, "a", readyObs)
+		r.policy.recordMember(isvc.UID, "a", readyObs)
 		for i := 0; i < policyPruneRevertThreshold; i++ {
 			r.policy.recordPrune(isvc.UID, "a", true)
 		}
@@ -575,11 +575,11 @@ func TestPolicyStatusForWrite_Detectors(t *testing.T) {
 
 	t.Run("field pruned unlatches when the member leaves the fleet", func(t *testing.T) {
 		r := &Reconciler{policy: newState()}
-		r.policy.recordHome(isvc.UID, "a", readyObs)
+		r.policy.recordMember(isvc.UID, "a", readyObs)
 		for i := 0; i < policyPruneRevertThreshold; i++ {
 			r.policy.recordPrune(isvc.UID, "a", true)
 		}
-		// "a" is no longer in the pass's candidate/home set: the counter can
+		// "a" is no longer in the pass's candidate/member set: the counter can
 		// never reset via a re-apply there, so it must not hold the aggregate.
 		res := &placementResult{candidates: []v1beta1.CandidatePlacement{{Cluster: "b"}}}
 		agg := condOfType(r.policyStatusForWrite(isvc, res), v1beta1.AutoscalerPolicyAggregateCondition)
@@ -610,20 +610,20 @@ func TestObservePolicyRefStamp_ConsecutiveCount(t *testing.T) {
 	for i := 0; i < policyPruneRevertThreshold-1; i++ {
 		r.observePolicyRefStamp(src, "a", pruned, desired)
 	}
-	assert.Empty(t, r.policyState().prunedHomes(src.UID))
+	assert.Empty(t, r.policyState().prunedMembers(src.UID))
 
-	// The threshold-th consecutive revert flags the home.
+	// The threshold-th consecutive revert flags the member.
 	r.observePolicyRefStamp(src, "a", pruned, desired)
-	assert.Equal(t, []string{"a"}, r.policyState().prunedHomes(src.UID))
+	assert.Equal(t, []string{"a"}, r.policyState().prunedMembers(src.UID))
 
 	// An intact live object resets the consecutive counter.
 	r.observePolicyRefStamp(src, "a", intact, desired)
-	assert.Empty(t, r.policyState().prunedHomes(src.UID))
+	assert.Empty(t, r.policyState().prunedMembers(src.UID))
 
 	// A first-time create (no live object) is no evidence either way.
 	fresh := srcISVC("")
 	r.observePolicyRefStamp(src, "b", fresh, desired)
-	assert.Empty(t, r.policyState().prunedHomes(src.UID))
+	assert.Empty(t, r.policyState().prunedMembers(src.UID))
 }
 
 // End-to-end through Reconcile: preflight passes, the winner's lifted policy
@@ -672,7 +672,7 @@ func TestReconcile_PolicyLiftEndToEnd(t *testing.T) {
 	require.Len(t, o.Status.Placement.Candidates, 1)
 
 	auto := o.Status.Placement.Candidates[0].Autoscaling
-	require.NotNil(t, auto, "lifted per-home policy state must be published")
+	require.NotNil(t, auto, "lifted per-member policy state must be published")
 	assert.True(t, auto.Ready)
 	assert.Equal(t, "rv1:def", auto.Components[v1beta1.EngineComponent].ResolvedDigest)
 	require.Len(t, auto.Policies, 1)
@@ -847,7 +847,7 @@ func TestPreflightPolicies_TransientErrorUnverifiedStaysSkipped(t *testing.T) {
 }
 
 // A transient control-plane blip on the anchor GET holds actuation while the
-// standing home still refreshes from member state.
+// standing member still refreshes from member state.
 func TestReconcile_AnchorBlipDoesNotWipePlacedStatus(t *testing.T) {
 	s := testScheme(t)
 	w := workerWithReplicaCounts(t, s, "fresh.example.com", 2, 1)
@@ -874,7 +874,7 @@ func TestReconcile_AnchorBlipDoesNotWipePlacedStatus(t *testing.T) {
 	assert.False(t, staged, "no condition staged on a transient anchor blip")
 }
 
-func TestReconcile_PolicyHoldKeepsPresentDeadmittedHomeObservableAfterGrace(t *testing.T) {
+func TestReconcile_PolicyHoldKeepsPresentDeadmittedMemberObservableAfterGrace(t *testing.T) {
 	s := testScheme(t)
 	worker := workerWithGatedDerived(t, s)
 	src := placedSrcISVCWithRef("gpu=gb300")
@@ -891,7 +891,7 @@ func TestReconcile_PolicyHoldKeepsPresentDeadmittedHomeObservableAfterGrace(t *t
 	require.NotNil(t, p)
 	assert.Empty(t, p.Cluster, "expired grace releases winner ownership")
 	assert.Equal(t, v1beta1.PlacementPhaseAdmitting, p.Phase)
-	require.Len(t, p.Candidates, 1, "the present home must remain observable")
+	require.Len(t, p.Candidates, 1, "the present member must remain observable")
 	assert.Equal(t, "a", p.Candidates[0].Cluster)
 	assert.Equal(t, v1beta1.CandidatePhaseAdmitting, p.Candidates[0].Phase)
 	assert.Nil(t, p.Candidates[0].Endpoint)
@@ -1019,7 +1019,7 @@ func TestReconcile_RefRollbackClearsPolicyConditions(t *testing.T) {
 // so adding a ref to a long-placed ISVC (the standard migration flow) does
 // not start already past the deadline; a recreated derived (creation later
 // than the anchor) restarts the clock.
-func TestRecordHome_SkewClockAnchorsAtFirstObservation(t *testing.T) {
+func TestRecordMember_SkewClockAnchorsAtFirstObservation(t *testing.T) {
 	isvc := srcISVCWithRef("gpu=gb300")
 	base := time.Now()
 	pp := newPolicyPreflight(controllerconfig.AutoscalerPolicyPreflightConfig{SkewDeadlineSeconds: 60})
@@ -1033,18 +1033,18 @@ func TestRecordHome_SkewClockAnchorsAtFirstObservation(t *testing.T) {
 
 	// Ref added to a long-placed derived: creation time is far in the past,
 	// but the clock starts now, at the first observation.
-	oldDerived := policyHomeObservation{
+	oldDerived := policyMemberObservation{
 		autoscaling: &v1beta1.CandidateAutoscalingStatus{},
 		placedSince: base.Add(-24 * time.Hour),
 	}
-	pp.recordHome(isvc.UID, "a", oldDerived)
+	pp.recordMember(isvc.UID, "a", oldDerived)
 	agg := aggregateAt()
 	require.NotNil(t, agg)
 	assert.Equal(t, corev1.ConditionTrue, agg.Status, "migration flow must not start past the deadline")
 
-	// The deadline still fires once the home stays silent past it.
+	// The deadline still fires once the member stays silent past it.
 	now = base.Add(2 * time.Minute)
-	pp.recordHome(isvc.UID, "a", oldDerived)
+	pp.recordMember(isvc.UID, "a", oldDerived)
 	agg = aggregateAt()
 	require.NotNil(t, agg)
 	assert.Equal(t, corev1.ConditionFalse, agg.Status)
@@ -1054,7 +1054,7 @@ func TestRecordHome_SkewClockAnchorsAtFirstObservation(t *testing.T) {
 	// moves it forward.
 	recreated := oldDerived
 	recreated.placedSince = base.Add(90 * time.Second)
-	pp.recordHome(isvc.UID, "a", recreated)
+	pp.recordMember(isvc.UID, "a", recreated)
 	agg = aggregateAt()
 	require.NotNil(t, agg)
 	assert.Equal(t, corev1.ConditionTrue, agg.Status)

@@ -273,7 +273,7 @@ func TestStickyBackendRefreshRespectsMemberAbsence(t *testing.T) {
 				t.Fatal(err)
 			}
 			observations := newPlacementObservations(f.source, f.clusters)
-			observations.homes["member-a"] = homeObservation{state: homePresent, candidate: candidate}
+			observations.members["member-a"] = memberObservation{state: memberPresent, candidate: candidate}
 			if _, err := f.reconciler.reconcileSinglePlanned(ctx, f.source, f.clusters, []string{"member-a", "member-b"}, observations); err != nil {
 				t.Fatal(err)
 			}

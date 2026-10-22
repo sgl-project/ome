@@ -115,7 +115,7 @@ func TestProbeConfig_ClassifyStatus(t *testing.T) {
 	}
 }
 
-func TestProbePolicyDigestGolden(t *testing.T) {
+func TestProbePolicyDigest_TestConfig_MatchesTheRecordedValue(t *testing.T) {
 	policy := testProbePolicy(t, testProbeConfig())
 	const want = "sha256:0727917987fccf0698041a81bab6747de022a8646a172535143fc83540b7b210"
 	if policy.PolicyDigest != want {
@@ -123,7 +123,7 @@ func TestProbePolicyDigestGolden(t *testing.T) {
 	}
 }
 
-func TestNewProberRequiresDependenciesAndBound(t *testing.T) {
+func TestNewProber_NilDependencyOrNonPositiveBound_ReturnsError(t *testing.T) {
 	executor, err := NewObserverExecutor(1, 1)
 	if err != nil {
 		t.Fatalf("NewObserverExecutor() error = %v", err)
@@ -153,7 +153,7 @@ func TestNewProberRequiresDependenciesAndBound(t *testing.T) {
 	}
 }
 
-func TestCanonicalEndpoint(t *testing.T) {
+func TestCanonicalEndpoint_ValidAndInvalidURLs_NormalizesOrRejects(t *testing.T) {
 	tests := []struct {
 		name string
 		raw  string
@@ -181,7 +181,7 @@ func TestCanonicalEndpoint(t *testing.T) {
 	}
 }
 
-func TestProberReconcileUsesAbsoluteDeadlines(t *testing.T) {
+func TestProberReconcile_CalledEarlyLateOrOverdue_ProbesOnlyWhenDue(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
@@ -256,7 +256,7 @@ func TestProberReconcileUsesAbsoluteDeadlines(t *testing.T) {
 	}
 }
 
-func TestProberReconcileMaintainsHysteresisAcrossUnknown(t *testing.T) {
+func TestProberReconcile_InconclusiveBetweenPasses_KeepsGateUntilTwoSuccesses(t *testing.T) {
 	var status atomic.Int32
 	status.Store(http.StatusServiceUnavailable)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -319,7 +319,7 @@ func TestProberReconcileMaintainsHysteresisAcrossUnknown(t *testing.T) {
 	}
 }
 
-func TestProberReconcileKeepsServicesIndependent(t *testing.T) {
+func TestProberReconcile_TwoServicesWithOwnPolicies_KeepsStateAndPeriodsApart(t *testing.T) {
 	const (
 		pathA        = "/models/a/ready"
 		changedPathA = "/models/a/live"
@@ -349,6 +349,8 @@ func TestProberReconcileKeepsServicesIndependent(t *testing.T) {
 	clk := clocktesting.NewFakeClock(testProbeNow)
 	prober := newTestProber(t, client, clk, 1, 1, testProbeResponseBytes)
 
+	// Service A probes every second and gates after one failure; service B
+	// probes every four seconds and gates after three.
 	configA := testProbeConfig()
 	configA.Path = "/ready"
 	configA.Period = time.Second
@@ -389,37 +391,8 @@ func TestProberReconcileKeepsServicesIndependent(t *testing.T) {
 		Targets:  []Target{targetB},
 	}
 
-	if delay, err := prober.Reconcile(context.Background(), requestA); err != nil {
-		t.Fatalf("initial service A Reconcile() error = %v", err)
-	} else if delay != configA.Period {
-		t.Fatalf("initial service A delay = %s, want %s", delay, configA.Period)
-	}
-	if reachable := prober.Reachable(targetA); reachable == nil || *reachable {
-		t.Fatalf("service A Reachable() at its threshold = %v, want false", reachable)
-	}
-	if delay, err := prober.Reconcile(context.Background(), requestB); err != nil {
-		t.Fatalf("initial service B Reconcile() error = %v", err)
-	} else if delay != configB.Period {
-		t.Fatalf("initial service B delay = %s, want %s", delay, configB.Period)
-	}
-	assertB := func(wantFailures int32, wantGated bool, wantProbeTime time.Time) {
-		t.Helper()
-		probe := prober.Provenance(targetB)
-		if probe == nil || probe.PolicyDigest != policyB.PolicyDigest ||
-			probe.ConsecutiveFailures != wantFailures || probe.Gated != wantGated ||
-			probe.LastProbeTime == nil || !probe.LastProbeTime.Time.Equal(wantProbeTime) {
-			t.Fatalf("service B provenance = %+v, want failures=%d gated=%t time=%s",
-				probe, wantFailures, wantGated, wantProbeTime)
-		}
-	}
-	assertB(1, false, testProbeNow)
-	if got := requestCount(pathA); got != 1 {
-		t.Fatalf("service A requests to %q = %d, want 1", pathA, got)
-	}
-	if got := requestCount(pathB); got != 1 {
-		t.Fatalf("service B requests to %q = %d, want 1", pathB, got)
-	}
-
+	// Service A's policy then changes: another path, a two-second period and
+	// a threshold of two failures.
 	changedConfigA := configA
 	changedConfigA.Path = "/live"
 	changedConfigA.Period = 2 * time.Second
@@ -430,87 +403,153 @@ func TestProberReconcileKeepsServicesIndependent(t *testing.T) {
 	changedRequestA := requestA
 	changedRequestA.Policy = changedPolicyA
 	changedRequestA.Targets = []Target{changedTargetA}
-	if _, err := prober.Reconcile(context.Background(), changedRequestA); err != nil {
-		t.Fatalf("changed service A Reconcile() error = %v", err)
+
+	type provenance struct {
+		failures int32
+		gated    bool
+		probed   time.Time
 	}
-	if provenance := prober.Provenance(targetA); provenance != nil {
-		t.Fatalf("old service A provenance after policy change = %+v, want nil", provenance)
-	}
-	if probe := prober.Provenance(changedTargetA); probe == nil || probe.ConsecutiveFailures != 1 || probe.Gated {
-		t.Fatalf("changed service A provenance = %+v, want reset failure count", probe)
-	}
-	assertB(1, false, testProbeNow)
-	if delay, err := prober.Reconcile(context.Background(), requestB); err != nil {
-		t.Fatalf("service B Reconcile() after service A change error = %v", err)
-	} else if delay != configB.Period {
-		t.Fatalf("service B delay after service A change = %s, want %s", delay, configB.Period)
-	}
-	if got := requestCount(pathB); got != 1 {
-		t.Fatalf("service B requests after service A change = %d, want 1", got)
+	steps := []struct {
+		name            string
+		advance         time.Duration          // how far the clock moves before the step acts
+		reconcile       *ProbeReconcileRequest // the request the step reconciles, when set
+		forget          *types.NamespacedName  // the map the step forgets, when set
+		wantDelay       time.Duration          // the requeue delay Reconcile returns, when checked
+		wantGone        []Target               // targets that must have no provenance
+		wantFresh       []Target               // targets reset to one failure and no gate
+		wantReachable   []Target
+		wantUnreachable []Target
+		wantB           *provenance    // service B's provenance, under its own digest
+		wantRequests    map[string]int // probes sent per path so far
+	}{
+		{
+			name:            "service A fails once and gates at its threshold",
+			reconcile:       &requestA,
+			wantDelay:       configA.Period,
+			wantUnreachable: []Target{targetA},
+		},
+		{
+			name:         "service B fails once, below its threshold",
+			reconcile:    &requestB,
+			wantDelay:    configB.Period,
+			wantB:        &provenance{failures: 1, probed: testProbeNow},
+			wantRequests: map[string]int{pathA: 1, pathB: 1},
+		},
+		{
+			name:      "a policy change on A resets A and leaves B alone",
+			reconcile: &changedRequestA,
+			wantGone:  []Target{targetA},
+			wantFresh: []Target{changedTargetA},
+			wantB:     &provenance{failures: 1, probed: testProbeNow},
+		},
+		{
+			name:         "B keeps its period after the change on A",
+			reconcile:    &requestB,
+			wantDelay:    configB.Period,
+			wantRequests: map[string]int{pathB: 1},
+		},
+		{
+			name:     "forgetting A drops A and leaves B alone",
+			forget:   &mapA,
+			wantGone: []Target{changedTargetA},
+			wantB:    &provenance{failures: 1, probed: testProbeNow},
+		},
+		{
+			name:      "B keeps its period after A was forgotten",
+			reconcile: &requestB,
+			wantDelay: configB.Period,
+		},
+		{
+			name:         "A starts over with one fresh failure",
+			reconcile:    &changedRequestA,
+			wantFresh:    []Target{changedTargetA},
+			wantB:        &provenance{failures: 1, probed: testProbeNow},
+			wantRequests: map[string]int{changedPathA: 2},
+		},
+		{
+			name:            "A fails a second time and gates at its new threshold",
+			advance:         changedConfigA.Period,
+			reconcile:       &changedRequestA,
+			wantUnreachable: []Target{changedTargetA},
+			wantB:           &provenance{failures: 1, probed: testProbeNow},
+		},
+		{
+			name:         "B is early and waits out the rest of its period",
+			reconcile:    &requestB,
+			wantDelay:    configB.Period - changedConfigA.Period,
+			wantRequests: map[string]int{pathB: 1},
+		},
+		{
+			name:          "B fails a second time and stays reachable",
+			advance:       configB.Period - changedConfigA.Period,
+			reconcile:     &requestB,
+			wantB:         &provenance{failures: 2, probed: testProbeNow.Add(configB.Period)},
+			wantReachable: []Target{targetB},
+		},
+		{
+			name:            "B fails a third time and gates",
+			advance:         configB.Period,
+			reconcile:       &requestB,
+			wantB:           &provenance{failures: 3, gated: true, probed: testProbeNow.Add(2 * configB.Period)},
+			wantUnreachable: []Target{targetB},
+			wantRequests:    map[string]int{pathB: configB.FailureThreshold},
+		},
 	}
 
-	prober.Forget(mapA)
-	if provenance := prober.Provenance(changedTargetA); provenance != nil {
-		t.Fatalf("service A provenance after Forget() = %+v, want nil", provenance)
-	}
-	assertB(1, false, testProbeNow)
-	if delay, err := prober.Reconcile(context.Background(), requestB); err != nil {
-		t.Fatalf("service B Reconcile() after service A Forget() error = %v", err)
-	} else if delay != configB.Period {
-		t.Fatalf("service B delay after service A Forget() = %s, want %s", delay, configB.Period)
-	}
-
-	if _, err := prober.Reconcile(context.Background(), changedRequestA); err != nil {
-		t.Fatalf("reset service A Reconcile() error = %v", err)
-	}
-	if probe := prober.Provenance(changedTargetA); probe == nil || probe.ConsecutiveFailures != 1 || probe.Gated {
-		t.Fatalf("reset service A provenance = %+v, want one fresh failure", probe)
-	}
-	assertB(1, false, testProbeNow)
-	if got := requestCount(changedPathA); got != 2 {
-		t.Fatalf("changed service A requests to %q = %d, want 2", changedPathA, got)
-	}
-
-	clk.Step(changedConfigA.Period)
-	if _, err := prober.Reconcile(context.Background(), changedRequestA); err != nil {
-		t.Fatalf("second changed service A Reconcile() error = %v", err)
-	}
-	if reachable := prober.Reachable(changedTargetA); reachable == nil || *reachable {
-		t.Fatalf("changed service A Reachable() at its threshold = %v, want false", reachable)
-	}
-	assertB(1, false, testProbeNow)
-	if delay, err := prober.Reconcile(context.Background(), requestB); err != nil {
-		t.Fatalf("early service B Reconcile() error = %v", err)
-	} else if delay != configB.Period-changedConfigA.Period {
-		t.Fatalf("early service B delay = %s, want %s", delay, configB.Period-changedConfigA.Period)
-	}
-	if got := requestCount(pathB); got != 1 {
-		t.Fatalf("early service B requests = %d, want 1", got)
-	}
-
-	clk.Step(configB.Period - changedConfigA.Period)
-	if _, err := prober.Reconcile(context.Background(), requestB); err != nil {
-		t.Fatalf("second service B Reconcile() error = %v", err)
-	}
-	assertB(2, false, testProbeNow.Add(configB.Period))
-	if reachable := prober.Reachable(targetB); reachable == nil || !*reachable {
-		t.Fatalf("service B Reachable() below its threshold = %v, want true", reachable)
-	}
-
-	clk.Step(configB.Period)
-	if _, err := prober.Reconcile(context.Background(), requestB); err != nil {
-		t.Fatalf("third service B Reconcile() error = %v", err)
-	}
-	assertB(3, true, testProbeNow.Add(2*configB.Period))
-	if reachable := prober.Reachable(targetB); reachable == nil || *reachable {
-		t.Fatalf("service B Reachable() at its threshold = %v, want false", reachable)
-	}
-	if got := requestCount(pathB); got != configB.FailureThreshold {
-		t.Fatalf("service B requests to %q = %d, want %d", pathB, got, configB.FailureThreshold)
+	for _, step := range steps {
+		if step.advance > 0 {
+			clk.Step(step.advance)
+		}
+		if step.reconcile != nil {
+			delay, err := prober.Reconcile(context.Background(), *step.reconcile)
+			if err != nil {
+				t.Fatalf("%s: Reconcile() error = %v", step.name, err)
+			}
+			if step.wantDelay != 0 && delay != step.wantDelay {
+				t.Fatalf("%s: delay = %s, want %s", step.name, delay, step.wantDelay)
+			}
+		}
+		if step.forget != nil {
+			prober.Forget(*step.forget)
+		}
+		for _, target := range step.wantGone {
+			if probe := prober.Provenance(target); probe != nil {
+				t.Fatalf("%s: provenance of %s = %+v, want nil", step.name, target.URL, probe)
+			}
+		}
+		for _, target := range step.wantFresh {
+			if probe := prober.Provenance(target); probe == nil || probe.ConsecutiveFailures != 1 || probe.Gated {
+				t.Fatalf("%s: provenance of %s = %+v, want one fresh failure", step.name, target.URL, probe)
+			}
+		}
+		for _, target := range step.wantReachable {
+			if reachable := prober.Reachable(target); reachable == nil || !*reachable {
+				t.Fatalf("%s: Reachable(%s) = %v, want true", step.name, target.URL, reachable)
+			}
+		}
+		for _, target := range step.wantUnreachable {
+			if reachable := prober.Reachable(target); reachable == nil || *reachable {
+				t.Fatalf("%s: Reachable(%s) = %v, want false", step.name, target.URL, reachable)
+			}
+		}
+		if want := step.wantB; want != nil {
+			probe := prober.Provenance(targetB)
+			if probe == nil || probe.PolicyDigest != policyB.PolicyDigest ||
+				probe.ConsecutiveFailures != want.failures || probe.Gated != want.gated ||
+				probe.LastProbeTime == nil || !probe.LastProbeTime.Time.Equal(want.probed) {
+				t.Fatalf("%s: service B provenance = %+v, want failures=%d gated=%t time=%s",
+					step.name, probe, want.failures, want.gated, want.probed)
+			}
+		}
+		for path, want := range step.wantRequests {
+			if got := requestCount(path); got != want {
+				t.Fatalf("%s: requests to %q = %d, want %d", step.name, path, got, want)
+			}
+		}
 	}
 }
 
-func TestProberHydratesOnlyExactPersistedIdentity(t *testing.T) {
+func TestProberReconcile_PersistedProbeState_ResumesOnlyOnExactIdentity(t *testing.T) {
 	config := testProbeConfig()
 	policy := testProbePolicy(t, config)
 	lastProbeTime := metav1.NewTime(testProbeNow)
@@ -665,7 +704,7 @@ func TestProberHydratesOnlyExactPersistedIdentity(t *testing.T) {
 	}
 }
 
-func TestProberRejectsLatePredecessorResult(t *testing.T) {
+func TestProber_ForgottenProbeFinishesLate_ResultIsIgnored(t *testing.T) {
 	firstStarted := make(chan struct{})
 	releaseFirst := make(chan struct{})
 	var requests atomic.Int32
@@ -727,7 +766,7 @@ func TestProberRejectsLatePredecessorResult(t *testing.T) {
 	}
 }
 
-func TestProberIdentityChangeResetsAndPrunesState(t *testing.T) {
+func TestProber_OwnerOrPolicyChanges_DropsOldStateAndStartsFresh(t *testing.T) {
 	var status atomic.Int32
 	status.Store(http.StatusServiceUnavailable)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -815,7 +854,7 @@ func TestProberIdentityChangeResetsAndPrunesState(t *testing.T) {
 	}
 }
 
-func TestProberRejectsAmbiguousIdentity(t *testing.T) {
+func TestProberReconcile_RequestMissingAnIdentityField_ReturnsError(t *testing.T) {
 	policy := testProbePolicy(t, testProbeConfig())
 	clk := clocktesting.NewFakeClock(testProbeNow)
 	prober := newTestProber(t, NewObserverClient(), clk, 1, 1, testProbeResponseBytes)
@@ -843,7 +882,7 @@ func TestProberRejectsAmbiguousIdentity(t *testing.T) {
 	}
 }
 
-func TestProberTimeoutStartsAfterExecutorDequeues(t *testing.T) {
+func TestProber_RequestWaitsForAWorker_TimeoutStartsWhenItRuns(t *testing.T) {
 	for _, tt := range []struct {
 		name          string
 		queueTimeouts int
@@ -913,7 +952,7 @@ func TestProberTimeoutStartsAfterExecutorDequeues(t *testing.T) {
 	}
 }
 
-func TestObserverClientRefusesRedirects(t *testing.T) {
+func TestObserverClient_EndpointRedirects_ProbeIsInconclusiveNoFollow(t *testing.T) {
 	var redirectedRequests atomic.Int32
 	destination := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		redirectedRequests.Add(1)
@@ -941,7 +980,7 @@ func TestObserverClientRefusesRedirects(t *testing.T) {
 	}
 }
 
-func TestProberTreatsResponseBodyTimeoutAsFailure(t *testing.T) {
+func TestProbeOne_BodyNeverArrives_FailsWithDeadlineExceeded(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		if flusher, ok := w.(http.Flusher); ok {
@@ -964,7 +1003,7 @@ func TestProberTreatsResponseBodyTimeoutAsFailure(t *testing.T) {
 	}
 }
 
-func TestProberJoinsPathsAndTreatsTransportFailureAsFailure(t *testing.T) {
+func TestProbeOne_EndpointWithPathThenClosed_JoinsPathThenFails(t *testing.T) {
 	paths := make(chan string, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		paths <- request.URL.Path
@@ -1017,7 +1056,7 @@ func (b *trackingBody) Close() error {
 	return nil
 }
 
-func TestProberBoundsAndClosesResponseBody(t *testing.T) {
+func TestProbeOne_LongResponseBody_ReadsOnlyTheBoundAndCloses(t *testing.T) {
 	const responseBound int64 = 7
 	body := &trackingBody{reader: strings.NewReader(strings.Repeat("x", 100))}
 	client := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
@@ -1047,7 +1086,7 @@ func TestProberBoundsAndClosesResponseBody(t *testing.T) {
 	}
 }
 
-func TestTargetsFromTrafficMapsCarriesIdentityAndSorts(t *testing.T) {
+func TestTargetsFromTrafficMaps_EntriesOutOfOrder_SortsByClusterWithIdentity(t *testing.T) {
 	mustURL := func(raw string) *apis.URL {
 		parsed, err := apis.ParseURL(raw)
 		if err != nil {
@@ -1093,7 +1132,7 @@ func TestTargetsFromTrafficMapsCarriesIdentityAndSorts(t *testing.T) {
 	}
 }
 
-func TestTargetsFromTrafficMapsRequiresExactControllerOwner(t *testing.T) {
+func TestTargetsFromTrafficMaps_OwnerReferenceOff_ReturnsNoTargets(t *testing.T) {
 	controller := true
 	valid := v1beta1.TrafficMap{
 		ObjectMeta: metav1.ObjectMeta{

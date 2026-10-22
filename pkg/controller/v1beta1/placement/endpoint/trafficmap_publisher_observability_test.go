@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-func TestTrafficMapPublicationFallbackMetricTracksConditionAndDeletion(t *testing.T) {
+func TestTrafficMapFallbackMetric_ConditionFlipsThenMapDeleted_TracksAndDropsSeries(t *testing.T) {
 	trafficMapPublicationFallback.Reset()
 	t.Cleanup(trafficMapPublicationFallback.Reset)
 

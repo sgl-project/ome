@@ -81,7 +81,7 @@ func withFinalizer(q *v1beta1.AcceleratorQuota) *v1beta1.AcceleratorQuota {
 // A node being deleted must not be rendered. It is on its way out of the tree,
 // and writing its objects in the same pass that reaps them makes the reap look
 // like it failed -- and, worse, can leave the objects behind.
-func TestReconcileExcludesDeletingNodesFromTheWrite(t *testing.T) {
+func TestReconcile_NodeDeleting_IsLeftOutOfTheBackendWrite(t *testing.T) {
 	tests := []struct {
 		name      string
 		quotas    []client.Object
@@ -137,7 +137,7 @@ func TestReconcileExcludesDeletingNodesFromTheWrite(t *testing.T) {
 // Reaping a departing node has to happen before applying the live tree. The two
 // can name the same object transiently -- a leaf deleted and recreated under a
 // different parent, say -- and reaping second deletes what the pass just wrote.
-func TestReconcileReapsBeforeItApplies(t *testing.T) {
+func TestReconcile_NodeDeleting_SweepsBeforeMaterializing(t *testing.T) {
 	tests := []struct {
 		name      string
 		quotas    []client.Object
@@ -183,7 +183,7 @@ func TestReconcileReapsBeforeItApplies(t *testing.T) {
 // invariant is retained rather than written, and the sweep is told to keep it.
 // Sweeping it would turn one misauthored parent into a quota outage for every
 // tenant beneath it.
-func TestReconcileRetainsFrozenNodesAndKeepsTheirObjects(t *testing.T) {
+func TestReconcile_SubtreeViolatesContainment_RetainsNodesAndKeepsObjects(t *testing.T) {
 	tests := []struct {
 		name         string
 		quotas       []client.Object
@@ -252,7 +252,7 @@ func TestReconcileRetainsFrozenNodesAndKeepsTheirObjects(t *testing.T) {
 // The finalizer is what makes deletion reap rather than orphan. Without it a
 // deleted CR leaves its ClusterQueue behind, still admitting workloads against a
 // budget nobody can see.
-func TestReconcileManagesTheFinalizer(t *testing.T) {
+func TestReconcile_MaterializationOnOrOff_ClaimsFinalizerOnlyWhenOn(t *testing.T) {
 	tests := []struct {
 		name          string
 		quotas        []client.Object
@@ -311,7 +311,7 @@ func TestReconcileManagesTheFinalizer(t *testing.T) {
 
 // A departing node's finalizer is released only once its objects are reaped, and
 // the reap must not take the surviving tree's objects with it.
-func TestReconcileReleasesTheFinalizerAfterReaping(t *testing.T) {
+func TestReconcile_NodeDeleting_ReleasesFinalizerAfterSweepingItsObjects(t *testing.T) {
 	b := &recordingBackend{}
 	r, c := materializingReconciler(t, b,
 		cohort(rootName, ""),
@@ -349,7 +349,7 @@ func TestReconcileReleasesTheFinalizerAfterReaping(t *testing.T) {
 
 // A backend problem on one node is reported on that node and nowhere else. One
 // tenant's typo must not hold every other tenant's quota hostage.
-func TestReconcileReportsPerNodeMaterializationOutcome(t *testing.T) {
+func TestReconcile_BackendFailsOneNode_ReportsItOnThatNodeOnly(t *testing.T) {
 	tests := []struct {
 		name        string
 		outcomes    map[string]backend.NodeOutcome
@@ -421,7 +421,7 @@ func TestReconcileReportsPerNodeMaterializationOutcome(t *testing.T) {
 // Ready and Degraded, so a pass where nothing moved except Materialized -- or the
 // freeze bookkeeping -- was judged a no-op and the condition never reached the
 // API at all.
-func TestEqualStatusSeesMaterializationChanges(t *testing.T) {
+func TestEqualStatus_MaterializationFieldsMove_ReportsChangeExceptTimestamp(t *testing.T) {
 	materialized := func(status metav1.ConditionStatus, reason string) metav1.Condition {
 		return metav1.Condition{Type: v1beta1.AcceleratorQuotaMaterialized, Status: status, Reason: reason}
 	}
@@ -487,7 +487,7 @@ func ptrTime(t metav1.Time) *metav1.Time { return &t }
 
 // A backend that cannot run at all fails the pass, so it is retried with
 // backoff rather than leaving every node reporting a stale condition.
-func TestReconcileSurfacesBackendFailure(t *testing.T) {
+func TestReconcile_BackendMaterializeOrSweepFails_FailsThePass(t *testing.T) {
 	tests := []struct {
 		name    string
 		backend *recordingBackend

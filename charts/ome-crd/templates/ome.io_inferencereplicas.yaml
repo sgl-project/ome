@@ -2038,6 +2038,8 @@ spec:
               observedGeneration:
                 format: int64
                 type: integer
+              observedTemplateHash:
+                type: string
               placementObservedGeneration:
                 format: int64
                 minimum: 1

@@ -63,7 +63,7 @@ func TestValidateCoordination_InvalidComponentName(t *testing.T) {
 	}
 }
 
-func TestValidateCoordination_OrphanGroup(t *testing.T) {
+func TestValidateCoordination_GroupNamesUndeclaredComponent_Rejected(t *testing.T) {
 	// Spec declares only engine; group references decoder + router.
 	spec := omeNativeEngineOnlySpec()
 	spec.Rollout = &v1beta1.RolloutSpec{
@@ -212,6 +212,42 @@ func TestValidateCoordination_ToleranceRange(t *testing.T) {
 	}
 }
 
+// TestValidateCoordination_MaintainRatioNeedsTwoComponents pins that
+// maintainRatio on a one-Component group is refused: there is no second
+// side to keep a ratio with, and the engine would ignore the field without
+// a word. The same field on an engine+decoder group is accepted.
+func TestValidateCoordination_MaintainRatioNeedsTwoComponents(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		components []v1beta1.ComponentType
+		wantErr    bool
+	}{
+		{name: "engine alone", components: []v1beta1.ComponentType{v1beta1.EngineComponent}, wantErr: true},
+		{name: "engine and decoder", components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := omeNativePDSpec()
+			spec.Rollout = &v1beta1.RolloutSpec{
+				Groups: []v1beta1.RolloutGroup{{
+					Components:    tc.components,
+					RollingUpdate: &v1beta1.GroupRollingUpdate{},
+					MaintainRatio: &v1beta1.MaintainRatio{Tolerance: ptr.To(int32(10))},
+				}},
+			}
+			err := ValidateCoordination(spec)
+			if tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), ReasonMaintainRatioUnpaired) {
+					t.Fatalf("got %v, want a refusal carrying %s", err, ReasonMaintainRatioUnpaired)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestCoordinationRatioToleranceWarning_OmittedToleranceEmpty(t *testing.T) {
 	// maintainRatio with no tolerance defers to the operator-configured
 	// default; the webhook cannot know that value, so it must not warn.
@@ -331,10 +367,10 @@ func TestValidateCoordination_ZeroBudgetPacingRejected(t *testing.T) {
 	}
 }
 
-// TestValidateCoordination_SoakOnNonCollapsingRejected: a multi-Component
+// TestValidateCoordination_WaitAfterReadinessOnMultiMemberGroup_Rejected: a multi-Component
 // blueGreen group with a soak does not collapse to the Sequential state machine,
 // so the engine would drop the soak. Admission rejects it.
-func TestValidateCoordination_SoakOnNonCollapsingRejected(t *testing.T) {
+func TestValidateCoordination_WaitAfterReadinessOnMultiMemberGroup_Rejected(t *testing.T) {
 	mode := constants.OMENative
 	soak := &metav1.Duration{Duration: 10 * time.Minute}
 	spec := &v1beta1.InferenceServiceSpec{
@@ -352,9 +388,9 @@ func TestValidateCoordination_SoakOnNonCollapsingRejected(t *testing.T) {
 	}
 }
 
-// TestValidateCoordination_SoakOnSequenceAccepted: a run of single-Component
+// TestValidateCoordination_WaitAfterReadinessOnSingleMemberRun_Accepted: a run of single-Component
 // blueGreen groups collapses to Sequential, which honors soak, so it passes.
-func TestValidateCoordination_SoakOnSequenceAccepted(t *testing.T) {
+func TestValidateCoordination_WaitAfterReadinessOnSingleMemberRun_Accepted(t *testing.T) {
 	mode := constants.OMENative
 	soak := &metav1.Duration{Duration: 10 * time.Minute}
 	spec := &v1beta1.InferenceServiceSpec{
@@ -664,7 +700,7 @@ func TestValidateCoordination_RatioBalancedWithZeroBudgetNotRejected(t *testing.
 	}
 }
 
-func TestValidateCoordinationUpdate_RollingUpdateBothBumped(t *testing.T) {
+func TestCoordinationUpdateWarnings_RollingUpdateBothImagesChange_NoWarning(t *testing.T) {
 	oldSpec := omeNativePDSpecWithImages("v1", "v1")
 	newSpec := omeNativePDSpecWithImages("v2", "v2")
 	newSpec.Rollout = &v1beta1.RolloutSpec{
@@ -672,12 +708,15 @@ func TestValidateCoordinationUpdate_RollingUpdateBothBumped(t *testing.T) {
 			{Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent}, RollingUpdate: &v1beta1.GroupRollingUpdate{}},
 		},
 	}
-	if err := ValidateCoordinationUpdate(oldSpec, newSpec); err != nil {
-		t.Errorf("pairedmixable both-bumped: unexpected error %v", err)
+	if w := CoordinationUpdateWarnings(oldSpec, newSpec); len(w) != 0 {
+		t.Errorf("both bumped: unexpected warnings %q", w)
 	}
 }
 
-func TestValidateCoordinationUpdate_RollingUpdateOnlyOneBumpedRejected(t *testing.T) {
+// One member's image bumped alone is admitted with one warning: the group's
+// members need not change together; the bumped member rolls and the other
+// keeps its revision.
+func TestCoordinationUpdateWarnings_RollingUpdateOneImageChanges_WarnsOnce(t *testing.T) {
 	oldSpec := omeNativePDSpecWithImages("v1", "v1")
 	newSpec := omeNativePDSpecWithImages("v2", "v1")
 	newSpec.Rollout = &v1beta1.RolloutSpec{
@@ -685,13 +724,13 @@ func TestValidateCoordinationUpdate_RollingUpdateOnlyOneBumpedRejected(t *testin
 			{Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent}, RollingUpdate: &v1beta1.GroupRollingUpdate{}},
 		},
 	}
-	err := ValidateCoordinationUpdate(oldSpec, newSpec)
-	if err == nil || !strings.Contains(err.Error(), ReasonRollingUpdateLockstepViolation) {
-		t.Errorf("rollingupdate lockstep: got %v want %s", err, ReasonRollingUpdateLockstepViolation)
+	w := CoordinationUpdateWarnings(oldSpec, newSpec)
+	if len(w) != 1 || !strings.Contains(w[0], "only the engine changes; the decoder keeps its revision and rolls nothing") {
+		t.Errorf("engine image bumped alone: warnings = %q, want one naming the decoder as keeping its revision", w)
 	}
 }
 
-func TestValidateCoordinationUpdate_RollingUpdateNoBumpsNoOp(t *testing.T) {
+func TestCoordinationUpdateWarnings_RollingUpdateNoImageChange_NoWarning(t *testing.T) {
 	oldSpec := omeNativePDSpecWithImages("v1", "v1")
 	newSpec := omeNativePDSpecWithImages("v1", "v1")
 	newSpec.Rollout = &v1beta1.RolloutSpec{
@@ -699,8 +738,8 @@ func TestValidateCoordinationUpdate_RollingUpdateNoBumpsNoOp(t *testing.T) {
 			{Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent}, RollingUpdate: &v1beta1.GroupRollingUpdate{}},
 		},
 	}
-	if err := ValidateCoordinationUpdate(oldSpec, newSpec); err != nil {
-		t.Errorf("no bumps: unexpected error %v", err)
+	if w := CoordinationUpdateWarnings(oldSpec, newSpec); len(w) != 0 {
+		t.Errorf("no bumps: unexpected warnings %q", w)
 	}
 }
 

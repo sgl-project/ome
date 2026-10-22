@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
-// BuildHeadlessService produces the per-Component headless Service that
+// buildHeadlessService produces the per-Component headless Service that
 // gives every workload-managed pod a stable FQDN of the form
 //
 //	<pod-name>.<spec.Name>.<spec.Namespace>.svc.<cluster-domain>
@@ -40,12 +40,12 @@ import (
 // Pure compute, no I/O. Returns an error (rather than panicking) when
 // the spec is missing required fields so callers — including tests —
 // can fail loud at the boundary.
-func BuildHeadlessService(spec types.PerComponentServiceSpec) (*corev1.Service, error) {
+func buildHeadlessService(spec types.PerComponentServiceSpec) (*corev1.Service, error) {
 	if spec.Name == "" {
-		return nil, fmt.Errorf("BuildHeadlessService: empty Name")
+		return nil, fmt.Errorf("buildHeadlessService: empty Name")
 	}
 	if spec.Namespace == "" {
-		return nil, fmt.Errorf("BuildHeadlessService: empty Namespace")
+		return nil, fmt.Errorf("buildHeadlessService: empty Namespace")
 	}
 
 	return &corev1.Service{
@@ -71,7 +71,7 @@ func BuildHeadlessService(spec types.PerComponentServiceSpec) (*corev1.Service, 
 }
 
 // ReconcileHeadlessService ensures the per-Component headless Service
-// (`spec.Name`) exists and matches the spec BuildHeadlessService
+// (`spec.Name`) exists and matches the spec buildHeadlessService
 // produces. Idempotent and drift-correcting: on every reconcile it
 // patches Selector / PublishNotReadyAddresses / Type / Labels /
 // OwnerReferences back to the controller-desired shape, but never
@@ -87,7 +87,7 @@ func ReconcileHeadlessService(ctx context.Context, c client.Client, spec types.P
 		return fmt.Errorf("ReconcileHeadlessService: nil client")
 	}
 
-	desired, err := BuildHeadlessService(spec)
+	desired, err := buildHeadlessService(spec)
 	if err != nil {
 		return fmt.Errorf("ReconcileHeadlessService: build desired: %w", err)
 	}
@@ -110,7 +110,7 @@ func ReconcileHeadlessService(ctx context.Context, c client.Client, spec types.P
 		target.Spec.PublishNotReadyAddresses = desired.Spec.PublishNotReadyAddresses
 		target.Spec.Selector = desired.Spec.Selector
 		target.Spec.Type = desired.Spec.Type
-		// Ports stay nil — see BuildHeadlessService comment for why
+		// Ports stay nil — see buildHeadlessService comment for why
 		// (peer-DNS only, no kube-proxy routing).
 		target.Labels = desired.Labels
 		target.OwnerReferences = desired.OwnerReferences

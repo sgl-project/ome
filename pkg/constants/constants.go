@@ -235,6 +235,19 @@ var (
 	// itself changes.
 	InferenceReplicaParentGenerationAnnotationKey = OMEAPIGroupName + "/parent-generation"
 
+	// InferenceReplicaTemplateHashAnnotationKey is the hash of the pod
+	// templates a projected InferenceReplica's spec holds, with the gang
+	// settings a revision covers and without the inherited annotation keys
+	// the revision leaves out. The projector stamps it in the same write as
+	// the templates, so it moves exactly when the spec's revision would and
+	// stays put when only an excluded annotation value, the replica count,
+	// a pause, a partition or a rollback target changes. The replica's
+	// status repeats it (observedTemplateHash) once updateRevision was
+	// computed from those templates; a reader compares the two to tell a
+	// status written for the spec in hand from one that still predates it,
+	// which metadata.generation cannot, since it moves on every spec write.
+	InferenceReplicaTemplateHashAnnotationKey = OMEAPIGroupName + "/template-hash"
+
 	// InferenceReplicaComposedFieldsAnnotationKey records the rollout-control
 	// fields an InferenceService holds on a replica it references without
 	// projecting it. The admission webhook lets only the configured

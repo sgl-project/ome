@@ -11,18 +11,18 @@ import (
 	"sigs.k8s.io/ome/scheduler/pkg/topology"
 )
 
-// TestPluginName pins the registered plugin name referenced from the scheduler
+// TestName_Plugin_ReturnsRegisteredName locks the registered plugin name referenced from the scheduler
 // config.
-func TestPluginName(t *testing.T) {
+func TestName_Plugin_ReturnsRegisteredName(t *testing.T) {
 	if got := (&GangPack{}).Name(); got != Name {
 		t.Fatalf("Name() = %q, want %q", got, Name)
 	}
 }
 
-func TestFilterProtectsOutstandingGangReservationFromStandalonePod(t *testing.T) {
-	g := &GangPack{pins: placement.New()}
-	g.pins.ChooseInTopology("team/pf", testKey, topology.FreeByDomain{"a": 2}, 2)
-	state := newCycleState() // standalone pod has no gang pin
+func TestFilter_StandalonePodOnReservedDomain_RejectsOnlyThatDomain(t *testing.T) {
+	g := &GangPack{assignments: placement.New()}
+	g.assignments.ChooseInTopology("team/pf", testKey, topology.FreeByDomain{"a": 2}, 2)
+	state := newCycleState() // standalone pod has no gang assignment
 	if status := g.Filter(context.Background(), state, gpuPod("4"), nodeInfo(gpuNode("a1", "a", "4"))); status.Code() != framework.UnschedulableAndUnresolvable {
 		t.Fatalf("reserved-domain Filter = %v, want UnschedulableAndUnresolvable", status)
 	}
@@ -31,24 +31,24 @@ func TestFilterProtectsOutstandingGangReservationFromStandalonePod(t *testing.T)
 	}
 }
 
-// TestFilterEnforcesPinnedDomain: once a gang is pinned to a domain (PreFilter
+// TestFilter_GangAssignedToDomain_AdmitsOnlyThatDomainsNodes: once a gang is assigned to a domain (PreFilter
 // records it in CycleState), Filter admits only nodes in that domain and rejects
 // the rest as UnschedulableAndUnresolvable — a wrong-domain node can't become
 // right by preempting on it, so the scheduler shouldn't waste preemption there.
-// With no pin recorded (not a pinned gang member), Filter imposes no constraint.
-func TestFilterEnforcesPinnedDomain(t *testing.T) {
+// With no assignment recorded (not an assigned gang member), Filter imposes no constraint.
+func TestFilter_GangAssignedToDomain_AdmitsOnlyThatDomainsNodes(t *testing.T) {
 	g := &GangPack{}
 	ctx := context.Background()
 	pod := &v1.Pod{}
 
-	// No pin recorded -> any node passes.
+	// No assignment recorded -> any node passes.
 	st := newCycleState()
 	if s := g.Filter(ctx, st, pod, nodeInfo(gpuNode("n0", "a", "4"))); !s.IsSuccess() {
-		t.Fatalf("no-pin Filter = %v, want Success", s)
+		t.Fatalf("no-assignment Filter = %v, want Success", s)
 	}
 
-	// Pin the gang to domain "a".
-	writePin(st, "a", gangInfo{topologyKey: testKey})
+	// Assign the gang to domain "a".
+	writeAssignment(st, "a", gangInfo{topologyKey: testKey})
 
 	if s := g.Filter(ctx, st, pod, nodeInfo(gpuNode("n1", "a", "4"))); !s.IsSuccess() {
 		t.Fatalf("in-domain Filter = %v, want Success", s)
@@ -59,7 +59,7 @@ func TestFilterEnforcesPinnedDomain(t *testing.T) {
 		t.Fatalf("out-of-domain Filter = %v, want UnschedulableAndUnresolvable", got)
 	}
 
-	// A node with no domain label is not the pinned domain -> rejected too.
+	// A node with no domain label is not the assigned domain -> rejected too.
 	if s := g.Filter(ctx, st, pod, nodeInfo(gpuNode("n3", "", "4"))); s.IsSuccess() {
 		t.Fatalf("no-domain-label Filter = Success, want rejected")
 	}

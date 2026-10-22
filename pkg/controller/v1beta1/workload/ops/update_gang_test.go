@@ -3133,6 +3133,102 @@ func TestGangSurgeUpdate_DrainGateHoldsTheSourceGang(t *testing.T) {
 	}
 }
 
+// TestGangSurgeUpdate_SupersededSurge_PairingHoldKeepsTheReplacementGang is
+// the gang twin of the pairing hold at a superseded surge: the replacement
+// gang is complete, PodReady and in rotation while the source gang still
+// serves, and the desired revision moved on past the pinned one. The
+// redirect asks the drain gate about the replacement members before
+// withdrawing them; a Pairing hold keeps them, the hand-over asks about the
+// source members and takes them out of rotation when admitted, and an
+// event names the choice. The source gang leaves rotation only through the
+// gate; the replacement gang never does.
+func TestGangSurgeUpdate_SupersededSurge_PairingHoldKeepsTheReplacementGang(t *testing.T) {
+	legacyResetExpectations(t)
+	isvc, _ := surgeISVCReady("gang-d", "prod", 1)
+	plan := gangSurgePlan()
+
+	const v1Name, v2Name, v3Name = "gang-d-engine-rev-v1hash", "gang-d-engine-rev-v2hash", "gang-d-engine-rev-v3hash"
+	ir := gangSurgeInFlightIR(isvc, v1Name, v2Name)
+	c := gangSchedClient(t, isvc, ir)
+	makeCR(t, c, isvc, v1Name)
+	makeCR(t, c, isvc, v2Name)
+	v3 := makeCR(t, c, isvc, v3Name)
+	v1Hash := query.RevisionHashFromControllerRevisionName(v1Name)
+	v2Hash := query.RevisionHashFromControllerRevisionName(v2Name)
+	for _, runner := range []string{"leader", "worker"} {
+		if err := c.Create(context.Background(), gangPodAt(isvc, 0, runner, v1Hash, true, true)); err != nil {
+			t.Fatalf("seed source pod (%s): %v", runner, err)
+		}
+		repl := gangPodAt(isvc, 1, runner, v2Hash, true, true)
+		repl.Status.Conditions = append(repl.Status.Conditions, corev1.PodCondition{Type: corev1.PodReady, Status: corev1.ConditionTrue})
+		if err := c.Create(context.Background(), repl); err != nil {
+			t.Fatalf("seed replacement pod (%s): %v", runner, err)
+		}
+	}
+	replacementNames, sourceNames := gangPodNames(isvc, 1), gangPodNames(isvc, 0)
+
+	input := gangInputWithRemove(isvc, c)
+	input.DesiredSpec.GangSchedulingAvailable = true
+	input.DrainHolds = &workload.DrainHolds{}
+	const holdReason = "the replacement gang is the only partner of the serving decoders"
+	var asked [][]string
+	// The replacement members may not leave rotation; the source members may.
+	input.DrainGate = func(pods []string) (bool, workload.RolloutHoldGate, string) {
+		asked = append(asked, pods)
+		for _, name := range pods {
+			for _, repl := range replacementNames {
+				if name == repl {
+					return false, workload.RolloutHoldGatePairing, holdReason
+				}
+			}
+		}
+		return true, "", ""
+	}
+	rec := record.NewFakeRecorder(16)
+	deps := legacyTestDeps(c)
+	deps.Recorder = rec
+	deps.EnsureGangPodGroup = gang.EnsureSurgePodGroup(deps)
+	gangAt := func(idx int32) (present, serving int) {
+		t.Helper()
+		pods, err := query.LiveListPodsForInstance(context.Background(), c, "prod", "gang-d", workload.ComponentEngine, idx)
+		if err != nil {
+			t.Fatalf("list gang %d: %v", idx, err)
+		}
+		for _, pod := range pods {
+			if podreadiness.IsServing(pod) {
+				serving++
+			}
+		}
+		return len(pods), serving
+	}
+
+	if _, err := surgeUpdate(context.Background(), deps, input, plan, plan.Instances[0], v3, nil); err != nil {
+		t.Fatalf("gang surge under a pairing hold on the replacement: %v", err)
+	}
+	if len(asked) != 2 || !sameNames(asked[0], replacementNames) || !sameNames(asked[1], sourceNames) {
+		t.Fatalf("the pass must ask the gate about the replacement gang first and then about the source gang, got %v", asked)
+	}
+	if present, serving := gangAt(1); present != 2 || serving != 2 {
+		t.Fatalf("a replacement gang the pairing gate holds must stay in rotation; present=%d serving=%d", present, serving)
+	}
+	// With nothing routed in the fixture the drain is complete at once, so
+	// the pass that takes the source gang out of rotation also deletes it.
+	if _, serving := gangAt(0); serving != 0 {
+		t.Fatalf("the hand-over must take the source gang out of rotation; %d source pod(s) still serving", serving)
+	}
+	events := drainRecorderEvents(rec)
+	want := corev1.EventTypeNormal + " " + string(workload.EventReasonSurgeKeptForPairing)
+	matched := 0
+	for _, e := range events {
+		if strings.HasPrefix(e, want) && strings.Contains(e, v2Name) && strings.Contains(e, v3Name) && strings.Contains(e, holdReason) {
+			matched++
+		}
+	}
+	if matched != 1 {
+		t.Fatalf("want one %q event naming the pinned revision, the newer target and the gate's reason, got %v", want, events)
+	}
+}
+
 // A gang surge that promotes its replacement rebinds every move still
 // pending on its source to the replacement's index before the source is
 // removed, and says so once per move. A move already executing, a
@@ -3842,5 +3938,34 @@ func TestGangSurge_LostMemberIsRebuiltBeforeTheRetryDelayElapses(t *testing.T) {
 	}
 	if len(*removed) != 0 {
 		t.Errorf("RemoveInstance: got %v want none (the source row stays)", *removed)
+	}
+}
+
+func TestRunGangSurgePhases_StopsAtTheFirstPhaseThatEndsThePass(t *testing.T) {
+	var ran []string
+	phase := func(name string, next bool, err error) gangSurgePhase {
+		return func(context.Context, workload.Deps, workload.ReconcileInput) (bool, error) {
+			ran = append(ran, name)
+			return next, err
+		}
+	}
+	run := func(phases ...gangSurgePhase) (bool, error, string) {
+		ran = nil
+		done, err := runGangSurgePhases(context.Background(), workload.Deps{}, workload.ReconcileInput{}, phases)
+		return done, err, strings.Join(ran, ",")
+	}
+
+	done, err, order := run(phase("first", true, nil), phase("second", true, nil))
+	if err != nil || !done || order != "first,second" {
+		t.Fatalf("every phase went on: done=%v err=%v ran=%q, want done=true err=nil ran=first,second", done, err, order)
+	}
+	done, err, order = run(phase("first", true, nil), phase("stops", false, nil), phase("never", true, nil))
+	if err != nil || done || order != "first,stops" {
+		t.Fatalf("a phase ended the pass: done=%v err=%v ran=%q, want done=false err=nil ran=first,stops", done, err, order)
+	}
+	listFailed := errors.New("list surge gang pods")
+	done, err, order = run(phase("fails", true, listFailed), phase("never", true, nil))
+	if !errors.Is(err, listFailed) || done || order != "fails" {
+		t.Fatalf("a phase failed: done=%v err=%v ran=%q, want done=false the phase's error ran=fails", done, err, order)
 	}
 }

@@ -24,13 +24,14 @@ import (
 	"sigs.k8s.io/ome/pkg/placement/protocol"
 )
 
-// TestAllResumedRetargetKeepsServingHomeUntilReplacementServes drives a full
-// home that was provisioned on its own while a peer's initial inventory was
+// TestAllResumedRetargetKeepsServingMemberUntilReplacementServes drives a full
+// member that was provisioned on its own while a peer's initial inventory was
 // unknown, retargets the service to that peer while the inventory is still
 // pending, and then lets the inventory arrive. The resumed move must keep the
-// serving home, even across an observation it cannot read, until the
-// replacement serves its whole floor within the shared allowance.
-func TestAllResumedRetargetKeepsServingHomeUntilReplacementServes(t *testing.T) {
+// serving member, even across an observation it cannot read, until the
+// replacement serves its whole floor within the shared allowance. Each stage
+// is one pass: what the fleet does before it, and what must hold after it.
+func TestAllResumedRetargetKeepsServingMemberUntilReplacementServes(t *testing.T) {
 	const replicas = 3
 	f := newBackendFixture(t, v1beta1.PlacementModeAll)
 	key := client.ObjectKeyFromObject(f.source)
@@ -91,131 +92,227 @@ func TestAllResumedRetargetKeepsServingHomeUntilReplacementServes(t *testing.T) 
 		a := allocationOf(current, "member-a")
 		_, present := allMemberOn(t, f, "member-a")
 		if a.CurrentReplicas != replicas || a.DrainRequested || !present {
-			t.Fatalf("%s: the serving home was trimmed before its replacement served (current=%d drain=%t member=%t)", stage, a.CurrentReplicas, a.DrainRequested, present)
+			t.Fatalf("%s: the serving member was trimmed before its replacement served (current=%d drain=%t member=%t)", stage, a.CurrentReplicas, a.DrainRequested, present)
 		}
 	}
+	publish := func(weights map[string]int32) func() {
+		return func() { publishAllRouting(t, f, weights) }
+	}
 
-	// The peer is unreachable, so the first home is provisioned on its own.
 	connected := f.connections.m["member-b"]
-	delete(f.connections.m, "member-b")
-	setReady("member-b", false)
-	initial := reconcile()
-	adoption := initial.Status.Placement.Plan.AdoptionDigest
-	if adoption == "" {
-		t.Fatal("unknown home inventory was treated as complete")
+	var (
+		adoption  string
+		projected v1beta1.CandidatePlacement
+	)
+	stages := []struct {
+		name     string
+		arrange  func()                                  // what the fleet and the operator do before the pass
+		retained bool                                    // the serving member keeps every replica through the pass
+		check    func(current *v1beta1.InferenceService) // what else must hold after the pass
+	}{
+		{
+			name: "independent member",
+			arrange: func() {
+				// The peer is unreachable, so the first member is provisioned on its own.
+				delete(f.connections.m, "member-b")
+				setReady("member-b", false)
+			},
+			check: func(initial *v1beta1.InferenceService) {
+				adoption = initial.Status.Placement.Plan.AdoptionDigest
+				if adoption == "" {
+					t.Fatal("unknown member inventory was treated as complete")
+				}
+				if diff := cmp.Diff(int32(replicas), allocationOf(initial, "member-a").CurrentReplicas); diff != "" {
+					t.Fatalf("independent member floor (-want +got):\n%s", diff)
+				}
+			},
+		},
+		{
+			name: "serving independent member",
+			arrange: func() {
+				projectAllModeMember(t, f, "member-a", replicas)
+				serveAllModeMember(t, f, "member-a", replicas)
+				publishAllRouting(t, f, map[string]int32{"member-a": replicas})
+			},
+			retained: true,
+		},
+		{
+			name: "inventory hold",
+			arrange: func() {
+				// A retarget to the unknown peer, with room for a whole member, holds.
+				source := live()
+				source.Spec.Placement.ClusterAffinity = testAffinity("metadata.name=member-b")
+				source.Generation++
+				if err := f.reconciler.Update(t.Context(), source); err != nil {
+					t.Fatal(err)
+				}
+			},
+			retained: true,
+			check: func(held *v1beta1.InferenceService) {
+				if diff := cmp.Diff(adoption, held.Status.Placement.Plan.AdoptionDigest); diff != "" {
+					t.Fatalf("retarget did not wait for the initial inventory (-want +got):\n%s", diff)
+				}
+				if condition := held.Status.GetCondition(v1beta1.PlacementConverged); condition == nil || condition.Reason != "AwaitingHomeInputs" {
+					t.Fatalf("hold condition = %+v", condition)
+				}
+				a := allocationOf(held, "member-a")
+				if diff := cmp.Diff([]int32{replicas, 0}, []int32{a.CurrentReplicas, a.DesiredReplicas}); diff != "" {
+					t.Fatalf("held floors (-want +got):\n%s", diff)
+				}
+			},
+		},
+		{
+			name: "acknowledged hold",
+			arrange: func() {
+				projectAllModeMember(t, f, "member-a", replicas)
+				publishAllRouting(t, f, map[string]int32{"member-a": replicas})
+			},
+			retained: true,
+		},
+		{
+			name: "resume",
+			arrange: func() {
+				// The peer's inventory arrives: the move resumes and places the replacement.
+				f.connections.m["member-b"] = connected
+				setReady("member-b", true)
+			},
+			retained: true,
+			check: func(resumed *v1beta1.InferenceService) {
+				if diff := cmp.Diff("", resumed.Status.Placement.Plan.AdoptionDigest); diff != "" {
+					t.Fatalf("inventory hold survived recovery (-want +got):\n%s", diff)
+				}
+			},
+		},
+		{
+			name: "replacement placement",
+			arrange: func() {
+				projectAllModeMember(t, f, "member-a", replicas)
+				publishAllRouting(t, f, map[string]int32{"member-a": replicas})
+			},
+			retained: true,
+			check: func(placed *v1beta1.InferenceService) {
+				if diff := cmp.Diff(int32(replicas), allocationOf(placed, "member-b").CurrentReplicas); diff != "" {
+					t.Fatalf("replacement floor (-want +got):\n%s", diff)
+				}
+				if _, ok := allMemberOn(t, f, "member-b"); !ok {
+					t.Fatal("replacement member was not created")
+				}
+			},
+		},
+		{
+			name: "replacement projected",
+			arrange: func() {
+				projectAllModeMember(t, f, "member-a", replicas)
+				projectAllModeMember(t, f, "member-b", replicas)
+				publishAllRouting(t, f, map[string]int32{"member-a": replicas})
+			},
+			retained: true,
+		},
+		{
+			name: "unreadable observation",
+			arrange: func() {
+				// One unreadable observation reports the serving member at zero readiness
+				// while it stays addressable, so the publisher withdraws its weight. The
+				// member keeps its acknowledged plan behind an unknown observation, and that
+				// kept acknowledgement is not a fresh reading: an unknown member cannot
+				// acknowledge the surge pause, so the move still holds.
+				projected = candidateOf(t, live(), "member-a")
+				if !projected.ObservationKnown || projected.AppliedPlanID == "" {
+					t.Fatalf("serving member has no acknowledged plan before the unreadable pass: %+v", projected)
+				}
+				f.connections.m["member-a"] = unreadableAllMember(f, "member-a")
+			},
+			retained: true,
+			check: func(unknown *v1beta1.InferenceService) {
+				candidate := candidateOf(t, unknown, "member-a")
+				if candidate.ObservationKnown || candidate.ReadyReplicas != 0 || candidate.Phase != v1beta1.CandidatePhaseAdmitted || candidate.Endpoint == nil {
+					t.Fatalf("unreadable member reported as %+v", candidate)
+				}
+				if diff := cmp.Diff(projected.AppliedPlanID, candidate.AppliedPlanID); diff != "" {
+					t.Fatalf("unreadable observation changed the acknowledged plan (-want +got):\n%s", diff)
+				}
+				if condition := unknown.Status.GetCondition(v1beta1.PlacementConverged); condition == nil || condition.Status != corev1.ConditionFalse || condition.Reason != "AwaitingSurgePause" {
+					t.Fatalf("kept acknowledgement advanced the move: %+v", condition)
+				}
+				if condition := unknown.Status.GetCondition(v1beta1.PlacementSatisfied); condition != nil && condition.Status == corev1.ConditionTrue {
+					t.Fatalf("kept acknowledgement satisfied the plan: %+v", condition)
+				}
+			},
+		},
+		{
+			name: "unrouted serving member",
+			arrange: func() {
+				f.connections.m["member-a"] = workloadcluster.NewNeverCachingClient(f.workers["member-a"])
+				publishAllRouting(t, f, map[string]int32{"member-a": 0})
+			},
+			retained: true,
+		},
+		{
+			name:     "routing restored",
+			arrange:  publish(map[string]int32{"member-a": replicas}),
+			retained: true,
+		},
+		{
+			name: "replacement serving before publication",
+			arrange: func() {
+				// Only a replacement serving its whole floor releases the original member.
+				serveAllModeMember(t, f, "member-b", replicas)
+				projectAllModeMember(t, f, "member-b", replicas)
+			},
+			retained: true,
+		},
+		{
+			name:    "serving replacement requests the drain",
+			arrange: publish(map[string]int32{"member-a": replicas, "member-b": replicas}),
+			check: func(draining *v1beta1.InferenceService) {
+				if a := allocationOf(draining, "member-a"); !a.DrainRequested || a.CurrentReplicas != replicas {
+					t.Fatalf("serving replacement did not request the original drain: %+v", a)
+				}
+			},
+		},
+		{
+			name: "drained member",
+			arrange: func() {
+				projectAllModeMember(t, f, "member-a", replicas)
+				projectAllModeMember(t, f, "member-b", replicas)
+				publishAllRouting(t, f, map[string]int32{"member-a": 0, "member-b": replicas})
+			},
+			check: func(released *v1beta1.InferenceService) {
+				if diff := cmp.Diff(int32(0), allocationOf(released, "member-a").CurrentReplicas); diff != "" {
+					t.Fatalf("drained floor (-want +got):\n%s", diff)
+				}
+			},
+		},
+		{
+			name: "original member removed",
+			arrange: func() {
+				projectAllModeMember(t, f, "member-b", replicas)
+				publishAllRouting(t, f, map[string]int32{"member-a": 0, "member-b": replicas})
+			},
+			check: func(*v1beta1.InferenceService) {
+				if _, ok := allMemberOn(t, f, "member-a"); ok {
+					t.Fatal("drained original member remains")
+				}
+				if diff := cmp.Diff(int32(replicas), allocationOf(live(), "member-b").CurrentReplicas); diff != "" {
+					t.Fatalf("replacement floor after the move (-want +got):\n%s", diff)
+				}
+			},
+		},
 	}
-	if diff := cmp.Diff(int32(replicas), allocationOf(initial, "member-a").CurrentReplicas); diff != "" {
-		t.Fatalf("independent home floor (-want +got):\n%s", diff)
-	}
-	projectAllHome(t, f, "member-a", replicas)
-	serveAllHome(t, f, "member-a", replicas)
-	publishAllRouting(t, f, map[string]int32{"member-a": replicas})
-	retained("serving independent home", reconcile())
-
-	// A retarget to the unknown peer, with room for a whole home, holds.
-	source := live()
-	source.Spec.Placement.ClusterAffinity = testAffinity("metadata.name=member-b")
-	source.Generation++
-	if err := f.reconciler.Update(t.Context(), source); err != nil {
-		t.Fatal(err)
-	}
-	held := reconcile()
-	if diff := cmp.Diff(adoption, held.Status.Placement.Plan.AdoptionDigest); diff != "" {
-		t.Fatalf("retarget did not wait for the initial inventory (-want +got):\n%s", diff)
-	}
-	if condition := held.Status.GetCondition(v1beta1.PlacementConverged); condition == nil || condition.Reason != "AwaitingHomeInputs" {
-		t.Fatalf("hold condition = %+v", condition)
-	}
-	a := allocationOf(held, "member-a")
-	if diff := cmp.Diff([]int32{replicas, 0}, []int32{a.CurrentReplicas, a.DesiredReplicas}); diff != "" {
-		t.Fatalf("held floors (-want +got):\n%s", diff)
-	}
-	retained("inventory hold", held)
-	projectAllHome(t, f, "member-a", replicas)
-	publishAllRouting(t, f, map[string]int32{"member-a": replicas})
-	retained("acknowledged hold", reconcile())
-
-	// The peer's inventory arrives: the move resumes and places the replacement.
-	f.connections.m["member-b"] = connected
-	setReady("member-b", true)
-	resumed := reconcile()
-	if diff := cmp.Diff("", resumed.Status.Placement.Plan.AdoptionDigest); diff != "" {
-		t.Fatalf("inventory hold survived recovery (-want +got):\n%s", diff)
-	}
-	retained("resume", resumed)
-	projectAllHome(t, f, "member-a", replicas)
-	publishAllRouting(t, f, map[string]int32{"member-a": replicas})
-	placed := reconcile()
-	retained("replacement placement", placed)
-	if diff := cmp.Diff(int32(replicas), allocationOf(placed, "member-b").CurrentReplicas); diff != "" {
-		t.Fatalf("replacement floor (-want +got):\n%s", diff)
-	}
-	if _, ok := allMemberOn(t, f, "member-b"); !ok {
-		t.Fatal("replacement member was not created")
-	}
-	projectAllHome(t, f, "member-a", replicas)
-	projectAllHome(t, f, "member-b", replicas)
-	publishAllRouting(t, f, map[string]int32{"member-a": replicas})
-	retained("replacement projected", reconcile())
-
-	// One unreadable observation reports the serving home at zero readiness
-	// while it stays addressable, so the publisher withdraws its weight. The
-	// home keeps its acknowledged plan behind an unknown observation, and that
-	// kept acknowledgement is not fresh evidence: an unknown home cannot
-	// acknowledge the surge pause, so the move still holds.
-	projected := candidateOf(t, live(), "member-a")
-	if !projected.ObservationKnown || projected.AppliedPlanID == "" {
-		t.Fatalf("serving home has no acknowledged plan before the unreadable pass: %+v", projected)
-	}
-	f.connections.m["member-a"] = unreadableAllMember(f, "member-a")
-	unknown := reconcile()
-	retained("unreadable observation", unknown)
-	candidate := candidateOf(t, unknown, "member-a")
-	if candidate.ObservationKnown || candidate.ReadyReplicas != 0 || candidate.Phase != v1beta1.CandidatePhaseAdmitted || candidate.Endpoint == nil {
-		t.Fatalf("unreadable home reported as %+v", candidate)
-	}
-	if diff := cmp.Diff(projected.AppliedPlanID, candidate.AppliedPlanID); diff != "" {
-		t.Fatalf("unreadable observation changed the acknowledged plan (-want +got):\n%s", diff)
-	}
-	if condition := unknown.Status.GetCondition(v1beta1.PlacementConverged); condition == nil || condition.Status != corev1.ConditionFalse || condition.Reason != "AwaitingSurgePause" {
-		t.Fatalf("kept acknowledgement advanced the move: %+v", condition)
-	}
-	if condition := unknown.Status.GetCondition(v1beta1.PlacementSatisfied); condition != nil && condition.Status == corev1.ConditionTrue {
-		t.Fatalf("kept acknowledgement satisfied the plan: %+v", condition)
-	}
-	f.connections.m["member-a"] = workloadcluster.NewNeverCachingClient(f.workers["member-a"])
-	publishAllRouting(t, f, map[string]int32{"member-a": 0})
-	retained("unrouted serving home", reconcile())
-	publishAllRouting(t, f, map[string]int32{"member-a": replicas})
-	retained("routing restored", reconcile())
-
-	// Only a replacement serving its whole floor releases the original home.
-	serveAllHome(t, f, "member-b", replicas)
-	projectAllHome(t, f, "member-b", replicas)
-	retained("replacement serving before publication", reconcile())
-	publishAllRouting(t, f, map[string]int32{"member-a": replicas, "member-b": replicas})
-	draining := reconcile()
-	if a := allocationOf(draining, "member-a"); !a.DrainRequested || a.CurrentReplicas != replicas {
-		t.Fatalf("serving replacement did not request the original drain: %+v", a)
-	}
-	projectAllHome(t, f, "member-a", replicas)
-	projectAllHome(t, f, "member-b", replicas)
-	publishAllRouting(t, f, map[string]int32{"member-a": 0, "member-b": replicas})
-	released := reconcile()
-	if diff := cmp.Diff(int32(0), allocationOf(released, "member-a").CurrentReplicas); diff != "" {
-		t.Fatalf("drained floor (-want +got):\n%s", diff)
-	}
-	projectAllHome(t, f, "member-b", replicas)
-	publishAllRouting(t, f, map[string]int32{"member-a": 0, "member-b": replicas})
-	reconcile()
-	if _, ok := allMemberOn(t, f, "member-a"); ok {
-		t.Fatal("drained original member remains")
-	}
-	if diff := cmp.Diff(int32(replicas), allocationOf(live(), "member-b").CurrentReplicas); diff != "" {
-		t.Fatalf("replacement floor after the move (-want +got):\n%s", diff)
+	for _, stage := range stages {
+		if stage.arrange != nil {
+			stage.arrange()
+		}
+		current := reconcile()
+		if stage.retained {
+			retained(stage.name, current)
+		}
+		if stage.check != nil {
+			stage.check(current)
+		}
 	}
 	if peak > 2*replicas {
-		t.Fatalf("the move carried %d replicas, more than one whole home above the floor", peak)
+		t.Fatalf("the move carried %d replicas, more than one whole member above the floor", peak)
 	}
 }
 
@@ -231,7 +328,7 @@ func candidateOf(t *testing.T, source *v1beta1.InferenceService, name string) v1
 	return v1beta1.CandidatePlacement{}
 }
 
-// allMemberOn reads the member copy of the source on the named home.
+// allMemberOn reads the member copy of the source on the named member.
 func allMemberOn(t *testing.T, f *backendFixture, name string) (*v1beta1.InferenceService, bool) {
 	t.Helper()
 	member := &v1beta1.InferenceService{}
@@ -249,9 +346,9 @@ func allEngineKey(f *backendFixture) client.ObjectKey {
 	return client.ObjectKey{Namespace: f.source.Namespace, Name: f.source.Name + "-engine"}
 }
 
-// projectAllHome acknowledges the member's current execution policy on its
+// projectAllModeMember acknowledges the member's current execution policy on its
 // engine component, creating the component without any serving instance first.
-func projectAllHome(t *testing.T, f *backendFixture, name string, replicas int32) {
+func projectAllModeMember(t *testing.T, f *backendFixture, name string, replicas int32) {
 	t.Helper()
 	member, ok := allMemberOn(t, f, name)
 	if !ok {
@@ -299,9 +396,9 @@ func projectAllHome(t *testing.T, f *backendFixture, name string, replicas int32
 	}
 }
 
-// serveAllHome materializes every engine instance as a ready, serving Pod and
+// serveAllModeMember materializes every engine instance as a ready, serving Pod and
 // publishes the member's endpoint.
-func serveAllHome(t *testing.T, f *backendFixture, name string, replicas int32) {
+func serveAllModeMember(t *testing.T, f *backendFixture, name string, replicas int32) {
 	t.Helper()
 	member, ok := allMemberOn(t, f, name)
 	if !ok {
@@ -342,7 +439,7 @@ func serveAllHome(t *testing.T, f *backendFixture, name string, replicas int32) 
 }
 
 // publishAllRouting writes the routing intent for the accepted plan: every
-// listed home that reports an endpoint carries the given weight.
+// listed member that reports an endpoint carries the given weight.
 func publishAllRouting(t *testing.T, f *backendFixture, weights map[string]int32) {
 	t.Helper()
 	key := client.ObjectKeyFromObject(f.source)
@@ -379,7 +476,7 @@ func publishAllRouting(t *testing.T, f *backendFixture, weights map[string]int32
 	}
 }
 
-// unreadableAllMember returns a connection to the named home whose component
+// unreadableAllMember returns a connection to the named member whose component
 // inventory cannot be listed, so every planned observation of it is unknown.
 func unreadableAllMember(f *backendFixture, name string) workloadcluster.SelectivelyCachingClient {
 	unreadable := interceptor.NewClient(f.workers[name], interceptor.Funcs{List: func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {

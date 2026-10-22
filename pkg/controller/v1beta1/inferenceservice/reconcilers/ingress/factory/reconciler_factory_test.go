@@ -5,15 +5,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"k8s.io/utils/ptr"
 
-	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/interfaces"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestDefaultStrategyFactory_CreateStrategyWithOptions(t *testing.T) {
@@ -29,12 +27,12 @@ func TestDefaultStrategyFactory_CreateStrategyWithOptions(t *testing.T) {
 			name:           "raw deployment mode with kubernetes ingress",
 			deploymentMode: string(constants.RawDeployment),
 			opts: interfaces.ReconcilerOptions{
-				Client: createFakeClient(t),
-				Scheme: createScheme(t),
+				Client: fakeclient.New(t),
+				Scheme: fakeclient.Scheme(t),
 				IngressConfig: &controllerconfig.IngressConfig{
 					EnableGatewayAPI:       false,
 					IngressDomain:          "example.com",
-					IngressClassName:       stringPtr("nginx"),
+					IngressClassName:       ptr.To("nginx"),
 					DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 					UrlScheme:              "https",
 					DisableIngressCreation: false,
@@ -48,8 +46,8 @@ func TestDefaultStrategyFactory_CreateStrategyWithOptions(t *testing.T) {
 			name:           "raw deployment mode with gateway api",
 			deploymentMode: string(constants.RawDeployment),
 			opts: interfaces.ReconcilerOptions{
-				Client: createFakeClient(t),
-				Scheme: createScheme(t),
+				Client: fakeclient.New(t),
+				Scheme: fakeclient.Scheme(t),
 				IngressConfig: &controllerconfig.IngressConfig{
 					EnableGatewayAPI:       true,
 					IngressDomain:          "example.com",
@@ -67,12 +65,12 @@ func TestDefaultStrategyFactory_CreateStrategyWithOptions(t *testing.T) {
 			name:           "multinode deployment mode with kubernetes ingress",
 			deploymentMode: string(constants.MultiNode),
 			opts: interfaces.ReconcilerOptions{
-				Client: createFakeClient(t),
-				Scheme: createScheme(t),
+				Client: fakeclient.New(t),
+				Scheme: fakeclient.Scheme(t),
 				IngressConfig: &controllerconfig.IngressConfig{
 					EnableGatewayAPI:       false,
 					IngressDomain:          "example.com",
-					IngressClassName:       stringPtr("nginx"),
+					IngressClassName:       ptr.To("nginx"),
 					DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 					UrlScheme:              "https",
 					DisableIngressCreation: false,
@@ -86,8 +84,8 @@ func TestDefaultStrategyFactory_CreateStrategyWithOptions(t *testing.T) {
 			name:           "multinode deployment mode with gateway api",
 			deploymentMode: string(constants.MultiNode),
 			opts: interfaces.ReconcilerOptions{
-				Client: createFakeClient(t),
-				Scheme: createScheme(t),
+				Client: fakeclient.New(t),
+				Scheme: fakeclient.Scheme(t),
 				IngressConfig: &controllerconfig.IngressConfig{
 					EnableGatewayAPI:       true,
 					IngressDomain:          "example.com",
@@ -105,12 +103,12 @@ func TestDefaultStrategyFactory_CreateStrategyWithOptions(t *testing.T) {
 			name:           "omenative deployment mode with kubernetes ingress",
 			deploymentMode: string(constants.OMENative),
 			opts: interfaces.ReconcilerOptions{
-				Client: createFakeClient(t),
-				Scheme: createScheme(t),
+				Client: fakeclient.New(t),
+				Scheme: fakeclient.Scheme(t),
 				IngressConfig: &controllerconfig.IngressConfig{
 					EnableGatewayAPI:       false,
 					IngressDomain:          "example.com",
-					IngressClassName:       stringPtr("nginx"),
+					IngressClassName:       ptr.To("nginx"),
 					DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 					UrlScheme:              "https",
 					DisableIngressCreation: false,
@@ -124,8 +122,8 @@ func TestDefaultStrategyFactory_CreateStrategyWithOptions(t *testing.T) {
 			name:           "omenative deployment mode with gateway api",
 			deploymentMode: string(constants.OMENative),
 			opts: interfaces.ReconcilerOptions{
-				Client: createFakeClient(t),
-				Scheme: createScheme(t),
+				Client: fakeclient.New(t),
+				Scheme: fakeclient.Scheme(t),
 				IngressConfig: &controllerconfig.IngressConfig{
 					EnableGatewayAPI:       true,
 					IngressDomain:          "example.com",
@@ -143,8 +141,8 @@ func TestDefaultStrategyFactory_CreateStrategyWithOptions(t *testing.T) {
 			name:           "unsupported deployment mode",
 			deploymentMode: "unsupported-mode",
 			opts: interfaces.ReconcilerOptions{
-				Client:        createFakeClient(t),
-				Scheme:        createScheme(t),
+				Client:        fakeclient.New(t),
+				Scheme:        fakeclient.Scheme(t),
 				IngressConfig: &controllerconfig.IngressConfig{},
 				IsvcConfig:    &controllerconfig.InferenceServicesConfig{},
 			},
@@ -156,8 +154,8 @@ func TestDefaultStrategyFactory_CreateStrategyWithOptions(t *testing.T) {
 			name:           "empty deployment mode",
 			deploymentMode: "",
 			opts: interfaces.ReconcilerOptions{
-				Client:        createFakeClient(t),
-				Scheme:        createScheme(t),
+				Client:        fakeclient.New(t),
+				Scheme:        fakeclient.Scheme(t),
 				IngressConfig: &controllerconfig.IngressConfig{},
 				IsvcConfig:    &controllerconfig.InferenceServicesConfig{},
 			},
@@ -169,8 +167,8 @@ func TestDefaultStrategyFactory_CreateStrategyWithOptions(t *testing.T) {
 			name:           "virtual deployment mode",
 			deploymentMode: string(constants.VirtualDeployment),
 			opts: interfaces.ReconcilerOptions{
-				Client:        createFakeClient(t),
-				Scheme:        createScheme(t),
+				Client:        fakeclient.New(t),
+				Scheme:        fakeclient.Scheme(t),
 				IngressConfig: &controllerconfig.IngressConfig{},
 				IsvcConfig:    &controllerconfig.InferenceServicesConfig{},
 			},
@@ -222,8 +220,8 @@ func TestDefaultStrategyFactory_StrategyConsistency(t *testing.T) {
 	factory := NewStrategyFactory(fakeClientset)
 
 	opts := interfaces.ReconcilerOptions{
-		Client: createFakeClient(t),
-		Scheme: createScheme(t),
+		Client: fakeclient.New(t),
+		Scheme: fakeclient.Scheme(t),
 		IngressConfig: &controllerconfig.IngressConfig{
 			IngressDomain:  "example.com",
 			DomainTemplate: "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
@@ -262,7 +260,7 @@ func TestDefaultStrategyFactory_DifferentConfigurations(t *testing.T) {
 			ingressConfig: &controllerconfig.IngressConfig{
 				EnableGatewayAPI: false,
 				IngressDomain:    "example.com",
-				IngressClassName: stringPtr("nginx"),
+				IngressClassName: ptr.To("nginx"),
 				DomainTemplate:   "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 			},
 			expectedStrategy: "KubernetesIngress",
@@ -283,8 +281,8 @@ func TestDefaultStrategyFactory_DifferentConfigurations(t *testing.T) {
 			factory := NewStrategyFactory(fakeClientset)
 
 			opts := interfaces.ReconcilerOptions{
-				Client:        createFakeClient(t),
-				Scheme:        createScheme(t),
+				Client:        fakeclient.New(t),
+				Scheme:        fakeclient.Scheme(t),
 				IngressConfig: tt.ingressConfig,
 				IsvcConfig:    &controllerconfig.InferenceServicesConfig{},
 			}
@@ -312,7 +310,7 @@ func TestDefaultStrategyFactory_NilOptions(t *testing.T) {
 			name: "nil client",
 			opts: interfaces.ReconcilerOptions{
 				Client:        nil,
-				Scheme:        createScheme(t),
+				Scheme:        fakeclient.Scheme(t),
 				IngressConfig: &controllerconfig.IngressConfig{},
 				IsvcConfig:    &controllerconfig.InferenceServicesConfig{},
 			},
@@ -321,7 +319,7 @@ func TestDefaultStrategyFactory_NilOptions(t *testing.T) {
 		{
 			name: "nil scheme",
 			opts: interfaces.ReconcilerOptions{
-				Client:        createFakeClient(t),
+				Client:        fakeclient.New(t),
 				Scheme:        nil,
 				IngressConfig: &controllerconfig.IngressConfig{},
 				IsvcConfig:    &controllerconfig.InferenceServicesConfig{},
@@ -331,8 +329,8 @@ func TestDefaultStrategyFactory_NilOptions(t *testing.T) {
 		{
 			name: "nil ingress config",
 			opts: interfaces.ReconcilerOptions{
-				Client:        createFakeClient(t),
-				Scheme:        createScheme(t),
+				Client:        fakeclient.New(t),
+				Scheme:        fakeclient.Scheme(t),
 				IngressConfig: nil,
 				IsvcConfig:    &controllerconfig.InferenceServicesConfig{},
 			},
@@ -341,8 +339,8 @@ func TestDefaultStrategyFactory_NilOptions(t *testing.T) {
 		{
 			name: "nil isvc config",
 			opts: interfaces.ReconcilerOptions{
-				Client:        createFakeClient(t),
-				Scheme:        createScheme(t),
+				Client:        fakeclient.New(t),
+				Scheme:        fakeclient.Scheme(t),
 				IngressConfig: &controllerconfig.IngressConfig{},
 				IsvcConfig:    nil,
 			},
@@ -373,34 +371,18 @@ func TestDefaultStrategyFactory_Interface(t *testing.T) {
 	var _ interfaces.StrategyFactory = NewStrategyFactory(fakeClientset)
 }
 
-// Helper functions
-func createFakeClient(t *testing.T) client.Client {
-	scheme := createScheme(t)
-	return fakeclient.NewClientBuilder().WithScheme(scheme).Build()
-}
-
-func createScheme(t *testing.T) *runtime.Scheme {
-	scheme := runtime.NewScheme()
-	require.NoError(t, v1beta1.AddToScheme(scheme))
-	return scheme
-}
-
-func stringPtr(s string) *string {
-	return &s
-}
-
 // Benchmark tests
 func BenchmarkDefaultStrategyFactory_CreateKubernetesIngressStrategy(b *testing.B) {
 	fakeClientset := fake.NewSimpleClientset()
 	factory := NewStrategyFactory(fakeClientset)
 
 	opts := interfaces.ReconcilerOptions{
-		Client: createFakeClient(&testing.T{}),
-		Scheme: createScheme(&testing.T{}),
+		Client: fakeclient.New(b),
+		Scheme: fakeclient.Scheme(b),
 		IngressConfig: &controllerconfig.IngressConfig{
 			EnableGatewayAPI: false,
 			IngressDomain:    "example.com",
-			IngressClassName: stringPtr("nginx"),
+			IngressClassName: ptr.To("nginx"),
 			DomainTemplate:   "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 		},
 		IsvcConfig: &controllerconfig.InferenceServicesConfig{},
@@ -421,8 +403,8 @@ func BenchmarkDefaultStrategyFactory_CreateGatewayAPIStrategy(b *testing.B) {
 	factory := NewStrategyFactory(fakeClientset)
 
 	opts := interfaces.ReconcilerOptions{
-		Client: createFakeClient(&testing.T{}),
-		Scheme: createScheme(&testing.T{}),
+		Client: fakeclient.New(b),
+		Scheme: fakeclient.Scheme(b),
 		IngressConfig: &controllerconfig.IngressConfig{
 			EnableGatewayAPI:  true,
 			IngressDomain:     "example.com",

@@ -1,4 +1,4 @@
-package evidence_test
+package evidence
 
 // The template diff, as the in-place roll reads it: which container
 // images a live pod still owes the target revision (in its spec and at
@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/ome/pkg/constants"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/evidence"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 )
 
 // TestPodImagesMatch_InjectedSidecarIgnored pins the container-subset
@@ -33,22 +33,22 @@ func TestPodImagesMatch_InjectedSidecarIgnored(t *testing.T) {
 			{Name: "istio-proxy", Image: "istio/proxyv2:1.20"},
 		}},
 	}
-	if !evidence.PodImagesMatch(pod, target) {
+	if !PodImagesMatch(pod, target) {
 		t.Errorf("PodImagesMatch: injected sidecar must be ignored")
 	}
-	if !evidence.PodRuntimeImagesMatch(pod, target) {
-		t.Errorf("PodRuntimeImagesMatch: injected sidecar status must be ignored")
+	if !podRuntimeImagesMatch(pod, target) {
+		t.Errorf("podRuntimeImagesMatch: injected sidecar status must be ignored")
 	}
 	stale := &corev1.PodSpec{Containers: []corev1.Container{{Name: "main", Image: "llama:v3"}}}
-	if evidence.PodImagesMatch(pod, stale) {
+	if PodImagesMatch(pod, stale) {
 		t.Errorf("PodImagesMatch: diverged target image must still mismatch")
 	}
 	foreign := &corev1.PodSpec{Containers: []corev1.Container{{Name: "other", Image: "x:v1"}}}
-	if evidence.PodImagesMatch(pod, foreign) {
+	if PodImagesMatch(pod, foreign) {
 		t.Errorf("PodImagesMatch: target container missing from pod must mismatch")
 	}
-	if evidence.PodRuntimeImagesMatch(pod, foreign) {
-		t.Errorf("PodRuntimeImagesMatch: target container without a status must mismatch")
+	if podRuntimeImagesMatch(pod, foreign) {
+		t.Errorf("podRuntimeImagesMatch: target container without a status must mismatch")
 	}
 }
 
@@ -66,10 +66,10 @@ func TestPodImagesMatch(t *testing.T) {
 		{Name: "main", Image: "llama:v3"},
 		{Name: "sidecar", Image: "metrics:v1"},
 	}}
-	if !evidence.PodImagesMatch(pod, matching) {
+	if !PodImagesMatch(pod, matching) {
 		t.Errorf("matching images should report true")
 	}
-	if evidence.PodImagesMatch(pod, mismatching) {
+	if PodImagesMatch(pod, mismatching) {
 		t.Errorf("differing images should report false")
 	}
 }
@@ -89,8 +89,8 @@ func TestCanonicalImage_NormalizesDockerHubReferences(t *testing.T) {
 		{"empty string", "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := evidence.CanonicalImage(tc.in); got != tc.want {
-				t.Errorf("evidence.CanonicalImage(%q) = %q, want %q", tc.in, got, tc.want)
+			if got := CanonicalImage(tc.in); got != tc.want {
+				t.Errorf("CanonicalImage(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}
@@ -110,7 +110,7 @@ func TestPodRuntimeImagesMatch_RegistryNormalization(t *testing.T) {
 			{Name: "main", Image: "docker.io/library/fake-serving:v2"},
 		}},
 	}
-	if !evidence.PodRuntimeImagesMatch(pod, target) {
+	if !podRuntimeImagesMatch(pod, target) {
 		t.Errorf("expected match between spec %q and runtime %q after canonicalImage normalization",
 			target.Containers[0].Image, pod.Status.ContainerStatuses[0].Image)
 	}
@@ -185,7 +185,7 @@ func TestAnnotationsDiff_Cases(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := evidence.AnnotationsDiff(tc.pod, tc.previous, tc.want)
+			got := AnnotationsDiff(tc.pod, tc.previous, tc.want)
 			if len(got) != len(tc.expect) {
 				t.Fatalf("diff length: got %d (%+v) want %d (%+v)", len(got), got, len(tc.expect), tc.expect)
 			}
@@ -280,8 +280,8 @@ func TestPodRuntimeImageChangesMatch(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := evidence.PodRuntimeImageChangesMatch(test.pod, test.running, test.target); got != test.want {
-				t.Fatalf("evidence.PodRuntimeImageChangesMatch() = %v, want %v", got, test.want)
+			if got := PodRuntimeImageChangesMatch(test.pod, test.running, test.target); got != test.want {
+				t.Fatalf("PodRuntimeImageChangesMatch() = %v, want %v", got, test.want)
 			}
 		})
 	}
@@ -304,7 +304,7 @@ func TestPodRuntimeImageChangesMatchDoesNotUseRestartAsTargetProof(t *testing.T)
 					}},
 				},
 			}
-			if evidence.PodRuntimeImageChangesMatch(pod, running, target) {
+			if PodRuntimeImageChangesMatch(pod, running, target) {
 				t.Fatal("old runtime image was accepted after an unrelated restart")
 			}
 		})
@@ -324,11 +324,107 @@ func TestAnnotationsDiffReservesInPlaceImageTransition(t *testing.T) {
 		constants.InferenceServiceInPlaceImageTransitionAnnotationKey: "forged-user-value",
 		"example.com/release": "two",
 	}
-	diff := evidence.AnnotationsDiff(podAnnotations, previous, target)
+	diff := AnnotationsDiff(podAnnotations, previous, target)
 	if _, found := diff[constants.InferenceServiceInPlaceImageTransitionAnnotationKey]; found {
 		t.Fatalf("reserved annotation entered PodMeta diff: %#v", diff)
 	}
 	if diff["example.com/release"] != "two" {
 		t.Fatalf("ordinary annotation diff was lost: %#v", diff)
+	}
+}
+
+// TestLabelsDiff_Cases pins the label diff to the annotation rule: add,
+// update, delete and leave-alone decide the same way, and the labels the
+// workload stamps on every pod are neither written nor removed from a
+// template, whichever side names them.
+func TestLabelsDiff_Cases(t *testing.T) {
+	cases := []struct {
+		name                string
+		pod, previous, want map[string]string
+		expect              map[string]any
+	}{
+		{
+			name:     "no diff: nothing to patch",
+			pod:      map[string]string{"example.com/tier": "gold"},
+			previous: map[string]string{"example.com/tier": "gold"},
+			want:     map[string]string{"example.com/tier": "gold"},
+			expect:   map[string]any{},
+		},
+		{
+			name:     "add a label the target sets",
+			pod:      map[string]string{query.LabelInstanceIdx: "0"},
+			previous: nil,
+			want:     map[string]string{"example.com/tier": "gold"},
+			expect:   map[string]any{"example.com/tier": "gold"},
+		},
+		{
+			name:     "update a label the target changes",
+			pod:      map[string]string{"example.com/tier": "silver"},
+			previous: map[string]string{"example.com/tier": "silver"},
+			want:     map[string]string{"example.com/tier": "gold"},
+			expect:   map[string]any{"example.com/tier": "gold"},
+		},
+		{
+			name:     "delete a label the previous revision set and the target drops",
+			pod:      map[string]string{"example.com/tier": "gold", "example.com/zone": "a"},
+			previous: map[string]string{"example.com/tier": "gold", "example.com/zone": "a"},
+			want:     map[string]string{"example.com/tier": "gold"},
+			expect:   map[string]any{"example.com/zone": nil},
+		},
+		{
+			name:     "leave a label no revision set alone",
+			pod:      map[string]string{"example.com/tier": "gold", "example.com/by-hand": "yes"},
+			previous: map[string]string{"example.com/tier": "gold"},
+			want:     map[string]string{"example.com/tier": "gold"},
+			expect:   map[string]any{},
+		},
+		{
+			name:     "no delete for a dropped label the pod does not carry",
+			pod:      map[string]string{"example.com/tier": "gold"},
+			previous: map[string]string{"example.com/tier": "gold", "example.com/zone": "a"},
+			want:     map[string]string{"example.com/tier": "gold"},
+			expect:   map[string]any{},
+		},
+		{
+			name:     "nil-as-empty across all inputs",
+			pod:      nil,
+			previous: nil,
+			want:     nil,
+			expect:   map[string]any{},
+		},
+		{
+			name: "workload labels are neither written from nor removed for a template",
+			pod: map[string]string{
+				query.LabelRevisionHash: "live", query.LabelInstanceIdx: "0", query.LabelPodOrdinal: "0",
+				query.LabelPairingProtocol: "v1", constants.OMEComponentLabel: "engine",
+			},
+			previous: map[string]string{query.LabelPodOrdinal: "7", query.LabelPairingProtocol: "v1"},
+			want: map[string]string{
+				"example.com/tier": "gold", query.LabelRevisionHash: "bogus", query.LabelInstanceIdx: "9",
+				constants.OMEComponentLabel: "decoder",
+			},
+			expect: map[string]any{"example.com/tier": "gold"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := LabelsDiff(tc.pod, tc.previous, tc.want)
+			if len(got) != len(tc.expect) {
+				t.Fatalf("diff: got %+v want %+v", got, tc.expect)
+			}
+			for k, want := range tc.expect {
+				gv, ok := got[k]
+				if !ok {
+					t.Errorf("missing key %q in diff %+v", k, got)
+					continue
+				}
+				if want == nil && gv != nil {
+					t.Errorf("key %q: got %+v want nil", k, gv)
+				}
+				if want != nil && gv != want {
+					t.Errorf("key %q: got %+v want %+v", k, gv, want)
+				}
+			}
+		})
 	}
 }

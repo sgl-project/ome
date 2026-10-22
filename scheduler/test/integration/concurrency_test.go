@@ -16,7 +16,7 @@ import (
 // the common case when a controller applies the whole workload at once — the
 // scheduler must not bind a lone member. If PreFilter Skipped an
 // unresolvable-PodGroup pod, it would bind immediately with no gate and no
-// domain pin, breaking all-or-nothing; instead such a member is held and
+// domain assignment, breaking all-or-nothing; instead such a member is held and
 // requeues when the PodGroup appears.
 //
 // Two nodes in one domain, a 2-member gang. The pods are created first; they must
@@ -69,7 +69,7 @@ func TestGangMembersCreatedBeforePodGroupHold(t *testing.T) {
 // many gangs whose PodGroups and pods are all created at once, from many
 // goroutines, with the pods racing ahead of their PodGroups. This stresses two
 // paths the serial suite never exercises together — the PodGroup-cache-lag
-// hold/requeue, and the domain-contention race where a gang can pin a domain
+// hold/requeue, and the domain-contention race where a gang can take a domain
 // that then fills. Every gang must still converge: all members bind, and each
 // gang lands in exactly one domain. A regression (a wedged gang with free
 // capacity, or an over-committed domain) fails via the never-binds wait or the
@@ -139,7 +139,7 @@ func TestConcurrentGangBurst(t *testing.T) {
 		t.Fatalf("burst setup: %v", err)
 	}
 
-	// Every pod must bind — a wedged gang (pinned to a full domain with free
+	// Every pod must bind — a wedged gang (assigned to a full domain with free
 	// capacity elsewhere, never re-planning) would time out here.
 	type result struct {
 		gang int

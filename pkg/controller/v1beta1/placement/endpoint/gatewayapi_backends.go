@@ -35,18 +35,18 @@ func (p *GatewayAPIPublisher) resolveBackendAddresses(ctx context.Context, isvc 
 	if p.addressResolver == nil {
 		return nil, errors.New("gateway backend publication is enabled but no backend address resolver is configured")
 	}
-	homes := append([]Home(nil), target.Homes...)
-	sort.Slice(homes, func(i, j int) bool { return homes[i].Cluster < homes[j].Cluster })
-	addresses := make(map[string][]BackendAddress, len(homes))
-	for _, home := range homes {
-		resolved, err := p.addressResolver.Resolve(ctx, isvc, home)
+	clusters := append([]ServingCluster(nil), target.Clusters...)
+	sort.Slice(clusters, func(i, j int) bool { return clusters[i].Cluster < clusters[j].Cluster })
+	addresses := make(map[string][]BackendAddress, len(clusters))
+	for _, cluster := range clusters {
+		resolved, err := p.addressResolver.Resolve(ctx, isvc, cluster)
 		if err != nil {
-			return nil, fmt.Errorf("resolve backend addresses for cluster %q: %w", home.Cluster, err)
+			return nil, fmt.Errorf("resolve backend addresses for cluster %q: %w", cluster.Cluster, err)
 		}
 		if len(resolved) == 0 {
-			return nil, fmt.Errorf("resolve backend addresses for cluster %q: resolver returned no addresses", home.Cluster)
+			return nil, fmt.Errorf("resolve backend addresses for cluster %q: resolver returned no addresses", cluster.Cluster)
 		}
-		addresses[home.Cluster] = resolved
+		addresses[cluster.Cluster] = resolved
 	}
 	return addresses, nil
 }
@@ -65,12 +65,12 @@ func (p *GatewayAPIPublisher) ensureGatewayBackendResources(
 		return desiredSlices, desiredPolicies, nil
 	}
 
-	homes := append([]Home(nil), target.Homes...)
-	sort.Slice(homes, func(i, j int) bool { return homes[i].Cluster < homes[j].Cluster })
-	for _, home := range homes {
-		serviceName := p.serviceName(isvc, home.Cluster)
+	clusters := append([]ServingCluster(nil), target.Clusters...)
+	sort.Slice(clusters, func(i, j int) bool { return clusters[i].Cluster < clusters[j].Cluster })
+	for _, cluster := range clusters {
+		serviceName := p.serviceName(isvc, cluster.Cluster)
 		if p.config.GatewayBackend.EndpointSlices.Enabled {
-			slices, err := p.buildEndpointSlices(isvc, serviceName, home, addresses[home.Cluster])
+			slices, err := p.buildEndpointSlices(isvc, serviceName, cluster, addresses[cluster.Cluster])
 			if err != nil {
 				return nil, nil, err
 			}
@@ -83,7 +83,7 @@ func (p *GatewayAPIPublisher) ensureGatewayBackendResources(
 		}
 
 		if p.config.GatewayBackend.TLS.Enabled {
-			policy := p.buildBackendTLSPolicy(isvc, serviceName, home)
+			policy := p.buildBackendTLSPolicy(isvc, serviceName, cluster)
 			if err := p.applyBackendTLSPolicy(ctx, isvc, policy); err != nil {
 				return nil, nil, err
 			}
@@ -96,7 +96,7 @@ func (p *GatewayAPIPublisher) ensureGatewayBackendResources(
 func (p *GatewayAPIPublisher) buildEndpointSlices(
 	isvc *v1beta1.InferenceService,
 	serviceName string,
-	home Home,
+	cluster ServingCluster,
 	addresses []BackendAddress,
 ) ([]*discoveryv1.EndpointSlice, error) {
 	byFamily := map[discoveryv1.AddressType]map[string]struct{}{}
@@ -104,15 +104,15 @@ func (p *GatewayAPIPublisher) buildEndpointSlices(
 		switch address.Type {
 		case discoveryv1.AddressTypeIPv4, discoveryv1.AddressTypeIPv6:
 		default:
-			return nil, fmt.Errorf("build EndpointSlice for cluster %q: unsupported address type %q", home.Cluster, address.Type)
+			return nil, fmt.Errorf("build EndpointSlice for cluster %q: unsupported address type %q", cluster.Cluster, address.Type)
 		}
 		parsed, err := netip.ParseAddr(address.Address)
 		if err != nil || parsed.Zone() != "" {
-			return nil, fmt.Errorf("build EndpointSlice for cluster %q: invalid %s address %q", home.Cluster, address.Type, address.Address)
+			return nil, fmt.Errorf("build EndpointSlice for cluster %q: invalid %s address %q", cluster.Cluster, address.Type, address.Address)
 		}
 		parsed = parsed.Unmap()
 		if (address.Type == discoveryv1.AddressTypeIPv4) != parsed.Is4() {
-			return nil, fmt.Errorf("build EndpointSlice for cluster %q: address %q does not match type %q", home.Cluster, address.Address, address.Type)
+			return nil, fmt.Errorf("build EndpointSlice for cluster %q: address %q does not match type %q", cluster.Cluster, address.Address, address.Type)
 		}
 		if byFamily[address.Type] == nil {
 			byFamily[address.Type] = map[string]struct{}{}
@@ -146,7 +146,7 @@ func (p *GatewayAPIPublisher) buildEndpointSlices(
 		if addressType == discoveryv1.AddressTypeIPv4 {
 			suffix = ipv4EndpointSliceSuffix
 		}
-		labels := p.serviceLabels(isvc, home.Cluster)
+		labels := p.serviceLabels(isvc, cluster.Cluster)
 		labels[discoveryv1.LabelServiceName] = serviceName
 		labels[discoveryv1.LabelManagedBy] = ManagedByValue
 		slices = append(slices, &discoveryv1.EndpointSlice{
@@ -164,7 +164,7 @@ func (p *GatewayAPIPublisher) buildEndpointSlices(
 		})
 	}
 	if len(slices) == 0 {
-		return nil, fmt.Errorf("build EndpointSlice for cluster %q: no IPv4 or IPv6 addresses", home.Cluster)
+		return nil, fmt.Errorf("build EndpointSlice for cluster %q: no IPv4 or IPv6 addresses", cluster.Cluster)
 	}
 	return slices, nil
 }
@@ -172,14 +172,14 @@ func (p *GatewayAPIPublisher) buildEndpointSlices(
 func (p *GatewayAPIPublisher) buildBackendTLSPolicy(
 	isvc *v1beta1.InferenceService,
 	serviceName string,
-	home Home,
+	cluster ServingCluster,
 ) *gatewayapiv1.BackendTLSPolicy {
 	caSet := gatewayapiv1.WellKnownCACertificatesType(p.config.GatewayBackend.TLS.WellKnownCACertificates)
 	return &gatewayapiv1.BackendTLSPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serviceName,
 			Namespace: p.routeNamespace(isvc),
-			Labels:    p.serviceLabels(isvc, home.Cluster),
+			Labels:    p.serviceLabels(isvc, cluster.Cluster),
 		},
 		Spec: gatewayapiv1.BackendTLSPolicySpec{
 			TargetRefs: []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{{
@@ -191,7 +191,7 @@ func (p *GatewayAPIPublisher) buildBackendTLSPolicy(
 			}},
 			Validation: gatewayapiv1.BackendTLSPolicyValidation{
 				WellKnownCACertificates: &caSet,
-				Hostname:                gatewayapiv1.PreciseHostname(home.BackendHost),
+				Hostname:                gatewayapiv1.PreciseHostname(cluster.BackendHost),
 			},
 		},
 	}

@@ -2,11 +2,8 @@ package servingruntime
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
@@ -25,78 +22,26 @@ func validateProfileMarker(annotations map[string]string, disabled *bool) error 
 	return nil
 }
 
+// validateClusterRuntimeInheritance refuses a ClusterServingRuntime whose
+// inherit-from chain does not resolve: a missing parent, a cycle or a chain
+// deeper than the limit. A runtime with no parent passes.
 func validateClusterRuntimeInheritance(ctx context.Context, c client.Reader, csr *v1beta1.ClusterServingRuntime) error {
-	parentName := csr.Annotations[constants.RuntimeInheritFromAnnotationKey]
-	if parentName == "" {
+	start := runtimeinheritance.ClusterRuntimeRef(csr)
+	if start.ParentName == "" {
 		return nil
 	}
-	fetch := clusterFetcher(c)
-	start := &runtimeinheritance.RuntimeRef{
-		Name:       csr.Name,
-		Spec:       &csr.Spec,
-		ParentName: parentName,
-	}
-	_, _, err := runtimeinheritance.Resolve(ctx, start, fetch, constants.RuntimeInheritMaxDepth)
+	_, _, err := runtimeinheritance.Resolve(ctx, start, runtimeinheritance.ClusterRuntimeFetcher(c), constants.RuntimeInheritMaxDepth)
 	return err
 }
 
+// validateNamespacedRuntimeInheritance is validateClusterRuntimeInheritance
+// for a ServingRuntime, whose parents are read from its own namespace first
+// and from cluster scope second.
 func validateNamespacedRuntimeInheritance(ctx context.Context, c client.Reader, sr *v1beta1.ServingRuntime) error {
-	parentName := sr.Annotations[constants.RuntimeInheritFromAnnotationKey]
-	if parentName == "" {
+	start := runtimeinheritance.NamespacedRuntimeRef(sr)
+	if start.ParentName == "" {
 		return nil
 	}
-	fetch := namespacedFetcher(c, sr.Namespace)
-	start := &runtimeinheritance.RuntimeRef{
-		Name:       sr.Name,
-		Spec:       &sr.Spec,
-		ParentName: parentName,
-	}
-	_, _, err := runtimeinheritance.Resolve(ctx, start, fetch, constants.RuntimeInheritMaxDepth)
+	_, _, err := runtimeinheritance.Resolve(ctx, start, runtimeinheritance.NamespacedRuntimeFetcher(c, sr.Namespace), constants.RuntimeInheritMaxDepth)
 	return err
-}
-
-func clusterFetcher(c client.Reader) runtimeinheritance.Fetcher {
-	return func(ctx context.Context, name string) (*runtimeinheritance.RuntimeRef, error) {
-		csr := &v1beta1.ClusterServingRuntime{}
-		if err := c.Get(ctx, types.NamespacedName{Name: name}, csr); err != nil {
-			if apierrors.IsNotFound(err) {
-				return nil, errors.Join(runtimeinheritance.ErrParentNotFound, err)
-			}
-			return nil, err
-		}
-		return &runtimeinheritance.RuntimeRef{
-			Name:       csr.Name,
-			Spec:       &csr.Spec,
-			ParentName: csr.Annotations[constants.RuntimeInheritFromAnnotationKey],
-		}, nil
-	}
-}
-
-func namespacedFetcher(c client.Reader, namespace string) runtimeinheritance.Fetcher {
-	return func(ctx context.Context, name string) (*runtimeinheritance.RuntimeRef, error) {
-		sr := &v1beta1.ServingRuntime{}
-		err := c.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, sr)
-		if err == nil {
-			return &runtimeinheritance.RuntimeRef{
-				Name:       sr.Name,
-				Spec:       &sr.Spec,
-				ParentName: sr.Annotations[constants.RuntimeInheritFromAnnotationKey],
-			}, nil
-		}
-		if !apierrors.IsNotFound(err) {
-			return nil, err
-		}
-		csr := &v1beta1.ClusterServingRuntime{}
-		if err := c.Get(ctx, types.NamespacedName{Name: name}, csr); err != nil {
-			if apierrors.IsNotFound(err) {
-				return nil, errors.Join(runtimeinheritance.ErrParentNotFound, err)
-			}
-			return nil, err
-		}
-		return &runtimeinheritance.RuntimeRef{
-			Name:       csr.Name,
-			Spec:       &csr.Spec,
-			ParentName: csr.Annotations[constants.RuntimeInheritFromAnnotationKey],
-		}, nil
-	}
 }

@@ -93,7 +93,7 @@ func TestSingleMoveProposal(t *testing.T) {
 			}
 			for _, name := range []string{"member-a", "member-b"} {
 				if diff := cmp.Diff(proposal.Assignments[name].CurrentHome, got.Assignments[name].CurrentHome); diff != "" {
-					t.Fatalf("occupied home changed: %s", diff)
+					t.Fatalf("occupied member changed: %s", diff)
 				}
 				if diff := cmp.Diff(proposal.Assignments[name].OriginalReplicas, got.Assignments[name].OriginalReplicas); diff != "" {
 					t.Fatalf("original budget changed: %s", diff)

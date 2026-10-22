@@ -59,9 +59,9 @@ func tainted(n *v1.Node, key string) *v1.Node {
 	return n
 }
 
-// TestNodeSchedulable: a node is schedulable for the pod only when it is not
+// TestNodeSchedulable_CordonedOrUntoleratedTaint_IsFalse: a node is schedulable for the pod only when it is not
 // cordoned and its NoSchedule taints are tolerated — capacity alone is not enough.
-func TestNodeSchedulable(t *testing.T) {
+func TestNodeSchedulable_CordonedOrUntoleratedTaint_IsFalse(t *testing.T) {
 	pod := gpuPod("4") // no tolerations
 	if !nodeSchedulable(gpuNode("n", "a", "4"), pod) {
 		t.Fatal("plain node should be schedulable")
@@ -82,10 +82,10 @@ func TestNodeSchedulable(t *testing.T) {
 	}
 }
 
-// TestFreeByDomainExcludesUnschedulable: a cordoned (or untolerated-taint) node
-// has capacity but is NOT counted free — otherwise Choose would pin a domain the
+// TestFreeByDomain_CordonedOrTaintedNodes_CountsThemNotFree: a cordoned (or untolerated-taint) node
+// has capacity but is NOT counted free — otherwise Choose would take a domain the
 // framework's Filter then rejects, wedging the gang.
-func TestFreeByDomainExcludesUnschedulable(t *testing.T) {
+func TestFreeByDomain_CordonedOrTaintedNodes_CountsThemNotFree(t *testing.T) {
 	pod := gpuPod("4")
 	nodes := []framework.NodeInfo{
 		nodeInfo(cordoned(gpuNode("a1", "a", "4"))),     // a: cordoned
@@ -107,7 +107,7 @@ func nodeInfo(node *v1.Node, pods ...*v1.Pod) framework.NodeInfo {
 	return ni
 }
 
-func TestDomainOf(t *testing.T) {
+func TestDomainOf_LabelledUnlabelledOrNilNode_ReturnsLabelOrEmpty(t *testing.T) {
 	if got := domainOf(gpuNode("n", "d7", "4"), testKey); got != "d7" {
 		t.Fatalf("domainOf = %q want d7", got)
 	}
@@ -119,12 +119,12 @@ func TestDomainOf(t *testing.T) {
 	}
 }
 
-// TestFreeByDomain: build topology.FreeByDomain from a framework node snapshot,
+// TestFreeByDomain_MixedSnapshot_CountsNodesWherePodFits: build topology.FreeByDomain from a framework node snapshot,
 // free-ness inferred from whether the GANG POD's own requests fit — no configured
 // accelerator name. Only nodes that both carry a domain label and could hold the
 // pod's resource (allocatable > 0 for it) participate; free = the pod fits; an
 // all-occupied domain still appears at 0; irrelevant and no-label nodes ignored.
-func TestFreeByDomain(t *testing.T) {
+func TestFreeByDomain_MixedSnapshot_CountsNodesWherePodFits(t *testing.T) {
 	nodes := []framework.NodeInfo{
 		nodeInfo(gpuNode("n1", "a", "4")),              // free
 		nodeInfo(gpuNode("n2", "a", "4")),              // free
@@ -142,7 +142,7 @@ func TestFreeByDomain(t *testing.T) {
 	}
 }
 
-func TestNodeFitsPodChecksStandardResourcesAndPodCapacity(t *testing.T) {
+func TestNodeFitsPod_CPUOrPodSlotsExhausted_IsFalse(t *testing.T) {
 	node := gpuNode("n", "a", "4")
 	node.Status.Allocatable[v1.ResourceCPU] = resource.MustParse("2")
 	node.Status.Allocatable[v1.ResourceMemory] = resource.MustParse("2Gi")
@@ -163,7 +163,7 @@ func TestNodeFitsPodChecksStandardResourcesAndPodCapacity(t *testing.T) {
 	}
 }
 
-func TestNodeFitsPodChecksSelectorAndRequiredAffinity(t *testing.T) {
+func TestNodeFitsPod_SelectorOrRequiredAffinityMismatch_IsFalse(t *testing.T) {
 	node := gpuNode("n", "a", "4")
 	node.Labels["pool"] = "serving"
 	pod := gpuPod("4")
@@ -182,7 +182,7 @@ func TestNodeFitsPodChecksSelectorAndRequiredAffinity(t *testing.T) {
 	}
 }
 
-func TestFeasibleByDomainMatchesHeterogeneousMembers(t *testing.T) {
+func TestFeasibleByDomain_MembersWithDifferentSelectors_CountsOnlyMatchingNodes(t *testing.T) {
 	aGPU := gpuNode("a-gpu", "a", "8")
 	aGPU.Labels["kind"] = "gpu"
 	aCPU := gpuNode("a-cpu", "a", "4")
@@ -202,7 +202,7 @@ func TestFeasibleByDomainMatchesHeterogeneousMembers(t *testing.T) {
 	}
 }
 
-func TestFeasibleAtLeastIgnoresInfeasibleSurplusMember(t *testing.T) {
+func TestFeasibleAtLeastByDomain_SurplusMemberFitsNowhere_IgnoresIt(t *testing.T) {
 	n1 := gpuNode("n1", "a", "4")
 	n1.Labels["pool"] = "usable"
 	n2 := gpuNode("n2", "a", "4")
@@ -223,11 +223,11 @@ func TestFeasibleAtLeastIgnoresInfeasibleSurplusMember(t *testing.T) {
 	}
 }
 
-// TestPlacedInDomain counts a gang's members occupying a specific domain — the
-// input the reservation reconciler uses to learn a pinned gang's real footprint.
+// TestPlacedInDomain_MixedOccupants_CountsOnlyThisGangInThatDomain counts a gang's members occupying a specific domain — the
+// input the reservation reconciler uses to learn an assigned gang's real footprint.
 // Only the named gang's pods in the named domain count: a sibling gang's members,
 // this gang's members in another domain, and non-gang pods are all excluded.
-func TestPlacedInDomain(t *testing.T) {
+func TestPlacedInDomain_MixedOccupants_CountsOnlyThisGangInThatDomain(t *testing.T) {
 	nodes := []framework.NodeInfo{
 		nodeInfo(gpuNode("a1", "a", "4"), gangPod("team", "pf")),     // pf in a  -> count
 		nodeInfo(gpuNode("a2", "a", "4"), gangPod("team", "pf")),     // pf in a  -> count
@@ -246,11 +246,11 @@ func TestPlacedInDomain(t *testing.T) {
 	}
 }
 
-// TestGangRoomIsCountedInMembers: the feasibility reading measures a node's room
+// TestFeasibleAtLeastByDomain_RoomOnOneOrTwoNodes_CountsMembersNotNodes: the feasibility reading measures a node's room
 // in gang members, the way placement fills it, not in nodes. A two-member gang
 // fits one node with room for two just as it fits two nodes with room for one
 // each; it does not fit one node with room for one.
-func TestGangRoomIsCountedInMembers(t *testing.T) {
+func TestFeasibleAtLeastByDomain_RoomOnOneOrTwoNodes_CountsMembersNotNodes(t *testing.T) {
 	leader := gangGPUPod("team", "pf", "1")
 	leader.Name = "leader"
 	worker := gangGPUPod("team", "pf", "1")
@@ -295,10 +295,10 @@ func TestGangRoomIsCountedInMembers(t *testing.T) {
 	}
 }
 
-// TestFeasibleByDomainReadsSharedRoomPerDomain: a domain fits a gang when its
+// TestFeasibleByDomain_MembersCanShareANode_CountsSharedRoom: a domain fits a gang when its
 // members can share one node with room for them, exactly as when each member
 // has a node of its own; a domain whose nodes hold one member only does not.
-func TestFeasibleByDomainReadsSharedRoomPerDomain(t *testing.T) {
+func TestFeasibleByDomain_MembersCanShareANode_CountsSharedRoom(t *testing.T) {
 	gang := []*v1.Pod{gangGPUPod("team", "pf", "1"), gangGPUPod("team", "pf", "1")}
 	nodes := []framework.NodeInfo{
 		nodeInfo(gpuNode("a1", "a", "2")),                                    // a: one node, room for two
@@ -313,10 +313,10 @@ func TestFeasibleByDomainReadsSharedRoomPerDomain(t *testing.T) {
 	}
 }
 
-// TestMembersThatMustStayApartKeepOneNodeEach: a gang whose members carry a
+// TestFeasibleByDomain_MembersWithMutualAntiAffinity_NeverShareANode: a gang whose members carry a
 // required anti-affinity against each other is never read as sharing a node,
 // however much room the node has.
-func TestMembersThatMustStayApartKeepOneNodeEach(t *testing.T) {
+func TestFeasibleByDomain_MembersWithMutualAntiAffinity_NeverShareANode(t *testing.T) {
 	apart := func(name string) *v1.Pod {
 		p := gangGPUPod("team", "pf", "1")
 		p.Name = name

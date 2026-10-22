@@ -28,7 +28,7 @@ import (
 const (
 	// resourceSuffix names the backing resources the Gateway API publisher
 	// creates for an InferenceService. The HTTPRoute is "<base>-global"; each
-	// per-home ExternalName Service is "<base>-global-<cluster>" — distinct from
+	// per-cluster ExternalName Service is "<base>-global-<cluster>" — distinct from
 	// the per-cluster ingress resources OME's normal ingress reconciler emits
 	// ("<isvc>", "<isvc>-engine", ...) so the two never collide.
 	resourceSuffix = "-global"
@@ -46,16 +46,16 @@ const (
 // control-plane cluster, one Gateway API HTTPRoute per InferenceService whose
 // backends are Services representing each serving workload cluster's ingress
 // host. In the portable default mode those Services are ExternalName aliases.
-// Optional gateway-backend settings add per-home hostname rewrites, backend TLS,
+// Optional gateway-backend settings add per-cluster hostname rewrites, backend TLS,
 // and direct addresses through EndpointSlices without a vendor-specific
 // external-backend CRD.
 //
 // Single mode yields one backend Service and a single-backendRef route; All/Split
-// yield one Service per home and a route that load-balances across all of them
-// using their resolved traffic weights. As homes come and go the Service set is
-// reconciled — new homes get a Service, departed homes' Services are
+// yield one Service per cluster and a route that load-balances across all of them
+// using their resolved traffic weights. As clusters come and go the Service set is
+// reconciled — new clusters get a Service, departed clusters' Services are
 // garbage-collected — and the route's backendRefs track the current set.
-// Teardown removes the route and every per-home backing resource.
+// Teardown removes the route and every per-cluster backing resource.
 type GatewayAPIPublisher struct {
 	client                 client.Client
 	apiReader              client.Reader
@@ -182,7 +182,7 @@ func (p *GatewayAPIPublisher) routeName(isvc *v1beta1.InferenceService) string {
 	return boundedResourceName(p.resourceBaseName(isvc) + resourceSuffix)
 }
 
-// serviceName is the per-home ExternalName Service name for a cluster.
+// serviceName is the per-cluster ExternalName Service name for a cluster.
 func (p *GatewayAPIPublisher) serviceName(isvc *v1beta1.InferenceService, cluster string) string {
 	if p.trafficMapBackendNames {
 		return trafficMapBackendResourceName(isvc, cluster)
@@ -199,8 +199,8 @@ func (p *GatewayAPIPublisher) routeNamespace(isvc *v1beta1.InferenceService) str
 	return isvc.Namespace
 }
 
-// Publish reconciles the per-home backing resources and the HTTPRoute so the
-// global host load-balances across exactly target.Homes.
+// Publish reconciles the per-cluster backing resources and the HTTPRoute so the
+// global host load-balances across exactly target.Clusters.
 func (p *GatewayAPIPublisher) Publish(ctx context.Context, isvc *v1beta1.InferenceService, target Target) error {
 	if err := p.validateIO(); err != nil {
 		return err
@@ -231,7 +231,7 @@ func (p *GatewayAPIPublisher) Publish(ctx context.Context, isvc *v1beta1.Inferen
 	return p.pruneServices(ctx, isvc, desired)
 }
 
-// Unpublish drains and removes the HTTPRoute before deleting its per-home
+// Unpublish drains and removes the HTTPRoute before deleting its per-cluster
 // resources. Missing resources are tolerated so repeated teardown is a no-op.
 func (p *GatewayAPIPublisher) Unpublish(ctx context.Context, isvc *v1beta1.InferenceService) error {
 	if err := p.validateIO(); err != nil {
@@ -399,9 +399,9 @@ func (p *GatewayAPIPublisher) deleteSourceResources(
 	return errors.Join(errs...)
 }
 
-// ownedServices lists the per-home backend Services this publisher created for
+// ownedServices lists the per-cluster backend Services this publisher created for
 // the ISVC (by the managed-by + per-ISVC name/namespace labels), so teardown and
-// stale-home GC find them all regardless of how many homes there are, and never
+// stale-cluster GC find them all regardless of how many clusters there are, and never
 // reach a same-named ISVC from another namespace.
 func (p *GatewayAPIPublisher) ownedServices(ctx context.Context, isvc *v1beta1.InferenceService) ([]corev1.Service, error) {
 	return p.sourceServices(
@@ -428,11 +428,11 @@ func (p *GatewayAPIPublisher) sourceServices(
 	return list.Items, nil
 }
 
-// ensureServices creates or updates one ExternalName Service per home, before
+// ensureServices creates or updates one ExternalName Service per cluster, before
 // the route is changed, and returns the desired names for the prune step.
 func (p *GatewayAPIPublisher) ensureServices(ctx context.Context, isvc *v1beta1.InferenceService, target Target) (map[string]struct{}, error) {
-	desired := make(map[string]Home, len(target.Homes))
-	for _, h := range target.Homes {
+	desired := make(map[string]ServingCluster, len(target.Clusters))
+	for _, h := range target.Clusters {
 		desired[p.serviceName(isvc, h.Cluster)] = h
 	}
 	// Apply in a stable order so behavior is deterministic.
@@ -453,7 +453,7 @@ func (p *GatewayAPIPublisher) ensureServices(ctx context.Context, isvc *v1beta1.
 	return keep, nil
 }
 
-// pruneServices deletes owned Services no longer backing a home. It runs after
+// pruneServices deletes owned Services no longer backing a cluster. It runs after
 // the route drops their backendRefs, so the route never points at a Service that
 // is already gone.
 func (p *GatewayAPIPublisher) pruneServices(ctx context.Context, isvc *v1beta1.InferenceService, desired map[string]struct{}) error {
@@ -473,8 +473,8 @@ func (p *GatewayAPIPublisher) pruneServices(ctx context.Context, isvc *v1beta1.I
 	return nil
 }
 
-func (p *GatewayAPIPublisher) applyService(ctx context.Context, isvc *v1beta1.InferenceService, name string, home Home) error {
-	desired := p.buildExternalNameService(isvc, name, home)
+func (p *GatewayAPIPublisher) applyService(ctx context.Context, isvc *v1beta1.InferenceService, name string, cluster ServingCluster) error {
+	desired := p.buildExternalNameService(isvc, name, cluster)
 	existing := &corev1.Service{}
 	err := p.apiReader.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if apierrors.IsNotFound(err) {
@@ -541,10 +541,10 @@ func (p *GatewayAPIPublisher) preflightResourceOwnership(
 		return err
 	}
 
-	homes := append([]Home(nil), target.Homes...)
-	sort.Slice(homes, func(i, j int) bool { return homes[i].Cluster < homes[j].Cluster })
-	for _, home := range homes {
-		serviceName := p.serviceName(isvc, home.Cluster)
+	clusters := append([]ServingCluster(nil), target.Clusters...)
+	sort.Slice(clusters, func(i, j int) bool { return clusters[i].Cluster < clusters[j].Cluster })
+	for _, cluster := range clusters {
+		serviceName := p.serviceName(isvc, cluster.Cluster)
 		service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{
 			Namespace: p.routeNamespace(isvc),
 			Name:      serviceName,
@@ -553,7 +553,7 @@ func (p *GatewayAPIPublisher) preflightResourceOwnership(
 			return err
 		}
 		if p.config.GatewayBackend.EndpointSlices.Enabled {
-			slices, err := p.buildEndpointSlices(isvc, serviceName, home, addresses[home.Cluster])
+			slices, err := p.buildEndpointSlices(isvc, serviceName, cluster, addresses[cluster.Cluster])
 			if err != nil {
 				return err
 			}
@@ -593,10 +593,10 @@ func (p *GatewayAPIPublisher) preflightResourceKeys(
 		return err
 	}
 
-	homes := append([]Home(nil), target.Homes...)
-	sort.Slice(homes, func(i, j int) bool { return homes[i].Cluster < homes[j].Cluster })
-	for _, home := range homes {
-		serviceName := p.serviceName(isvc, home.Cluster)
+	clusters := append([]ServingCluster(nil), target.Clusters...)
+	sort.Slice(clusters, func(i, j int) bool { return clusters[i].Cluster < clusters[j].Cluster })
+	for _, cluster := range clusters {
+		serviceName := p.serviceName(isvc, cluster.Cluster)
 		service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{
 			Namespace: p.routeNamespace(isvc),
 			Name:      serviceName,
@@ -695,19 +695,19 @@ func (p *GatewayAPIPublisher) applyRoute(ctx context.Context, isvc *v1beta1.Infe
 }
 
 // buildExternalNameService renders the ExternalName Service that aliases one
-// home cluster's ingress host. The externalName is repointed if the home's
+// cluster's ingress host. The externalName is repointed if the cluster's
 // backend changes; the Service name is stable per cluster so the HTTPRoute
-// backendRef for that home never has to change.
-func (p *GatewayAPIPublisher) buildExternalNameService(isvc *v1beta1.InferenceService, name string, home Home) *corev1.Service {
+// backendRef for that cluster never has to change.
+func (p *GatewayAPIPublisher) buildExternalNameService(isvc *v1beta1.InferenceService, name string, cluster ServingCluster) *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: p.routeNamespace(isvc),
-			Labels:    p.serviceLabels(isvc, home.Cluster),
+			Labels:    p.serviceLabels(isvc, cluster.Cluster),
 		},
 		Spec: corev1.ServiceSpec{
 			Type:            corev1.ServiceTypeExternalName,
-			ExternalName:    home.BackendHost,
+			ExternalName:    cluster.BackendHost,
 			SessionAffinity: corev1.ServiceAffinityNone,
 			Ports: []corev1.ServicePort{{
 				Port:       p.config.BackendPort,
@@ -720,7 +720,7 @@ func (p *GatewayAPIPublisher) buildExternalNameService(isvc *v1beta1.InferenceSe
 
 // buildHTTPRoute renders the global HTTPRoute: it attaches to the configured
 // global gateway, matches the global host at root, and forwards to one backend
-// per home (each the home's ExternalName Service), equal weight. Homes are
+// per cluster (each the cluster's ExternalName Service), equal weight. Clusters are
 // sorted by cluster so the backendRef order is deterministic (stable idempotency
 // comparisons).
 func (p *GatewayAPIPublisher) buildHTTPRoute(isvc *v1beta1.InferenceService, target Target) *gatewayapiv1.HTTPRoute {
@@ -736,22 +736,22 @@ func (p *GatewayAPIPublisher) buildHTTPRoute(isvc *v1beta1.InferenceService, tar
 		parentRef.Namespace = ptr.To(gatewayapiv1.Namespace(gwNS))
 	}
 
-	homes := append([]Home(nil), target.Homes...)
-	sort.Slice(homes, func(i, j int) bool { return homes[i].Cluster < homes[j].Cluster })
+	clusters := append([]ServingCluster(nil), target.Clusters...)
+	sort.Slice(clusters, func(i, j int) bool { return clusters[i].Cluster < clusters[j].Cluster })
 
-	// Traffic weight per home, resolved upstream: the TrafficMap's capacity-aware
-	// weight when routing is on, else the reactive ready-replica count (a home
-	// with 0 ready gets 0 — no traffic until it is serving). When no home carries
-	// a weight (Single/All, or a Split placement before any home is ready) every
+	// Traffic weight per cluster, resolved upstream: the TrafficMap's capacity-aware
+	// weight when routing is on, else the reactive ready-replica count (a cluster
+	// with 0 ready gets 0 — no traffic until it is serving). When no cluster carries
+	// a weight (Single/All, or a Split placement before any cluster is ready) every
 	// weight is zero; Gateway API sends no traffic if ALL backendRef weights are
 	// zero, so legacy inputs fall back to equal weight (1 each). TrafficMap
 	// weights are authoritative and can intentionally keep every arm at zero.
 	var totalWeight int32
-	for _, h := range homes {
+	for _, h := range clusters {
 		totalWeight += h.Weight
 	}
-	refs := make([]gatewayapiv1.HTTPBackendRef, 0, len(homes))
-	for _, h := range homes {
+	refs := make([]gatewayapiv1.HTTPBackendRef, 0, len(clusters))
+	for _, h := range clusters {
 		weight := int32(1)
 		if totalWeight > 0 || target.WeightsAuthoritative {
 			weight = h.Weight
@@ -815,8 +815,8 @@ func (p *GatewayAPIPublisher) baseLabels(isvc *v1beta1.InferenceService) map[str
 	return out
 }
 
-// serviceLabels are baseLabels plus the per-home cluster marker (a backend
-// Service points at exactly one cluster).
+// serviceLabels are baseLabels plus the cluster label (a backend Service
+// points at exactly one cluster).
 func (p *GatewayAPIPublisher) serviceLabels(isvc *v1beta1.InferenceService, cluster string) map[string]string {
 	out := p.baseLabels(isvc)
 	if cluster != "" {

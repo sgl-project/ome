@@ -1,9 +1,9 @@
 package types
 
-// ConditionType / ConditionReason are workload-internal identifiers
-// stamped on metav1.Condition entries. Values match the legacy
-// omenative/status strings byte-for-byte so operator dashboards keep
-// matching.
+// ConditionType and ConditionReason are the Type and Reason strings of
+// the metav1.Condition entries the engine writes on its owner's status
+// through ReconcileInput.WriteAggregateCondition. Dashboards and alerts
+// match on these strings, so they are fixed API values, not free text.
 type ConditionType string
 
 func (t ConditionType) String() string { return string(t) }

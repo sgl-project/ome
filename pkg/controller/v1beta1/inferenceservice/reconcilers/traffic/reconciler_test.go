@@ -9,15 +9,13 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/traffic/status"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 var fixedNow = metav1.NewTime(time.Date(2026, time.May, 17, 12, 0, 0, 0, time.UTC))
@@ -82,15 +80,8 @@ func (s *stubTranslator) ObserveAcceptance(obj client.Object) AcceptanceObservat
 
 func newReconcilerWithStub(t *testing.T, tr *stubTranslator, seed ...client.Object) (*Reconciler, client.Client) {
 	t.Helper()
-	scheme := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		t.Fatalf("add clientgo scheme: %v", err)
-	}
-	if err := v1beta1.AddToScheme(scheme); err != nil {
-		t.Fatalf("add v1beta1 scheme: %v", err)
-	}
-	c := fakeclient.NewClientBuilder().WithScheme(scheme).WithObjects(seed...).Build()
-	r := NewReconciler(c, scheme, tr)
+	c := fakeclient.New(t, fakeclient.WithObjects(seed...))
+	r := NewReconciler(c, c.Scheme(), tr)
 	r.now = func() metav1.Time { return fixedNow }
 	return r, c
 }

@@ -54,21 +54,13 @@ type AutoscalerPolicyConfig struct {
 
 // NewAutoscalerPolicyConfig loads the block once (startup paths).
 func NewAutoscalerPolicyConfig(clientset kubernetes.Interface) (*AutoscalerPolicyConfig, error) {
-	configMap, err := getInferenceServiceConfigMap(clientset)
-	if err != nil {
-		return nil, err
-	}
-	return parseAutoscalerPolicyConfig(configMap)
+	return loadBlock(clientset, parseAutoscalerPolicyConfig)
 }
 
 // NewAutoscalerPolicyConfigCached loads the block through the TTL config
 // cache, so provider-binding edits take effect without a controller restart.
 func NewAutoscalerPolicyConfigCached(cache *ConfigCache, clientset kubernetes.Interface) (*AutoscalerPolicyConfig, error) {
-	configMap, err := cache.get(clientset)
-	if err != nil {
-		return nil, err
-	}
-	return parseAutoscalerPolicyConfig(configMap)
+	return loadBlockCached(cache, clientset, parseAutoscalerPolicyConfig)
 }
 
 func parseAutoscalerPolicyConfig(configMap *v1.ConfigMap) (*AutoscalerPolicyConfig, error) {

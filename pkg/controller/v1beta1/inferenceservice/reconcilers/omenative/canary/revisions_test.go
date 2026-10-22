@@ -269,3 +269,56 @@ func TestRecordSettledRevisionsFollowsTheReplica(t *testing.T) {
 		}
 	}
 }
+
+// A member whose run records no stable revision for it, a decoder created
+// in the same change that put it in the canary group, starts with its unit
+// on the primary's stable identity, is staged and shifted with it, and is
+// sent no revert signal. A completed promotion records its target with
+// nothing moved to previous; a completed revert records nothing on it, since
+// it has no stable revision to own its traffic again, and the unit reads
+// complete without waiting on it.
+func TestReconcile_AMemberWithNoStableRevisionIsRecordedByAPromotionAlone(t *testing.T) {
+	newDecoder := func() MemberRevisions {
+		return MemberRevisions{CanaryRevisionHash: "decnew", ReadyCanaryCapacity: 1, CanaryPairingProtocol: pdCanaryProtocol}
+	}
+	started := func(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+		t.Helper()
+		isvc, in := pdInputs(map[string]int32{"new": 2, "old": 2}, newDecoder())
+		mustReconcile(t, isvc, in)
+		if cs := rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent); cs == nil || cs.StableRevisionHash != "old" || cs.CanaryRevisionHash != "new" {
+			t.Fatalf("the unit must start on the primary's stable identity, got %+v", cs)
+		}
+		expectRevisions(t, isvc, v1beta1.EngineComponent, revisionWant{ready: "new"})
+		expectRevisions(t, isvc, v1beta1.DecoderComponent, revisionWant{ready: "decnew"})
+		return isvc, in
+	}
+	t.Run("a promotion records the target with nothing moved to previous", func(t *testing.T) {
+		isvc, in := started(t)
+		annotate(isvc, constants.RolloutPromoteAnnotation, "new")
+		mustReconcile(t, isvc, in)
+		delete(isvc.Annotations, constants.RolloutPromoteAnnotation)
+		in.PerRevisionPods = map[string]int32{"new": 4}
+		mustReconcile(t, isvc, in) // 100% traffic moves; the release reads the next pass's count
+		if res := mustReconcile(t, isvc, in); !res.Complete {
+			t.Fatalf("the ungated final step completes, got %+v", res)
+		}
+		expectRevisions(t, isvc, v1beta1.EngineComponent, revisionWant{ready: "new", latest: "new", previous: "old"})
+		expectRevisions(t, isvc, v1beta1.DecoderComponent, revisionWant{ready: "decnew", latest: "decnew"})
+		if cs := rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent); cs.StableRevisionHash != "" {
+			t.Fatalf("the cutover must drop the unit's stable identity, got %+v", cs)
+		}
+	})
+	t.Run("a revert records nothing on it", func(t *testing.T) {
+		isvc, in := started(t)
+		annotate(isvc, constants.RolloutRollbackAnnotation, "true")
+		if res := mustReconcile(t, isvc, in); !res.RolledBack || phaseOf(isvc) != v1beta1.RolloutPhaseRollingBack {
+			t.Fatalf("the rejected engine pods still serve, got phase=%q res=%+v", phaseOf(isvc), res)
+		}
+		in.PerRevisionPods = map[string]int32{"old": 4}
+		if res := mustReconcile(t, isvc, in); !res.RolledBack || phaseOf(isvc) != v1beta1.RolloutPhaseRolledBack {
+			t.Fatalf("the revert must complete without the stable-less member, got phase=%q res=%+v", phaseOf(isvc), res)
+		}
+		expectRevisions(t, isvc, v1beta1.EngineComponent, revisionWant{ready: "old", latest: "old"})
+		expectRevisions(t, isvc, v1beta1.DecoderComponent, revisionWant{ready: "decnew"})
+	})
+}

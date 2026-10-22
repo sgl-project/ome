@@ -25,6 +25,69 @@ func isRollbackRequested(isvc *v1beta1.InferenceService) bool {
 	return isvc.Annotations[constants.RolloutRollbackAnnotation] == "true"
 }
 
+// rollbackRequestHeld reports whether a unit applied the visible rollback
+// request and still holds the rollback it recorded. The request is that
+// unit's: it stays on the object through the hold, and no other unit acts on
+// it. The service-level record counts only while no unit has one of its own.
+func rollbackRequestHeld(isvc *v1beta1.InferenceService) bool {
+	holds := func(cs *v1beta1.CanaryStatus) bool {
+		return cs != nil && cs.RollbackRequested && cs.RolledBackRevisionHash != ""
+	}
+	perUnit := false
+	for _, c := range isvc.Status.Components {
+		if c.Canary != nil {
+			perUnit = true
+			if holds(c.Canary) {
+				return true
+			}
+		}
+	}
+	return !perUnit && holds(isvc.Status.Canary)
+}
+
+// rollbackRequestPending reports a rollback request no unit has applied.
+func rollbackRequestPending(isvc *v1beta1.InferenceService) bool {
+	return isRollbackRequested(isvc) && !rollbackRequestHeld(isvc)
+}
+
+// rollbackRequestActionable reports whether a unit of the service other
+// than self carries a canary a rollback request can act on: started and not
+// done, serving, held or resting Failed. A unit that is already rolling back or
+// rolled back has nothing to reject. The dispatching unit answers for itself.
+func rollbackRequestActionable(isvc *v1beta1.InferenceService, policies rollout.Policies, self v1beta1.ComponentType) bool {
+	for _, g := range rollout.CanaryGroups(isvc, policies) {
+		primary := rollout.PrimaryOf(g)
+		if primary == self || g.Canary == nil {
+			continue
+		}
+		cs := rollout.CanaryStatusFor(&isvc.Status, primary)
+		if cs == nil {
+			continue
+		}
+		switch rollout.StateOf(cs, isvc.Status.Components[primary].RolloutPhase, len(g.Canary.Steps)) {
+		case rollout.CanaryStateDone, rollout.CanaryStateRollingBack, rollout.CanaryStateRolledBack:
+		default:
+			return true
+		}
+	}
+	return false
+}
+
+// rollbackRequestSpendable reports whether the unit self, carrying the record
+// cs, may remove the visible rollback request: the request is its own (it
+// applied it and still holds the rollback), or no unit holds it and no other
+// unit carries a canary it can act on. A request another unit holds, or one
+// another unit's canary can still apply, is that unit's and is left for it.
+func rollbackRequestSpendable(isvc *v1beta1.InferenceService, policies rollout.Policies, self v1beta1.ComponentType, cs *v1beta1.CanaryStatus) bool {
+	if !isRollbackRequested(isvc) {
+		return false
+	}
+	if cs != nil && cs.RollbackRequested && cs.RolledBackRevisionHash != "" {
+		return true
+	}
+	return !rollbackRequestHeld(isvc) && !rollbackRequestActionable(isvc, policies, self)
+}
+
 // promoteKeys are the operator verbs that open a step's gate: the promote
 // and its forced form. Both carry the canary revision hash and are recorded
 // in PromotedThrough when applied.

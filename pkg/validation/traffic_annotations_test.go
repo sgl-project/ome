@@ -509,7 +509,7 @@ func TestValidateTrafficAnnotations_CrossRules(t *testing.T) {
 	}
 }
 
-func TestLevenshtein(t *testing.T) {
+func TestLevenshtein_EditPairs_CountsSubstitutionsInsertionsDeletions(t *testing.T) {
 	tests := []struct {
 		a, b string
 		want int

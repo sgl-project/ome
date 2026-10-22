@@ -116,7 +116,10 @@ type MigrationRecord struct {
 
 	StartedAt metav1.Time
 
-	// Deadline is when a non-terminal record expires.
+	// Deadline is when a non-terminal record expires: the accept time
+	// plus the ready timeout. A pause of the Component clears it, and the
+	// pass the pause clears starts it again, a full window from then, as
+	// for an operation's deadline.
 	Deadline metav1.Time
 
 	CompletedAt *metav1.Time

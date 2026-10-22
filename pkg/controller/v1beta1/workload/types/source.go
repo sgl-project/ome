@@ -163,12 +163,71 @@ type WorkloadObservedState struct {
 	// from the ControllerRevisions. A revision absent here records no width
 	// and renders the desired one.
 	WorkerSizeByRevision map[string]int32
+
+	// rowIndex is where each row sits in InstanceStatuses, built by IndexRows
+	// at the start of a pass and shared by every copy of the state made after
+	// it. nil until then, and a lookup without one scans the slice.
+	rowIndex *rowIndex
+}
+
+// rowIndex is the position of each Instance's row in one row slice, so a
+// lookup by Instance index costs the same on 4,000 rows as on 4. It is
+// built for one slice and never edited afterwards: a state whose slice was
+// replaced builds a new one, and a copy of the state still holding this
+// one reads the slice it was built for.
+type rowIndex struct {
+	rows     []InstanceStatus
+	position map[int32]int
+}
+
+// indexRows records the first row of each Instance index.
+func indexRows(rows []InstanceStatus) *rowIndex {
+	position := make(map[int32]int, len(rows))
+	for i := range rows {
+		if _, seen := position[rows[i].Index]; !seen {
+			position[rows[i].Index] = i
+		}
+	}
+	return &rowIndex{rows: rows, position: position}
+}
+
+// covers reports whether the index was built from rows: the same backing
+// array read at the same length. The engine reads rows in place and never
+// moves them, so an index that covers the slice is current.
+func (x *rowIndex) covers(rows []InstanceStatus) bool {
+	if x == nil || len(x.rows) != len(rows) {
+		return false
+	}
+	return len(rows) == 0 || &x.rows[0] == &rows[0]
+}
+
+// IndexRows indexes the rows once for this state and for every copy of it
+// made afterwards, so a pass that calls it on entry reads rows through one
+// index all the way down. A state that already indexed this slice keeps
+// its index. Only this method builds one: a lookup never does, so a copy
+// made before the index existed scans its slice as it always has.
+func (o *WorkloadObservedState) IndexRows() {
+	if !o.rowIndex.covers(o.InstanceStatuses) {
+		o.rowIndex = indexRows(o.InstanceStatuses)
+	}
 }
 
 // Instance returns the observed row at idx, or nil when the observation
 // carries none. The pointer aliases the observation and is read-only: a
 // write goes through MutateInstance, which re-reads the row it lands on.
+// With an index that covers the slice the lookup is one map read; without
+// one, or when the row at the recorded position does not carry idx, the
+// slice is scanned.
 func (o WorkloadObservedState) Instance(idx int32) *InstanceStatus {
+	if o.rowIndex.covers(o.InstanceStatuses) {
+		position, found := o.rowIndex.position[idx]
+		if !found {
+			return nil
+		}
+		if o.InstanceStatuses[position].Index == idx {
+			return &o.InstanceStatuses[position]
+		}
+	}
 	for i := range o.InstanceStatuses {
 		if o.InstanceStatuses[i].Index == idx {
 			return &o.InstanceStatuses[i]

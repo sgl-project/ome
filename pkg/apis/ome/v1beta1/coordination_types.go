@@ -307,8 +307,10 @@ const (
 // RolloutCoordinationRatio is the cross-Component ratio snapshot used
 // by RatioBalanced pacing.
 type RolloutCoordinationRatio struct {
-	// Original is the snapshot of desired replica counts per
-	// Component at rollout start. The keys are ComponentType strings.
+	// Original is the reference the ratio rule measures against: each
+	// Component's desired replica count as its spec asks for it now. It
+	// follows the spec, so a resize mid-roll or while idle moves it to
+	// the new counts. The keys are ComponentType strings.
 	// +optional
 	Original map[ComponentType]int32 `json:"original,omitempty"`
 

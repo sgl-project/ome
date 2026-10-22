@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 
@@ -13,7 +11,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
-	"github.com/onsi/gomega/types"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,7 +33,7 @@ func TestRetryPreservesLastError(t *testing.T) {
 	}
 }
 
-func TestFilterUtil(t *testing.T) {
+func TestFilter_PredicateAlwaysTrueOrFalse_KeepsAllOrNoEntries(t *testing.T) {
 	scenarios := map[string]struct {
 		input     map[string]string
 		predicate func(string) bool
@@ -62,7 +59,7 @@ func TestFilterUtil(t *testing.T) {
 	}
 }
 
-func TestUnionUtil(t *testing.T) {
+func TestUnion_OverlappingEmptyOrUnsetMaps_LaterValueWinsAndUnsetIsEmpty(t *testing.T) {
 	scenarios := map[string]struct {
 		input1   map[string]string
 		input2   map[string]string
@@ -111,7 +108,7 @@ func TestUnionUtil(t *testing.T) {
 	}
 }
 
-func TestContainsUtil(t *testing.T) {
+func TestIncludes_PresentPrefixOnlyOrEmptySlice_TrueOnlyForTheWholeString(t *testing.T) {
 	scenarios := map[string]struct {
 		input1   []string
 		input2   string
@@ -141,7 +138,7 @@ func TestContainsUtil(t *testing.T) {
 	}
 }
 
-func TestAppendVolumeIfNotExists(t *testing.T) {
+func TestAppendVolumeIfNotExists_SameOrNewName_AppendsOnlyTheNewName(t *testing.T) {
 
 	scenarios := map[string]struct {
 		volumes         []v1.Volume
@@ -259,147 +256,33 @@ func TestAppendVolumeIfNotExists(t *testing.T) {
 	}
 }
 
-func TestMergeEnvs(t *testing.T) {
-
-	scenarios := map[string]struct {
-		baseEnvs     []v1.EnvVar
-		overrideEnvs []v1.EnvVar
-		expectedEnvs []v1.EnvVar
+func TestMergeEnvs_OverlappingOrNewNames_OverridesReplaceAndNewNamesAppend(t *testing.T) {
+	env := func(name, value string) v1.EnvVar { return v1.EnvVar{Name: name, Value: value} }
+	for _, row := range []struct {
+		name      string
+		base      []v1.EnvVar
+		overrides []v1.EnvVar
+		want      []v1.EnvVar
 	}{
-		"EmptyOverrides": {
-			baseEnvs: []v1.EnvVar{
-				{
-					Name:  "name1",
-					Value: "value1",
-				},
-			},
-			overrideEnvs: []v1.EnvVar{},
-			expectedEnvs: []v1.EnvVar{
-				{
-					Name:  "name1",
-					Value: "value1",
-				},
-			},
-		},
-		"EmptyBase": {
-			baseEnvs: []v1.EnvVar{},
-			overrideEnvs: []v1.EnvVar{
-				{
-					Name:  "name1",
-					Value: "value1",
-				},
-			},
-			expectedEnvs: []v1.EnvVar{
-				{
-					Name:  "name1",
-					Value: "value1",
-				},
-			},
-		},
-		"NoOverlap": {
-			baseEnvs: []v1.EnvVar{
-				{
-					Name:  "name1",
-					Value: "value1",
-				},
-			},
-			overrideEnvs: []v1.EnvVar{
-				{
-					Name:  "name2",
-					Value: "value2",
-				},
-			},
-			expectedEnvs: []v1.EnvVar{
-				{
-					Name:  "name1",
-					Value: "value1",
-				},
-				{
-					Name:  "name2",
-					Value: "value2",
-				},
-			},
-		},
-		"SingleOverlap": {
-			baseEnvs: []v1.EnvVar{
-				{
-					Name:  "name1",
-					Value: "value1",
-				},
-			},
-			overrideEnvs: []v1.EnvVar{
-				{
-					Name:  "name1",
-					Value: "value2",
-				},
-			},
-			expectedEnvs: []v1.EnvVar{
-				{
-					Name:  "name1",
-					Value: "value2",
-				},
-			},
-		},
-		"MultiOverlap": {
-			baseEnvs: []v1.EnvVar{
-				{
-					Name:  "name1",
-					Value: "value1",
-				},
-				{
-					Name:  "name2",
-					Value: "value2",
-				},
-				{
-					Name:  "name3",
-					Value: "value3",
-				},
-			},
-			overrideEnvs: []v1.EnvVar{
-				{
-					Name:  "name1",
-					Value: "value3",
-				},
-				{
-					Name:  "name3",
-					Value: "value1",
-				},
-				{
-					Name:  "name4",
-					Value: "value4",
-				},
-			},
-			expectedEnvs: []v1.EnvVar{
-				{
-					Name:  "name1",
-					Value: "value3",
-				},
-				{
-					Name:  "name2",
-					Value: "value2",
-				},
-				{
-					Name:  "name3",
-					Value: "value1",
-				},
-				{
-					Name:  "name4",
-					Value: "value4",
-				},
-			},
-		},
-	}
-
-	for name, scenario := range scenarios {
-		envs := MergeEnvs(scenario.baseEnvs, scenario.overrideEnvs)
-
-		if diff := cmp.Diff(scenario.expectedEnvs, envs); diff != "" {
-			t.Errorf("Test %q unexpected envs (-want +got): %v", name, diff)
-		}
+		{"no overrides", []v1.EnvVar{env("name1", "value1")}, []v1.EnvVar{}, []v1.EnvVar{env("name1", "value1")}},
+		{"no base", []v1.EnvVar{}, []v1.EnvVar{env("name1", "value1")}, []v1.EnvVar{env("name1", "value1")}},
+		{"no overlap", []v1.EnvVar{env("name1", "value1")}, []v1.EnvVar{env("name2", "value2")},
+			[]v1.EnvVar{env("name1", "value1"), env("name2", "value2")}},
+		{"one overlap", []v1.EnvVar{env("name1", "value1")}, []v1.EnvVar{env("name1", "value2")}, []v1.EnvVar{env("name1", "value2")}},
+		{"two overlaps and one addition",
+			[]v1.EnvVar{env("name1", "value1"), env("name2", "value2"), env("name3", "value3")},
+			[]v1.EnvVar{env("name1", "value3"), env("name3", "value1"), env("name4", "value4")},
+			[]v1.EnvVar{env("name1", "value3"), env("name2", "value2"), env("name3", "value1"), env("name4", "value4")}},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			if diff := cmp.Diff(row.want, MergeEnvs(row.base, row.overrides)); diff != "" {
+				t.Errorf("MergeEnvs mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 
-func TestIsGpuEnabled(t *testing.T) {
+func TestIsGPUEnabled_VendorListSetEmptyOrAbsent_ReadsLimitsForListedOrNvidia(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	multiVendor := []string{constants.NvidiaGPUResourceType, "amd.com/gpu", "google.com/tpu"}
 	scenarios := map[string]struct {
@@ -497,7 +380,7 @@ func TestIsGpuEnabled(t *testing.T) {
 	}
 }
 
-func TestPodRequestsAccelerator(t *testing.T) {
+func TestPodRequestsAccelerator_AnyContainerRequestOrLimit_TrueForListedVendorsOnly(t *testing.T) {
 	multiVendor := []string{
 		constants.NvidiaGPUResourceType,
 		"amd.com/gpu",
@@ -598,54 +481,7 @@ func TestPodRequestsAccelerator(t *testing.T) {
 	}
 }
 
-func TestFirstNonNilError(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
-	scenarios := map[string]struct {
-		errors  []error
-		matcher types.GomegaMatcher
-	}{
-		"NoNonNilError": {
-			errors: []error{
-				nil,
-				nil,
-			},
-			matcher: gomega.BeNil(),
-		},
-		"ContainsError": {
-			errors: []error{
-				nil,
-				errors.New("First non nil error"),
-				errors.New("Second non nil error"),
-			},
-			matcher: gomega.Equal(errors.New("First non nil error")),
-		},
-	}
-	for name, scenario := range scenarios {
-		t.Run(name, func(t *testing.T) {
-			err := FirstNonNilError(scenario.errors)
-			g.Expect(err).Should(scenario.matcher)
-		})
-	}
-}
-
-func TestRemoveString(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
-	testStrings := []string{
-		"Model Tensorflow",
-		"SKLearn Model",
-		"Model",
-		"ModelPytorch",
-	}
-	expected := []string{
-		"Model Tensorflow",
-		"SKLearn Model",
-		"ModelPytorch",
-	}
-	res := RemoveString(testStrings, "Model")
-	g.Expect(res).Should(gomega.Equal(expected))
-}
-
-func TestIsPrefixSupported(t *testing.T) {
+func TestIsPrefixSupported_ListedOrUnlistedScheme_TrueOnlyForListed(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	prefixes := []string{
 		"S3://",
@@ -674,7 +510,7 @@ func TestIsPrefixSupported(t *testing.T) {
 	}
 }
 
-func TestFilterPodOnlyAnnotations(t *testing.T) {
+func TestFilterPodOnlyAnnotations_MixedOrNoKeys_DropsOnlyThePodOnlyKeys(t *testing.T) {
 	scenarios := map[string]struct {
 		annotations map[string]string
 		expected    map[string]string
@@ -791,570 +627,9 @@ func TestFilterPodOnlyAnnotations(t *testing.T) {
 	}
 }
 
-// Helper to assert a path is a symlink with expected relative target and resolves to the absolute target.
-func assertSymlink(t *testing.T, linkPath, expectedRelTarget, absoluteTarget string) {
-	t.Helper()
-
-	info, err := os.Lstat(linkPath)
-	if err != nil {
-		t.Fatalf("lstat on %s failed: %v", linkPath, err)
-	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("expected %s to be a symlink", linkPath)
-	}
-
-	gotTarget, err := os.Readlink(linkPath)
-	if err != nil {
-		t.Fatalf("readlink failed: %v", err)
-	}
-	if gotTarget != expectedRelTarget {
-		t.Fatalf("unexpected symlink target: got %q want %q", gotTarget, expectedRelTarget)
-	}
-
-	resolved, err := filepath.EvalSymlinks(linkPath)
-	if err != nil {
-		t.Fatalf("EvalSymlinks failed: %v", err)
-	}
-	expectedResolved, err := filepath.EvalSymlinks(absoluteTarget)
-	if err != nil {
-		t.Fatalf("EvalSymlinks of expected target failed: %v", err)
-	}
-	if filepath.Clean(resolved) != filepath.Clean(expectedResolved) {
-		t.Fatalf("resolved path mismatch: got %q want %q", resolved, expectedResolved)
-	}
-}
-
-func TestCreateSymbolicLink_HappyPath(t *testing.T) {
-	tmp := t.TempDir()
-
-	parentPath := filepath.Join(tmp, "parentDir")
-	if err := os.MkdirAll(parentPath, 0o755); err != nil {
-		t.Fatalf("failed to create parent dir: %v", err)
-	}
-
-	childPath := filepath.Join(tmp, "child", "link")
-
-	if err := CreateSymbolicLink(childPath, parentPath); err != nil {
-		t.Fatalf("CreateSymbolicLink returned error: %v", err)
-	}
-
-	expectedRel, err := filepath.Rel(filepath.Dir(childPath), parentPath)
-	if err != nil {
-		t.Fatalf("failed to compute expected relative path: %v", err)
-	}
-
-	assertSymlink(t, childPath, expectedRel, parentPath)
-}
-
-func TestCreateSymbolicLink_IdempotentNoOp(t *testing.T) {
-	tmp := t.TempDir()
-
-	parentPath := filepath.Join(tmp, "parent")
-	if err := os.MkdirAll(parentPath, 0o755); err != nil {
-		t.Fatalf("failed to create parent dir: %v", err)
-	}
-
-	childPath := filepath.Join(tmp, "child", "link")
-
-	// First creation
-	if err := CreateSymbolicLink(childPath, parentPath); err != nil {
-		t.Fatalf("CreateSymbolicLink returned error: %v", err)
-	}
-
-	target1, err := os.Readlink(childPath)
-	if err != nil {
-		t.Fatalf("readlink failed: %v", err)
-	}
-
-	// Second creation should be a no-op
-	if err := CreateSymbolicLink(childPath, parentPath); err != nil {
-		t.Fatalf("CreateSymbolicLink returned error on idempotent call: %v", err)
-	}
-
-	target2, err := os.Readlink(childPath)
-	if err != nil {
-		t.Fatalf("readlink failed: %v", err)
-	}
-
-	if target1 != target2 {
-		t.Fatalf("idempotent call should keep same symlink target, got %q want %q", target2, target1)
-	}
-
-	resolved, err := filepath.EvalSymlinks(childPath)
-	if err != nil {
-		t.Fatalf("EvalSymlinks failed: %v", err)
-	}
-	expectedResolved, err := filepath.EvalSymlinks(parentPath)
-	if err != nil {
-		t.Fatalf("EvalSymlinks of expected target failed: %v", err)
-	}
-	if filepath.Clean(resolved) != filepath.Clean(expectedResolved) {
-		t.Fatalf("resolved mismatch: got %q want %q", resolved, expectedResolved)
-	}
-}
-
-func TestCreateSymbolicLink_ReplacesExistingSymlinkWithDifferentTarget(t *testing.T) {
-	tmp := t.TempDir()
-
-	parentPath1 := filepath.Join(tmp, "parent1")
-	parentPath2 := filepath.Join(tmp, "parent2")
-	if err := os.MkdirAll(parentPath1, 0o755); err != nil {
-		t.Fatalf("failed to create parent1: %v", err)
-	}
-	if err := os.MkdirAll(parentPath2, 0o755); err != nil {
-		t.Fatalf("failed to create parent2: %v", err)
-	}
-
-	childPath := filepath.Join(tmp, "child", "link")
-
-	// Create symlink to parent1
-	if err := CreateSymbolicLink(childPath, parentPath1); err != nil {
-		t.Fatalf("CreateSymbolicLink returned error: %v", err)
-	}
-	oldTarget, err := os.Readlink(childPath)
-	if err != nil {
-		t.Fatalf("readlink failed: %v", err)
-	}
-
-	// Retarget to parent2
-	if err := CreateSymbolicLink(childPath, parentPath2); err != nil {
-		t.Fatalf("CreateSymbolicLink returned error on retarget: %v", err)
-	}
-
-	newTarget, err := os.Readlink(childPath)
-	if err != nil {
-		t.Fatalf("readlink failed: %v", err)
-	}
-
-	if oldTarget == newTarget {
-		t.Fatalf("symlink target should have changed, still %q", newTarget)
-	}
-
-	expectedRel2, err := filepath.Rel(filepath.Dir(childPath), parentPath2)
-	if err != nil {
-		t.Fatalf("failed to compute expected relative path: %v", err)
-	}
-	assertSymlink(t, childPath, expectedRel2, parentPath2)
-}
-
-func TestCreateSymbolicLink_WhenNonSymlinkAlreadyExists_RemoveAndCreateSymbolicLink(t *testing.T) {
-	tmp := t.TempDir()
-
-	parentPath := filepath.Join(tmp, "parent")
-	if err := os.MkdirAll(parentPath, 0o755); err != nil {
-		t.Fatalf("failed to create parent: %v", err)
-	}
-
-	childPath := filepath.Join(tmp, "child", "link")
-
-	// Create a regular file at childPath
-	if err := os.MkdirAll(filepath.Dir(childPath), 0o755); err != nil {
-		t.Fatalf("failed to create child dir: %v", err)
-	}
-	if err := os.WriteFile(childPath, []byte("regular file"), 0o644); err != nil {
-		t.Fatalf("failed to create regular file: %v", err)
-	}
-
-	if err := CreateSymbolicLink(childPath, parentPath); err != nil {
-		t.Fatalf("not expect err")
-	}
-
-	info, err := os.Lstat(childPath)
-	if err != nil {
-		t.Fatalf("lstat failed: %v", err)
-	}
-	result := info.Mode()&os.ModeSymlink != 0
-	assert.True(t, result)
-
-	expectedRel, err := filepath.Rel(filepath.Dir(childPath), parentPath)
-	if err != nil {
-		t.Fatalf("failed to compute expected relative path: %v", err)
-	}
-
-	assertSymlink(t, childPath, expectedRel, parentPath)
-}
-
-func TestCreateSymbolicLink_CreatesParentDirsForChildPath(t *testing.T) {
-	tmp := t.TempDir()
-
-	parentPath := filepath.Join(tmp, "targetDir")
-	if err := os.MkdirAll(parentPath, 0o755); err != nil {
-		t.Fatalf("failed to create parent dir: %v", err)
-	}
-
-	// Intentionally nested childPath parent that doesn't exist
-	childPath := filepath.Join(tmp, "a", "very", "deep", "dir", "link")
-
-	// Precondition: parent of childPath should not exist
-	if _, err := os.Stat(filepath.Dir(childPath)); !os.IsNotExist(err) {
-		t.Fatalf("expected parent dir to not exist before call")
-	}
-
-	if err := CreateSymbolicLink(childPath, parentPath); err != nil {
-		t.Fatalf("CreateSymbolicLink returned error: %v", err)
-	}
-
-	// Parent dir should now exist and link should be correct
-	if _, err := os.Stat(filepath.Dir(childPath)); err != nil {
-		t.Fatalf("expected parent dir to exist after call, err: %v", err)
-	}
-
-	expectedRel, err := filepath.Rel(filepath.Dir(childPath), parentPath)
-	if err != nil {
-		t.Fatalf("failed to compute expected relative path: %v", err)
-	}
-	assertSymlink(t, childPath, expectedRel, parentPath)
-}
-
-func TestContainsString(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
-
-	scenarios := map[string]struct {
-		values          []interface{}
-		target          string
-		isCaseSensitive bool
-		expected        bool
-	}{
-		"Sensitive_Match": {
-			values:          []interface{}{"hey", "Hello"},
-			target:          "Hello",
-			isCaseSensitive: true,
-			expected:        true,
-		},
-		"Sensitive_NoMatch_DifferentCase": {
-			values:          []interface{}{"hey", "Hello"},
-			target:          "hello",
-			isCaseSensitive: true,
-			expected:        false,
-		},
-		"Insensitive_Match_DifferentCase": {
-			values:          []interface{}{"hey", "Hello"},
-			target:          "hello",
-			isCaseSensitive: false,
-			expected:        true,
-		},
-		"NotFoundInAllStrings": {
-			values:          []interface{}{"hey", "hello"},
-			target:          "he",
-			isCaseSensitive: true,
-			expected:        false,
-		},
-		"FoundWithMixedTypes": {
-			values:          []interface{}{"a", 123, "b", 4.56},
-			target:          "b",
-			isCaseSensitive: true,
-			expected:        true,
-		},
-		"NotFoundWithMixedTypesOnlyNonStringMatch": {
-			values:          []interface{}{123, 456},
-			target:          "123",
-			isCaseSensitive: false,
-			expected:        false,
-		},
-		"EmptySlice": {
-			values:          []interface{}{},
-			target:          "a",
-			isCaseSensitive: false,
-			expected:        false,
-		},
-		"NilSlice": {
-			values:          nil,
-			target:          "a",
-			isCaseSensitive: true,
-			expected:        false,
-		},
-		"ContainsNilElements": {
-			values:          []interface{}{"a", nil, "c"},
-			target:          "a",
-			isCaseSensitive: true,
-			expected:        true,
-		},
-		"Duplicates": {
-			values:          []interface{}{"x", "x", "y"},
-			target:          "x",
-			isCaseSensitive: true,
-			expected:        true,
-		},
-	}
-
-	for name, scenario := range scenarios {
-		t.Run(name, func(t *testing.T) {
-			got := ContainsString(scenario.values, scenario.target, scenario.isCaseSensitive)
-			g.Expect(got).To(gomega.Equal(scenario.expected))
-		})
-	}
-}
-
-func TestHasSymlinkPointingToDir(t *testing.T) {
-	tests := []struct {
-		name      string
-		setupFunc func(root string) (targetDir string, cleanup func())
-		wantFound bool
-		wantErr   bool
-	}{
-		{
-			name: "symlink exists in child directory",
-			/*
-				Directory structure:
-				/parent
-				├── childA
-				│   └── targetDir           (real directory)
-				└── childB
-				    └── grandchild1
-				        └── link -> ../../childA/targetDir   (symlink)
-			*/
-			setupFunc: func(root string) (string, func()) {
-				parent := filepath.Join(root, "parent")
-				childA := filepath.Join(parent, "childA")
-				targetDir := filepath.Join(childA, "targetDir")
-				childB := filepath.Join(parent, "childB")
-				grandchild := filepath.Join(childB, "grandchild1")
-
-				dirs := []string{parent, childA, targetDir, childB, grandchild}
-				for _, dir := range dirs {
-					if err := os.MkdirAll(dir, 0o755); err != nil {
-						t.Fatalf("failed to mkdir %s: %v", dir, err)
-					}
-				}
-
-				linkPath := filepath.Join(grandchild, "link")
-				relTarget, _ := filepath.Rel(grandchild, targetDir)
-				if err := os.Symlink(relTarget, linkPath); err != nil {
-					t.Fatalf("failed to create symlink: %v", err)
-				}
-
-				return targetDir, func() {}
-			},
-			wantFound: true,
-			wantErr:   false,
-		},
-		{
-			name: "symlink exists in sibling directory",
-			/*
-				Directory structure:
-				/parent
-				├── childA
-				│   └── link -> ../childB   (symlink)
-				└── childB                 (real directory)
-			*/
-			setupFunc: func(root string) (string, func()) {
-				parent := filepath.Join(root, "parent")
-				childA := filepath.Join(parent, "childA")
-				childB := filepath.Join(parent, "childB")
-
-				dirs := []string{parent, childA, childB}
-				for _, dir := range dirs {
-					if err := os.MkdirAll(dir, 0o755); err != nil {
-						t.Fatalf("failed to mkdir %s: %v", dir, err)
-					}
-				}
-
-				targetDir := childB
-
-				linkPath := filepath.Join(childA, "link")
-				relTarget, _ := filepath.Rel(childA, targetDir)
-				if err := os.Symlink(relTarget, linkPath); err != nil {
-					t.Fatalf("failed to create symlink: %v", err)
-				}
-
-				return targetDir, func() {}
-			},
-			wantFound: true,
-			wantErr:   false,
-		},
-		{
-			name: "no symlink exists",
-			/*
-				Directory structure:
-				/parent
-				├── childA   (real directory)
-				└── childB   (real directory)
-				// No symlinks anywhere
-			*/
-			setupFunc: func(root string) (string, func()) {
-				parent := filepath.Join(root, "parent")
-				childA := filepath.Join(parent, "childA")
-				childB := filepath.Join(parent, "childB")
-
-				dirs := []string{parent, childA, childB}
-				for _, dir := range dirs {
-					if err := os.MkdirAll(dir, 0o755); err != nil {
-						t.Fatalf("failed to mkdir %s: %v", dir, err)
-					}
-				}
-
-				targetDir := childA
-				return targetDir, func() {}
-			},
-			wantFound: false,
-			wantErr:   false,
-		},
-		{
-			name: "symlink inside targetDir itself",
-			/*
-				Directory structure:
-				/parent
-				└── childA  (targetDir)
-				    └── grandchild
-				        └── link -> ../childA  (symlink inside targetDir)
-			*/
-			setupFunc: func(root string) (string, func()) {
-				parent := filepath.Join(root, "parent")
-				targetDir := filepath.Join(parent, "childA")
-				child := filepath.Join(targetDir, "grandchild")
-
-				if err := os.MkdirAll(child, 0o755); err != nil {
-					t.Fatalf("failed to mkdir %s: %v", child, err)
-				}
-
-				linkPath := filepath.Join(child, "link")
-				relTarget, _ := filepath.Rel(child, targetDir)
-				if err := os.Symlink(relTarget, linkPath); err != nil {
-					t.Fatalf("failed to create symlink: %v", err)
-				}
-
-				return targetDir, func() {}
-			},
-			wantFound: true,
-			wantErr:   false,
-		},
-		{
-			name: "a possible case from production",
-			/*
-				Directory structure:
-				/models
-				└── meta-llama
-				    ├── llama-3.2-1b-instruct-parent   (real directory)
-				    └── llama-3.2-1b-instruct-kid3 -> ../llama-3.2-1b-instruct-parent  (symlink)
-			*/
-			setupFunc: func(root string) (string, func()) {
-				modelsDir := filepath.Join(root, "models")
-				metaLlama := filepath.Join(modelsDir, "meta-llama")
-
-				// Create directories
-				targetDir := filepath.Join(metaLlama, "llama-3.2-1b-instruct-parent")
-				kidDir := filepath.Join(metaLlama, "llama-3.2-1b-instruct-kid3")
-
-				dirs := []string{modelsDir, metaLlama, targetDir}
-				for _, d := range dirs {
-					if err := os.MkdirAll(d, 0o755); err != nil {
-						t.Fatalf("failed to create directory %s: %v", d, err)
-					}
-				}
-
-				// Create symlink: kid3 -> parent
-				relTarget, _ := filepath.Rel(metaLlama, targetDir) // relative path
-				if err := os.Symlink(relTarget, kidDir); err != nil {
-					t.Fatalf("failed to create symlink %s -> %s: %v", kidDir, targetDir, err)
-				}
-				return targetDir, func() {}
-			},
-			wantFound: true,
-			wantErr:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			targetDir, cleanup := tt.setupFunc(tmpDir)
-			defer cleanup()
-
-			found, err := HasSymlinkPointingToDir(tmpDir, targetDir)
-
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.wantFound, found)
-			}
-		})
-	}
-}
-
-func TestRemoveSymbolicLink(t *testing.T) {
-	tests := []struct {
-		name        string
-		setup       func(t *testing.T, dir string) string
-		expectError bool
-	}{
-		{
-			name: "symlink exists and is removed",
-			setup: func(t *testing.T, dir string) string {
-				targetDir := filepath.Join(dir, "target")
-				linkPath := filepath.Join(dir, "link")
-
-				assert.NoError(t, os.Mkdir(targetDir, 0755))
-				assert.NoError(t, os.Symlink(targetDir, linkPath))
-
-				return linkPath
-			},
-			expectError: false,
-		},
-		{
-			name: "path does not exist (no-op)",
-			setup: func(t *testing.T, dir string) string {
-				return filepath.Join(dir, "nonexistent")
-			},
-			expectError: true,
-		},
-		{
-			name: "path exists but is a directory (error)",
-			setup: func(t *testing.T, dir string) string {
-				dirPath := filepath.Join(dir, "real-dir")
-				assert.NoError(t, os.Mkdir(dirPath, 0755))
-				return dirPath
-			},
-			expectError: true,
-		},
-		{
-			name: "path exists but is a regular file (error)",
-			setup: func(t *testing.T, dir string) string {
-				filePath := filepath.Join(dir, "file")
-				assert.NoError(t, os.WriteFile(filePath, []byte("data"), 0644))
-				return filePath
-			},
-			expectError: true,
-		},
-		{
-			name: "broken symlink is removed",
-			setup: func(t *testing.T, dir string) string {
-				linkPath := filepath.Join(dir, "broken-link")
-				assert.NoError(t, os.Symlink(filepath.Join(dir, "missing"), linkPath))
-				return linkPath
-			},
-			expectError: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tempDir := t.TempDir()
-			path := tt.setup(t, tempDir)
-
-			err := RemoveSymbolicLink(path)
-
-			if tt.expectError {
-				assert.Error(t, err)
-				return
-			}
-
-			assert.NoError(t, err)
-
-			_, statErr := os.Lstat(path)
-			assert.True(t, os.IsNotExist(statErr), "path should not exist after removal")
-		})
-	}
-}
-
-// TestGvResourcesCacheConcurrentAccess exercises the gvResourcesCache through its
-// exported accessors from many goroutines at once. Before the cache was guarded by
-// gvResourcesCacheMu this reliably produced a fatal "concurrent map writes" /
-// "concurrent map read and map write" crash; run with -race to also catch the
-// data race directly. The reads use the cache-hit branch of
-// GetAvailableResourcesForApi (config is never dereferenced on a hit) so the test
-// needs no live cluster.
-func TestGvResourcesCacheConcurrentAccess(t *testing.T) {
+// Many goroutines read and write gvResourcesCache through its accessors at once.
+// The reads hit seeded keys, so no cluster is needed and -race catches any unguarded access.
+func TestGvResourcesCache_ConcurrentReadsAndWrites_SeededKeysStayReadable(t *testing.T) {
 	const (
 		seededKeys = 8
 		goroutines = 64

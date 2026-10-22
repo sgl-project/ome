@@ -193,6 +193,7 @@ func TestDispatch_AnotherGroupsRunKeepsTheRolledBackUnitHeld(t *testing.T) {
 	}
 
 	group := rollout.CanaryGroupFor(isvc, rollout.Policies{}, v1beta1.EngineComponent)
+	syncInstanceRows(t, c, isvc, v1beta1.RouterComponent, v1beta1.EngineComponent, v1beta1.DecoderComponent)
 	if _, err := Dispatch(ctx, DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: group}); err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}

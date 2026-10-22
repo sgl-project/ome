@@ -50,7 +50,7 @@ func (*testTrafficMapPublisher) Unpublish(
 	return nil
 }
 
-func TestTrafficMapPublisherRegistry(t *testing.T) {
+func TestRegisterTrafficMapPublisher_FactoryRegistered_BuildsCopiesRejectsDuplicates(t *testing.T) {
 	const name = "publisher-registry-test"
 	t.Cleanup(func() {
 		publishers.mu.Lock()
@@ -106,7 +106,7 @@ func TestTrafficMapPublisherRegistry(t *testing.T) {
 	assert.Error(t, RegisterTrafficMapPublisher("nil-factory", nil))
 }
 
-func TestNewTrafficMapPublisher(t *testing.T) {
+func TestNewTrafficMapPublisher_NoNameOrUnknownName_NilOrError(t *testing.T) {
 	got, err := NewTrafficMapPublisher(PublisherConfig{}, nil, nil)
 	require.NoError(t, err)
 	assert.Nil(t, got)
@@ -122,7 +122,7 @@ func TestNewTrafficMapPublisher(t *testing.T) {
 	assert.Contains(t, err.Error(), "not compiled into this manager")
 }
 
-func TestNewTrafficMapPublisherValidatesFactoryResult(t *testing.T) {
+func TestNewTrafficMapPublisher_FactoryFailsOrReturnsWrongPublisher_ReturnsError(t *testing.T) {
 	tests := []struct {
 		name       string
 		result     *TrafficMapPublisher

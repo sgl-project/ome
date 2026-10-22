@@ -13,12 +13,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/quota/tree"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 // quotaGR is the group-resource the apiserver would name in a conflict or
@@ -30,7 +30,7 @@ var quotaGR = schema.GroupResource{Group: "ome.io", Resource: "acceleratorquotas
 // silent either way: a wrongly-absorbed error leaves every node's verdict stale
 // with nothing logged, while a wrongly-surfaced one turns an ordinary mid-pass
 // rewrite into endless backoff.
-func TestReconcileFailurePaths(t *testing.T) {
+func TestReconcile_ListOrStatusWriteFails_AbortsOrAbsorbsByCause(t *testing.T) {
 	quotas := []client.Object{
 		cohort(rootName, "", budget("128")),
 		cohort("org", rootName, budget("100")),
@@ -89,13 +89,8 @@ func TestReconcileFailurePaths(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			s := testScheme(t)
-			c := fake.NewClientBuilder().
-				WithScheme(s).
-				WithObjects(quotas...).
-				WithStatusSubresource(&v1beta1.AcceleratorQuota{}).
-				WithInterceptorFuncs(tc.funcs).
-				Build()
+			s := fakeclient.Scheme(t)
+			c := fakeclient.New(t, fakeclient.WithScheme(s), fakeclient.WithObjects(quotas...), fakeclient.WithStatusSubresource(&v1beta1.AcceleratorQuota{}), fakeclient.WithInterceptors(tc.funcs))
 			r := &Reconciler{
 				Client: c, Scheme: s, Log: logf.Log.WithName("test"), APIReader: c,
 				Options: tree.Options{RootName: rootName, MaxDepth: 5},
@@ -121,18 +116,16 @@ func TestReconcileFailurePaths(t *testing.T) {
 // whichever nodes sort after the failure carrying a stale verdict until
 // something else touched them, and that order is not something an operator can
 // see or influence.
-func TestReconcileWritesEveryNodeDespiteOneFailure(t *testing.T) {
-	s := testScheme(t)
+func TestReconcile_OneStatusWriteFails_StillWritesTheOtherNodes(t *testing.T) {
+	s := fakeclient.Scheme(t)
 	var attempted []string
-	c := fake.NewClientBuilder().
-		WithScheme(s).
-		WithObjects(
-			cohort(rootName, "", budget("128")),
+	c := fakeclient.New(t,
+		fakeclient.WithScheme(s),
+		fakeclient.WithObjects(cohort(rootName, "", budget("128")),
 			cohort("org", rootName, budget("100")),
-			leaf("team-a", "org", budget("60")),
-		).
-		WithStatusSubresource(&v1beta1.AcceleratorQuota{}).
-		WithInterceptorFuncs(interceptor.Funcs{
+			leaf("team-a", "org", budget("60"))),
+		fakeclient.WithStatusSubresource(&v1beta1.AcceleratorQuota{}),
+		fakeclient.WithInterceptors(interceptor.Funcs{
 			SubResourcePatch: func(ctx context.Context, cl client.Client, sub string,
 				obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
 				attempted = append(attempted, obj.GetName())
@@ -143,8 +136,8 @@ func TestReconcileWritesEveryNodeDespiteOneFailure(t *testing.T) {
 				}
 				return cl.Status().Patch(ctx, obj, patch, opts...)
 			},
-		}).
-		Build()
+		}),
+	)
 	r := &Reconciler{
 		Client: c, Scheme: s, Log: logf.Log.WithName("test"), APIReader: c,
 		Options: tree.Options{RootName: rootName, MaxDepth: 5},
@@ -169,7 +162,7 @@ func TestReconcileWritesEveryNodeDespiteOneFailure(t *testing.T) {
 // refused create is therefore the normal first outcome on a fresh install, and a
 // Runnable that returned it would stop the manager before the rotator ran —
 // making every restart lose the same race.
-func TestBootstrapRootSurvivesARefusedCreate(t *testing.T) {
+func TestBootstrapRootEvery_WebhookRefusesCreate_RetriesAndNeverFailsTheManager(t *testing.T) {
 	// Fast enough to keep the test honest about retrying without paying the
 	// production cadence.
 	const retry = time.Millisecond
@@ -193,11 +186,11 @@ func TestBootstrapRootSurvivesARefusedCreate(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var attempts int
-			s := testScheme(t)
-			c := fake.NewClientBuilder().
-				WithScheme(s).
-				WithStatusSubresource(&v1beta1.AcceleratorQuota{}).
-				WithInterceptorFuncs(interceptor.Funcs{
+			s := fakeclient.Scheme(t)
+			c := fakeclient.New(t,
+				fakeclient.WithScheme(s),
+				fakeclient.WithStatusSubresource(&v1beta1.AcceleratorQuota{}),
+				fakeclient.WithInterceptors(interceptor.Funcs{
 					Create: func(ctx context.Context, cl client.WithWatch, obj client.Object,
 						opts ...client.CreateOption) error {
 						attempts++
@@ -206,8 +199,8 @@ func TestBootstrapRootSurvivesARefusedCreate(t *testing.T) {
 						}
 						return cl.Create(ctx, obj, opts...)
 					},
-				}).
-				Build()
+				}),
+			)
 			r := &Reconciler{
 				Client: c, Scheme: s, Log: logf.Log.WithName("test"), APIReader: c,
 				Options: tree.Options{RootName: rootName, MaxDepth: 5},

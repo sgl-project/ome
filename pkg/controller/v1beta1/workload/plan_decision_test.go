@@ -3,11 +3,17 @@ package workload_test
 import (
 	"context"
 	"errors"
+	"flag"
+	"fmt"
+	"path/filepath"
 	"reflect"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/escalation"
@@ -24,6 +31,7 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
+	"sigs.k8s.io/ome/pkg/utils/testing/allocbudget"
 )
 
 // Plan is the pure decision layer: the tests below assert the Decision
@@ -975,8 +983,8 @@ func TestPlan_Update_CrashedSetBackInRotationLeavesTheRollIdle(t *testing.T) {
 
 			in, snapshot = observe(rebuilt(true), types.RetryBlock{TargetRevision: target.Name, State: types.RetryBlockRetryInProgress, AttemptsStarted: 1, Reason: "Error"})
 			d = planTargetOrFail(t, in, plan, target, snapshot)
-			if d.UpdateIdle || d.LadderHold == nil || d.LadderHold.Gate != types.RolloutHoldGateRetryBlock || d.LadderHold.Target != target.Name {
-				t.Errorf("a rebuilt set proving itself under the ladder's attempt is the ladder's to report: idle=%t ladder=%+v", d.UpdateIdle, d.LadderHold)
+			if d.UpdateIdle || d.RetryScheduleHold == nil || d.RetryScheduleHold.Gate != types.RolloutHoldGateRetryBlock || d.RetryScheduleHold.Target != target.Name {
+				t.Errorf("a rebuilt set proving itself under the retry schedule's attempt is the retry schedule's to report: idle=%t retryScheduleHold=%+v", d.UpdateIdle, d.RetryScheduleHold)
 			}
 		})
 	}
@@ -1243,7 +1251,9 @@ func TestPlan_Update_CoordGateExempt_FailedZeroServing(t *testing.T) {
 		UpdateStrategy: types.UpdateStrategy{Type: types.UpdateStrategyRecreatePod},
 	}
 
-	d := planTargetOrFail(t, in, plan, target, planSnapshot(in, nil))
+	// The healthy Instance has its serving pod; a Ready row with no pod
+	// left is one the serving count already leaves out.
+	d := planTargetOrFail(t, in, plan, target, planSnapshot(in, map[int32][]*corev1.Pod{2: {servingEnginePod(2)}}))
 	ua := findAction(d, workload.ActionUpdate)
 	if ua == nil {
 		t.Fatalf("expected an Update action, got %v", actionKinds(d))
@@ -1961,6 +1971,30 @@ func TestPlan_Demote_UnbackedReadyInstances(t *testing.T) {
 		}
 	})
 
+	t.Run("a terminal pod backs nothing, so a pause writes the row Pending and names the pod", func(t *testing.T) {
+		in := unbacked(t)
+		plan := minimalPlan()
+		plan.Paused = true
+		pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "llama-70b-engine-0-default-0", Namespace: "prod"}}
+		pod.Status.Phase = corev1.PodFailed
+		pod.Status.Reason = "OutOfcpu"
+		d := planOrFail(t, in, plan, planSnapshot(in, map[int32][]*corev1.Pod{0: {pod}}))
+		reason := ""
+		for _, action := range d.Actions {
+			for _, selection := range action.Demotions {
+				if selection.Index == 0 {
+					reason = selection.Reason
+				}
+			}
+		}
+		if reason == "" {
+			t.Fatalf("paused decision = %v, want the row whose only pod is terminal written Pending", actionKinds(d))
+		}
+		if want := "llama-70b-engine-0-default-0 (Failed/OutOfcpu)"; !strings.Contains(reason, want) {
+			t.Errorf("reason = %q, want it to name %s", reason, want)
+		}
+	})
+
 	t.Run("live pods veto the demotion", func(t *testing.T) {
 		in := unbacked(t)
 		plan := minimalPlan()
@@ -2063,7 +2097,9 @@ func TestPlan_Paused_AdvancesInFlightAttemptsOnly(t *testing.T) {
 
 	t.Run("unpause restores the fresh start", func(t *testing.T) {
 		in, plan := build(t)
-		d := planTargetOrFail(t, in, plan, updateTarget(), planSnapshot(in, nil))
+		// Index 1 serves, so its fresh start is listed in plan order behind
+		// the continuation rather than first as a start out of rotation.
+		d := planTargetOrFail(t, in, plan, updateTarget(), planSnapshot(in, map[int32][]*corev1.Pod{1: {servingEnginePod(1)}}))
 		ua := findAction(d, workload.ActionUpdate)
 		if ua == nil || len(ua.Update.Items) != 2 {
 			t.Fatalf("unpaused update selection = %+v, want both indices", ua)
@@ -2638,8 +2674,8 @@ func TestPlan_Update_DarkInstancesListedFirst(t *testing.T) {
 			}
 			for _, item := range ua.Update.Items {
 				dark := item.Instance.Index == 3 || item.Instance.Index == 4
-				if item.ReplacesDarkPodSet != dark {
-					t.Errorf("instance %d: ReplacesDarkPodSet = %v, want %v", item.Instance.Index, item.ReplacesDarkPodSet, dark)
+				if item.ReplacesUnservingPodSet != dark {
+					t.Errorf("instance %d: ReplacesUnservingPodSet = %v, want %v", item.Instance.Index, item.ReplacesUnservingPodSet, dark)
 				}
 			}
 		})
@@ -2712,9 +2748,9 @@ func TestPlan_Update_DarkGangIsReadOnItsLeader(t *testing.T) {
 			for _, item := range ua.Update.Items {
 				dark := tc.dark && item.Instance.Index == 1
 				exempt := item.Instance.Index == 1
-				if item.ReplacesDarkPodSet != dark || item.CoordGateExempt != exempt {
-					t.Errorf("instance %d: ReplacesDarkPodSet = %v, CoordGateExempt = %v, want %v and %v",
-						item.Instance.Index, item.ReplacesDarkPodSet, item.CoordGateExempt, dark, exempt)
+				if item.ReplacesUnservingPodSet != dark || item.CoordGateExempt != exempt {
+					t.Errorf("instance %d: ReplacesUnservingPodSet = %v, CoordGateExempt = %v, want %v and %v",
+						item.Instance.Index, item.ReplacesUnservingPodSet, item.CoordGateExempt, dark, exempt)
 				}
 			}
 		})
@@ -2786,8 +2822,148 @@ func TestPlan_Update_CoordGateExempt_GangWithParkedMember(t *testing.T) {
 				t.Fatalf("the off-target gang must be a fresh update start; actions = %v", actionKinds(d))
 			}
 			item := ua.Update.Items[0]
-			if item.CoordGateExempt != tc.exempt || item.ReplacesDarkPodSet != tc.dark {
-				t.Fatalf("CoordGateExempt = %v, ReplacesDarkPodSet = %v, want %v and %v", item.CoordGateExempt, item.ReplacesDarkPodSet, tc.exempt, tc.dark)
+			if item.CoordGateExempt != tc.exempt || item.ReplacesUnservingPodSet != tc.dark {
+				t.Fatalf("CoordGateExempt = %v, ReplacesUnservingPodSet = %v, want %v and %v", item.CoordGateExempt, item.ReplacesUnservingPodSet, tc.exempt, tc.dark)
+			}
+		})
+	}
+}
+
+// TestPlan_Update_CoordGateExempt_GangShortOfMember: the coordination
+// gate counts a gang as serving only when every member is, so a gang
+// whose member is gone, being deleted or in a terminal phase is already
+// inside the gate's unavailability whichever member it is, and a fresh
+// drain-first start on it takes nothing further out of the count: it
+// skips the consult and pays no unavailability budget for itself. A gang
+// whose member is merely booting keeps the consult, as does any start on
+// a surge strategy, where the replacement genuinely adds a pod. A gang
+// whose leader is gone serves nothing and is dark as well.
+func TestPlan_Update_CoordGateExempt_GangShortOfMember(t *testing.T) {
+	target := updateTarget()
+	member := func(pod *corev1.Pod, runner string) *corev1.Pod {
+		pod.Name += "-" + runner
+		pod.Labels[query.LabelRunner] = runner
+		return pod
+	}
+	terminating := func(pod *corev1.Pod) *corev1.Pod {
+		ts := metav1.NewTime(time.Now())
+		pod.DeletionTimestamp = &ts
+		pod.Finalizers = []string{"test.example.com/kubelet"}
+		return pod
+	}
+	bootingWorker := func() *corev1.Pod {
+		pod := enginePod("llama-70b", "prod", 0)
+		pod.Status.Phase = corev1.PodRunning
+		pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+			Name: constants.MainContainerName, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+		}}
+		return member(pod, "worker")
+	}
+	for _, tc := range []struct {
+		name     string
+		strategy types.UpdateStrategyType
+		pods     []*corev1.Pod
+		serving  int32
+		exempt   bool
+		dark     bool
+	}{
+		{name: "worker gone beside a serving leader, recreate", strategy: types.UpdateStrategyRecreatePod,
+			pods: []*corev1.Pod{member(servingEnginePod(0), "leader")}, serving: 1, exempt: true},
+		{name: "worker gone beside a serving leader, in-place", strategy: types.UpdateStrategyInPlaceIfPossible,
+			pods: []*corev1.Pod{member(servingEnginePod(0), "leader")}, serving: 1, exempt: true},
+		{name: "worker gone beside a serving leader, surge", strategy: types.UpdateStrategySurgeThenDrain,
+			pods: []*corev1.Pod{member(servingEnginePod(0), "leader")}, serving: 1, exempt: false},
+		{name: "worker being deleted beside a serving leader, recreate", strategy: types.UpdateStrategyRecreatePod,
+			pods: []*corev1.Pod{member(servingEnginePod(0), "leader"), terminating(member(servingEnginePod(0), "worker"))}, serving: 1, exempt: true},
+		{name: "leader gone beside a serving worker, recreate", strategy: types.UpdateStrategyRecreatePod,
+			pods: []*corev1.Pod{member(servingEnginePod(0), "worker")}, serving: 1, exempt: true, dark: true},
+		{name: "worker booting beside a serving leader, recreate", strategy: types.UpdateStrategyRecreatePod,
+			pods: []*corev1.Pod{member(servingEnginePod(0), "leader"), bootingWorker()}, serving: 1, exempt: false},
+		{name: "both members serving, recreate", strategy: types.UpdateStrategyRecreatePod,
+			pods: []*corev1.Pod{member(servingEnginePod(0), "leader"), member(servingEnginePod(0), "worker")}, serving: 2, exempt: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := minimalInput(t)
+			forbidMutations(t, &in)
+			in.ObservedState.InstanceStatuses = []types.InstanceStatus{
+				{Index: 0, Incarnation: 1, Phase: types.InstancePhaseReady, PodCount: int32(len(tc.pods)), ServingPodCount: tc.serving, RunningRevision: crashLoopRepairRevision},
+			}
+			plan := types.ComponentPlan{
+				Component:      types.ComponentEngine,
+				Replicas:       1,
+				UpdateStrategy: types.UpdateStrategy{Type: tc.strategy},
+				Instances: []types.InstancePlan{{Index: 0, Incarnation: 1,
+					Runners: []types.RunnerPlan{{Name: "leader", Size: 1}, {Name: "worker", Size: 1}}}},
+			}
+			d := planTargetOrFail(t, in, plan, target, planSnapshot(in, map[int32][]*corev1.Pod{0: tc.pods}))
+			ua := findAction(d, workload.ActionUpdate)
+			if ua == nil || len(ua.Update.Items) != 1 || !ua.Update.Items[0].StartingFresh {
+				t.Fatalf("the off-target gang must be a fresh update start; actions = %v", actionKinds(d))
+			}
+			item := ua.Update.Items[0]
+			if item.CoordGateExempt != tc.exempt || item.ReplacesUnservingPodSet != tc.dark {
+				t.Fatalf("CoordGateExempt = %v, ReplacesUnservingPodSet = %v, want %v and %v", item.CoordGateExempt, item.ReplacesUnservingPodSet, tc.exempt, tc.dark)
+			}
+		})
+	}
+}
+
+// TestPlan_Update_CoordGateExempt_ReadyRowWithNoPodLeft: a fresh update
+// start on a Ready single-pod row with no pod left that could serve, the
+// pod gone, on its way out or in a terminal phase, replaces an Instance
+// the serving count already leaves out, so under a drain-first strategy
+// it skips the coordination gate consult and is listed out of rotation,
+// ahead of the starts on Instances that still serve, as a gang short of
+// a member is. A row whose only pod serves keeps the consult, and so does
+// any start on a surge strategy, whose replacement adds a pod.
+func TestPlan_Update_CoordGateExempt_ReadyRowWithNoPodLeft(t *testing.T) {
+	target := updateTarget()
+	terminating := func(pod *corev1.Pod) *corev1.Pod {
+		ts := metav1.NewTime(time.Now())
+		pod.DeletionTimestamp = &ts
+		pod.Finalizers = []string{"test.example.com/kubelet"}
+		return pod
+	}
+	terminal := func(pod *corev1.Pod) *corev1.Pod {
+		pod.Status.Phase = corev1.PodFailed
+		return pod
+	}
+	for _, tc := range []struct {
+		name          string
+		strategy      types.UpdateStrategyType
+		pods          []*corev1.Pod
+		exempt        bool
+		outOfRotation bool
+	}{
+		{name: "no pod left, recreate", strategy: types.UpdateStrategyRecreatePod, pods: nil, exempt: true, outOfRotation: true},
+		{name: "no pod left, surge", strategy: types.UpdateStrategySurgeThenDrain, pods: nil, exempt: false, outOfRotation: true},
+		{name: "the only pod on its way out, recreate", strategy: types.UpdateStrategyRecreatePod,
+			pods: []*corev1.Pod{terminating(servingEnginePod(0))}, exempt: true, outOfRotation: true},
+		{name: "the only pod in a terminal phase, recreate", strategy: types.UpdateStrategyRecreatePod,
+			pods: []*corev1.Pod{terminal(servingEnginePod(0))}, exempt: true, outOfRotation: true},
+		{name: "the only pod serving, recreate", strategy: types.UpdateStrategyRecreatePod,
+			pods: []*corev1.Pod{servingEnginePod(0)}, exempt: false, outOfRotation: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := minimalInput(t)
+			forbidMutations(t, &in)
+			in.ObservedState.InstanceStatuses = []types.InstanceStatus{
+				{Index: 0, Incarnation: 1, Phase: types.InstancePhaseReady, PodCount: int32(len(tc.pods)), RunningRevision: crashLoopRepairRevision},
+			}
+			plan := types.ComponentPlan{
+				Component:      types.ComponentEngine,
+				Replicas:       1,
+				UpdateStrategy: types.UpdateStrategy{Type: tc.strategy},
+				Instances:      []types.InstancePlan{{Index: 0, Incarnation: 1, Runners: []types.RunnerPlan{{Name: "default", Size: 1}}}},
+			}
+			d := planTargetOrFail(t, in, plan, target, planSnapshot(in, map[int32][]*corev1.Pod{0: tc.pods}))
+			ua := findAction(d, workload.ActionUpdate)
+			if ua == nil || len(ua.Update.Items) != 1 || !ua.Update.Items[0].StartingFresh {
+				t.Fatalf("the off-target row must be a fresh update start; actions = %v", actionKinds(d))
+			}
+			item := ua.Update.Items[0]
+			if item.CoordGateExempt != tc.exempt || item.OutOfRotation != tc.outOfRotation {
+				t.Fatalf("CoordGateExempt = %v, OutOfRotation = %v, want %v and %v", item.CoordGateExempt, item.OutOfRotation, tc.exempt, tc.outOfRotation)
 			}
 		})
 	}
@@ -2887,8 +3063,8 @@ func TestPlan_Update_CoordGateExempt_ReadyRowUnreadyPastTheWindow(t *testing.T) 
 				t.Fatalf("the off-target row must be a fresh update start; actions = %v", actionKinds(d))
 			}
 			item := ua.Update.Items[0]
-			if item.CoordGateExempt != tc.exempt || item.ReplacesDarkPodSet != tc.dark {
-				t.Fatalf("CoordGateExempt = %v, ReplacesDarkPodSet = %v, want %v and %v", item.CoordGateExempt, item.ReplacesDarkPodSet, tc.exempt, tc.dark)
+			if item.CoordGateExempt != tc.exempt || item.ReplacesUnservingPodSet != tc.dark {
+				t.Fatalf("CoordGateExempt = %v, ReplacesUnservingPodSet = %v, want %v and %v", item.CoordGateExempt, item.ReplacesUnservingPodSet, tc.exempt, tc.dark)
 			}
 		})
 	}
@@ -2988,8 +3164,8 @@ func TestPlan_Update_InstancesOutOfRotationListedFirst(t *testing.T) {
 					if !item.StartingFresh {
 						t.Errorf("instance %d: every off-target Ready row is a fresh start", item.Instance.Index)
 					}
-					if dark := shape.dark[item.Instance.Index]; item.ReplacesDarkPodSet != dark {
-						t.Errorf("instance %d: ReplacesDarkPodSet = %v, want %v: the order is read on rotation, the budget on the grace", item.Instance.Index, item.ReplacesDarkPodSet, dark)
+					if dark := shape.dark[item.Instance.Index]; item.ReplacesUnservingPodSet != dark {
+						t.Errorf("instance %d: ReplacesUnservingPodSet = %v, want %v: the order is read on rotation, the budget on the grace", item.Instance.Index, item.ReplacesUnservingPodSet, dark)
 					}
 					if exempt := shape.dark[item.Instance.Index] && sc.strategy != types.UpdateStrategySurgeThenDrain; item.CoordGateExempt != exempt {
 						t.Errorf("instance %d: CoordGateExempt = %v, want %v: a start inside the grace is consulted like any other", item.Instance.Index, item.CoordGateExempt, exempt)
@@ -3297,5 +3473,276 @@ func TestPlan_Update_InPlaceStartOverADarkPodIsAFallbackRecreate(t *testing.T) {
 				t.Fatalf("RecreateFallback = %v, want %v", got, tc.recreate)
 			}
 		})
+	}
+}
+
+var updateFleetAllocations = flag.Bool("update", false, "re-record testdata/fleet_allocations.json from this run")
+
+// fleetPlanCase is one plan at fleet size: the name the benchmark and the
+// allocation golden share, and the plan.
+type fleetPlanCase struct {
+	name string
+	run  func(testing.TB)
+}
+
+// fleetMoment is one moment of a replica's life the fleet cases plan at:
+// how many of the Instances have a row, the revision those rows run, the
+// revision the roll targets, and whether every pod is gone.
+type fleetMoment struct {
+	name            string
+	rows            func(instances int) int
+	running, target string
+	podless         bool
+}
+
+// fleetMoments: "idle" is a fleet whose every Instance is Ready on the
+// target; "mid-roll" is one whose every Instance still runs the old
+// revision; "fresh" is the first pass of a new replica, with no row yet;
+// "scale-up" has rows for three quarters of the count and plans the rest;
+// "mid-roll-podless" is the mid-roll fleet with every pod gone under
+// RecreateInstanceOnPodRestart, so every row is a repair candidate the
+// roll takes.
+var fleetMoments = []fleetMoment{
+	{name: "idle", rows: func(n int) int { return n }, running: "svc-engine-rev-a", target: "svc-engine-rev-a"},
+	{name: "mid-roll", rows: func(n int) int { return n }, running: "svc-engine-rev-a", target: "svc-engine-rev-b"},
+	{name: "fresh", rows: func(int) int { return 0 }, running: "svc-engine-rev-a", target: "svc-engine-rev-a"},
+	{name: "scale-up", rows: func(n int) int { return n * 3 / 4 }, running: "svc-engine-rev-a", target: "svc-engine-rev-a"},
+	{name: "mid-roll-podless", rows: func(n int) int { return n }, running: "svc-engine-rev-a", target: "svc-engine-rev-b", podless: true},
+}
+
+// fleetPlanCases runs the pure decision layer over the benchmark's largest
+// shapes: 4,000 single-pod Instances and 160 gangs of one leader and seven
+// workers, under RecreatePod at 10 percent, at each of fleetMoments.
+// BuildPlan is the plan over the rows alone, so a podless moment measures
+// Plan only; Plan also builds the pod snapshot the decision reads, as one
+// pass does.
+func fleetPlanCases(tb testing.TB) []fleetPlanCase {
+	tb.Helper()
+	shapes := []struct {
+		name            string
+		instances, pods int
+	}{
+		{name: "4000x1", instances: 4000, pods: 1},
+		{name: "160x8", instances: 160, pods: 8},
+	}
+	// The context carries a logger, as a pass's does: the root logger's own
+	// bookkeeping before the manager sets it is not part of the plan's cost.
+	ctx := logr.NewContext(context.Background(), logr.Discard())
+	var cases []fleetPlanCase
+	for _, s := range shapes {
+		for _, moment := range fleetMoments {
+			rows := moment.rows(s.instances)
+			input := fleetInput(s.instances, rows, s.pods, moment.running)
+			byIdx := fleetPods(rows, s.pods)
+			if moment.podless {
+				recreate := types.RestartPolicyRecreateInstance
+				input.DesiredSpec.Lifecycle.RestartPolicy = &recreate
+				byIdx = nil
+			}
+			target := &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: moment.target, Namespace: "ns"}}
+			plan, err := workload.BuildPlan(types.ComponentEngine, input.DesiredSpec, input.ObservedState)
+			if err != nil {
+				tb.Fatal(err)
+			}
+			prefix := s.name + "/" + moment.name + "/"
+			if !moment.podless {
+				cases = append(cases, fleetPlanCase{name: prefix + "BuildPlan", run: func(tb testing.TB) {
+					if _, err := workload.BuildPlan(types.ComponentEngine, input.DesiredSpec, input.ObservedState); err != nil {
+						tb.Fatal(err)
+					}
+				}})
+			}
+			cases = append(cases, fleetPlanCase{name: prefix + "Plan", run: func(tb testing.TB) {
+				snapshot := workload.SnapshotWithPodsForTest(input, byIdx)
+				if _, err := workload.Plan(ctx, input, plan, target, snapshot); err != nil {
+					tb.Fatal(err)
+				}
+			}})
+		}
+	}
+	return cases
+}
+
+// BenchmarkPlanFleet is the cost of one plan per shape and moment.
+func BenchmarkPlanFleet(b *testing.B) {
+	for _, c := range fleetPlanCases(b) {
+		b.Run(c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				c.run(b)
+			}
+		})
+	}
+}
+
+// TestFleetPlanAllocationsStayWithinBudget holds the allocations of one plan
+// per shape and moment to the recorded golden, so a change in the plan's
+// cost is made on purpose and carries its reason.
+func TestFleetPlanAllocationsStayWithinBudget(t *testing.T) {
+	golden := allocbudget.Open(t, filepath.Join("testdata", "fleet_allocations.json"), *updateFleetAllocations)
+	defer golden.Close()
+	for _, c := range fleetPlanCases(t) {
+		golden.Check(c.name, func() { c.run(t) })
+	}
+}
+
+// TestBuildPlanCostGrowsWithTheInstanceCount: a plan over 4,000 Instances
+// costs about four times one over 1,000 at every moment, not sixteen: the
+// rows are read through an index built once, and the slots a scale-up adds
+// are found in one pass over the used indexes. The ratio of one path at two
+// sizes does not depend on the machine, so the test gates everywhere. Each
+// size is read as the fastest of its interleaved samples: another process
+// on the machine can only slow a sample down, so the fastest sample is the
+// one it disturbed least. A sample never carries a garbage collection: the
+// heap is collected between samples and may grow tenfold within one, so
+// the 3 MB a 4,000-Instance plan allocates is read under the same
+// conditions as the 1,000-Instance plan whatever else the machine runs.
+func TestBuildPlanCostGrowsWithTheInstanceCount(t *testing.T) {
+	if testing.Short() {
+		t.Skip("timing-backed gate; skipped under -short")
+	}
+	const small, large = 1000, 4000
+	// A cost that grows with the count gives a ratio near 4 between the two
+	// sizes and one that grows with its square gives 16; the ceiling sits
+	// between them, with room for a loaded machine.
+	const ceiling = 10.0
+	const samples = 15
+	previousGCPercent := debug.SetGCPercent(1000)
+	defer debug.SetGCPercent(previousGCPercent)
+	for _, moment := range fleetMoments {
+		t.Run(moment.name, func(t *testing.T) {
+			inputs := map[int]types.ReconcileInput{}
+			for _, n := range []int{small, large} {
+				inputs[n] = fleetInput(n, moment.rows(n), 1, moment.running)
+			}
+			fastest := map[int]time.Duration{}
+			for i := 0; i < samples; i++ {
+				for _, n := range []int{small, large} {
+					input := inputs[n]
+					runtime.GC()
+					start := time.Now()
+					if _, err := workload.BuildPlan(types.ComponentEngine, input.DesiredSpec, input.ObservedState); err != nil {
+						t.Fatal(err)
+					}
+					if elapsed := time.Since(start); i == 0 || elapsed < fastest[n] {
+						fastest[n] = elapsed
+					}
+				}
+			}
+			ratio := float64(fastest[large]) / float64(fastest[small])
+			t.Logf("%s: BuildPlan %v at %d Instances, %v at %d, %.1fx (ceiling %.0fx)", moment.name, fastest[small], small, fastest[large], large, ratio, ceiling)
+			if ratio > ceiling {
+				t.Errorf("%s: BuildPlan over %d Instances costs %.1fx the plan over %d, above the ceiling of %.0fx: the cost grows faster than the count", moment.name, large, ratio, small, ceiling)
+			}
+		})
+	}
+}
+
+// fleetInput is the engine Component of a service: instances is the count
+// the spec wants and rows how many of them have a row already, each Ready
+// on running with all its pods serving; the rest are not created yet.
+func fleetInput(instances, rows, pods int, running string) types.ReconcileInput {
+	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "ns", UID: "uid-1"}}
+	tenPercent := intstr.FromString("10%")
+	desired := types.WorkloadDesiredSpec{
+		Replicas: int32(instances),
+		Runners:  []types.Runner{{Name: types.RunnerDefault, Size: 1}},
+		PodSpec:  &corev1.PodSpec{Containers: []corev1.Container{{Name: "main", Image: "serving:v1"}}},
+		Lifecycle: types.Lifecycle{UpdateStrategy: &types.UpdateStrategy{
+			Type:          types.UpdateStrategyRecreatePod,
+			RollingUpdate: &types.RollingUpdate{MaxUnavailable: &tenPercent},
+		}},
+	}
+	if pods > 1 {
+		desired.MultiPod = true
+		desired.Runners = []types.Runner{{Name: types.RunnerLeader, Size: 1}, {Name: types.RunnerWorker, Size: int32(pods - 1)}}
+	}
+	recorded := make([]types.InstanceStatus, rows)
+	for i := range recorded {
+		recorded[i] = types.InstanceStatus{
+			Index: int32(i), Incarnation: 1, Phase: types.InstancePhaseReady,
+			RunningRevision: running, PodCount: int32(pods), ServingPodCount: int32(pods),
+			AvailablePodCount: int32(pods), Admitted: true,
+		}
+	}
+	in := types.ReconcileInput{
+		OwnerObject:              isvc,
+		OwnerGVK:                 v1beta1.SchemeGroupVersion.WithKind("InferenceService"),
+		EventTarget:              isvc,
+		Key:                      types.Key{Namespace: "ns", Component: types.ComponentEngine, OwnerName: "svc"},
+		ScaleDownRequeueInterval: testScaleDownRequeueInterval,
+		Requeue:                  testRequeueIntervals,
+		DesiredSpec:              desired,
+		ObservedState:            types.WorkloadObservedState{InstanceStatuses: recorded},
+	}
+	stubInputCallbacks(&in)
+	return in
+}
+
+// fleetPods is the pod set of each of the rows recorded Instances, serving
+// and in rotation, bucketed by Instance index.
+func fleetPods(rows, pods int) map[int32][]*corev1.Pod {
+	byIdx := make(map[int32][]*corev1.Pod, rows)
+	for i := 0; i < rows; i++ {
+		for ordinal := 0; ordinal < pods; ordinal++ {
+			pod := observationPod(fmt.Sprintf("svc-engine-%d-%d", i, ordinal), fmt.Sprintf("node-%d", ordinal), true, true, false)
+			byIdx[int32(i)] = append(byIdx[int32(i)], pod)
+		}
+	}
+	return byIdx
+}
+
+// TestPlan_Update_ListsTheInstancesDownOutsideTheRoll: the update selection
+// lists, in plan order, every planned Instance that serves short of its
+// set and that the roll has not moved or is not moving: the Instance a
+// scale-up has not created yet, the one it is still creating, and the one
+// a canary step holds on a pod that cannot start; a serving Instance, an
+// attempt in flight and an Instance already on the target are not listed.
+func TestPlan_Update_ListsTheInstancesDownOutsideTheRoll(t *testing.T) {
+	target := updateTarget()
+	in := minimalInput(t)
+	forbidMutations(t, &in)
+	in.DesiredSpec.Replicas = 6
+	partition := int32(1)
+	in.DesiredSpec.Pacing = &types.WorkloadPacing{Partition: &partition}
+	in.ObservedState.InstanceStatuses = []types.InstanceStatus{
+		{Index: 0, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: crashLoopRepairRevision, PodCount: 1, ServingPodCount: 0},
+		{Index: 1, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: crashLoopRepairRevision, PodCount: 1, ServingPodCount: 1},
+		{Index: 2, Incarnation: 1, Phase: types.InstancePhaseUpdating, RunningRevision: crashLoopRepairRevision,
+			Operation: &types.InstanceOperation{Type: types.InstanceOperationUpdate, Step: types.UpdateStepDrain, TargetRevision: target.Name}},
+		{Index: 3, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: target.Name, PodCount: 1, ServingPodCount: 0},
+		{Index: 4, Incarnation: 1, Phase: types.InstancePhaseCreating, PodCount: 1,
+			Operation: &types.InstanceOperation{Type: types.InstanceOperationCreate, Step: "CreatePods", TargetRevision: target.Name}},
+	}
+	plan := types.ComponentPlan{
+		Component: types.ComponentEngine,
+		Replicas:  6,
+		UpdateStrategy: types.UpdateStrategy{
+			Type:          types.UpdateStrategyRecreatePod,
+			RollingUpdate: &types.RollingUpdate{MaxSurge: intOrStringInt(0), MaxUnavailable: intOrStringInt(1)},
+		},
+	}
+	for idx := int32(0); idx < 6; idx++ {
+		plan.Instances = append(plan.Instances, types.InstancePlan{Index: idx, Incarnation: 1, Runners: []types.RunnerPlan{{Name: "default", Size: 1}}})
+	}
+	starting := enginePod("llama-70b", "prod", 4)
+	starting.Status.Phase = corev1.PodPending
+	pods := map[int32][]*corev1.Pod{
+		0: {crashLoopingEnginePod(0, time.Now().Add(-time.Minute))},
+		1: {servingEnginePod(1)},
+		2: {servingEnginePod(2)},
+		3: {podOnRevision(unreadyEnginePod(3, 0), target.Name)},
+		4: {starting},
+	}
+	d := planTargetOrFail(t, in, plan, target, planSnapshot(in, pods))
+	ua := findAction(d, workload.ActionUpdate)
+	if ua == nil {
+		t.Fatalf("want an update action; actions = %v", actionKinds(d))
+	}
+	if got, want := ua.Update.NotServingOutsideRoll, []int32{0, 4, 5}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("NotServingOutsideRoll = %v, want %v", got, want)
+	}
+	if got, want := ua.Update.RolledNotServing, []int32{3}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("RolledNotServing = %v, want %v", got, want)
 	}
 }

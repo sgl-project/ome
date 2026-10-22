@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination"
 	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	workloadtypes "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 	"sigs.k8s.io/ome/pkg/render"
@@ -212,4 +213,43 @@ func (r *Reconciler) reportRenderBlocked(ctx context.Context, ir *v1beta1.Infere
 		return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: publish blocked render (ir=%s/%s): %w", ir.Namespace, ir.Name, err)
 	}
 	return ctrl.Result{}, nil
+}
+
+// ISVCRenderHook is the per-pod hook this reconciler hands the workload
+// renderer: when the InferenceService declares a rollout, every rendered
+// pod gets the OME_<PEER>_ENDPOINT variable of each serving peer and, through
+// peerRevision, the per-revision endpoint of the peer revision the pod is
+// paired with. A nil peerRevision names only the revision-agnostic
+// endpoints. The hook is nil when the InferenceService declares no rollout.
+func ISVCRenderHook(isvc *v1beta1.InferenceService, peerRevision coordination.PeerRevisionFunc) workloadtypes.RenderHook {
+	// Peer-env applies whenever the ISVC declares a rollout (any groups); skip
+	// the hook otherwise. Membership is serving topology (below), not grouping.
+	if !coordination.PeerEnvDeclared(isvc) {
+		return nil
+	}
+	return func(pod *corev1.Pod, _ string, _ int32, revisionHash string) {
+		// The component is read from constants.OMEComponentLabel, the key
+		// the renderer stamps on every pod; a peer lookup by any other key
+		// matches nothing.
+		c := v1beta1.ComponentType(pod.Labels[constants.OMEComponentLabel])
+		// Peers reflect SERVING topology (the ISVC's declared Components), not
+		// rollout grouping — a PD engine needs the decoder's address regardless of
+		// whether the rollout groups them together, separately, or via canary.
+		peers := coordination.ServingPeers(isvc, c)
+		if len(peers) == 0 {
+			return
+		}
+		// Each Component hashes its own template, so the rendered pod's hash
+		// never names a peer's per-revision Service; the adapter's resolver
+		// maps this pod's revision onto the peer revision it pairs with. With
+		// no resolver only the revision-agnostic endpoints are injected
+		// rather than dead per-revision DNS.
+		var revisionHashFor func(v1beta1.ComponentType) string
+		if peerRevision != nil {
+			revisionHashFor = func(peer v1beta1.ComponentType) string {
+				return peerRevision(peer, revisionHash)
+			}
+		}
+		coordination.InjectPeerEnv(pod, isvc, peers, revisionHashFor)
+	}
 }

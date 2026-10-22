@@ -68,7 +68,7 @@ func TestSingleRacePersistsBeforeMemberWrites(t *testing.T) {
 		{name: "every declared component is required", pd: true, a: []v1beta1.ComponentType{v1beta1.EngineComponent}, b: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent}, winner: "member-b"},
 		{name: "partial component admission keeps race open", pd: true, a: []v1beta1.ComponentType{v1beta1.EngineComponent}},
 		{name: "zero nominees await external admission", floor: ptr.To(0)},
-		{name: "zero floor winner retains its home", floor: ptr.To(0), a: []v1beta1.ComponentType{v1beta1.EngineComponent}, winner: "member-a"},
+		{name: "zero floor winner retains its member", floor: ptr.To(0), a: []v1beta1.ComponentType{v1beta1.EngineComponent}, winner: "member-a"},
 		{name: "zero floor disaggregated race", floor: ptr.To(0), pd: true, a: []v1beta1.ComponentType{v1beta1.EngineComponent}, b: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent}, winner: "member-b"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -367,11 +367,11 @@ func TestSingleRetainedWinnerHolds(t *testing.T) {
 func TestSingleModeChangeReportsOnlyWinnerHealth(t *testing.T) {
 	for _, tt := range []struct {
 		name  string
-		state homeObservationState
+		state memberObservationState
 		want  corev1.ConditionStatus
 	}{
-		{name: "unready winner cannot borrow loser readiness", state: homePresent, want: corev1.ConditionFalse},
-		{name: "unknown winner cannot borrow loser readiness", state: homeUnknown, want: corev1.ConditionUnknown},
+		{name: "unready winner cannot borrow loser readiness", state: memberPresent, want: corev1.ConditionFalse},
+		{name: "unknown winner cannot borrow loser readiness", state: memberUnknown, want: corev1.ConditionUnknown},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			f := singleFixture(t, false)
@@ -384,8 +384,8 @@ func TestSingleModeChangeReportsOnlyWinnerHealth(t *testing.T) {
 				t.Fatal(err)
 			}
 			observations := newPlacementObservations(s, f.clusters)
-			observations.homes["member-a"] = homeObservation{state: tt.state, candidate: v1beta1.CandidatePlacement{Cluster: "member-a", Phase: v1beta1.CandidatePhaseAdmitted}}
-			observations.homes["member-b"] = homeObservation{state: homePresent, serving: true, candidate: v1beta1.CandidatePlacement{Cluster: "member-b", Phase: v1beta1.CandidatePhaseAdmitted, AdmittedReplicas: 3, ReadyReplicas: 3, Endpoint: apis.HTTPS("member-b.example.com")}}
+			observations.members["member-a"] = memberObservation{state: tt.state, candidate: v1beta1.CandidatePlacement{Cluster: "member-a", Phase: v1beta1.CandidatePhaseAdmitted}}
+			observations.members["member-b"] = memberObservation{state: memberPresent, serving: true, candidate: v1beta1.CandidatePlacement{Cluster: "member-b", Phase: v1beta1.CandidatePhaseAdmitted, AdmittedReplicas: 3, ReadyReplicas: 3, Endpoint: apis.HTTPS("member-b.example.com")}}
 			if _, err := f.reconciler.writeSplitHold(t.Context(), s, observations, "PlacementModeChangeBlocked", errors.New("accepted mode held")); err != nil {
 				t.Fatal(err)
 			}

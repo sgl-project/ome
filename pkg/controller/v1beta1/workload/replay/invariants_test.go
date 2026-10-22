@@ -404,3 +404,36 @@ func TestCheckOwnership(t *testing.T) {
 		})
 	}
 }
+
+// TestCheckLabelTruth holds I6 to its rule: a pod write that leaves label and
+// template apart is a finding, one that moves them together is not, and a
+// label naming no stored revision is not judged.
+func TestCheckLabelTruth(t *testing.T) {
+	revisions := map[string]RevisionTemplate{
+		"rev-a": {Images: map[string]string{"main": "registry.example.com/runtime:v1"}, Annotations: map[string]string{"release": "one"}},
+		"rev-b": {Images: map[string]string{"main": "registry.example.com/runtime:v2"}, Annotations: map[string]string{"release": "two"}},
+	}
+	written := func(hash, image, release string) *corev1.Pod {
+		pod := servingPod("p-0")
+		pod.Labels = map[string]string{query.LabelRevisionHash: hash, query.LabelInstanceIdx: "0"}
+		pod.Annotations = map[string]string{"release": release}
+		pod.Spec.Containers = []corev1.Container{{Name: "main", Image: image}}
+		return pod
+	}
+	cases := []struct {
+		name   string
+		writes []PodWrite
+		want   []string
+	}{
+		{name: "label and template move together", writes: []PodWrite{{Verb: "patch", Pod: written("rev-b", "registry.example.com/runtime:v2", "two")}}},
+		{name: "template moved under the old label", writes: []PodWrite{{Verb: "patch", Pod: written("rev-a", "registry.example.com/runtime:v2", "one")}}, want: []string{"I6/label-template-apart[patch]"}},
+		{name: "annotation moved under the old label", writes: []PodWrite{{Verb: "patch", Pod: written("rev-a", "registry.example.com/runtime:v1", "two")}}, want: []string{"I6/label-template-apart[patch]"}},
+		{name: "label moved ahead of the template", writes: []PodWrite{{Verb: "patch", Pod: written("rev-b", "registry.example.com/runtime:v1", "one")}}, want: []string{"I6/label-template-apart[patch]"}},
+		{name: "a label naming no stored revision", writes: []PodWrite{{Verb: "create", Pod: written("rev-z", "registry.example.com/runtime:v1", "one")}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			expectClasses(t, CheckLabelTruth(TickView{PodWrites: tc.writes, Revisions: revisions}), tc.want)
+		})
+	}
+}

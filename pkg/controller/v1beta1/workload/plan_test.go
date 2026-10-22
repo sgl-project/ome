@@ -340,11 +340,51 @@ func TestBuildPlan_RestartPolicyExplicitWinsOverDefault(t *testing.T) {
 
 func TestLowestUnusedIndex(t *testing.T) {
 	used := map[int32]struct{}{0: {}, 1: {}, 3: {}}
-	if got := lowestUnusedIndex(used); got != 2 {
-		t.Errorf("got %d want 2", got)
+	for _, tc := range []struct {
+		from, want int32
+	}{
+		{from: 0, want: 2},
+		{from: 2, want: 2},
+		{from: 3, want: 4},
+		{from: 5, want: 5},
+	} {
+		if got := lowestUnusedIndex(used, tc.from); got != tc.want {
+			t.Errorf("from %d: got %d want %d", tc.from, got, tc.want)
+		}
 	}
-	if got := lowestUnusedIndex(map[int32]struct{}{}); got != 0 {
+	if got := lowestUnusedIndex(map[int32]struct{}{}, 0); got != 0 {
 		t.Errorf("empty set: got %d want 0", got)
+	}
+}
+
+// TestInstancePlanIndices_ScaleUpTakesTheLowestUnusedIndexesInOrder: the
+// slots a scale-up adds take the lowest unused indexes, lowest first,
+// whatever holes the recorded rows leave. Rows 0, 1, 3 and 7 serve; each
+// step of the count from 5 to 10 adds the next index of 2, 4, 5, 6, 8, 9.
+// The index is in the pod's name, so the sequence is part of what an
+// operator sees.
+func TestInstancePlanIndices_ScaleUpTakesTheLowestUnusedIndexesInOrder(t *testing.T) {
+	instances := []types.InstanceStatus{
+		{Index: 0, Phase: types.InstancePhaseReady},
+		{Index: 1, Phase: types.InstancePhaseReady},
+		{Index: 3, Phase: types.InstancePhaseReady},
+		{Index: 7, Phase: types.InstancePhaseReady},
+	}
+	for _, tc := range []struct {
+		replicas int32
+		want     []int32
+	}{
+		{replicas: 4, want: []int32{0, 1, 3, 7}},
+		{replicas: 5, want: []int32{0, 1, 2, 3, 7}},
+		{replicas: 6, want: []int32{0, 1, 2, 3, 4, 7}},
+		{replicas: 7, want: []int32{0, 1, 2, 3, 4, 5, 7}},
+		{replicas: 8, want: []int32{0, 1, 2, 3, 4, 5, 6, 7}},
+		{replicas: 9, want: []int32{0, 1, 2, 3, 4, 5, 6, 7, 8}},
+		{replicas: 10, want: []int32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}},
+	} {
+		if diff := cmp.Diff(tc.want, instancePlanIndices(instances, tc.replicas, nil, nil)); diff != "" {
+			t.Errorf("replicas=%d (-want +got):\n%s", tc.replicas, diff)
+		}
 	}
 }
 
@@ -1527,4 +1567,123 @@ func TestBuildPlan_MigrationSurgeRendersTheSourceWidth(t *testing.T) {
 			t.Errorf("Instance %d renders %d pods, want the source revision's 5", inst.Index, got)
 		}
 	}
+}
+
+// A row mid-recreate is not Ready, so it ranks behind every Ready row whose
+// pods are all in rotation, whatever its index: a scale-down that lands
+// mid-roll retires the Instance being rebuilt and keeps the one that serves.
+func TestInstancePlanIndices_RecreateInFlightLeavesBeforeAServingRow(t *testing.T) {
+	rebuilding := func(idx int32) types.InstanceStatus {
+		return types.InstanceStatus{
+			Index: idx, Phase: types.InstancePhaseUpdating, RunningRevision: "comp-rev-v1aaaaaa", TargetRevision: "comp-rev-v2bbbbbb",
+			PodCount: 2, ServingPodCount: 0,
+			Operation: &types.InstanceOperation{Type: types.InstanceOperationUpdate, Step: types.UpdateStepDrain, TargetRevision: "comp-rev-v2bbbbbb", Strategy: types.UpdateStrategyRecreatePod},
+		}
+	}
+	serving := func(idx int32) types.InstanceStatus {
+		return types.InstanceStatus{Index: idx, Phase: types.InstancePhaseReady, RunningRevision: "comp-rev-v1aaaaaa", PodCount: 2, ServingPodCount: 2}
+	}
+	tests := []struct {
+		name      string
+		instances []types.InstanceStatus
+		replicas  int32
+		want      []int32
+	}{
+		{
+			name:      "the lower index is being rebuilt: it leaves and the serving row stays",
+			instances: []types.InstanceStatus{rebuilding(0), serving(1)},
+			replicas:  1,
+			want:      []int32{1},
+		},
+		{
+			name:      "the higher index is being rebuilt: it leaves and the serving row stays",
+			instances: []types.InstanceStatus{serving(0), rebuilding(1)},
+			replicas:  1,
+			want:      []int32{0},
+		},
+		{
+			name:      "one of four is being rebuilt and the count drops by one: the rebuild leaves, the three serving rows stay",
+			instances: []types.InstanceStatus{rebuilding(0), serving(1), serving(2), serving(3)},
+			replicas:  3,
+			want:      []int32{1, 2, 3},
+		},
+		{
+			name:      "the rebuild is kept only when no serving row fills the count",
+			instances: []types.InstanceStatus{rebuilding(0), serving(1)},
+			replicas:  2,
+			want:      []int32{0, 1},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if diff := cmp.Diff(test.want, instancePlanIndices(test.instances, test.replicas, nil, nil)); diff != "" {
+				t.Fatalf("a row mid-recreate must leave before a serving one (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+// A row left Creating with no operation is a slot nothing drives: it never
+// served and no pass owns it, so it holds nothing a scale-down should keep.
+// It leaves ahead of every row whose pod still runs, a Failed attempt on a
+// revision in backoff and a serving row on a cordoned node included, and
+// fills the count only when no other row can.
+func TestInstancePlanIndices_CreatingRowWithNoOperationLeavesFirst(t *testing.T) {
+	const running, pushed = "comp-rev-v1aaaaaa", "comp-rev-v2bbbbbb"
+	serving := func(idx int32) types.InstanceStatus {
+		return types.InstanceStatus{Index: idx, Phase: types.InstancePhaseReady, RunningRevision: running, PodCount: 1, ServingPodCount: 1}
+	}
+	failedAttempt := types.InstanceStatus{Index: 0, Phase: types.InstancePhaseFailed, RunningRevision: running, TargetRevision: pushed, PodCount: 1}
+	releasedReplacement := types.InstanceStatus{Index: 3, Phase: types.InstancePhaseCreating, PodCount: 1}
+	backoff := []types.RetryBlock{{TargetRevision: pushed, State: types.RetryBlockBackoff}}
+	tests := []struct {
+		name      string
+		instances []types.InstanceStatus
+		blocks    []types.RetryBlock
+		cordoned  map[int32]struct{}
+		replicas  int32
+		want      []int32
+	}{
+		{
+			name:      "beside a Failed attempt on a revision in backoff, the row nothing drives leaves and the attempt keeps its pod",
+			instances: []types.InstanceStatus{failedAttempt, serving(1), serving(2), releasedReplacement},
+			blocks:    backoff,
+			replicas:  3,
+			want:      []int32{0, 1, 2},
+		},
+		{
+			name:      "beside a serving row on a cordoned node, the row nothing drives leaves first",
+			instances: []types.InstanceStatus{serving(0), serving(1), serving(2), releasedReplacement},
+			cordoned:  map[int32]struct{}{0: {}},
+			replicas:  3,
+			want:      []int32{0, 1, 2},
+		},
+		{
+			name:      "a lower index does not save it",
+			instances: []types.InstanceStatus{{Index: 0, Phase: types.InstancePhaseCreating, PodCount: 1}, failedAttemptAt(1, running, pushed), serving(2), serving(3)},
+			blocks:    backoff,
+			replicas:  3,
+			want:      []int32{1, 2, 3},
+		},
+		{
+			name:      "the row nothing drives fills the count only when no other row can",
+			instances: []types.InstanceStatus{failedAttempt, serving(1), serving(2), releasedReplacement},
+			blocks:    backoff,
+			replicas:  4,
+			want:      []int32{0, 1, 2, 3},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if diff := cmp.Diff(test.want, instancePlanIndices(test.instances, test.replicas, test.blocks, test.cordoned)); diff != "" {
+				t.Fatalf("a Creating row with no operation must leave before any row whose pod runs (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+// failedAttemptAt is a Failed row at idx whose attempt toward pushed ended
+// with its pod on running still standing.
+func failedAttemptAt(idx int32, running, pushed string) types.InstanceStatus {
+	return types.InstanceStatus{Index: idx, Phase: types.InstancePhaseFailed, RunningRevision: running, TargetRevision: pushed, PodCount: 1}
 }

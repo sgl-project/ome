@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/ome/pkg/placement/protocol"
 )
 
-// retireCapacityFloor preserves an outgoing home's rendering while reducing
+// retireCapacityFloor preserves an outgoing member's rendering while reducing
 // its floor. Hardware weights authorize new allocation; they cannot prevent
 // cleanup of an already accepted, observed reduction.
 func (r *Reconciler) retireCapacityFloor(ctx context.Context, cl client.Client, source *v1beta1.InferenceService, candidate v1beta1.CandidatePlacement) error {

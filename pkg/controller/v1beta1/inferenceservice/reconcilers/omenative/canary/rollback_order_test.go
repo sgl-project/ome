@@ -122,6 +122,7 @@ func TestDispatch_RollbackKeepsTrafficOffAnEmptyStableRevision(t *testing.T) {
 	annotateStored(t, c, isvc, constants.RolloutRollbackAnnotation, "true")
 	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: g}
 
+	syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 	if _, err := Dispatch(ctx, deps); err != nil {
 		t.Fatalf("Dispatch (rollback): %v", err)
 	}
@@ -146,6 +147,7 @@ func TestDispatch_RollbackKeepsTrafficOffAnEmptyStableRevision(t *testing.T) {
 	if err := c.Create(ctx, canaryPod(ns, isvc.Name, "engine", "old", isvc.Name+"-engine-0")); err != nil {
 		t.Fatal(err)
 	}
+	syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 	if _, err := Dispatch(ctx, deps); err != nil {
 		t.Fatalf("Dispatch (stable serving): %v", err)
 	}

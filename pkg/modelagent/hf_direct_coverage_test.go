@@ -168,7 +168,7 @@ func TestDirectHFLegacyLinkWithDescendantsCannotBeReplaced(t *testing.T) {
 
 func TestDirectHFConfigParsingFailurePreservesVerifiedDownload(t *testing.T) {
 	s, task, input, source, downloads := newTestDirectHfSource(t)
-	s.modelConfigParser = modelparser.NewModelConfigParser(nil, s.logger)
+	s.modelConfigParser = modelparser.NewModelConfigParser(s.logger)
 	waiting, err := source.process(context.Background(), s, task, task.BaseModel.Spec, true)
 	require.NoError(t, err, "the verified snapshot remains usable even when its config format is unsupported")
 	require.False(t, waiting)
@@ -182,7 +182,7 @@ func TestDirectHFConfigParsingFailurePreservesVerifiedDownload(t *testing.T) {
 
 func TestDirectHFSkipConfigParsingCompletesOrdinaryDownload(t *testing.T) {
 	s, task, input, source, downloads := newTestDirectHfSource(t)
-	s.modelConfigParser = modelparser.NewModelConfigParser(nil, s.logger)
+	s.modelConfigParser = modelparser.NewModelConfigParser(s.logger)
 	// Only the ordinary download passes its artifact to config parsing.
 	task.BaseModel.Spec.Storage.DownloadPolicy = nil
 	task.BaseModel.Annotations[ConfigParsingAnnotation] = "true"

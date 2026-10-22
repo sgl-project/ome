@@ -45,6 +45,7 @@ func TestDispatch_RetargetWhileRollingBackWithTerminatingReplacement(t *testing.
 	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}
 	dispatch := func(pass string) Outcome {
 		t.Helper()
+		syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 		out, err := Dispatch(ctx, deps)
 		if err != nil {
 			t.Fatalf("Dispatch (%s): %v", pass, err)

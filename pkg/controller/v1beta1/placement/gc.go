@@ -85,28 +85,40 @@ func OrphanedDeriveds(liveUIDs map[string]bool, controlPlaneID string, derived [
 	return orphans
 }
 
-// sweep lists live CP ISVC UIDs, then for each connected cluster deletes
-// origin-labeled derived ISVCs whose source is gone. Both lists are
-// metadata-only so full specs/status are never deserialized.
-func (g *GCReconciler) sweep(ctx context.Context) error {
-	pageSize := g.PageSize
-	if pageSize <= 0 {
-		pageSize = defaultGCPageSize
-	}
+// liveSourceUIDs reads the UID of every control-plane InferenceService
+// through the uncached reader, page by page.
+func (g *GCReconciler) liveSourceUIDs(ctx context.Context, pageSize int64) (map[string]bool, error) {
 	live := map[string]bool{}
 	continueToken := ""
 	for {
 		cpList := isvcMetadataList()
 		if err := g.APIReader.List(ctx, cpList, client.Limit(pageSize), client.Continue(continueToken)); err != nil {
-			return fmt.Errorf("gc: list control-plane ISVCs: %w", err)
+			return nil, fmt.Errorf("gc: list control-plane ISVCs: %w", err)
 		}
 		for i := range cpList.Items {
 			live[string(cpList.Items[i].UID)] = true
 		}
 		continueToken = cpList.Continue
 		if continueToken == "" {
-			break
+			return live, nil
 		}
+	}
+}
+
+// sweep lists live CP ISVC UIDs, then for each connected cluster deletes
+// origin-labeled derived ISVCs whose source is gone. Both lists are
+// metadata-only so full specs/status are never deserialized. A source
+// created between the two lists reads as missing from the first, so a
+// candidate is confirmed against a fresh read of the control plane before
+// it is deleted.
+func (g *GCReconciler) sweep(ctx context.Context) error {
+	pageSize := g.PageSize
+	if pageSize <= 0 {
+		pageSize = defaultGCPageSize
+	}
+	live, err := g.liveSourceUIDs(ctx, pageSize)
+	if err != nil {
+		return err
 	}
 
 	// Safety guard: an empty live-UID set is treated as suspect and the
@@ -138,8 +150,26 @@ func (g *GCReconciler) sweep(ctx context.Context) error {
 			g.Log.Error(err, "gc: list derived ISVCs", "cluster", cluster)
 			continue
 		}
-		for _, orphan := range OrphanedDeriveds(live, g.ControlPlaneID, derivedList.Items) {
-			o := orphan
+		candidates := OrphanedDeriveds(live, g.ControlPlaneID, derivedList.Items)
+		if len(candidates) == 0 {
+			continue
+		}
+		// A source that appeared after the first read keeps its derived. A
+		// source that disappeared since is caught by the next sweep.
+		confirmed, err := g.liveSourceUIDs(ctx, pageSize)
+		if err != nil {
+			g.Log.Error(err, "gc: confirm live sources before deleting", "cluster", cluster)
+			continue
+		}
+		if len(confirmed) == 0 {
+			g.Log.Info("gc: control-plane ISVC list empty on confirmation; skipping cluster (suspect/transient)", "cluster", cluster)
+			continue
+		}
+		for uid := range confirmed {
+			live[uid] = true
+		}
+		for _, candidate := range OrphanedDeriveds(live, g.ControlPlaneID, candidates) {
+			o := candidate
 			o.SetGroupVersionKind(v1beta1.SchemeGroupVersion.WithKind("InferenceService"))
 			// Delete the exact object this sweep classified, never whatever now
 			// holds that name. A source deleted and recreated under the same name

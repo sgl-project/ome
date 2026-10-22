@@ -2,6 +2,7 @@ package v1beta1
 
 import (
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
@@ -108,6 +109,38 @@ type InferenceServiceStatus struct {
 	// +optional
 	// +ome:since=v1.3
 	RolloutCoordination *RolloutCoordinationStatus `json:"rolloutCoordination,omitempty"`
+	// ScalingPolicy reports the applied cross-component desired-count policy.
+	// +optional
+	// +ome:since=v1.3
+	ScalingPolicy *ScalingPolicyStatus `json:"scalingPolicy,omitempty"`
+}
+
+// ScalingPolicyStatus records the coordinator's last decision.
+type ScalingPolicyStatus struct {
+	Mode          ScalingMode   `json:"mode,omitempty"`
+	Source        string        `json:"source,omitempty"`
+	Anchor        ComponentType `json:"anchor,omitempty"`
+	AnchorDesired int32         `json:"anchorDesired,omitempty"`
+	// +listType=map
+	// +listMapKey=component
+	Followers []FollowerScalingStatus `json:"followers,omitempty"`
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// FollowerScalingStatus compares a target with the committed desired count.
+type FollowerScalingStatus struct {
+	Component ComponentType     `json:"component"`
+	Ratio     resource.Quantity `json:"ratio"`
+	// Target is the anchor's desired count times the ratio, rounded up, after
+	// the follower's own bounds.
+	Target int32 `json:"target"`
+	// Current is the follower's desired count after this pass.
+	Current int32 `json:"current,omitempty"`
+	// Clamped is true when the follower's minReplicas or a declared
+	// maxReplicas moved the target; the Ready condition names the bound.
+	Clamped bool `json:"clamped,omitempty"`
 }
 
 // MountedOverlay records one overlay the controller wired into the

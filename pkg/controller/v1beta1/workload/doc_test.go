@@ -93,6 +93,13 @@ var transitionWriteAllowlist = []allowedTransitionWrite{
 			"is a test-only package no binary links",
 	},
 	{
+		file: "inferenceservice/reconcilers/omenative/replay/members.go", fn: "publish", field: "Operation", count: 1,
+		why: "the replica controller's stand-in in the InferenceService replay driver publishes a " +
+			"surging row's attempt at step Surge, the shape the controller publishes from the " +
+			"workload's own stamp, so the pairing gates the replay driver reads treat the row as " +
+			"they treat a live one; a test-only package no binary links, deciding nothing for the workload",
+	},
+	{
 		file: "workload/escalation/escalation.go", fn: "Run", field: "UpdateRevision", count: 1,
 		why: "defaults the pass's LOCAL ReconcileInput copy (pass-by-value) so the first-rollout " +
 			"disposition can resolve its RetryBlock target before the aggregator has stamped " +
@@ -104,6 +111,13 @@ var transitionWriteAllowlist = []allowedTransitionWrite{
 			"(the spec target once every Instance is Ready on it, withdrawn while an Instance still " +
 			"runs another revision; persisted write), then mirrors the committed value onto the " +
 			"caller's in-memory IR (second assignment) so the deferred aggregator observes it",
+	},
+	{
+		file: "inferencereplica/convert.go", fn: "buildPromoteCurrentRevision", field: "UpdateRevision", count: 2,
+		why: "the rollup writes the pair as one pair: the write that moves CurrentRevision records " +
+			"the spec target as UpdateRevision too, so the withdrawal it records names the revision " +
+			"the pass writes rather than a stale one (persisted write), then mirrors the committed " +
+			"name onto the caller's in-memory IR (second assignment)",
 	},
 	{
 		file: "inferencereplica/convert.go", fn: "buildRecordUpdateRevision", field: "CurrentRevision", count: 2,
@@ -119,9 +133,9 @@ var transitionWriteAllowlist = []allowedTransitionWrite{
 			"the caller's in-memory IR (second assignment); the aggregator restates the same name",
 	},
 	{
-		file: "inferencereplica/reconciler.go", fn: "Reconcile", field: "UpdateRevision", count: 1,
-		why: "copies the just-recorded target onto the pass's LOCAL ReconcileInput copy " +
-			"(pass-by-value) so the engine reads the spec target the status now names; never " +
+		file: "inferencereplica/reconciler.go", fn: "recordUpdateRevision", field: "UpdateRevision", count: 1,
+		why: "copies the just-recorded target onto the pass record's ReconcileInput, the engine's " +
+			"in-memory input, so the engine reads the spec target the status now names; never " +
 			"persisted — not a component-pair decision",
 	},
 	{

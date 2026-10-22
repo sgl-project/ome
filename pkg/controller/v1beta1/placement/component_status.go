@@ -10,6 +10,7 @@ import (
 	"knative.dev/pkg/apis"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/placement/affinity"
 )
 
 // componentOrder lists the scaled components in the order status reports them.
@@ -30,10 +31,10 @@ func splitDesired(source *v1beta1.InferenceService) (map[string]int32, map[strin
 	return targets, allocations
 }
 
-// componentFloorsFor reports each Split home's floors per component: the floor
+// componentFloorsFor reports each Split member's floors per component: the floor
 // on its member copy now and the floor at the accepted plan's desired shares.
 // A source with only its primary component reports none.
-func componentFloorsFor(source *v1beta1.InferenceService, observations map[string]plannedHomeObservation) map[string][]v1beta1.CandidateComponentFloor {
+func componentFloorsFor(source *v1beta1.InferenceService, observations map[string]plannedMemberObservation) map[string][]v1beta1.CandidateComponentFloor {
 	mode := placementMode(source)
 	if (mode != v1beta1.PlacementModeSplit && mode != v1beta1.PlacementModeSplitByCapacity) || source.Status.Placement == nil {
 		return nil
@@ -68,13 +69,12 @@ func componentFloorsFor(source *v1beta1.InferenceService, observations map[strin
 	return out
 }
 
-// componentSharesCondition reports how a Split source with per-component
-// terms splits each component, and which weights go unused because their
-// cluster holds no primary component. Every other source clears it.
+// componentSharesCondition reports how a Split source whose terms set weights
+// splits each component, and which weights go unused because their cluster
+// holds no primary component. Every other source clears it.
 func componentSharesCondition(source *v1beta1.InferenceService) policyCondition {
 	condition := policyCondition{condType: apis.ConditionType(v1beta1.PlacementComponentShares), clear: true}
-	mode := placementMode(source)
-	if !source.Spec.Placement.UsesComponentAffinity() || (mode != v1beta1.PlacementModeSplit && mode != v1beta1.PlacementModeSplitByCapacity) || source.Status.Placement == nil {
+	if placementMode(source) != v1beta1.PlacementModeSplit || !affinity.SetsWeights(source.Spec.Placement.ClusterAffinity) || source.Status.Placement == nil {
 		return condition
 	}
 	minimums, err := splitComponentMinimums(source)
@@ -90,23 +90,20 @@ func componentSharesCondition(source *v1beta1.InferenceService) policyCondition 
 		if _, secondary := minimums.secondaries()[component]; !secondary {
 			continue
 		}
-		switch _, independent := own[component]; {
-		case independent:
+		if _, independent := own[component]; independent {
 			parts = append(parts, fmt.Sprintf("%s is split by its own weights", component))
 			reason = "OwnWeights"
-		case mode == v1beta1.PlacementModeSplitByCapacity:
-			parts = append(parts, fmt.Sprintf("%s follows the capacity shares", component))
-		default:
+		} else {
 			parts = append(parts, fmt.Sprintf("%s follows the %s shares", component, minimums.primary))
 		}
 	}
 	for _, component := range componentOrder {
-		byHome := weights.components[component]
+		byCluster := weights.components[component]
 		if component == minimums.primary {
-			byHome = weights.primary
+			byCluster = weights.primary
 		}
-		for _, name := range slices.Sorted(maps.Keys(byHome)) {
-			if byHome[name] > 0 && targets[name] == 0 {
+		for _, name := range slices.Sorted(maps.Keys(byCluster)) {
+			if byCluster[name] > 0 && targets[name] == 0 {
 				unused = append(unused, fmt.Sprintf("%s weight on %s", component, name))
 			}
 		}

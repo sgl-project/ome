@@ -24,10 +24,11 @@ type gangMemberLister interface {
 	gangPods(namespace, name string) ([]*v1.Pod, error)
 }
 
-// runPinGC periodically reconciles the pin store against live gangs, releasing
-// pins whose pods are all gone. It runs for the scheduler's lifetime (bounded by
-// ctx) and is a no-op if no pod lister was wired.
-func (g *GangPack) runPinGC(ctx context.Context) {
+// runAssignmentGC periodically reconciles the assignment store against live
+// gangs, releasing assignments whose pods are all gone. It runs for the
+// scheduler's lifetime (bounded by ctx) and is a no-op if no pod lister was
+// wired.
+func (g *GangPack) runAssignmentGC(ctx context.Context) {
 	if g.podLister == nil || g.gcInterval <= 0 {
 		return
 	}
@@ -38,22 +39,23 @@ func (g *GangPack) runPinGC(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			g.gcPins()
+			g.gcAssignments()
 		}
 	}
 }
 
-// gcPins releases pins whose gangs no longer have live pods. Reservation
-// accounting is owned synchronously by PreFilter/Reserve/PostFilter/Unreserve;
-// a background goroutine must not read SnapshotSharedLister, whose data is only
-// valid during a scheduling cycle and is mutated without reader locking.
-func (g *GangPack) gcPins() {
+// gcAssignments releases assignments whose gangs no longer have live pods.
+// Reservation accounting is owned synchronously by
+// PreFilter/Reserve/PostFilter/Unreserve; a background goroutine must not read
+// SnapshotSharedLister, whose data is only valid during a scheduling cycle and
+// is mutated without reader locking.
+func (g *GangPack) gcAssignments() {
 	live, err := g.podLister.liveGangKeys()
 	if err != nil {
 		return
 	}
 	g.pruneTemplatesIncomplete()
-	for group, owner := range g.pins.Owners() {
+	for group, owner := range g.assignments.Owners() {
 		stale := !live[group]
 		// A live pod label only identifies namespace/name. Compare the immutable
 		// PodGroup UID as well so deleting and recreating that name cannot keep or
@@ -68,16 +70,16 @@ func (g *GangPack) gcPins() {
 		if !stale {
 			continue
 		}
-		domain, token, _, found, ownerMatch := g.pins.GetOwnedBy(group, owner)
+		domain, token, _, found, ownerMatch := g.assignments.GetOwnedBy(group, owner)
 		if !found || !ownerMatch {
 			continue
 		}
-		pin := &pinState{
+		assignment := &assignmentState{
 			domain: domain.Name, topologyKey: domain.TopologyKey,
 			gang: gangInfo{key: group, uid: owner}, commitment: token,
 		}
-		if released, _ := g.releaseAttempt(pin, nil, false); released {
-			g.clearFailedDomains(pin.gang)
+		if released, _ := g.releaseAttempt(assignment, nil, false); released {
+			g.clearFailedDomains(assignment.gang)
 		}
 	}
 }

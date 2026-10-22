@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/validation"
 )
 
 // DefaultRuntimeScorer implements RuntimeScorer with configurable scoring weights.
@@ -24,7 +25,7 @@ func (s *DefaultRuntimeScorer) CalculateScore(runtime *v1beta1.ServingRuntimeSpe
 	var maxScore int64 = 0
 
 	for _, supportedFormat := range runtime.SupportedModelFormats {
-		if modelRequiresCacheProvider(model) && !supportedFormatSupportsModelCacheProvider(supportedFormat, s.config.ModelCacheProvider) {
+		if validation.ModelRequiresCacheProvider(model) && !validation.FormatSupportsModelCacheProvider(supportedFormat, s.config.ModelCacheProvider) {
 			continue
 		}
 
@@ -85,7 +86,7 @@ func (s *DefaultRuntimeScorer) CompareRuntimes(r1, r2 RuntimeMatch, model *v1bet
 }
 
 func (s *DefaultRuntimeScorer) CalculateFormatScore(model *v1beta1.BaseModelSpec, supportedFormat v1beta1.SupportedModelFormat, priority int64) int64 {
-	if modelRequiresCacheProvider(model) && !supportedFormatSupportsModelCacheProvider(supportedFormat, s.config.ModelCacheProvider) {
+	if validation.ModelRequiresCacheProvider(model) && !validation.FormatSupportsModelCacheProvider(supportedFormat, s.config.ModelCacheProvider) {
 		return 0
 	}
 
@@ -169,9 +170,9 @@ func (s *DefaultRuntimeScorer) calculateSizeScore(runtime RuntimeMatch, model *v
 }
 
 func (s *DefaultRuntimeScorer) compareVersions(supportedFormat *v1beta1.ModelFormat, modelFormat *v1beta1.ModelFormat) bool {
-	return compareVersionsWithOperator(*modelFormat.Version, *supportedFormat.Version, supportedFormat.Operator)
+	return validation.VersionsMatch(*modelFormat.Version, *supportedFormat.Version, supportedFormat.Operator)
 }
 
 func (s *DefaultRuntimeScorer) compareFrameworkVersions(supportedFramework *v1beta1.ModelFrameworkSpec, modelFramework *v1beta1.ModelFrameworkSpec) bool {
-	return compareVersionsWithOperator(*modelFramework.Version, *supportedFramework.Version, supportedFramework.Operator)
+	return validation.VersionsMatch(*modelFramework.Version, *supportedFramework.Version, supportedFramework.Operator)
 }

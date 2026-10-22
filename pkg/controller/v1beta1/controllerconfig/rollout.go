@@ -51,28 +51,19 @@ type rolloutConfigJSON struct {
 
 // NewRolloutConfig loads the block once (startup paths).
 func NewRolloutConfig(clientset kubernetes.Interface) (*RolloutConfig, error) {
-	configMap, err := getInferenceServiceConfigMap(clientset)
-	if err != nil {
-		return nil, err
-	}
-	return parseRolloutConfig(configMap)
+	return loadBlock(clientset, parseRolloutConfig)
 }
 
 // NewRolloutConfigCached is the ConfigCache-backed variant of NewRolloutConfig
 // used on the reconcile hot path.
 func NewRolloutConfigCached(cache *ConfigCache, clientset kubernetes.Interface) (*RolloutConfig, error) {
-	configMap, err := cache.get(clientset)
-	if err != nil {
-		return nil, err
-	}
-	return parseRolloutConfig(configMap)
+	return loadBlockCached(cache, clientset, parseRolloutConfig)
 }
 
 // parseRolloutConfig parses the block. An empty, malformed, or non-positive
-// defaultReadyTimeout degrades to zero — "no configured default" — rather
-// than failing the load, mirroring the canaryAnalysis duration handling. A
-// negative maxPinnedPlanBytes can never be a sane cap, so it is a config
-// error surfaced at load time.
+// duration reads as zero, "no configured default", rather than failing the
+// load. A negative maxPinnedPlanBytes can never be a sane cap, so it is a
+// config error surfaced at load time.
 func parseRolloutConfig(configMap *v1.ConfigMap) (*RolloutConfig, error) {
 	raw := &rolloutConfigJSON{}
 	if err := getComponentConfig(RolloutConfigName, configMap, raw); err != nil {
@@ -82,18 +73,8 @@ func parseRolloutConfig(configMap *v1.ConfigMap) (*RolloutConfig, error) {
 		return nil, fmt.Errorf("invalid rollout config, maxPinnedPlanBytes must be >= 0, got %d", raw.MaxPinnedPlanBytes)
 	}
 	cfg := &RolloutConfig{MaxPinnedPlanBytes: raw.MaxPinnedPlanBytes}
-	cfg.DefaultReadyTimeout = positiveDuration(raw.DefaultReadyTimeout)
-	cfg.CanaryRequeue = positiveDuration(raw.CanaryRequeue)
-	cfg.CanaryParkedRequeue = positiveDuration(raw.CanaryParkedRequeue)
+	cfg.DefaultReadyTimeout = positiveDurationOrZero(raw.DefaultReadyTimeout)
+	cfg.CanaryRequeue = positiveDurationOrZero(raw.CanaryRequeue)
+	cfg.CanaryParkedRequeue = positiveDurationOrZero(raw.CanaryParkedRequeue)
 	return cfg, nil
-}
-
-// positiveDuration parses a ConfigMap duration string; empty, malformed and
-// non-positive values read as zero, the "unconfigured" value every consumer
-// of this block treats as "keep the documented fallback".
-func positiveDuration(s string) time.Duration {
-	if d, err := time.ParseDuration(s); err == nil && d > 0 {
-		return d
-	}
-	return 0
 }

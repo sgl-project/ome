@@ -117,7 +117,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, err
 	}
 	r.Log.Info("endpoint published", "isvc", req.String(), "backend", r.Publisher.Name(),
-		"globalHost", target.GlobalHost, "homes", len(target.Homes))
+		"globalHost", target.GlobalHost, "homes", len(target.Clusters))
 	if r.Config.GatewayBackend.EndpointSlices.Enabled && r.Config.GatewayBackend.EndpointSlices.AddressRefreshInterval > 0 {
 		return ctrl.Result{RequeueAfter: r.Config.GatewayBackend.EndpointSlices.AddressRefreshInterval}, nil
 	}
@@ -141,16 +141,16 @@ func (r *Reconciler) resolveTarget(isvc *v1beta1.InferenceService, weights map[s
 	if pl == nil || pl.Phase != v1beta1.PlacementPhasePlaced {
 		return Target{}, false, nil
 	}
-	homes := homesFromPlacement(pl)
-	if len(homes) == 0 {
-		// Placed but no home is addressable yet — nothing concrete to point at.
+	clusters := servingClustersFromPlacement(pl)
+	if len(clusters) == 0 {
+		// Placed but no cluster is addressable yet — nothing concrete to point at.
 		return Target{}, false, nil
 	}
-	weightsAuthoritative := applyTrafficMapWeights(homes, weights)
+	weightsAuthoritative := applyTrafficMapWeights(clusters, weights)
 	return Target{
 		Service:              isvc.Name,
 		GlobalHost:           host,
-		Homes:                homes,
+		Clusters:             clusters,
 		WeightsAuthoritative: weightsAuthoritative,
 	}, true, nil
 }
@@ -183,20 +183,20 @@ func trafficMapBlocksLegacyPublisher(trafficMap *v1beta1.TrafficMap) bool {
 }
 
 // applyTrafficMapWeights overlays the TrafficMap's capacity-aware, health-gated
-// weights onto the serving homes, replacing the reactive ready-replica weight
-// homesFromPlacement seeds. A home absent from the map — or a nil map, when no
+// weights onto the serving clusters, replacing the reactive ready-replica weight
+// servingClustersFromPlacement seeds. A cluster absent from the map — or a nil map, when no
 // TrafficMap exists — keeps its reactive weight, so publication degrades to the
 // live ready-replica split when routing is off or the map lags placement. The
-// return value is true only when every current home had an explicit map entry;
+// return value is true only when every current cluster had an explicit map entry;
 // only that complete table may authorize an all-zero route.
-func applyTrafficMapWeights(homes []Home, weights map[string]int32) bool {
+func applyTrafficMapWeights(clusters []ServingCluster, weights map[string]int32) bool {
 	if weights == nil {
 		return false
 	}
 	complete := true
-	for i := range homes {
-		if w, ok := weights[homes[i].Cluster]; ok {
-			homes[i].Weight = w
+	for i := range clusters {
+		if w, ok := weights[clusters[i].Cluster]; ok {
+			clusters[i].Weight = w
 		} else {
 			complete = false
 		}
@@ -204,23 +204,23 @@ func applyTrafficMapWeights(homes []Home, weights map[string]int32) bool {
 	return complete
 }
 
-// homesFromPlacement extracts the serving homes — admitted candidates that
+// servingClustersFromPlacement extracts the serving clusters — admitted candidates that
 // report an addressable endpoint — from a placement status, sorted by cluster
 // for a deterministic route. This is the uniform source for both Single (one
 // winner candidate) and All/Split (one per serving cluster).
-func homesFromPlacement(pl *v1beta1.PlacementStatus) []Home {
-	var homes []Home
+func servingClustersFromPlacement(pl *v1beta1.PlacementStatus) []ServingCluster {
+	var clusters []ServingCluster
 	for i := range pl.Candidates {
 		c := &pl.Candidates[i]
 		if c.Phase == v1beta1.CandidatePhaseAdmitted && c.Endpoint != nil && c.Endpoint.Host != "" {
-			homes = append(homes, Home{
+			clusters = append(clusters, ServingCluster{
 				Cluster: c.Cluster, Endpoint: c.Endpoint.String(),
 				BackendHost: hostOnly(c.Endpoint.Host), Weight: c.ReadyReplicas,
 			})
 		}
 	}
-	sort.Slice(homes, func(i, j int) bool { return homes[i].Cluster < homes[j].Cluster })
-	return homes
+	sort.Slice(clusters, func(i, j int) bool { return clusters[i].Cluster < clusters[j].Cluster })
+	return clusters
 }
 
 // hostOnly strips a port from an endpoint host. A URL's Host is "host:port"
@@ -419,7 +419,7 @@ var placementPublishChange = predicate.Funcs{
 
 // placementEqual reports whether two PlacementStatus values agree on the fields
 // the publisher consumes: phase, winner cluster, endpoint host, and the
-// candidate-derived serving homes (including their weights).
+// candidate-derived serving clusters (including their weights).
 func placementEqual(a, b *v1beta1.PlacementStatus) bool {
 	if a == nil || b == nil {
 		return a == b
@@ -427,7 +427,7 @@ func placementEqual(a, b *v1beta1.PlacementStatus) bool {
 	if a.Phase != b.Phase || a.Cluster != b.Cluster {
 		return false
 	}
-	return endpointHost(a) == endpointHost(b) && slices.Equal(homesFromPlacement(a), homesFromPlacement(b))
+	return endpointHost(a) == endpointHost(b) && slices.Equal(servingClustersFromPlacement(a), servingClustersFromPlacement(b))
 }
 
 func endpointHost(pl *v1beta1.PlacementStatus) string {

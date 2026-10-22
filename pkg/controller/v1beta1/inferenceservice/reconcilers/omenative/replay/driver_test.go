@@ -119,3 +119,39 @@ func TestObserverSeesEveryTick(t *testing.T) {
 		t.Fatalf("the plain walk makes findings: %+v", got)
 	}
 }
+
+// A status that trails its spec by a write publishes nothing on its tick:
+// the last written status stands, pair and generation included, and the
+// next tick publishes the spec's revision under the new generation. A lag
+// the stand-in does not know fails the run.
+func TestStaleStatusKeepsTheLastPublication(t *testing.T) {
+	kept := strings.Replace(plainWalk, "      - spec.revision[new]: {component: engine, image: registry.example.com/runtime:v2}\n",
+		"      - spec.revision[new]: {component: engine, image: registry.example.com/runtime:v2}\n      - ir.stale: {component: engine, lag: status}\n", 1)
+	s, err := Parse([]byte(kept), Vocabulary{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	trace, err := Run(context.Background(), s, Options{})
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, trace)
+	}
+	if strings.Contains(trace, "tick=2 publish component=engine") {
+		t.Errorf("the engine must publish nothing on the tick its status trails the spec\n%s", trace)
+	}
+	for _, want := range []string{
+		"tick=2 apply ir.stale component=engine lag=status",
+		"tick=3 publish component=engine current=svc-a-engine-f332566b update=svc-a-engine-46e64ada observedGeneration=2",
+	} {
+		if !strings.Contains(trace, want) {
+			t.Errorf("trace lacks %q\n%s", want, trace)
+		}
+	}
+	unknown := strings.Replace(kept, "lag: status", "lag: rows", 1)
+	s, err = Parse([]byte(unknown), Vocabulary{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(context.Background(), s, Options{}); err == nil || !strings.Contains(err.Error(), "lag must be generation or status") {
+		t.Fatalf("unknown lag: %v", err)
+	}
+}

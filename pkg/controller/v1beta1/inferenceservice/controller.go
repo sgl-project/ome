@@ -55,16 +55,17 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
 	multimodelconfig "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/modelconfig"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/canary"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/rolloutrun"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/scaling"
 	traffic "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/traffic"
 	isvcstatus "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/status"
 	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/irstatus"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/obsmetrics"
 	rolloutpolicycontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/rolloutpolicy"
+	workloadtypes "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 	"sigs.k8s.io/ome/pkg/placement/protocol"
 	"sigs.k8s.io/ome/pkg/render"
 	"sigs.k8s.io/ome/pkg/rollout"
@@ -152,9 +153,9 @@ type InferenceServiceReconciler struct {
 	InstanceStatusDecoder irstatus.Decoder
 	// Expectations is the OMENative create/delete bookkeeping cache.
 	// SetupWithManager initializes it (if nil) and registers the Pod
-	// event handler against the same instance the component dispatch
-	// path threads into ReconcileParams.
-	Expectations *omenative.Expectations
+	// event handler against the same instance the component builders
+	// receive.
+	Expectations *workloadtypes.Expectations
 	Log          logr.Logger
 	Scheme       *runtime.Scheme
 	Recorder     record.EventRecorder
@@ -230,202 +231,393 @@ type InferenceServiceReconciler struct {
 	componentDeps *components.ComponentDeps
 }
 
-func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
-	// Fetch the InferenceService instance
+// shutdownCutShort reports whether err came from a pass the manager's own
+// shutdown stopped. The next manager re-queues the object and finishes the
+// work, so such an error is not a failure of the service and earns no report.
+func shutdownCutShort(ctx context.Context, err error) bool {
+	return ctx.Err() != nil || errors.Is(err, context.Canceled)
+}
+
+func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	isvc := &v1beta1.InferenceService{}
 	if err := r.Get(ctx, req.NamespacedName, isvc); err != nil {
 		if apierrors.IsNotFound(err) {
-			// Object not found, return.  Created objects are automatically garbage collected.
-			// For additional cleanup logic use finalizers.
+			// A deleted service has nothing to reconcile: the objects it
+			// owned are garbage collected.
 			return reconcile.Result{}, nil
 		}
 		return reconcile.Result{}, err
 	}
-	// Bind structured logging context for this reconcile pass: every
-	// per-step log line and every downstream callback that pulls from
-	// ctx inherits (namespace, isvc) without re-stamping per-line. The
-	// existing r.Log field is preserved for sites that already key off
-	// the receiver — those use the same backing logger so output stays
-	// consistent.
+	// Every log line of the pass, and every callback that takes its logger
+	// from ctx, carries the service's namespace and name.
 	log := r.Log.WithValues("namespace", isvc.Namespace, "isvc", isvc.Name)
-	ctx = ctrl.LoggerInto(ctx, log)
-	// spec.ttlSecondsAfterCreation is checked before anything that can fail,
-	// so an invalid spec cannot keep an expired InferenceService alive. A
-	// placement member copy is left to the TTL of its source.
-	if isvc.DeletionTimestamp.IsZero() && !protocol.IsMember(isvc) {
-		if remaining, ok := ttlRemaining(isvc, r.now()); ok {
-			if remaining <= 0 {
-				log.Info("Deleting InferenceService because ttlSecondsAfterCreation has passed",
-					"ttlSecondsAfterCreation", *isvc.Spec.TTLSecondsAfterCreation)
-				return ctrl.Result{}, r.deleteExpired(ctx, isvc)
-			}
-			defer func() { result = requeueBy(result, err, remaining) }()
+	pass := &servicePass{reconciler: r, isvc: isvc, log: log}
+	return pass.run(ctrl.LoggerInto(ctx, log))
+}
+
+// servicePass is one reconcile pass over one InferenceService: what the pass
+// read at its start and what its steps decide as they run. The steps share
+// the record; a step that ends the pass records the result the controller
+// returns.
+type servicePass struct {
+	reconciler *InferenceServiceReconciler
+	isvc       *v1beta1.InferenceService
+	log        logr.Logger
+
+	// result is what the pass returns when a step ends it.
+	result ctrl.Result
+	// requeueNoLaterThan caps the requeue so the next pass runs before
+	// spec.ttlSecondsAfterCreation passes; zero when no TTL applies.
+	requeueNoLaterThan time.Duration
+
+	// policy is the execution policy placement wrote on a member copy, and
+	// placementMember is true once the hub has granted one; until then the
+	// service is the local service it still is.
+	policy          *v1beta1.PlacementExecutionPolicy
+	placementMember bool
+	deployConfig    *controllerconfig.DeployConfig
+	// deploymentMode is the service-level mode, which decides the
+	// VirtualDeployment pass and the status; each Component's own mode is in
+	// resolved.Modes once its spec is merged.
+	deploymentMode constants.DeploymentModeType
+	// base is the canary records as this pass read them, so the status flush
+	// keeps a newer live record over a decision made from a stale copy.
+	base       *canary.Base
+	isvcConfig *controllerconfig.InferenceServicesConfig
+	// modelConfig writes the mounted model configuration; a placement
+	// member's waits for the member rules.
+	modelConfig    *multimodelconfig.ConfigMapReconciler
+	policyResolver *autoscaler.PolicyResolver
+
+	// in is what resolution reads, and res what it produced: the model, the
+	// overlays, the runtime, the three merged Component specs and their
+	// deployment modes.
+	in       render.Inputs
+	resolved *render.Resolved
+	// componentRunnerPorts is the port each Component serves on; the
+	// per-revision Services of the rollout layers publish it.
+	componentRunnerPorts map[v1beta1.ComponentType][]v1.ContainerPort
+
+	scalingPolicy   *v1beta1.ScalingPolicy
+	scalingSource   string
+	componentBounds map[v1beta1.ComponentType]*v1beta1.ComponentExtensionSpec
+	// scalingTargets is the count the coordinator resolved for each follower
+	// this pass; each follower's projection writes it beside its partition.
+	scalingTargets *scaling.Targets
+
+	// runOutcome is what the run layer decided; nil when the service neither
+	// declares nor carries a rollout.
+	runOutcome      *rolloutrun.Outcome
+	rolloutConfig   *controllerconfig.RolloutConfig
+	metricProviders controllerconfig.MetricProvidersConfig
+	// policies is the RolloutPolicy set as the run layer observed it; every
+	// reader of the effective plan resolves through the same set.
+	policies rollout.Policies
+
+	reconcilers           []components.Component
+	ingressDeploymentMode constants.DeploymentModeType
+	// pendingRequeue gathers the requeue the run layer, the components and
+	// the canary groups asked for, folded by SoonestRequeue: any Requeue,
+	// the soonest positive RequeueAfter.
+	pendingRequeue reconcile.Result
+	// canaryConsume lists the operator annotations the canary passes
+	// applied; they are removed once the status write that carries their
+	// effect has landed.
+	canaryConsume []string
+	// resolvedIngressConfig is the ingress config with the service's
+	// annotation overrides applied; set on a settled pass.
+	resolvedIngressConfig *controllerconfig.IngressConfig
+}
+
+// passStep is one step of a pass. It reports whether the pass goes on; a
+// step that ends the pass has recorded the result on the pass first.
+type passStep func(context.Context) (bool, error)
+
+// run takes the pass through its steps in order and stops at the first one
+// that ends it. The list is the whole order of a pass. The result the pass
+// recorded, capped by the TTL, is what the controller returns.
+func (p *servicePass) run(ctx context.Context) (ctrl.Result, error) {
+	_, err := runPassSteps(ctx, []passStep{
+		p.deleteWhenExpired,
+		p.checkPlacementIntent,
+		p.resolveDeploymentMode,
+		p.addFinalizer,
+		p.finishDeletion,
+		p.serveVirtualDeployment,
+		p.prepareStatus,
+		p.loadServiceConfig,
+		p.frontReferencedReplicas,
+		p.reconcileModelConfig,
+		p.buildPolicyResolver,
+		p.resolveModel,
+		p.resolveOverlays,
+		p.useRecordedRuntimeRevision,
+		p.resolveRuntime,
+		p.prepareComponentSpecs,
+		p.resolveScalingPolicy,
+		p.checkPlacementMember,
+		p.reconcileRolloutRun,
+		p.bindCanaryToOpenedRun,
+		p.flushRunBoundary,
+		p.resolveScalingTargets,
+		p.buildComponentReconcilers,
+		p.chooseIngressMode,
+		p.runComponentReconcilers,
+		p.removeReplacedBackendObjects,
+		p.runScalingCoordinator,
+		p.dispatchCanaryGroups,
+		p.releaseUndeclaredUnits,
+		p.reconcileCoordination,
+		p.flushRequeueingPass,
+		p.reconcileIngress,
+		p.reconcileExternalService,
+		p.reconcileTraffic,
+		p.setURLWhenIngressDisabled,
+		p.cleanupUndeclaredComponents,
+		p.flushSettledPass,
+	})
+	return requeueBy(p.result, err, p.requeueNoLaterThan), err
+}
+
+// runPassSteps runs the steps in order and reports whether every one let
+// the pass go on. It stops at the first step that ends the pass or fails
+// and returns that step's error.
+func runPassSteps(ctx context.Context, steps []passStep) (bool, error) {
+	for _, step := range steps {
+		if next, err := step(ctx); !next || err != nil {
+			return false, err
 		}
 	}
-	// A malformed or foreign execution policy ends the pass before any write.
-	// A placement mark without a policy does not: the hub has not granted
-	// authority yet, so the service keeps reconciling as a local service.
-	// Deletion still follows finalizer cleanup regardless of the stored policy.
-	var policy *v1beta1.PlacementExecutionPolicy
-	if isvc.DeletionTimestamp.IsZero() {
-		if err := validation.ValidatePlacementIntent(isvc); err != nil {
-			return ctrl.Result{}, err
-		}
-		var err error
-		if policy, err = protocol.FromDerived(isvc); err != nil {
-			return ctrl.Result{}, err
-		}
-		if protocol.IsMember(isvc) && policy == nil {
-			if result, err := r.notePlacementExecutionPending(ctx, isvc); err != nil || !result.IsZero() {
-				return result, err
-			}
+	return true, nil
+}
+
+// end records the result a step ends the pass with and reports that the
+// pass does not go on.
+func (p *servicePass) end(result ctrl.Result, err error) (bool, error) {
+	p.result = result
+	return false, err
+}
+
+// SoonestRequeue folds one more request to be looked at again into the
+// pass's pending requeue. The run layer, every component reconciler and
+// every canary group may ask; the pass comes back at the soonest of their
+// asks, so a part that asked for a quick second look never waits on a part
+// that asked for a slow one. A RequeueAfter of zero asks for nothing and
+// never wins. A bare Requeue stays the flag it is, with its controller
+// meaning: a timed requeue runs when one is set, else the rate-limited one.
+func SoonestRequeue(pending, asked reconcile.Result) reconcile.Result {
+	pending.Requeue = pending.Requeue || asked.Requeue
+	if asked.RequeueAfter > 0 && (pending.RequeueAfter <= 0 || asked.RequeueAfter < pending.RequeueAfter) {
+		pending.RequeueAfter = asked.RequeueAfter
+	}
+	return pending
+}
+
+// deleteWhenExpired deletes a service whose spec.ttlSecondsAfterCreation
+// has passed, before anything that can fail, so an invalid spec cannot stop
+// the deletion, and caps the requeue of one whose TTL has not. A placement
+// member copy is left to the TTL of its source.
+func (p *servicePass) deleteWhenExpired(ctx context.Context) (bool, error) {
+	if !p.isvc.DeletionTimestamp.IsZero() || protocol.IsMember(p.isvc) {
+		return true, nil
+	}
+	remaining, ok := ttlRemaining(p.isvc, p.reconciler.now())
+	if !ok {
+		return true, nil
+	}
+	if remaining <= 0 {
+		p.log.Info("Deleting InferenceService because ttlSecondsAfterCreation has passed",
+			"ttlSecondsAfterCreation", *p.isvc.Spec.TTLSecondsAfterCreation)
+		return p.end(ctrl.Result{}, p.reconciler.deleteExpired(ctx, p.isvc))
+	}
+	p.requeueNoLaterThan = remaining
+	return true, nil
+}
+
+// checkPlacementIntent ends the pass, before any write, on a malformed
+// placement intent or on an execution policy that is malformed or belongs
+// to another owner. A placement mark with no policy yet does not end it:
+// the hub has not granted authority, so the service notes that and goes on
+// as a local service. A service being deleted goes to its finalizer instead.
+func (p *servicePass) checkPlacementIntent(ctx context.Context) (bool, error) {
+	if !p.isvc.DeletionTimestamp.IsZero() {
+		return true, nil
+	}
+	if err := validation.ValidatePlacementIntent(p.isvc); err != nil {
+		return false, err
+	}
+	var err error
+	if p.policy, err = protocol.FromDerived(p.isvc); err != nil {
+		return false, err
+	}
+	if protocol.IsMember(p.isvc) && p.policy == nil {
+		if result, err := p.reconciler.notePlacementExecutionPending(ctx, p.isvc); err != nil || !result.IsZero() {
+			return p.end(result, err)
 		}
 	}
-	deployConfig, err := controllerconfig.NewDeployConfigCached(r.ConfigCache, r.Clientset)
+	return true, nil
+}
+
+// resolveDeploymentMode loads the deploy config and resolves the
+// service-level mode. A placement member in VirtualDeployment is held: the
+// member rules need OMENative's admission and surge accounting.
+func (p *servicePass) resolveDeploymentMode(ctx context.Context) (bool, error) {
+	deployConfig, err := controllerconfig.NewDeployConfigCached(p.reconciler.ConfigCache, p.reconciler.Clientset)
 	if err != nil {
-		return reconcile.Result{}, errors.Wrapf(err, "fails to create DeployConfig")
+		return false, errors.Wrapf(err, "fails to create DeployConfig")
 	}
-
-	// The InferenceService-level mode gates VirtualDeployment and status;
-	// per-Component dispatch is resolved from the merged specs below.
-	deploymentMode := isvcutils.InferenceServiceDeploymentMode(isvc, constants.DeploymentModeType(deployConfig.DefaultDeploymentMode))
-	log.V(1).Info("InferenceService deployment mode resolved", "deploymentMode", deploymentMode)
-	// The member rules apply only once the hub has granted an execution
-	// policy; until then the service is the local service it still is.
-	placementMember := protocol.IsMember(isvc) && policy != nil
-	if placementMember && isvc.DeletionTimestamp.IsZero() && deploymentMode == constants.VirtualDeployment {
-		return r.holdPlacementBackend(ctx, isvc, fmt.Errorf("multicluster placement requires OMENative; VirtualDeployment has no member admission or surge accounting"))
+	p.deployConfig = deployConfig
+	p.deploymentMode = isvcutils.InferenceServiceDeploymentMode(p.isvc, constants.DeploymentModeType(deployConfig.DefaultDeploymentMode))
+	p.log.V(1).Info("InferenceService deployment mode resolved", "deploymentMode", p.deploymentMode)
+	p.placementMember = protocol.IsMember(p.isvc) && p.policy != nil
+	if p.placementMember && p.isvc.DeletionTimestamp.IsZero() && p.deploymentMode == constants.VirtualDeployment {
+		return p.end(p.reconciler.holdPlacementBackend(ctx, p.isvc, fmt.Errorf("multicluster placement requires OMENative; VirtualDeployment has no member admission or surge accounting")))
 	}
+	return true, nil
+}
 
-	// examine DeletionTimestamp to determine if object is under deletion
-	if isvc.ObjectMeta.DeletionTimestamp.IsZero() {
-		// The object is not being deleted, so if it does not have our finalizer,
-		// then lets add the finalizer and update the object. This is equivalent
-		// registering our finalizer.
-		if !controllerutil.ContainsFinalizer(isvc, inferenceServiceFinalizer) {
-			controllerutil.AddFinalizer(isvc, inferenceServiceFinalizer)
-			if err := r.Update(ctx, isvc); err != nil {
-				// A conflict means another writer advanced the object after
-				// this reconcile read it. Requeue so the next pass applies the
-				// finalizer to a fresh object.
-				if apierrors.IsNotFound(err) {
-					return ctrl.Result{}, nil
-				}
-				if apierrors.IsConflict(err) {
-					return ctrl.Result{Requeue: true}, nil
-				}
-				return ctrl.Result{}, err
-			}
+// addFinalizer puts the controller's finalizer on a service that lacks it,
+// so its deletion passes through finishDeletion. A conflict means another
+// writer moved the object after this pass read it; the next pass adds the
+// finalizer to a fresh copy.
+func (p *servicePass) addFinalizer(ctx context.Context) (bool, error) {
+	if !p.isvc.ObjectMeta.DeletionTimestamp.IsZero() || controllerutil.ContainsFinalizer(p.isvc, inferenceServiceFinalizer) {
+		return true, nil
+	}
+	controllerutil.AddFinalizer(p.isvc, inferenceServiceFinalizer)
+	if err := p.reconciler.Update(ctx, p.isvc); err != nil {
+		if apierrors.IsNotFound(err) {
+			return p.end(ctrl.Result{}, nil)
 		}
-	} else {
-		// The object is being deleted
-		if controllerutil.ContainsFinalizer(isvc, inferenceServiceFinalizer) {
-			// Drop this ISVC's OMENative coordination, canary, and readiness
-			// metric series so the per-(namespace,isvc) vectors do not leak
-			// unbounded after teardown. Idempotent and runs on the
-			// finalizer-bearing delete pass.
-			coordination.DeleteForISVC(isvc.Namespace, isvc.Name)
-			canary.DeleteForISVC(isvc.Namespace, isvc.Name)
-			obsmetrics.DeleteISVCSeries(isvc.Namespace, isvc.Name)
-
-			// remove our finalizer from the list and update it.
-			controllerutil.RemoveFinalizer(isvc, inferenceServiceFinalizer)
-			if err := r.Update(ctx, isvc); err != nil {
-				if apierrors.IsNotFound(err) {
-					return ctrl.Result{}, nil
-				}
-				if apierrors.IsConflict(err) {
-					return ctrl.Result{Requeue: true}, nil
-				}
-				return ctrl.Result{}, err
-			}
+		if apierrors.IsConflict(err) {
+			return p.end(ctrl.Result{Requeue: true}, nil)
 		}
-
-		// Stop reconciliation as the item is being deleted
-		return ctrl.Result{}, nil
+		return false, err
 	}
+	return true, nil
+}
 
-	// A VirtualDeployment selects no backend: the status reports the virtual
-	// endpoint, and whatever a backend projected before is removed.
-	if deploymentMode == constants.VirtualDeployment {
-		return r.handleVirtualDeployment(ctx, isvc)
+// finishDeletion ends the pass of a service being deleted. While the
+// finalizer is still on it, the pass drops the service's coordination,
+// canary and readiness metric series, so the per-service vectors do not
+// grow without bound, and removes the finalizer; a conflict on that write
+// is retried by the next pass.
+func (p *servicePass) finishDeletion(ctx context.Context) (bool, error) {
+	if p.isvc.ObjectMeta.DeletionTimestamp.IsZero() {
+		return true, nil
 	}
-
-	// The canary executor's state as this pass read it: the records, and the
-	// phase and traffic of every Component a canary group governs. The status
-	// flush keeps the live state over decisions made from a stale copy of it.
-	base := canary.NewBase(isvc)
-
-	// Initialize status if not already initialized
-	if isvc.Status.Components == nil {
-		isvc.Status.Components = make(map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec)
+	if controllerutil.ContainsFinalizer(p.isvc, inferenceServiceFinalizer) {
+		coordination.DeleteForISVC(p.isvc.Namespace, p.isvc.Name)
+		canary.DeleteForISVC(p.isvc.Namespace, p.isvc.Name)
+		obsmetrics.DeleteISVCSeries(p.isvc.Namespace, p.isvc.Name)
+		controllerutil.RemoveFinalizer(p.isvc, inferenceServiceFinalizer)
+		if err := p.reconciler.Update(ctx, p.isvc); err != nil {
+			if apierrors.IsNotFound(err) {
+				return p.end(ctrl.Result{}, nil)
+			}
+			if apierrors.IsConflict(err) {
+				return p.end(ctrl.Result{Requeue: true}, nil)
+			}
+			return false, err
+		}
 	}
+	return p.end(ctrl.Result{}, nil)
+}
 
-	// Setup reconcilers.
-	// apiVersion is omitted: controller-runtime strips TypeMeta from
-	// objects fetched via the typed cache, so isvc.APIVersion is always
-	// empty here. Use v1beta1.SchemeGroupVersion.String() if a callable
-	// API version is needed downstream.
-	log.V(1).Info("Reconciling inference service")
-	isvcConfig, err := controllerconfig.NewInferenceServicesConfigCached(r.ConfigCache, r.Clientset)
+// serveVirtualDeployment ends the pass of a VirtualDeployment, which selects
+// no backend: whatever a backend projected before is removed and the status
+// reports the virtual endpoint.
+func (p *servicePass) serveVirtualDeployment(ctx context.Context) (bool, error) {
+	if p.deploymentMode != constants.VirtualDeployment {
+		return true, nil
+	}
+	return p.end(p.reconciler.handleVirtualDeployment(ctx, p.isvc))
+}
+
+// prepareStatus takes the canary records as this pass read them, so the
+// status flush keeps a newer live record over a decision made from a stale
+// copy, and gives the component status writers their map.
+func (p *servicePass) prepareStatus(context.Context) (bool, error) {
+	p.base = canary.NewBase(p.isvc)
+	if p.isvc.Status.Components == nil {
+		p.isvc.Status.Components = make(map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec)
+	}
+	return true, nil
+}
+
+// loadServiceConfig loads the inferenceservices block of the operator
+// config, with the model cache provider's settings attached.
+func (p *servicePass) loadServiceConfig(context.Context) (bool, error) {
+	p.log.V(1).Info("Reconciling inference service")
+	isvcConfig, err := controllerconfig.NewInferenceServicesConfigCached(p.reconciler.ConfigCache, p.reconciler.Clientset)
 	if err != nil {
-		return reconcile.Result{}, errors.Wrapf(err, "fails to create InferenceServicesConfig")
+		return false, errors.Wrapf(err, "fails to create InferenceServicesConfig")
 	}
+	p.isvcConfig = isvcConfig
+	return true, nil
+}
 
-	// A service over referenced replicas renders and projects nothing; its
-	// pass is the fronting alone.
-	if irprojector.ReferencesReplicas(isvc) {
-		return r.reconcileReferencedReplicas(ctx, isvc, deploymentMode, isvcConfig, base)
+// frontReferencedReplicas ends the pass of a service over referenced
+// replicas, which renders and projects nothing: its pass is the fronting
+// alone.
+func (p *servicePass) frontReferencedReplicas(ctx context.Context) (bool, error) {
+	if !irprojector.ReferencesReplicas(p.isvc) {
+		return true, nil
 	}
+	return p.end(p.reconciler.reconcileReferencedReplicas(ctx, p.isvc, p.deploymentMode, p.isvcConfig, p.base))
+}
 
-	modelConfigReconciler := multimodelconfig.NewModelConfigReconciler(r.Client, r.Clientset, r.Scheme)
-	// A member's mounted model configuration must wait for backend validation.
-	if !placementMember {
-		if result, err := modelConfigReconciler.Reconcile(ctx, isvc); err != nil {
-			return result, err
-		}
+// reconcileModelConfig writes the mounted model configuration of a local
+// service. A placement member's waits for the member rules.
+func (p *servicePass) reconcileModelConfig(ctx context.Context) (bool, error) {
+	p.modelConfig = multimodelconfig.NewModelConfigReconciler(p.reconciler.Client, p.reconciler.Clientset, p.reconciler.Scheme)
+	if p.placementMember {
+		return true, nil
 	}
-
-	cdeps := r.buildComponentDeps(isvcConfig)
-
-	// The policy resolver is rebuilt per reconcile from the cached operator
-	// config so provider-binding edits apply within one config TTL. With the
-	// feature absent, Enabled=false fails any ref closed instead of silently
-	// ignoring it.
-	policyResolver := &autoscaler.PolicyResolver{Enabled: false}
-	if r.AutoscalerPolicyEnabled {
-		policyConfig, err := controllerconfig.NewAutoscalerPolicyConfigCached(r.ConfigCache, r.Clientset)
-		if err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "fails to load autoscalerPolicy config")
-		}
-		providers, providerAuth := autoscaler.ProviderBindingsFromConfig(policyConfig)
-		policyResolver = &autoscaler.PolicyResolver{
-			Client:        r.Client,
-			Providers:     providers,
-			ProviderAuth:  providerAuth,
-			Enabled:       true,
-			KedaAvailable: r.KedaAvailable,
-			// Holds caused by operator-config state (unbound provider) heal
-			// on config edits, which emit no ISVC event — requeue once per
-			// config cache TTL so consumers recover unattended. TTL<=0 means
-			// live config reads; no periodic requeue is wired then.
-			HoldRequeueAfter: r.ConfigCacheTTL,
-		}
+	if result, err := p.modelConfig.Reconcile(ctx, p.isvc); err != nil {
+		return p.end(result, err)
 	}
+	return true, nil
+}
 
-	// Determine which components to reconcile based on the spec
-	var reconcilers []components.Component
+// buildPolicyResolver builds the AutoscalerPolicy resolver from the cached
+// operator config, so a provider-binding edit applies within one config
+// TTL. With the feature absent the resolver refuses every reference instead
+// of ignoring it.
+func (p *servicePass) buildPolicyResolver(context.Context) (bool, error) {
+	p.policyResolver = &autoscaler.PolicyResolver{Enabled: false}
+	if !p.reconciler.AutoscalerPolicyEnabled {
+		return true, nil
+	}
+	policyConfig, err := controllerconfig.NewAutoscalerPolicyConfigCached(p.reconciler.ConfigCache, p.reconciler.Clientset)
+	if err != nil {
+		return false, errors.Wrapf(err, "fails to load autoscalerPolicy config")
+	}
+	providers, providerAuth := autoscaler.ProviderBindingsFromConfig(policyConfig)
+	p.policyResolver = &autoscaler.PolicyResolver{
+		Client:        p.reconciler.Client,
+		Providers:     providers,
+		ProviderAuth:  providerAuth,
+		Enabled:       true,
+		KedaAvailable: p.reconciler.KedaAvailable,
+		// A hold caused by the operator config (an unbound provider) ends on
+		// a config edit, which raises no event on the service, so the service
+		// requeues once per config cache TTL. A TTL of zero or less means
+		// live config reads and no periodic requeue.
+		HoldRequeueAfter: p.reconciler.ConfigCacheTTL,
+	}
+	return true, nil
+}
 
-	var ingressDeploymentMode constants.DeploymentModeType
-
-	// Step 1: Reconcile model first. The model and the overlays are read
-	// here, ahead of the runtime pin, so a pin that persists status carries
-	// the overlay status and a failed model read creates no revision.
-	// Lean path: no spec.model. Operator must specify spec.runtime
-	// directly; we skip model fetch, sharded-readiness gating, overlay
-	// resolution, and runtime-vs-model validation.
-	in := render.Inputs{Service: isvc, Client: r.Client, Runtimes: r.RuntimeSelector, Accelerators: r.AcceleratorClassSelector, Config: isvcConfig, Log: r.Log}
-	in.Model, in.ModelMeta, in.ModelStatus, err = render.ResolveModel(ctx, in)
+// resolveModel reads the model the service names, ahead of the runtime, so
+// a failed model read creates no revision. A service with no spec.model
+// names its runtime directly and skips the model read, the readiness wait,
+// the overlays and the runtime-against-model check. A sharded model that is
+// not ready yet requeues the pass.
+func (p *servicePass) resolveModel(ctx context.Context) (bool, error) {
+	p.in = render.Inputs{Service: p.isvc, Client: p.reconciler.Client, Runtimes: p.reconciler.RuntimeSelector, Accelerators: p.reconciler.AcceleratorClassSelector, Config: p.isvcConfig, Log: p.reconciler.Log}
+	var err error
+	p.in.Model, p.in.ModelMeta, p.in.ModelStatus, err = render.ResolveModel(ctx, p.in)
 	if err != nil {
 		var notReady *render.ModelNotReadyError
 		if errors.As(err, &notReady) {
@@ -433,625 +625,633 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if message == "" {
 				message = "sharded BaseModel is not ready"
 			}
-			r.Log.Info("Waiting for sharded BaseModel to become ready",
-				"model", isvc.Spec.Model.Name,
-				"namespace", isvc.Namespace,
+			p.reconciler.Log.Info("Waiting for sharded BaseModel to become ready",
+				"model", p.isvc.Spec.Model.Name,
+				"namespace", p.isvc.Namespace,
 				"message", message)
-			r.Recorder.Event(isvc, v1.EventTypeNormal, "ModelNotReady", message)
-			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+			p.reconciler.Recorder.Event(p.isvc, v1.EventTypeNormal, "ModelNotReady", message)
+			return p.end(reconcile.Result{RequeueAfter: 5 * time.Second}, nil)
 		}
-		r.Log.Error(err, "Failed to reconcile base model", "Name", isvc.Name)
-		r.Recorder.Event(isvc, v1.EventTypeWarning, "ModelReconcileError", err.Error())
-		return reconcile.Result{}, err
+		p.reconciler.Log.Error(err, "Failed to reconcile base model", "Name", p.isvc.Name)
+		p.reconciler.Recorder.Event(p.isvc, v1.EventTypeWarning, "ModelReconcileError", err.Error())
+		return false, err
 	}
-	in.ModelRead = true
+	p.in.ModelRead = true
+	return true, nil
+}
 
-	// Resolve overlays. Failures here (NotFound, disabled, sharded
-	// NotReady) become Skipped entries — only transient client errors
-	// abort the reconcile.
-	in.Overlays, err = render.ResolveOverlays(ctx, in)
+// resolveOverlays reads the overlays the service names and records them on
+// the status. A missing, disabled or not-ready overlay is a skipped entry;
+// only a client error ends the pass.
+func (p *servicePass) resolveOverlays(ctx context.Context) (bool, error) {
+	overlays, err := render.ResolveOverlays(ctx, p.in)
 	if err != nil {
-		r.Log.Error(err, "Failed to resolve overlays", "isvc", isvc.Name)
-		r.Recorder.Event(isvc, v1.EventTypeWarning, "OverlayResolveError", err.Error())
-		return reconcile.Result{}, err
+		p.reconciler.Log.Error(err, "Failed to resolve overlays", "isvc", p.isvc.Name)
+		p.reconciler.Recorder.Event(p.isvc, v1.EventTypeWarning, "OverlayResolveError", err.Error())
+		return false, err
 	}
-	in.OverlaysRead = true
-	isvc.Status.MountedOverlays = components.MountedOverlaySummary(in.Overlays)
-	setOverlaysReadyCondition(isvc, in.Overlays)
+	p.in.Overlays = overlays
+	p.in.OverlaysRead = true
+	p.isvc.Status.MountedOverlays = components.MountedOverlaySummary(p.in.Overlays)
+	setOverlaysReadyCondition(p.isvc, p.in.Overlays)
+	return true, nil
+}
 
-	// Step 2: Get runtime spec.
-	//   - runtime pinned    → the ControllerRevision pin, resolved here
-	//     because it creates revisions and persists status.
-	//   - runtime explicit  → fetch by name; validate against model only
-	//     if model is present.
-	//   - runtime omitted  → auto-select from model; requires a model.
-	if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name != "" && isvc.Spec.Runtime.AutoSync != nil && !*isvc.Spec.Runtime.AutoSync {
-		// When the user opts into pinning (autoSync=false), fetch the
-		// pinned ControllerRevision rather than the live runtime. The
-		// pin helper handles first-reconcile create, drift detection,
-		// and ome.io/runtime-sync ack — and persists status itself when
-		// children must be skipped.
-		pin, perr := r.resolvePinnedRuntime(ctx, isvc)
-		if perr != nil {
-			r.Log.Error(perr, "Pin resolution failed", "runtime", isvc.Spec.Runtime.Name)
-			r.Recorder.Event(isvc, v1.EventTypeWarning, "RuntimePinError", perr.Error())
-			return reconcile.Result{}, perr
-		}
-		if pin.skipChildren {
-			return reconcile.Result{}, nil
-		}
-		in.Runtime = pin.spec
-		in.RuntimeName = isvc.Spec.Runtime.Name
-		in.RuntimeIsCluster = sourceKindFor(isvc.Spec.Runtime) == runtimerevision.KindClusterServingRuntime
+// useRecordedRuntimeRevision applies to a service whose spec.runtime.autoSync
+// is false: its runtime spec comes from the ControllerRevision recorded for
+// it, not from the live runtime. The helper creates the first revision,
+// detects drift and answers the ome.io/runtime-sync request; when it has
+// written the status itself the children are skipped and the pass ends.
+func (p *servicePass) useRecordedRuntimeRevision(ctx context.Context) (bool, error) {
+	ref := p.isvc.Spec.Runtime
+	if ref == nil || ref.Name == "" || ref.AutoSync == nil || *ref.AutoSync {
+		return true, nil
 	}
-	res, err := render.Resolve(ctx, in)
+	recorded, err := p.reconciler.resolvePinnedRuntime(ctx, p.isvc)
 	if err != nil {
-		return r.reportResolveError(isvc, deploymentMode, in, err)
+		p.reconciler.Log.Error(err, "Pin resolution failed", "runtime", ref.Name)
+		p.reconciler.Recorder.Event(p.isvc, v1.EventTypeWarning, "RuntimePinError", err.Error())
+		return false, err
 	}
-	if res.CompatibilityAdvisory != nil {
-		// The operator named this runtime explicitly, so OME should not
-		// block on the runtime's *declared* supportedModelFormats: a
-		// generic runtime (e.g. sglang) can serve many architectures it
-		// never enumerates. A pure compatibility mismatch (format /
-		// architecture / framework) is an advisory event — the deliberate
-		// choice wins over the declaration.
-		r.Log.Info("Runtime named explicitly; proceeding despite declared-format mismatch",
-			"runtime", res.RuntimeName, "model", isvc.Spec.Model.Name, "details", res.CompatibilityAdvisory.Error())
-		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeCompatibilityAdvisory",
+	if recorded.skipChildren {
+		return p.end(reconcile.Result{}, nil)
+	}
+	p.in.Runtime = recorded.spec
+	p.in.RuntimeName = ref.Name
+	p.in.RuntimeIsCluster = sourceKindFor(ref) == runtimerevision.KindClusterServingRuntime
+	return true, nil
+}
+
+// resolveRuntime looks the runtime up by name, or selects one for the model,
+// refuses a disabled one, and merges the runtime's block and the service's
+// into the three Component specs. A runtime the operator named serves a
+// model it does not declare; the mismatch is an advisory event. A failure is
+// reported by reportResolveError, which holds a service with no runtime
+// behind RuntimeReady=False without an error.
+func (p *servicePass) resolveRuntime(ctx context.Context) (bool, error) {
+	resolved, err := render.Resolve(ctx, p.in)
+	if err != nil {
+		return p.end(p.reconciler.reportResolveError(p.isvc, p.deploymentMode, p.in, err))
+	}
+	p.resolved = resolved
+	if resolved.CompatibilityAdvisory != nil {
+		p.reconciler.Log.Info("Runtime named explicitly; proceeding despite declared-format mismatch",
+			"runtime", resolved.RuntimeName, "model", p.isvc.Spec.Model.Name, "details", resolved.CompatibilityAdvisory.Error())
+		p.reconciler.Recorder.Eventf(p.isvc, v1.EventTypeWarning, "RuntimeCompatibilityAdvisory",
 			"Runtime %s does not declare support for model %s (%v); proceeding because the runtime was named explicitly",
-			res.RuntimeName, isvc.Spec.Model.Name, res.CompatibilityAdvisory)
+			resolved.RuntimeName, p.isvc.Spec.Model.Name, resolved.CompatibilityAdvisory)
 	}
-	if in.Runtime == nil {
-		// RuntimeReady tracks the live lookup; a pinned runtime reports
+	if p.in.Runtime == nil {
+		// RuntimeReady follows the live lookup; a recorded revision reports
 		// through RuntimeDrifted instead.
-		r.clearRuntimeUnresolved(isvc)
+		p.reconciler.clearRuntimeUnresolved(p.isvc)
 	}
-	if !res.UserSpecifiedRuntime {
-		log.Info("Auto-selected runtime", "runtime", res.RuntimeName, "model", isvc.Spec.Model.Name)
+	if !resolved.UserSpecifiedRuntime {
+		p.log.Info("Auto-selected runtime", "runtime", resolved.RuntimeName, "model", p.isvc.Spec.Model.Name)
 	}
-	mergedEngine, mergedDecoder, mergedRouter := res.Specs.Engine, res.Specs.Decoder, res.Specs.Router
+	p.componentRunnerPorts = isvcutils.MergedRunnerPorts(resolved.Specs.Engine, resolved.Specs.Decoder, resolved.Specs.Router)
+	return true, nil
+}
 
-	// The effective serving container ports are the resolved view of the
-	// port each Component exposes. OMENative's per-revision Service
-	// producers (coordination, canary) publish their routing Service on
-	// this port, so it must be captured here and threaded down.
-	componentRunnerPorts := isvcutils.MergedRunnerPorts(mergedEngine, mergedDecoder, mergedRouter)
-
-	// Step 4: Determine deployment modes based on merged specs and apply the
-	// deploy defaults. Placement verifies the same resolved policy used by
-	// component projectors, including replica floors supplied by operator
-	// configuration.
-	if err := render.Prepare(res, isvc.Spec.DeploymentMode, deployConfig); err != nil {
-		r.Log.Error(err, "Failed to determine deployment modes", "Name", isvc.Name)
-		r.Recorder.Event(isvc, v1.EventTypeWarning, "DeploymentModeError", err.Error())
-		return reconcile.Result{}, err
+// prepareComponentSpecs decides each Component's deployment mode from its
+// merged spec and fills the operator's deploy defaults in place. Placement
+// checks the same resolved specs the projectors read, replica minimums from
+// the operator configuration included.
+func (p *servicePass) prepareComponentSpecs(context.Context) (bool, error) {
+	if err := render.Prepare(p.resolved, p.isvc.Spec.DeploymentMode, p.deployConfig); err != nil {
+		p.reconciler.Log.Error(err, "Failed to determine deployment modes", "Name", p.isvc.Name)
+		p.reconciler.Recorder.Event(p.isvc, v1.EventTypeWarning, "DeploymentModeError", err.Error())
+		return false, err
 	}
-	componentDeploymentModes := res.Modes
-	if placementMember {
-		if err := protocol.ValidateNativeModes(componentDeploymentModes); err != nil {
-			return r.holdPlacementBackend(ctx, isvc, err)
-		}
-		if err := checkPlacementReplicaFloors(isvc, mergedEngine, mergedDecoder, mergedRouter); err != nil {
-			return r.holdPlacementCondition(ctx, isvc, v1beta1.PlacementReplicaFloorsReady, "ReplicaFloorsMismatch", err)
-		}
-		clearPlacementReplicaFloorsHold(isvc)
-		clearPlacementBackendHold(isvc)
-		if result, err := modelConfigReconciler.Reconcile(ctx, isvc); err != nil {
-			return result, err
-		}
+	return true, nil
+}
+
+// resolveScalingPolicy picks the service's scaling policy, else the
+// runtime's, and gathers each declared Component's replica bounds, which
+// follows reads.
+func (p *servicePass) resolveScalingPolicy(context.Context) (bool, error) {
+	p.scalingPolicy, p.scalingSource = scaling.Resolve(p.isvc, p.resolved.Runtime)
+	p.componentBounds = map[v1beta1.ComponentType]*v1beta1.ComponentExtensionSpec{}
+	if engine := p.resolved.Specs.Engine; engine != nil {
+		p.componentBounds[v1beta1.EngineComponent] = &engine.ComponentExtensionSpec
 	}
-
-	// If both engine and decoder exist, it's PD-disaggregated. V(1):
-	// steady-state per-reconcile breadcrumb; no operator action.
-	if mergedEngine != nil && mergedDecoder != nil {
-		log.V(1).Info("PD-disaggregated deployment detected")
+	if decoder := p.resolved.Specs.Decoder; decoder != nil {
+		p.componentBounds[v1beta1.DecoderComponent] = &decoder.ComponentExtensionSpec
 	}
-
-	// Rollout run layer: resolve and pin the effective plan BEFORE the
-	// partition stamp and the dispatch engines, so every consumer in this
-	// pass indexes the same frozen plan. Pinning is not chart-gated; only
-	// ref resolution depends on the policy feature. The pin and the executors'
-	// step state ride the same status flush, which is what makes them
-	// atomic.
-	var rolloutRunRequeue time.Duration
-	var rolloutConfig *controllerconfig.RolloutConfig
-	var metricProviders controllerconfig.MetricProvidersConfig
-	// The referenced RolloutPolicy objects as the run layer observed them this
-	// pass; every reader of the effective view resolves through the same set.
-	var policies rollout.Policies
-	if isvc.Spec.Rollout != nil || isvc.Status.Rollout != nil {
-		rolloutConfig, err = controllerconfig.NewRolloutConfigCached(r.ConfigCache, r.Clientset)
-		if err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "fails to load rollout config")
-		}
-		metricProviders, err = controllerconfig.NewMetricProvidersConfigCached(r.ConfigCache, r.Clientset)
-		if err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "fails to load metricProviders config")
-		}
-		bound := make(map[string]struct{}, len(metricProviders))
-		for name := range metricProviders {
-			bound[name] = struct{}{}
-		}
-		runOutcome, runErr := rolloutrun.Reconcile(ctx, rolloutrun.Inputs{
-			Client:         r.Client,
-			Reader:         r.APIReader,
-			Recorder:       r.Recorder,
-			ISVC:           isvc,
-			FeatureEnabled: r.RolloutPolicyEnabled,
-			BoundProviders: bound,
-		})
-		if runErr != nil {
-			log.Error(runErr, "Failed to reconcile rollout run")
-			return reconcile.Result{}, errors.Wrapf(runErr, "fails to reconcile rollout run")
-		}
-		rolloutRunRequeue = runOutcome.RequeueAfter
-		policies = runOutcome.Policies
-		if runOutcome.Opened {
-			// Bind/reset the canary state before persisting the run boundary so
-			// activeRun and its step state become visible atomically. Adoption is
-			// the exception: preserve the in-flight step and attach its target ID.
-			for _, g := range rollout.CanaryGroups(isvc, policies) {
-				if err := canary.BindRun(ctx, r.Client, isvc, g, runOutcome.Adopted); err != nil {
-					log.Error(err, "Failed to bind canary state to the rollout run")
-					return reconcile.Result{}, errors.Wrapf(err, "fails to bind canary state to the rollout run")
-				}
-			}
-		}
-		// A run boundary (open/close/repin) is persisted IMMEDIATELY: the pin
-		// is load-bearing for the update gates and the partition stamp, and a
-		// fallible reconciler erroring downstream would otherwise drop the
-		// in-memory pin — reopening the run next pass and flapping the
-		// projected spec under the executors.
-		if runOutcome.StateChanged {
-			if err := r.updateStatus(isvc, deploymentMode, base); err != nil {
-				r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
-				return reconcile.Result{}, err
-			}
-			// A pass that read a stale record decides nothing further: the
-			// flush kept the live record, and the next pass decides from it.
-			if base.Stale() {
-				return reconcile.Result{Requeue: true}, nil
-			}
-		}
+	if router := p.resolved.Specs.Router; router != nil {
+		p.componentBounds[v1beta1.RouterComponent] = &router.ComponentExtensionSpec
 	}
+	return true, nil
+}
 
-	// Canary: when the effective plan carries a canary group, compute the
-	// current step's partition for each Component before the Component
-	// reconcilers run. It travels to the InferenceReplica as the
-	// rollout-control spec.pacing.partition — never inside the user's
-	// lifecycle — and the engine's partition hold stages the old/new split
-	// from there. The step machine + traffic run in Step 6a below.
-	var enginePartition, decoderPartition, routerPartition *int32
-	if len(rollout.CanaryGroups(isvc, policies)) > 0 {
-		if mergedEngine != nil {
-			enginePartition = canary.StepPartition(isvc, policies, v1beta1.EngineComponent, &mergedEngine.ComponentExtensionSpec)
-		}
-		if mergedDecoder != nil {
-			decoderPartition = canary.StepPartition(isvc, policies, v1beta1.DecoderComponent, &mergedDecoder.ComponentExtensionSpec)
-		}
-		if mergedRouter != nil {
-			routerPartition = canary.StepPartition(isvc, policies, v1beta1.RouterComponent, &mergedRouter.ComponentExtensionSpec)
-		}
-	} else {
-		// A canary-KIND group with no resolvable plan (a reference whose
-		// policy cannot be resolved) projects a full hold instead of no
-		// partition, keeping the projected spec deterministic across run states.
-		if mergedEngine != nil {
-			enginePartition = canary.PlanGateHoldPartition(isvc, policies, v1beta1.EngineComponent, &mergedEngine.ComponentExtensionSpec)
-		}
-		if mergedDecoder != nil {
-			decoderPartition = canary.PlanGateHoldPartition(isvc, policies, v1beta1.DecoderComponent, &mergedDecoder.ComponentExtensionSpec)
-		}
-		if mergedRouter != nil {
-			routerPartition = canary.PlanGateHoldPartition(isvc, policies, v1beta1.RouterComponent, &mergedRouter.ComponentExtensionSpec)
-		}
+// follows reports whether the scaling coordinator owns the Component's
+// replica count.
+func (p *servicePass) follows(component v1beta1.ComponentType) bool {
+	return scaling.Follows(p.scalingPolicy, component, p.componentBounds, p.resolved.Modes)
+}
+
+// checkPlacementMember applies the member rules once the hub has granted an
+// execution policy: every Component resolves to OMENative, the replica
+// minimums the policy sets match the merged specs, and only then is the
+// mounted model configuration written. A failed rule holds the service
+// behind an advisory condition.
+func (p *servicePass) checkPlacementMember(ctx context.Context) (bool, error) {
+	if !p.placementMember {
+		return true, nil
 	}
-
-	// Step 5: Create reconcilers based on merged specs. The
-	// "Creating <component> reconciler" / "Determined ingress
-	// deployment mode" lines fire every reconcile but observe no
-	// state change — demoted to V(1) because they're hot-path /
-	// steady-state breadcrumbs.
-	if mergedEngine != nil {
-		piece, _, err := res.Piece(ctx, in, v1beta1.EngineComponent)
-		if err != nil {
-			log.Error(err, "Failed to get accelerator class for engine component")
-			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "AcceleratorClassError", "Failed to get accelerator class for engine: %v", err)
-			return reconcile.Result{}, err
-		}
-		log.V(1).Info("Creating engine reconciler",
-			"deploymentMode", piece.DeploymentMode,
-			"acceleratorClass", piece.AcceleratorClassName)
-
-		engineReconciler := components.NewEngine(cdeps, componentInputs(piece, policyResolver, enginePartition), mergedEngine)
-		reconcilers = append(reconcilers, engineReconciler)
+	if err := protocol.ValidateNativeModes(p.resolved.Modes); err != nil {
+		return p.end(p.reconciler.holdPlacementBackend(ctx, p.isvc, err))
 	}
-
-	if mergedDecoder != nil {
-		piece, _, err := res.Piece(ctx, in, v1beta1.DecoderComponent)
-		if err != nil {
-			log.Error(err, "Failed to get accelerator class for decoder component")
-			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "AcceleratorClassError", "Failed to get accelerator class for decoder: %v", err)
-			return reconcile.Result{}, err
-		}
-		log.V(1).Info("Creating decoder reconciler",
-			"deploymentMode", piece.DeploymentMode,
-			"acceleratorClass", piece.AcceleratorClassName)
-
-		decoderReconciler := components.NewDecoder(cdeps, componentInputs(piece, policyResolver, decoderPartition), mergedDecoder)
-		reconcilers = append(reconcilers, decoderReconciler)
+	if err := checkPlacementReplicaFloors(p.isvc, p.resolved.Specs.Engine, p.resolved.Specs.Decoder, p.resolved.Specs.Router); err != nil {
+		return p.end(p.reconciler.holdPlacementCondition(ctx, p.isvc, v1beta1.PlacementReplicaFloorsReady, "ReplicaFloorsMismatch", err))
 	}
-
-	// Add Router reconciler if merged router spec exists (using new v2 Router)
-	if mergedRouter != nil {
-		// The router piece takes no accelerator class and no model format, so
-		// assembling it performs no reads and cannot fail.
-		piece, _, _ := res.Piece(ctx, in, v1beta1.RouterComponent)
-		log.V(1).Info("Creating router reconciler",
-			"deploymentMode", piece.DeploymentMode)
-
-		routerReconciler := components.NewRouter(cdeps, componentInputs(piece, policyResolver, routerPartition), mergedRouter) // merged router spec, not isvc.Spec.Router
-		reconcilers = append(reconcilers, routerReconciler)
+	clearPlacementReplicaFloorsHold(p.isvc)
+	clearPlacementBackendHold(p.isvc)
+	if result, err := p.modelConfig.Reconcile(ctx, p.isvc); err != nil {
+		return p.end(result, err)
 	}
+	return true, nil
+}
 
-	// Determine the correct ingress deployment mode using the same logic as ingress reconciler
-	// but with the already-determined deployment modes to avoid inconsistency
-	if mergedRouter != nil {
-		ingressDeploymentMode = res.Modes[v1beta1.RouterComponent]
-	} else if mergedDecoder != nil {
-		ingressDeploymentMode = res.Modes[v1beta1.DecoderComponent]
-	} else {
-		ingressDeploymentMode = res.Modes[v1beta1.EngineComponent]
+// reconcileRolloutRun runs the run layer when the service declares or
+// carries a rollout. It resolves the effective plan and records it before
+// the partition resolvers and the dispatch engines read it, so every reader
+// in this pass sees the same plan. Recording the plan does not depend on the
+// RolloutPolicy feature; only resolving a policy reference does. The run
+// layer's requeue joins the pass's.
+func (p *servicePass) reconcileRolloutRun(ctx context.Context) (bool, error) {
+	// A service with both an engine and a decoder is prefill/decode
+	// disaggregated; the line is a steady-state breadcrumb.
+	if p.resolved.Specs.Engine != nil && p.resolved.Specs.Decoder != nil {
+		p.log.V(1).Info("PD-disaggregated deployment detected")
 	}
-
-	log.V(1).Info("Determined ingress deployment mode",
-		"ingressDeploymentMode", ingressDeploymentMode)
-
-	// Step 6: Run all reconcilers. Capture the max-requeue across
-	// per-Component reconcilers WITHOUT short-circuiting — coordination
-	// must run at the end of every reconcile pass even when individual
-	// Components requeue (which they do constantly during active
-	// rollouts). A loop that returned on the first requeuing
-	// reconciler would leave Status.RolloutCoordination /
-	// per-revision Services / Traffic[] stale until convergence.
-	var pendingRequeue reconcile.Result
-	for _, reconciler := range reconcilers {
-		result, err := reconciler.Reconcile(ctx, isvc)
-		if err != nil {
-			// A component's failure is often a write the API server rejects,
-			// such as an InferenceReplica an admission webhook denies, which
-			// only a change to the InferenceService fixes. Record it where
-			// the owner looks. A conflict is retried at once and needs no
-			// report.
-			if !apierrors.IsConflict(err) {
-				r.Recorder.Event(isvc, v1.EventTypeWarning, "ComponentReconcileError", err.Error())
-			}
-			log.Error(err, "Failed to reconcile component",
-				"component", fmt.Sprintf("%T", reconciler))
-			return result, err
-		}
-		if result.Requeue {
-			pendingRequeue.Requeue = true
-		}
-		if result.RequeueAfter > pendingRequeue.RequeueAfter {
-			pendingRequeue.RequeueAfter = result.RequeueAfter
-		}
+	if p.isvc.Spec.Rollout == nil && p.isvc.Status.Rollout == nil {
+		return true, nil
 	}
-
-	// A Component runs under exactly one backend, the one its resolved mode
-	// selects. The objects of a backend it left are removed in the pass that
-	// projects the selected one, and before any requeue: the two backends
-	// share the Component's Service, disruption budget, autoscaler and
-	// accelerator capacity, so a rollout that waited for the new backend's
-	// pods would wait on capacity the replaced backend still holds.
-	if err := r.cleanupReplacedBackends(ctx, isvc, componentDeploymentModes); err != nil {
-		log.Error(err, "Failed to remove the objects of a replaced backend")
-		r.Recorder.Event(isvc, v1.EventTypeWarning, "DeploymentModeChangeError", err.Error())
-		return reconcile.Result{}, err
+	var err error
+	if p.rolloutConfig, err = controllerconfig.NewRolloutConfigCached(p.reconciler.ConfigCache, p.reconciler.Clientset); err != nil {
+		return false, errors.Wrapf(err, "fails to load rollout config")
 	}
-
-	// Step 6a: Run cross-Component coordination once every Component
-	// reconciler has finished. The coordination layer reads observed
-	// per-revision pod counts, ensures per-revision Services, writes
-	// Status.Components.<c>.Traffic[], drives the per-group state
-	// machine, and stamps RolloutCoordinationReady. Independent of
-	// any single Component reconciler so the ingress / traffic
-	// reconciliation downstream reads the freshest producer-side
-	// status.
-	// Rollout dispatch (v2 groups): a canary group drives the canary step machine;
-	// blueGreen/rollingUpdate groups drive the coordination engine. v2 groups
-	// partition the Components into disjoint sets, so both engines may run in one
-	// pass — each no-ops when its group type is absent (canary.Dispatch on no
-	// canary group; coordination.Reconcile on no coordination-style group). Both
-	// observe per-revision pods, ensure per-revision Services, and write
-	// Status.Components.<c>.Traffic + phase for their own Components. Cross-group
-	// ordering (the group sequencer) is a follow-on; today the groups run
-	// concurrently on their disjoint Components.
-	if rolloutRunRequeue > pendingRequeue.RequeueAfter {
-		pendingRequeue.RequeueAfter = rolloutRunRequeue
+	if p.metricProviders, err = controllerconfig.NewMetricProvidersConfigCached(p.reconciler.ConfigCache, p.reconciler.Clientset); err != nil {
+		return false, errors.Wrapf(err, "fails to load metricProviders config")
 	}
-	// Operator annotations the canary passes applied this reconcile. They
-	// are removed after the status write that carries their effect lands.
-	var canaryConsume []string
-	if canaryGroups := rollout.CanaryGroups(isvc, policies); len(canaryGroups) > 0 {
-		// Resolve the metrics source + query timeout per-reconcile from the
-		// canaryAnalysis operator config (so ConfigMap edits take effect without a
-		// restart); the sampler's structural tuning is fixed at startup. Only
-		// analysis steps read these — non-analysis canaries ignore them.
-		analysisConfig, err := controllerconfig.NewCanaryAnalysisConfigCached(r.ConfigCache, r.Clientset)
-		if err != nil {
-			log.Error(err, "Failed to load canaryAnalysis config")
-			return reconcile.Result{}, errors.Wrapf(err, "fails to load canaryAnalysis config")
-		}
-		var defaultReadyTimeout, canaryRequeue, canaryParkedRequeue time.Duration
-		if rolloutConfig != nil {
-			defaultReadyTimeout = rolloutConfig.DefaultReadyTimeout
-			canaryRequeue = rolloutConfig.CanaryRequeue
-			canaryParkedRequeue = rolloutConfig.CanaryParkedRequeue
-		}
-		// One dispatch per canary group. A group owns one unit, so the runs
-		// touch disjoint Components: neither can see the other's step counter,
-		// and the soonest requeue wins so the faster unit is not slowed to the
-		// pace of the slower one.
-		for _, g := range canaryGroups {
-			out, err := canary.Dispatch(ctx, canary.DispatchDeps{
-				ISVC:   isvc,
-				Client: r.Client,
-				// The crash reading decodes per-Instance rows, so the live
-				// reader carries the configured row decoder.
-				Reader:                   irstatus.NewReader(r.APIReader, r.InstanceStatusDecoder),
-				Recorder:                 r.Recorder,
-				Sampler:                  r.CanarySampler,
-				BundledPrometheusAddress: analysisConfig.BundledPrometheusAddress,
-				QueryTimeout:             analysisConfig.QueryTimeoutDuration(),
-				DefaultReadyTimeout:      defaultReadyTimeout,
-				Requeue:                  canaryRequeue,
-				ParkedRequeue:            canaryParkedRequeue,
-				MetricProviders:          metricProviders,
-				DefaultProvider:          analysisConfig.DefaultProvider,
-				ComponentRunnerPorts:     componentRunnerPorts,
-				Policies:                 policies,
-				Group:                    g,
-			})
-			if err != nil {
-				log.Error(err, "Failed to reconcile canary rollout")
-				return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile canary")
-			}
-			if out.RequeueAfter > pendingRequeue.RequeueAfter {
-				pendingRequeue.RequeueAfter = out.RequeueAfter
-			}
-			if out.Requeue {
-				pendingRequeue.Requeue = true
-			}
-			canaryConsume = append(canaryConsume, out.Consume...)
-		}
+	bound := make(map[string]struct{}, len(p.metricProviders))
+	for name := range p.metricProviders {
+		bound[name] = struct{}{}
 	}
-	// Load the coordination tuning per-reconcile from the operator config so
-	// ConfigMap edits take effect within the cache TTL without a restart (mirrors
-	// canaryAnalysis). An absent "coordination" key yields a zero deadband (no
-	// hysteresis), preserving the prior write-on-any-diff behavior.
-	coordinationConfig, err := controllerconfig.NewCoordinationConfigCached(r.ConfigCache, r.Clientset)
+	outcome, err := rolloutrun.Reconcile(ctx, rolloutrun.Inputs{
+		Client:         p.reconciler.Client,
+		Reader:         p.reconciler.APIReader,
+		Recorder:       p.reconciler.Recorder,
+		ISVC:           p.isvc,
+		FeatureEnabled: p.reconciler.RolloutPolicyEnabled,
+		BoundProviders: bound,
+	})
 	if err != nil {
-		log.Error(err, "Failed to load coordination config")
-		return reconcile.Result{}, errors.Wrapf(err, "fails to load coordination config")
+		p.log.Error(err, "Failed to reconcile rollout run")
+		return false, errors.Wrapf(err, "fails to reconcile rollout run")
+	}
+	p.runOutcome = &outcome
+	p.policies = outcome.Policies
+	p.pendingRequeue = SoonestRequeue(p.pendingRequeue, reconcile.Result{RequeueAfter: outcome.RequeueAfter})
+	return true, nil
+}
+
+// bindCanaryToOpenedRun binds or resets each canary group's state to a run
+// the run layer opened this pass, before the run boundary is written, so
+// the active run and its step state become visible together. An adopted
+// run keeps its in-flight step and gains the run's target.
+func (p *servicePass) bindCanaryToOpenedRun(ctx context.Context) (bool, error) {
+	if p.runOutcome == nil || !p.runOutcome.Opened {
+		return true, nil
+	}
+	for _, group := range rollout.CanaryGroups(p.isvc, p.policies) {
+		if err := canary.BindRun(ctx, p.reconciler.Client, p.isvc, group, p.runOutcome.Adopted); err != nil {
+			p.log.Error(err, "Failed to bind canary state to the rollout run")
+			return false, errors.Wrapf(err, "fails to bind canary state to the rollout run")
+		}
+	}
+	return true, nil
+}
+
+// flushRunBoundary writes the status as soon as the run layer opened,
+// closed or re-recorded a run. The recorded plan steers the update gates
+// and the partition; a later step that failed would otherwise drop it from
+// memory, reopen the run on the next pass and move the projected spec under
+// the executors. A pass that read a stale canary record decides nothing
+// further: the flush kept the live record, and the next pass decides from
+// it.
+func (p *servicePass) flushRunBoundary(context.Context) (bool, error) {
+	if p.runOutcome == nil || !p.runOutcome.StateChanged {
+		return true, nil
+	}
+	if err := p.reconciler.updateStatus(p.isvc, p.deploymentMode, p.base); err != nil {
+		p.reconciler.Recorder.Event(p.isvc, v1.EventTypeWarning, "InternalError", err.Error())
+		return false, err
+	}
+	if p.base.Stale() {
+		return p.end(reconcile.Result{Requeue: true}, nil)
+	}
+	return true, nil
+}
+
+// resolveScalingTargets resolves each follower's count under a proportional
+// scaling policy before the projectors run and hands it to the follower's
+// reconciler, so the count and the canary partition sized from it reach the
+// InferenceReplica in one write. The coordinator publishes its status after
+// the projectors (runScalingCoordinator) and writes no replica itself.
+func (p *servicePass) resolveScalingTargets(ctx context.Context) (bool, error) {
+	targets, err := scaling.ResolveTargets(ctx, p.reconciler.APIReader, p.isvc, p.scalingPolicy, p.scalingSource,
+		p.componentBounds, p.resolved.Modes)
+	if err != nil {
+		return false, errors.Wrap(err, "resolve component scaling")
+	}
+	p.scalingTargets = targets
+	return true, nil
+}
+
+// buildComponentReconcilers builds one reconciler per declared Component, in
+// the order engine, decoder, router. Each takes its render piece (the
+// accelerator class and the model format; the router has neither, so its
+// piece cannot fail), the policy resolver, the canary's partition resolver
+// for its role and whether the coordinator owns its count.
+func (p *servicePass) buildComponentReconcilers(ctx context.Context) (bool, error) {
+	componentDeps := p.reconciler.buildComponentDeps(p.isvcConfig)
+	if engine := p.resolved.Specs.Engine; engine != nil {
+		piece, _, err := p.resolved.Piece(ctx, p.in, v1beta1.EngineComponent)
+		if err != nil {
+			p.log.Error(err, "Failed to get accelerator class for engine component")
+			p.reconciler.Recorder.Eventf(p.isvc, v1.EventTypeWarning, "AcceleratorClassError", "Failed to get accelerator class for engine: %v", err)
+			return false, err
+		}
+		p.log.V(1).Info("Creating engine reconciler",
+			"deploymentMode", piece.DeploymentMode,
+			"acceleratorClass", piece.AcceleratorClassName)
+		p.reconcilers = append(p.reconcilers, components.NewEngine(componentDeps, p.inputsFor(piece, v1beta1.EngineComponent), engine))
+	}
+	if decoder := p.resolved.Specs.Decoder; decoder != nil {
+		piece, _, err := p.resolved.Piece(ctx, p.in, v1beta1.DecoderComponent)
+		if err != nil {
+			p.log.Error(err, "Failed to get accelerator class for decoder component")
+			p.reconciler.Recorder.Eventf(p.isvc, v1.EventTypeWarning, "AcceleratorClassError", "Failed to get accelerator class for decoder: %v", err)
+			return false, err
+		}
+		p.log.V(1).Info("Creating decoder reconciler",
+			"deploymentMode", piece.DeploymentMode,
+			"acceleratorClass", piece.AcceleratorClassName)
+		p.reconcilers = append(p.reconcilers, components.NewDecoder(componentDeps, p.inputsFor(piece, v1beta1.DecoderComponent), decoder))
+	}
+	if router := p.resolved.Specs.Router; router != nil {
+		piece, _, _ := p.resolved.Piece(ctx, p.in, v1beta1.RouterComponent)
+		p.log.V(1).Info("Creating router reconciler", "deploymentMode", piece.DeploymentMode)
+		p.reconcilers = append(p.reconcilers, components.NewRouter(componentDeps, p.inputsFor(piece, v1beta1.RouterComponent), router))
+	}
+	return true, nil
+}
+
+// inputsFor is one role's per-pass inputs: its render piece, the policy
+// resolver, the canary's partition resolver, which sizes the current step's
+// hold against the count the projector writes so the partition and the
+// replica count describe the same fleet, the follower flag and the count the
+// scaling coordinator resolved for the role.
+func (p *servicePass) inputsFor(piece *render.Piece, component v1beta1.ComponentType) components.ComponentInputs {
+	return componentInputs(piece, p.policyResolver, canary.PartitionResolver(p.isvc, p.policies, component), p.follows(component),
+		p.scalingTargets.Replicas(component))
+}
+
+// chooseIngressMode takes the ingress deployment mode from the router, else
+// the decoder, else the engine, from the modes already decided, so the
+// ingress reconciler and the Components cannot disagree.
+func (p *servicePass) chooseIngressMode(context.Context) (bool, error) {
+	switch {
+	case p.resolved.Specs.Router != nil:
+		p.ingressDeploymentMode = p.resolved.Modes[v1beta1.RouterComponent]
+	case p.resolved.Specs.Decoder != nil:
+		p.ingressDeploymentMode = p.resolved.Modes[v1beta1.DecoderComponent]
+	default:
+		p.ingressDeploymentMode = p.resolved.Modes[v1beta1.EngineComponent]
+	}
+	p.log.V(1).Info("Determined ingress deployment mode", "ingressDeploymentMode", p.ingressDeploymentMode)
+	return true, nil
+}
+
+// runComponentReconcilers runs the component reconcilers in order. The
+// first error ends the pass. A failure is often a write the apiserver
+// rejects, which only a change to the service fixes, so it is recorded as
+// an event on the service; a conflict is retried at once and gets no event,
+// and an error of a pass the manager's shutdown stopped gets neither event
+// nor error log. A requeue request does not end the pass, because the
+// rollout layers must run on every pass; the soonest request is kept.
+func (p *servicePass) runComponentReconcilers(ctx context.Context) (bool, error) {
+	for _, reconciler := range p.reconcilers {
+		result, err := reconciler.Reconcile(ctx, p.isvc)
+		if err != nil {
+			if shutdownCutShort(ctx, err) {
+				p.log.V(1).Info("Component reconcile stopped by the manager's shutdown",
+					"component", fmt.Sprintf("%T", reconciler), "error", err)
+				return p.end(result, err)
+			}
+			if !apierrors.IsConflict(err) {
+				p.reconciler.Recorder.Event(p.isvc, v1.EventTypeWarning, "ComponentReconcileError", err.Error())
+			}
+			p.log.Error(err, "Failed to reconcile component",
+				"component", fmt.Sprintf("%T", reconciler))
+			return p.end(result, err)
+		}
+		p.pendingRequeue = SoonestRequeue(p.pendingRequeue, result)
+	}
+	return true, nil
+}
+
+// removeReplacedBackendObjects removes the objects of a backend a Component
+// left. A Component runs under exactly one backend, the one its mode
+// selects, and the two backends share the Component's Service, disruption
+// budget, autoscaler and accelerator capacity, so the removal lands in the
+// pass that projects the selected backend and before any requeue.
+func (p *servicePass) removeReplacedBackendObjects(ctx context.Context) (bool, error) {
+	err := p.reconciler.cleanupReplacedBackends(ctx, p.isvc, p.resolved.Modes)
+	if err == nil {
+		return true, nil
+	}
+	if shutdownCutShort(ctx, err) {
+		p.log.V(1).Info("Replaced backend cleanup stopped by the manager's shutdown", "error", err)
+		return false, err
+	}
+	p.log.Error(err, "Failed to remove the objects of a replaced backend")
+	p.reconciler.Recorder.Event(p.isvc, v1.EventTypeWarning, "DeploymentModeChangeError", err.Error())
+	return false, err
+}
+
+// runScalingCoordinator writes status.scalingPolicy once the projectors have
+// run: each follower's target beside the count its projection written, read
+// back after the projectors ran.
+func (p *servicePass) runScalingCoordinator(ctx context.Context) (bool, error) {
+	if err := scaling.Reconcile(ctx, p.reconciler.APIReader, p.reconciler.Recorder, p.isvc, p.scalingTargets); err != nil {
+		return false, errors.Wrap(err, "coordinate component scaling")
+	}
+	return true, nil
+}
+
+// dispatchCanaryGroups runs the canary step machine once per canary group.
+// The groups split the Components into disjoint sets, so each run sees only
+// its own step counter; each run's requeue joins the pass's, the soonest
+// kept, so a group mid-step is not paced by a group that waits. The metrics
+// source and the query timeout come from the canaryAnalysis config on every
+// pass, so a ConfigMap edit applies without a restart; only analysis steps
+// read them.
+func (p *servicePass) dispatchCanaryGroups(ctx context.Context) (bool, error) {
+	canaryGroups := rollout.CanaryGroups(p.isvc, p.policies)
+	if len(canaryGroups) == 0 {
+		return true, nil
+	}
+	analysisConfig, err := controllerconfig.NewCanaryAnalysisConfigCached(p.reconciler.ConfigCache, p.reconciler.Clientset)
+	if err != nil {
+		p.log.Error(err, "Failed to load canaryAnalysis config")
+		return false, errors.Wrapf(err, "fails to load canaryAnalysis config")
+	}
+	for _, group := range canaryGroups {
+		out, err := canary.Dispatch(ctx, p.canaryDispatchDeps(group, analysisConfig))
+		if err != nil {
+			p.log.Error(err, "Failed to reconcile canary rollout")
+			return false, errors.Wrapf(err, "fails to reconcile canary")
+		}
+		p.pendingRequeue = SoonestRequeue(p.pendingRequeue, reconcile.Result{Requeue: out.Requeue, RequeueAfter: out.RequeueAfter})
+		p.canaryConsume = append(p.canaryConsume, out.Consume...)
+	}
+	return true, nil
+}
+
+// canaryDispatchDeps is what one canary group's dispatch reads: the live
+// reader with the configured row decoder, because the crash reading decodes
+// per-Instance rows; the analysis source, timeout and providers; and the
+// cadences of the rollout config when the run layer loaded one.
+func (p *servicePass) canaryDispatchDeps(group *v1beta1.RolloutGroup, analysisConfig *controllerconfig.CanaryAnalysisConfig) canary.DispatchDeps {
+	deps := canary.DispatchDeps{
+		ISVC:                     p.isvc,
+		Client:                   p.reconciler.Client,
+		Reader:                   irstatus.NewReader(p.reconciler.APIReader, p.reconciler.InstanceStatusDecoder),
+		Recorder:                 p.reconciler.Recorder,
+		Sampler:                  p.reconciler.CanarySampler,
+		BundledPrometheusAddress: analysisConfig.BundledPrometheusAddress,
+		QueryTimeout:             analysisConfig.QueryTimeoutDuration(),
+		MetricProviders:          p.metricProviders,
+		DefaultProvider:          analysisConfig.DefaultProvider,
+		ComponentRunnerPorts:     p.componentRunnerPorts,
+		Policies:                 p.policies,
+		Group:                    group,
+	}
+	if p.rolloutConfig != nil {
+		deps.DefaultReadyTimeout = p.rolloutConfig.DefaultReadyTimeout
+		deps.Requeue = p.rolloutConfig.CanaryRequeue
+		deps.ParkedRequeue = p.rolloutConfig.CanaryParkedRequeue
+	}
+	return deps
+}
+
+// releaseUndeclaredUnits drops the status a canary projected onto a unit
+// no group of the effective plan names any more (its record and phase), so
+// its Components follow their own spec. The coordination step writes their
+// traffic split from the pods, as it does for every Component.
+func (p *servicePass) releaseUndeclaredUnits(context.Context) (bool, error) {
+	canary.ReleaseUndeclaredUnits(p.isvc, p.policies)
+	return true, nil
+}
+
+// reconcileCoordination runs the group coordination once every component
+// reconciler has finished: it reads the per-revision pod counts, keeps the
+// per-revision Services, writes each Component's traffic entries, drives
+// the per-group state machine and sets RolloutCoordinationReady. The
+// traffic weight deadband and the ratio tolerance come from the
+// coordination config on every pass; an absent block means a zero deadband.
+func (p *servicePass) reconcileCoordination(ctx context.Context) (bool, error) {
+	coordinationConfig, err := controllerconfig.NewCoordinationConfigCached(p.reconciler.ConfigCache, p.reconciler.Clientset)
+	if err != nil {
+		p.log.Error(err, "Failed to load coordination config")
+		return false, errors.Wrapf(err, "fails to load coordination config")
 	}
 	if _, err := coordination.Reconcile(ctx, coordination.ReconcileInputs{
-		ISVC:     isvc,
-		Policies: policies,
-		Client:   r.Client,
+		ISVC:     p.isvc,
+		Policies: p.policies,
+		Client:   p.reconciler.Client,
 		// The coordination gates decode per-Instance rows, so the live reader
 		// carries the configured row decoder.
-		Reader:                       irstatus.NewReader(r.APIReader, r.InstanceStatusDecoder),
-		Recorder:                     r.Recorder,
+		Reader:                       irstatus.NewReader(p.reconciler.APIReader, p.reconciler.InstanceStatusDecoder),
+		Recorder:                     p.reconciler.Recorder,
 		TrafficWeightDeadbandPercent: coordinationConfig.TrafficWeightDeadbandPercent,
 		DefaultRatioTolerancePercent: coordinationConfig.DefaultRatioTolerancePercent,
-		ComponentDeploymentModes:     componentDeploymentModes,
-		ComponentRunnerPorts:         componentRunnerPorts,
+		ComponentDeploymentModes:     p.resolved.Modes,
+		ComponentRunnerPorts:         p.componentRunnerPorts,
 	}); err != nil {
-		log.Error(err, "Failed to reconcile cross-Component coordination")
-		return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile coordination")
+		p.log.Error(err, "Failed to reconcile cross-Component coordination")
+		return false, errors.Wrapf(err, "fails to reconcile coordination")
 	}
+	return true, nil
+}
 
-	// Project IR status onto the ISVC on requeueing passes too — see the
-	// call below for what the projection is; this call exists only so the
-	// short-circuit cannot skip it.
-	//
-	// The projector is the ONLY writer of both the Lifecycle subtree and
-	// the top-level EngineReady / DecoderReady / RouterReady conditions,
-	// and a requeueing pass is the steady state of an active rollout, not
-	// an exception. Running it only on the no-requeue tail freezes the
-	// projection for as long as anything asks to requeue, and because the
-	// rollout engines gate on component readiness, that freeze sustains
-	// itself: stale NotReady conditions hold the rollout at its step, the
-	// held rollout keeps requeueing, and the requeue keeps the projection
-	// stale. The ISVC then stays Ready=False/Initializing while its live
-	// IR advances arbitrarily far, with no reconcile error and no recovery
-	// across controller restarts.
-	//
-	// The tail call stays in place after ingress / traffic / component-status
-	// cleanup, so the no-requeue path's write ordering is preserved. An
-	// unchanged rollup performs zero writes (AggregateIRStatus skips the
-	// Status().Update when the recomputed status DeepEquals the live one),
-	// so the pass that runs both calls still writes at most once.
-	if pendingRequeue.Requeue || pendingRequeue.RequeueAfter > 0 {
-		if err = irprojector.AggregateIRStatus(ctx, r.Client, r.APIReader, isvc, componentDeploymentModes); err != nil {
-			r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
-			return reconcile.Result{}, err
-		}
+// flushRequeueingPass ends a pass that asked to requeue, which is the steady
+// state of an open rollout. It copies each replica's summary onto the
+// service and writes the status, so the Component conditions the rollout
+// layers gate on and the coordination's traffic entries land on every pass;
+// a projection that only ran on settled passes would stay stale while the
+// held rollout kept requeueing. Ingress, the external Service and traffic wait
+// for a settled pass. A stale canary record adds an immediate requeue.
+func (p *servicePass) flushRequeueingPass(ctx context.Context) (bool, error) {
+	requeueing := p.pendingRequeue.Requeue || p.pendingRequeue.RequeueAfter > 0
+	if !requeueing {
+		return true, nil
 	}
-
-	// If any Component asked to requeue, return that signal AFTER
-	// coordination has run. Ingress / traffic / external-service
-	// reconciliation downstream is skipped this pass — they re-run on
-	// the requeue. This preserves the prior short-circuit semantics
-	// for downstream reconcilers while ensuring coordination's
-	// producer-side status writes (Traffic, RolloutCoordination) land
-	// every pass. updateStatus must be called BEFORE the early return
-	// — coordination.Reconcile above just mutated isvc.Status in-memory
-	// (Traffic[], RolloutCoordination, RolloutCoordinationReady); without
-	// flushing it here those writes are dropped on every requeuing pass,
-	// which is the steady state during active rollouts.
-	if pendingRequeue.Requeue || pendingRequeue.RequeueAfter > 0 {
-		if err := r.FlushStatusThenConsume(ctx, isvc, deploymentMode, canaryConsume, base); err != nil {
-			r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
-			return reconcile.Result{}, err
-		}
-		if base.Stale() {
-			pendingRequeue.Requeue = true
-		}
-		return pendingRequeue, nil
+	if err := irprojector.AggregateIRStatus(ctx, p.reconciler.Client, p.reconciler.APIReader, p.isvc, p.resolved.Modes); err != nil {
+		p.reconciler.Recorder.Event(p.isvc, v1.EventTypeWarning, "InternalError", err.Error())
+		return false, err
 	}
+	if err := p.reconciler.FlushStatusThenConsume(ctx, p.isvc, p.deploymentMode, p.canaryConsume, p.base); err != nil {
+		p.reconciler.Recorder.Event(p.isvc, v1.EventTypeWarning, "InternalError", err.Error())
+		return false, err
+	}
+	if p.base.Stale() {
+		p.pendingRequeue.Requeue = true
+	}
+	return p.end(p.pendingRequeue, nil)
+}
 
-	// Now reconcile ingress and external service after components have created their services
-	ingressConfig, err := controllerconfig.NewIngressConfigCached(r.ConfigCache, r.Clientset)
+// reconcileIngress runs on a settled pass, once the Components have created
+// their Services: it loads the ingress config, applies the service's
+// annotation overrides and reconciles the route for the ingress mode.
+func (p *servicePass) reconcileIngress(ctx context.Context) (bool, error) {
+	ingressConfig, err := controllerconfig.NewIngressConfigCached(p.reconciler.ConfigCache, p.reconciler.Clientset)
 	if err != nil {
-		return reconcile.Result{}, errors.Wrapf(err, "fails to create IngressConfig")
+		return false, errors.Wrapf(err, "fails to create IngressConfig")
 	}
-
-	// Resolve ingress config with annotation overrides
-	resolvedIngressConfig := isvcutils.ResolveIngressConfig(ingressConfig, isvc.Annotations)
-
-	// New architecture: ingress uses the determined ingress deployment mode
-	ingressReconciler := ingress.NewIngressReconciler(r.Client, r.Clientset, r.Scheme, resolvedIngressConfig, isvcConfig)
-	log.V(1).Info("Reconciling ingress for inference service")
-	if err := ingressReconciler.(*ingress.IngressReconciler).ReconcileWithDeploymentMode(ctx, isvc, ingressDeploymentMode); err != nil {
-		return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")
+	p.resolvedIngressConfig = isvcutils.ResolveIngressConfig(ingressConfig, p.isvc.Annotations)
+	ingressReconciler := ingress.NewIngressReconciler(p.reconciler.Client, p.reconciler.Clientset, p.reconciler.Scheme, p.resolvedIngressConfig, p.isvcConfig)
+	p.log.V(1).Info("Reconciling ingress for inference service")
+	if err := ingressReconciler.(*ingress.IngressReconciler).ReconcileWithDeploymentMode(ctx, p.isvc, p.ingressDeploymentMode); err != nil {
+		return false, errors.Wrapf(err, "fails to reconcile ingress")
 	}
+	return true, nil
+}
 
-	// Reconcile external service - creates a service with the inference service name
-	// when ingress is disabled to provide a stable endpoint
-	externalServiceReconciler := external_service.NewExternalServiceReconciler(r.Client, r.Clientset, r.Scheme, resolvedIngressConfig)
-	log.V(1).Info("Reconciling external service for inference service")
-	if err := externalServiceReconciler.Reconcile(ctx, isvc); err != nil {
-		return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile external service")
+// reconcileExternalService keeps the Service named after the
+// InferenceService, which is its stable endpoint while ingress creation is
+// disabled.
+func (p *servicePass) reconcileExternalService(ctx context.Context) (bool, error) {
+	externalServiceReconciler := external_service.NewExternalServiceReconciler(p.reconciler.Client, p.reconciler.Clientset, p.reconciler.Scheme, p.resolvedIngressConfig)
+	p.log.V(1).Info("Reconciling external service for inference service")
+	if err := externalServiceReconciler.Reconcile(ctx, p.isvc); err != nil {
+		return false, errors.Wrapf(err, "fails to reconcile external service")
 	}
+	return true, nil
+}
 
-	// Traffic management reconciler. Skipped when the InferenceService
-	// declares no traffic intent (spec.traffic or ome.io/* annotation).
-	// The reconciler invokes the active translator (chosen at startup
-	// by the factory), applies the emitted backend policy resource,
-	// and returns the TrafficStatus to write back. A nil reconciler
-	// means the controller was set up without traffic management
-	// (legitimate for tests / minimal configurations).
-	if r.TrafficReconciler != nil {
-		targetRoutes := traffic.ComputeTargetHTTPRoutes(isvc, mergedDecoder != nil, mergedRouter != nil)
-		trafficStatus, err := r.TrafficReconciler.Reconcile(ctx, isvc, targetRoutes)
-		if err != nil {
-			r.Log.Error(err, "Failed to reconcile traffic policy",
-				"namespace", isvc.Namespace, "inferenceService", isvc.Name,
-				"translator", r.TrafficReconciler.TranslatorName())
-			r.Recorder.Event(isvc, v1.EventTypeWarning, "TrafficReconcileError", err.Error())
-			// Surface the status even on error so operators see the
-			// TranslationFailed reason without waiting for the next
-			// successful reconcile.
-			isvc.Status.Traffic = trafficStatus
-			return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile traffic policy")
+// reconcileTraffic applies the backend policy the active translator emits
+// for the service's traffic intent and records the traffic status, on a
+// failure too, so the operator sees the reason without waiting for a later
+// pass. A controller set up without traffic management skips it.
+func (p *servicePass) reconcileTraffic(ctx context.Context) (bool, error) {
+	if p.reconciler.TrafficReconciler == nil {
+		return true, nil
+	}
+	targetRoutes := traffic.ComputeTargetHTTPRoutes(p.isvc, p.resolved.Specs.Decoder != nil, p.resolved.Specs.Router != nil)
+	trafficStatus, err := p.reconciler.TrafficReconciler.Reconcile(ctx, p.isvc, targetRoutes)
+	p.isvc.Status.Traffic = trafficStatus
+	if err != nil {
+		p.reconciler.Log.Error(err, "Failed to reconcile traffic policy",
+			"namespace", p.isvc.Namespace, "inferenceService", p.isvc.Name,
+			"translator", p.reconciler.TrafficReconciler.TranslatorName())
+		p.reconciler.Recorder.Event(p.isvc, v1.EventTypeWarning, "TrafficReconcileError", err.Error())
+		return false, errors.Wrapf(err, "fails to reconcile traffic policy")
+	}
+	return true, nil
+}
+
+// setURLWhenIngressDisabled runs while ingress creation is disabled: it
+// marks the service so the cleanup keeps the external Service, and sets the
+// service URL from that Service. A Service the cache has not observed yet is
+// not a failure: the Service is owned and watched, so its create event
+// brings the next pass.
+func (p *servicePass) setURLWhenIngressDisabled(ctx context.Context) (bool, error) {
+	if !p.resolvedIngressConfig.DisableIngressCreation {
+		return true, nil
+	}
+	if err := p.reconciler.ensureIngressDisableAnnotation(p.isvc); err != nil {
+		return false, errors.Wrapf(err, "fails to add ingress disable annotation")
+	}
+	if err := p.reconciler.setExternalServiceURL(ctx, p.isvc, p.resolvedIngressConfig); err != nil {
+		if !apierrors.IsNotFound(err) {
+			p.reconciler.Recorder.Event(p.isvc, v1.EventTypeWarning, "InternalError", err.Error())
+			return false, errors.Wrapf(err, "fails to set external service URL")
 		}
-		isvc.Status.Traffic = trafficStatus
+		p.log.V(1).Info("external service absent; leaving the URL unset for this pass",
+			"service", p.isvc.Name)
 	}
+	return true, nil
+}
 
-	// Set Status.Address for external service and add ingress disable annotation when ingress is disabled
-	if resolvedIngressConfig.DisableIngressCreation {
-		// Add annotation to InferenceService so cleanup logic knows to keep the external service
-		if err := r.ensureIngressDisableAnnotation(isvc); err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "fails to add ingress disable annotation")
-		}
-		// A missing external service is not a failure. The reconciler above
-		// creates one only for a non-cluster-local InferenceService that has
-		// something to route to, and where it does create one, the read below
-		// goes through the informer cache, which has not observed that write
-		// yet. The Service is owned by this InferenceService and watched, so
-		// its create event brings the reconcile back to set the URL. Returning
-		// an error would add a backoff, a warning event and a stack trace to a
-		// state that either resolves itself or is correct as it stands.
-		if err := r.setExternalServiceURL(ctx, isvc, resolvedIngressConfig); err != nil {
-			if !apierrors.IsNotFound(err) {
-				r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
-				return reconcile.Result{}, errors.Wrapf(err, "fails to set external service URL")
-			}
-			log.V(1).Info("external service absent; leaving the URL unset for this pass",
-				"service", isvc.Name)
-		}
+// cleanupUndeclaredComponents removes the objects and the status entry of a
+// Component the spec no longer declares. A failed object removal does not
+// end the pass, so the status flush still lands; it is logged as an error so
+// a lasting permission failure is visible.
+func (p *servicePass) cleanupUndeclaredComponents(ctx context.Context) (bool, error) {
+	engine, decoder, router := p.resolved.Specs.Engine, p.resolved.Specs.Decoder, p.resolved.Specs.Router
+	if err := p.reconciler.cleanupRemovedComponents(ctx, p.isvc, engine, decoder, router); err != nil {
+		p.log.Error(err, "Failed to cleanup removed components")
 	}
-
-	// Clean up resources for components that no longer exist. Cleanup
-	// errors don't fail reconciliation (we still want the rest of the
-	// status flush to land), but we log Error so a chronic permission
-	// failure on cleanup isn't fully invisible to the operator.
-	if err := r.cleanupRemovedComponents(ctx, isvc, mergedEngine, mergedDecoder, mergedRouter); err != nil {
-		log.Error(err, "Failed to cleanup removed components")
+	if p.isvc.Status.Components == nil {
+		return true, nil
 	}
-
-	// Clean up status for components that no longer exist. Demoted to
-	// V(1): this block runs every reconcile but in steady state every
-	// declared Component still has a merged spec, so the "Cleaning up"
-	// breadcrumb fires on the hot path without ever doing real work.
-	// The per-Component delete lines stay at Info because they only
-	// fire on a real spec change (Component removed from the ISVC).
-	if isvc.Status.Components != nil {
-		log.V(1).Info("Cleaning up component status",
-			"mergedEngine", mergedEngine != nil,
-			"mergedDecoder", mergedDecoder != nil,
-			"mergedRouter", mergedRouter != nil,
-			"statusComponents", len(isvc.Status.Components))
-
-		if mergedEngine == nil {
-			if _, present := isvc.Status.Components[v1beta1.EngineComponent]; present {
-				delete(isvc.Status.Components, v1beta1.EngineComponent)
-				log.Info("Deleted engine from status")
-			}
-		}
-		if mergedDecoder == nil {
-			if _, present := isvc.Status.Components[v1beta1.DecoderComponent]; present {
-				delete(isvc.Status.Components, v1beta1.DecoderComponent)
-				log.Info("Deleted decoder from status")
-			}
-		}
-		if mergedRouter == nil {
-			if _, present := isvc.Status.Components[v1beta1.RouterComponent]; present {
-				delete(isvc.Status.Components, v1beta1.RouterComponent)
-				log.Info("Deleted router from status")
-			}
+	p.log.V(1).Info("Cleaning up component status",
+		"mergedEngine", engine != nil,
+		"mergedDecoder", decoder != nil,
+		"mergedRouter", router != nil,
+		"statusComponents", len(p.isvc.Status.Components))
+	if engine == nil {
+		if _, present := p.isvc.Status.Components[v1beta1.EngineComponent]; present {
+			delete(p.isvc.Status.Components, v1beta1.EngineComponent)
+			p.log.Info("Deleted engine from status")
 		}
 	}
-
-	// For every Component whose resolved deployment mode is OMENative
-	// (i.e. flows through the IR-managed path), read the live IR.Status
-	// and copy it onto ISVC.Status.Components[<component>].Lifecycle.
-	// The IR controller is the sole writer of IR.Status. Components on
-	// non-OMENative paths are not touched here; their status was already
-	// written by the Raw / MultiNode reconciler during the per-Component
-	// dispatcher pass above.
-	//
-	// Errors propagate so a transient apiserver read failure triggers
-	// a retry; first-reconcile NotFound is swallowed inside the
-	// helper (the next reconcile picks up the IR's fresh status once
-	// the cache observes it).
-	if err = irprojector.AggregateIRStatus(ctx, r.Client, r.APIReader, isvc, componentDeploymentModes); err != nil {
-		r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
-		return reconcile.Result{}, err
+	if decoder == nil {
+		if _, present := p.isvc.Status.Components[v1beta1.DecoderComponent]; present {
+			delete(p.isvc.Status.Components, v1beta1.DecoderComponent)
+			p.log.Info("Deleted decoder from status")
+		}
 	}
+	if router == nil {
+		if _, present := p.isvc.Status.Components[v1beta1.RouterComponent]; present {
+			delete(p.isvc.Status.Components, v1beta1.RouterComponent)
+			p.log.Info("Deleted router from status")
+		}
+	}
+	return true, nil
+}
 
-	if err = r.FlushStatusThenConsume(ctx, isvc, deploymentMode, canaryConsume, base); err != nil {
-		// A terminal status conflict is benign — requeue and re-reconcile
-		// off fresh state instead of surfacing an ERROR-level failure.
+// flushSettledPass ends a pass that asked for no requeue. It copies each
+// OMENative replica's status onto the service (the replica controller is
+// the only writer of that status; a Raw or MultiNode Component's status was
+// written by its own reconciler) and writes the status. A status conflict
+// and a stale canary record requeue at once instead of reporting an error.
+func (p *servicePass) flushSettledPass(ctx context.Context) (bool, error) {
+	if err := irprojector.AggregateIRStatus(ctx, p.reconciler.Client, p.reconciler.APIReader, p.isvc, p.resolved.Modes); err != nil {
+		p.reconciler.Recorder.Event(p.isvc, v1.EventTypeWarning, "InternalError", err.Error())
+		return false, err
+	}
+	if err := p.reconciler.FlushStatusThenConsume(ctx, p.isvc, p.deploymentMode, p.canaryConsume, p.base); err != nil {
 		if apierrors.IsConflict(err) {
-			return ctrl.Result{Requeue: true}, nil
+			return p.end(ctrl.Result{Requeue: true}, nil)
 		}
-		r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
-		return reconcile.Result{}, err
+		p.reconciler.Recorder.Event(p.isvc, v1.EventTypeWarning, "InternalError", err.Error())
+		return false, err
 	}
-	if base.Stale() {
-		return ctrl.Result{Requeue: true}, nil
+	if p.base.Stale() {
+		return p.end(ctrl.Result{Requeue: true}, nil)
 	}
-
-	return ctrl.Result{}, nil
+	return p.end(ctrl.Result{}, nil)
 }
 
 // componentInputs carries one role's render inputs, with the reconcile's
-// policy resolver and the role's canary partition, into its component
-// reconciler.
-func componentInputs(p *render.Piece, policies *autoscaler.PolicyResolver, partition *int32) components.ComponentInputs {
+// policy resolver, the role's canary partition and the count the scaling
+// coordinator resolved for it, into its component reconciler.
+func componentInputs(p *render.Piece, policies *autoscaler.PolicyResolver, partition irprojector.PartitionResolver, follower bool, target *int32) components.ComponentInputs {
 	return components.ComponentInputs{
 		DeploymentMode:       p.DeploymentMode,
 		BaseModel:            p.BaseModel,
@@ -1063,6 +1263,8 @@ func componentInputs(p *render.Piece, policies *autoscaler.PolicyResolver, parti
 		AcceleratorClassName: p.AcceleratorClassName,
 		Overlays:             p.Overlays,
 		PolicyResolver:       policies,
+		CoordinatorFollower:  follower,
+		CoordinatorTarget:    target,
 		PacingPartition:      partition,
 	}
 }
@@ -1462,13 +1664,13 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 	if r.Expectations == nil {
-		r.Expectations = omenative.NewExpectations()
+		r.Expectations = workloadtypes.NewExpectations()
 	}
 	// scheduler-plugins PodGroup detection. Optional CRD; absence is a
-	// degradation surface, not a hard fail. OMENative's reconciler reads
-	// the cached flag via ReconcileParams.GangSchedulingAvailable and
-	// stamps a `GangSchedulingUnavailable=True` Component Condition when
-	// a multi-pod Component is requested without the CRD.
+	// degradation surface, not a hard fail. The component builders receive
+	// the cached flag; the workload engine stamps a
+	// `GangSchedulingUnavailable=True` Component Condition when a multi-pod
+	// Component is requested without the CRD.
 	podGroupFound, err := utils.IsCrdAvailable(r.ClientConfig, schedulingv1alpha1.SchemeGroupVersion.String(), constants.PodGroupKind)
 	if err != nil {
 		return err
@@ -1568,10 +1770,12 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// zero (unset) falls back to controller-runtime's single-worker default.
 		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		// Ignore the ISVC's own status-only writes (which bump resourceVersion
-		// without touching spec/generation or metadata). Still trigger on spec
-		// (generation) changes AND on label/annotation changes — OME drives
-		// canary promote/rollback via annotations that do NOT bump generation,
-		// so a blanket GenerationChangedPredicate would break rollouts.
+		// without touching spec/generation or metadata), except a change to a
+		// canary record, which any writer may make and only a pass can read
+		// back. Still trigger on spec (generation) changes AND on
+		// label/annotation changes — OME drives canary promote/rollback via
+		// annotations that do NOT bump generation, so a blanket
+		// GenerationChangedPredicate would break rollouts.
 		For(&v1beta1.InferenceService{}, builder.WithPredicates(isvcReconcileTriggerPredicate())).
 		Owns(&appsv1.Deployment{}).
 		Owns(&v1.Service{}).

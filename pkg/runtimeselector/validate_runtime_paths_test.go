@@ -9,13 +9,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 // ValidateRuntime is the gate for user-pinned runtimes: every error class it
 // returns drives a distinct controller/webhook decision (hard reject vs
 // advisory vs park), so each path is pinned individually.
 func TestValidateRuntimeErrorPaths(t *testing.T) {
-	fakeClient := createFakeClient()
+	fakeClient := fakeclient.New(t)
 	selector := New(fakeClient)
 	ctx := context.Background()
 

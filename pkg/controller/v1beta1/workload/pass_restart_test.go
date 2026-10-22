@@ -20,6 +20,7 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination"
@@ -119,7 +120,7 @@ func TestReconcile_RestartPass_PerInstanceSemanticsPreserved(t *testing.T) {
 		},
 	}
 
-	result, err := workload.Reconcile(context.Background(), deps, in, plan, nil)
+	result, err := workload.Reconcile(context.Background(), deps, in, plan, desiredRevisionForTest(t, c, in))
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -184,7 +185,7 @@ func TestReconcile_RestartPass_ReusesOneAuthoritativeSnapshot(t *testing.T) {
 
 	if _, err := workload.Reconcile(context.Background(), workloadtypes.Deps{
 		Client: c, APIReader: counter, Expectations: workloadtypes.NewExpectations(),
-	}, in, plan, nil); err != nil {
+	}, in, plan, desiredRevisionForTest(t, c, in)); err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	if counter.podListCalls != 1 {
@@ -227,7 +228,7 @@ func TestReconcile_RestartPass_RecordsTheDeathFromTheDecisionRead(t *testing.T) 
 	plan := minimalPlan()
 	plan.RestartPolicy = workloadtypes.RestartPolicyRecreateInstance
 
-	if _, err := workload.Reconcile(context.Background(), deps, in, plan, nil); err != nil {
+	if _, err := workload.Reconcile(context.Background(), deps, in, plan, desiredRevisionForTest(t, c, in)); err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	if counter.podListCalls != 1 {
@@ -1268,6 +1269,7 @@ const (
 	crashAtStart   crashForm = "crash-at-start"
 	crashAfterUp   crashForm = "crash-after-ready"
 	gangMemberLost crashForm = "member-lost"
+	podSetLost     crashForm = "pod-set-lost"
 )
 
 // offTargetStrategies is every update strategy with the budget the closed
@@ -1308,8 +1310,8 @@ func offTargetCrashHarness(t *testing.T, gang bool, strategy workloadtypes.Updat
 }
 
 // breakInstance applies form to the Instance at idx on the running
-// revision: the leader (or single) pod is pointed at the crash image, or
-// the gang's worker is deleted.
+// revision: the leader (or single) pod is pointed at the crash image, the
+// gang's worker is deleted, or every pod of the Instance is deleted.
 func breakInstance(t *testing.T, h *recoveryHarness, idx int32, gang bool, form crashForm) {
 	t.Helper()
 	runner := ""
@@ -1321,6 +1323,16 @@ func breakInstance(t *testing.T, h *recoveryHarness, idx int32, gang bool, form 
 		h.crashPod(idx, runner, crashStartImage)
 	case crashAfterUp:
 		h.crashPod(idx, runner, crashLoadImage)
+	case podSetLost:
+		pods := h.podsOf(idx)
+		if len(pods) == 0 {
+			t.Fatalf("instance %d has no pod to lose", idx)
+		}
+		for _, pod := range pods {
+			if err := h.c.Delete(h.ctx, pod); err != nil {
+				t.Fatalf("delete pod %s: %v", pod.Name, err)
+			}
+		}
 	case gangMemberLost:
 		for _, pod := range h.podsOf(idx) {
 			if pod.Labels[query.LabelRunner] != "worker" {
@@ -2949,13 +2961,17 @@ func TestReconcile_DarkInstance_RollsFirst(t *testing.T) {
 	}
 }
 
-// TestReconcile_DarkInstance_HeldByPartitionStaysPut: the preference for
-// a dark Instance never moves one the partition holds. Four Instances
-// under a partition of two, the higher of the two held indices
-// crash-looping on the running revision: the two released Instances roll
-// while the dark Instance and its held peer stay untouched on their
-// revision, neither rolled nor repaired; once the partition is lifted the
-// dark Instance is the first of the two to land the fix.
+// TestReconcile_DarkInstance_HeldByPartitionStaysPut is the closed-loop
+// story for a dark Instance a partition holds. Four Instances, the second
+// crash-looping on the running revision, and a fix pushed under a partition
+// of two: the released Instances land the fix. The held dark Instance stays
+// on its revision: the roll may not take it, so the crash-loop repair is
+// not left to the roll and rebuilds the Instance on the revision it runs
+// once the wedge is past the stuck-pod grace, and the Instance serves again
+// on that revision while the partition holds it. The healthy held Instance
+// never moves, and no pod of a held Instance is created on the fix while
+// the hold stands. Once the partition is lifted, every Instance rolls
+// within the budget and the Component settles on the fix.
 func TestReconcile_DarkInstance_HeldByPartitionStaysPut(t *testing.T) {
 	const replicas = 4
 	for _, sc := range offTargetStrategies[:2] {
@@ -2968,30 +2984,132 @@ func TestReconcile_DarkInstance_HeldByPartitionStaysPut(t *testing.T) {
 			h.events = nil
 			h.setTarget(h.revFixed, fixedImage)
 
-			releasedLanded := func() bool {
+			heldStayOnTheirRevision := heldInstancesStayOnTheirRevision(t, h, []int32{dark, heldPeer}, []int32{heldPeer})
+			repairedAndReleasedLanded := func() bool {
 				landed := h.landedOn(h.revFixed)
-				return len(landed) == 2 && landed[0] == 2 && landed[1] == 3
+				return len(landed) == 2 && landed[0] == 2 && landed[1] == 3 && h.repairedOnItsRevision(dark)
 			}
-			heldStayPut := func() {
-				for _, idx := range []int32{dark, heldPeer} {
-					if !h.untouchedOn(idx, h.revV1) {
-						h.dumpState("held instance moved")
-						t.Fatalf("instance %d is held by the partition and must not move", idx)
-					}
-				}
-			}
-			if !h.runWithInvariant(100, releasedLanded, heldStayPut) {
+			if !h.runWithInvariant(120, repairedAndReleasedLanded, heldStayOnTheirRevision) {
 				h.dumpState("under the partition")
-				t.Fatalf("the released Instances never landed the fix under the partition")
+				t.Fatalf("the released Instances never landed the fix with the held dark Instance repaired on its revision")
 			}
-			if h.sawEvent(workloadtypes.EventReasonRestartTriggered) {
-				t.Fatalf("a restart was recorded for a held Instance off the roll target: %v", h.events)
+			if !h.sawEvent(workloadtypes.EventReasonRestartTriggered) {
+				t.Fatalf("no RestartTriggered event names the held dark Instance: %v", h.events)
 			}
 
 			partition = 0
-			requireDarkInstanceRollsFirst(t, h, dark, []int32{heldPeer}, nil, sc.strategy, sc.surge, sc.unavail,
-				func() bool { return h.settledOn(h.revFixed, replicas) })
+			if !h.runWithInvariant(120, func() bool { return h.settledOn(h.revFixed, replicas) }, h.rollWithinBudget(sc.strategy, sc.surge, sc.unavail)) {
+				h.dumpState("after the partition was lifted")
+				t.Fatalf("the Component never settled on the fixed revision after the partition was lifted")
+			}
 		})
+	}
+}
+
+// heldInstancesStayOnTheirRevision is the per-step invariant of a hold: every
+// Instance in held keeps the running revision it had, no pod of one is
+// created on the fix, and every Instance in untouched stays Ready on it with
+// no operation. A held Instance under repair is on its revision with a
+// Restart open, which the hold allows.
+func heldInstancesStayOnTheirRevision(t *testing.T, h *recoveryHarness, held, untouched []int32) func() {
+	t.Helper()
+	fixedHash := query.RevisionOf(h.revFixed).Hash()
+	return func() {
+		for _, idx := range held {
+			if s := h.instance(idx); s == nil || s.RunningRevision != h.revV1.Name {
+				h.dumpState("held instance off its revision")
+				t.Fatalf("instance %d is held and must keep its revision", idx)
+			}
+			for _, pod := range h.podsOf(idx) {
+				if pod.Labels[query.LabelRevisionHash] == fixedHash || pod.Spec.Containers[0].Image == fixedImage {
+					h.dumpState("held instance on the fix")
+					t.Fatalf("pod %s of held instance %d was created on the fix while the hold stands", pod.Name, idx)
+				}
+			}
+		}
+		for _, idx := range untouched {
+			if !h.untouchedOn(idx, h.revV1) {
+				h.dumpState("healthy held instance moved")
+				t.Fatalf("instance %d is held and healthy and must not move", idx)
+			}
+		}
+	}
+}
+
+// repairedOnItsRevision reports whether the Instance at idx came back
+// through a repair on the revision it ran: Ready with no operation on v1 at
+// the bumped incarnation, every pod serving on the good image.
+func (h *recoveryHarness) repairedOnItsRevision(idx int32) bool {
+	if !h.untouchedOn(idx, h.revV1) || !h.atIncarnation(idx, 2) || !h.instanceServes(idx) {
+		return false
+	}
+	for _, pod := range h.podsOf(idx) {
+		if pod.Spec.Containers[0].Image != goodImage {
+			return false
+		}
+	}
+	return true
+}
+
+// rollWithinBudget is the per-step invariant of a roll's budget: the surges
+// in flight stay within maxSurge under the surge strategy, the Instances
+// offline for the roll within maxUnavailable under every other.
+func (h *recoveryHarness) rollWithinBudget(strategy workloadtypes.UpdateStrategyType, surge, unavail int32) func() {
+	return func() {
+		sts := h.irStatuses()
+		if strategy == workloadtypes.UpdateStrategySurgeThenDrain {
+			if n := escalation.CurrentSurgeInFlight(sts); n > surge {
+				h.t.Fatalf("%d surges in flight, budget %d", n, surge)
+			}
+		} else if n := escalation.CurrentUnavailableInFlight(sts); n > unavail {
+			h.t.Fatalf("%d Instances offline for the roll, budget %d", n, unavail)
+		}
+	}
+}
+
+// TestReconcile_HeldGangCrashAtStart_RepairedOnItsRevisionThenRolled is the
+// closed-loop story for a gang a canary step holds on its stable side while
+// its leader dies at start. Three gangs of a leader and a worker under
+// SurgeThenDrain and RecreateInstanceOnPodRestart; a push to a fixed
+// revision under a step whose partition holds the two lowest gangs; the
+// lowest gang's leader pointed at an image that dies at every start. The
+// roll may not take a gang the step holds, so leaving the repair to the
+// roll would keep the gang dark for the length of the hold, a manual gate
+// included: the repair opens instead, rebuilds the gang at a bumped
+// incarnation on the revision it runs, and the gang serves again on the
+// stable side while the released gang lands the fix. No pod of a held gang
+// is created on the fix while the step holds it, and the healthy held gang
+// never moves. Once the step releases every gang, the Component settles on
+// the fix within the surge budget.
+func TestReconcile_HeldGangCrashAtStart_RepairedOnItsRevisionThenRolled(t *testing.T) {
+	const replicas = 3
+	h := offTargetCrashHarness(t, true, workloadtypes.UpdateStrategySurgeThenDrain, 1, 0, workloadtypes.RestartPolicyRecreateInstance, replicas)
+	const crashed, heldPeer = int32(0), int32(1)
+	breakInstance(t, h, crashed, true, crashAtStart)
+	h.events = nil
+	h.setTarget(h.revFixed, fixedImage)
+	step := int32(2)
+	h.desired.Pacing = &workloadtypes.WorkloadPacing{Partition: &step}
+
+	heldStayOnTheirRevision := heldInstancesStayOnTheirRevision(t, h, []int32{crashed, heldPeer}, []int32{heldPeer})
+	// The released gang lands at the index its surge promoted, never at a
+	// held one.
+	repairedAndReleasedLanded := func() bool {
+		landed := h.landedOn(h.revFixed)
+		return len(landed) == 1 && landed[0] != crashed && landed[0] != heldPeer && h.repairedOnItsRevision(crashed)
+	}
+	if !h.runWithInvariant(120, repairedAndReleasedLanded, heldStayOnTheirRevision) {
+		h.dumpState("under the step")
+		t.Fatalf("the held gang was not repaired on its revision while the released gang landed the fix")
+	}
+	if !h.sawEvent(workloadtypes.EventReasonRestartTriggered) {
+		t.Fatalf("no RestartTriggered event names the held gang whose leader died at start: %v", h.events)
+	}
+
+	step = 0
+	if !h.runWithInvariant(120, func() bool { return h.settledOn(h.revFixed, replicas) }, h.rollWithinBudget(workloadtypes.UpdateStrategySurgeThenDrain, 1, 0)) {
+		h.dumpState("after the step released every gang")
+		t.Fatalf("the Component never settled on the fix after the step released the held gangs")
 	}
 }
 
@@ -4569,5 +4687,191 @@ func TestMissingKey_ScaleUpBesideTheParkedRepair_NewInstanceWaitsOnTheKey(t *tes
 			}
 			requireIdentitiesKept(t, h, map[int32]string{1: healthy}, "scale-up beside the park")
 		})
+	}
+}
+
+// A repair of an Instance that served the pushed revision answers to its
+// own retry schedule, not to the push's retry record. Three single-pod
+// Instances roll in place to a pushed revision under maxUnavailable 1.
+// Instance 0 is patched and serves the revision. Instance 1's patched
+// runner never passes readiness, so its attempt ends at the ready timeout
+// and the revision's retry record waits in backoff. Instance 0's runner
+// restarts after it served, the policy rebuilds it, the cluster has no
+// room for the rebuilt pod and the placement grace stops the repair. The
+// repair's retry comes due while the record is still in backoff: the
+// rebuild starts again at once, on the revision the Instance served, the
+// record keeps its one failed attempt for the push, and the push's own
+// stopped attempt still waits for the record to come due.
+func TestRepairRetryDue_RecordInBackoffForTheRevisionTheInstanceServed_RebuildStartsAgain(t *testing.T) {
+	const (
+		replicas       = 3
+		readyTimeout   = 10 * time.Minute
+		placementGrace = 2 * time.Minute
+		retryDelay     = 5 * time.Minute
+	)
+	h := newRecoveryHarnessFor(t, false, constants.MainContainerName)
+	h.recorder = record.NewFakeRecorder(512)
+	h.replicas = replicas
+	policy := workloadtypes.RestartPolicyRecreateInstance
+	maxSurge, maxUnavailable := intstr.FromInt(0), intstr.FromInt(1)
+	h.lifecycle = workloadtypes.Lifecycle{
+		RestartPolicy:        &policy,
+		InstanceReadyTimeout: &metav1.Duration{Duration: readyTimeout},
+		UpdateStrategy: &workloadtypes.UpdateStrategy{
+			Type:          workloadtypes.UpdateStrategyInPlaceIfPossible,
+			RollingUpdate: &workloadtypes.RollingUpdate{MaxSurge: &maxSurge, MaxUnavailable: &maxUnavailable},
+		},
+	}
+	h.retryPolicy = &workloadtypes.RetryPolicy{MaxAttempts: 3, InitialDelay: retryDelay, MaxDelay: 30 * time.Minute, Multiplier: 2}
+	h.unschedulableGrace = placementGrace
+	h.placementMessage = schedulerMessage
+	// Every step moves the clock 30 s, so each wait of the story is read
+	// at a known instant.
+	h.stepCap = 30 * time.Second
+	h.setTarget(h.revV1, goodImage)
+	if !h.run(40, func() bool { return h.settledOn(h.revV1, replicas) }) {
+		h.dumpState("initial create")
+		t.Fatalf("initial create never settled on v1 for %d instances", replicas)
+	}
+
+	// The pushed revision's runner dies once, after the first Instance
+	// promoted on it has served for a while; every other pod of it runs
+	// sound, so that death is the one restart the policy answers.
+	h.crashOnceInComponent = true
+	h.crashAfterServed = 12
+	pushed := h.pushRevision(crashOnceAfterServingImage)
+
+	// Instance 1's patched runner never passes readiness. The fault is set
+	// on the container the patch started, which the kubelet model reports
+	// running and not yet ready for one pass.
+	var unreadyUID types.UID
+	holdReadiness := func() {
+		if unreadyUID != "" {
+			return
+		}
+		for _, pod := range h.podsOf(1) {
+			if cs := priorContainerStatus(pod); cs != nil && cs.Image == crashOnceAfterServingImage && !podConditionTrue(pod, corev1.ContainersReady) {
+				h.readinessFails[pod.UID] = true
+				unreadyUID = pod.UID
+			}
+		}
+	}
+	secondAttemptOpen := func() bool {
+		zero, one := h.instance(0), h.instance(1)
+		return zero != nil && zero.Phase == workloadtypes.InstancePhaseReady && zero.RunningRevision == pushed.Name && zero.Operation == nil &&
+			one != nil && one.Operation != nil && one.Operation.Type == workloadtypes.InstanceOperationUpdate && unreadyUID != ""
+	}
+	if !h.runWithInvariant(40, secondAttemptOpen, holdReadiness) {
+		h.dumpState("second attempt")
+		t.Fatalf("the roll never promoted Instance 0 on %s and opened Instance 1's attempt behind it", pushed.Name)
+	}
+
+	// The cluster has no room for any pod created from now on; the pods
+	// already placed run on.
+	h.placementHeld = true
+	repairOpen := func() bool {
+		s := h.instance(0)
+		return s != nil && s.Phase == workloadtypes.InstancePhaseRestarting
+	}
+	if !h.runWithInvariant(40, repairOpen, holdReadiness) {
+		h.dumpState("runner restart")
+		t.Fatalf("the restart policy never rebuilt Instance 0 after its runner died")
+	}
+	repairStopped := func() bool {
+		s := h.instance(0)
+		return s != nil && s.Phase == workloadtypes.InstancePhaseFailed && s.Operation != nil &&
+			s.Operation.Type == workloadtypes.InstanceOperationRestart && s.LastFailure != nil
+	}
+	if !h.runWithInvariant(20, repairStopped, holdReadiness) {
+		h.dumpState("placement grace")
+		t.Fatalf("the placement grace never stopped the repair of Instance 0")
+	}
+	stopped := *h.instance(0)
+	if stopped.LastFailure.Reason != workloadtypes.WaitingReasonUnschedulable || stopped.RunningRevision != pushed.Name {
+		t.Fatalf("the story did not run: the repair must stop on the placement grace with Instance 0 still on %s, got %+v", pushed.Name, stopped)
+	}
+	retryDue := stopped.LastFailure.Time.Add(retryDelay)
+
+	// The push's attempt on Instance 1 ends at the ready timeout and the
+	// revision's record waits in backoff past the repair's retry.
+	recordInBackoff := func() bool {
+		b := h.findBlock(pushed.Name)
+		return b != nil && b.State == workloadtypes.RetryBlockBackoff
+	}
+	if !h.runWithInvariant(40, recordInBackoff, holdReadiness) {
+		h.dumpState("ready timeout")
+		t.Fatalf("the ready timeout never ended Instance 1's attempt at %s", pushed.Name)
+	}
+	record := *h.findBlock(pushed.Name)
+	if record.AttemptsStarted != 1 || record.NextRetryAt == nil {
+		t.Fatalf("the record must count the push's one failed attempt, got %+v", record)
+	}
+	if !h.clk.Now().Before(retryDue) || !retryDue.Before(record.NextRetryAt.Time) {
+		t.Fatalf("the story did not run: the repair's retry (%s) must come due after the record enters backoff (%s) and before it comes due (%s)",
+			retryDue.Format(time.TimeOnly), h.clk.Now().Format(time.TimeOnly), record.NextRetryAt.Format(time.TimeOnly))
+	}
+	attemptStopped := func(s *workloadtypes.InstanceStatus) bool {
+		return s != nil && s.Operation != nil && s.Operation.Type == workloadtypes.InstanceOperationUpdate && s.Operation.Step == workloadtypes.UpdateStepParked
+	}
+	if one := h.instance(1); !attemptStopped(one) {
+		t.Fatalf("Instance 1's attempt must rest stopped behind the record, got %+v", one)
+	}
+
+	// The push's stopped attempt stays stopped until its record comes due,
+	// whatever the repair does.
+	pushWaitsForItsRecord := func() {
+		holdReadiness()
+		if one := h.instance(1); one != nil && !attemptStopped(one) && h.clk.Now().Before(record.NextRetryAt.Time) {
+			h.dumpState("push attempt reopened")
+			t.Fatalf("Instance 1's attempt reopened at %s, before its record comes due at %s: %+v",
+				h.clk.Now().Format(time.TimeOnly), record.NextRetryAt.Format(time.TimeOnly), one)
+		}
+	}
+	h.runWithInvariant(40, func() bool { return !h.clk.Now().Before(retryDue) }, pushWaitsForItsRecord)
+	startedAgain := func() bool {
+		s := h.instance(0)
+		return s != nil && s.Phase == workloadtypes.InstancePhaseRestarting && s.Incarnation == stopped.Incarnation+1
+	}
+	if !h.runWithInvariant(2, startedAgain, pushWaitsForItsRecord) {
+		hold := ""
+		if last := h.lastHold(); last != nil {
+			hold = last.Reason
+		}
+		h.dumpState("retry due")
+		t.Fatalf("the repair's retry came due at %s while the record for %s waits in backoff until %s; the rebuild of Instance 0, which served that revision, must start again at once: row %+v, hold %q",
+			retryDue.Format(time.TimeOnly), pushed.Name, record.NextRetryAt.Format(time.TimeOnly), *h.instance(0), hold)
+	}
+	if got := h.instance(0).Operation.RetryCount; got != 1 {
+		t.Errorf("the repair's second attempt must count one retry, got %d", got)
+	}
+	if b := h.findBlock(pushed.Name); b == nil || b.State != workloadtypes.RetryBlockBackoff || b.AttemptsStarted != 1 {
+		t.Fatalf("the rebuild is no attempt of the push: the record must keep its one failed attempt in backoff, got %+v", b)
+	}
+
+	// The cluster has room again: the rebuilt pod serves and the repair
+	// completes on the revision the Instance served, with the push's
+	// record untouched.
+	h.placementHeld = false
+	servesAgain := func() bool {
+		s := h.instance(0)
+		return s != nil && servingReady(h, 0, 1) && s.RunningRevision == pushed.Name && s.Incarnation == stopped.Incarnation+1
+	}
+	if !h.runWithInvariant(20, servesAgain, pushWaitsForItsRecord) {
+		h.dumpState("rebuilt pod")
+		t.Fatalf("Instance 0 never served again on %s from a second rebuild: %+v", pushed.Name, *h.instance(0))
+	}
+	if b := h.findBlock(pushed.Name); b == nil || b.State != workloadtypes.RetryBlockBackoff || b.AttemptsStarted != 1 {
+		t.Fatalf("the repair's completion must leave the push's record as it was, got %+v", b)
+	}
+
+	// Once the record comes due the push finishes on its own: Instance 1's
+	// runner passes readiness, its attempt reopens, and Instance 2 follows.
+	delete(h.readinessFails, unreadyUID)
+	if !h.run(60, func() bool { return h.settledOn(pushed, replicas) }) {
+		h.dumpState("push end")
+		t.Fatalf("the push never settled every Instance on %s", pushed.Name)
+	}
+	if b := h.findBlock(pushed.Name); b != nil {
+		t.Errorf("the promote onto %s must remove its record, got %+v", pushed.Name, b)
 	}
 }

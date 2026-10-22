@@ -360,14 +360,15 @@ func TestHeldPeerReplicasOf_WakesOnlySiblingsHeldOnPeerCounters(t *testing.T) {
 	})
 }
 
-// ratioPeersParent is mkRatioParent with both Components declared, so the
+// ratioPeersParent is mkRatioParent on an engine beside a router, a pair
+// the batch step does not govern, with both Components declared, so the
 // serving peers of each are resolvable, and with the owner identity the
 // projected replicas carry.
-func ratioPeersParent(tol, engServing, decServing int32) *v1beta1.InferenceService {
-	parent := mkRatioParent(tol, engServing, decServing)
+func ratioPeersParent(tol, engServing, routerServing int32) *v1beta1.InferenceService {
+	parent := withRouterPeer(mkRatioParent(tol, engServing, routerServing))
 	parent.UID = "llama-isvc-uid"
 	parent.Spec.Engine = &v1beta1.EngineSpec{}
-	parent.Spec.Decoder = &v1beta1.DecoderSpec{}
+	parent.Spec.Router = &v1beta1.RouterSpec{}
 	return parent
 }
 
@@ -400,20 +401,20 @@ func steadyEngine(replicas int32) (*v1beta1.InferenceReplica, []client.Object) {
 
 // TestReconcile_PeerServingCountReleasesARatioHold pins the release of a
 // coordination denial that waits on a peer's serving count. The engine's
-// update start is denied by the RatioBalanced gate while the decoder
+// update start is denied by the RatioBalanced gate while the router
 // serves 3 of 4, and with no gate cadence configured the pass asks only
 // for the rate-limited backoff, which a burst of churn can push out by
-// minutes. The decoder's serving count then rises, and nothing else about
+// minutes. The router's serving count then rises, and nothing else about
 // it changes. That transition must map back to the held engine, whose next
 // pass admits the start.
 func TestReconcile_PeerServingCountReleasesARatioHold(t *testing.T) {
 	ctx := context.Background()
 	engine, pods := steadyEngine(4)
-	decoder := projectedIR(v1beta1.DecoderComponent, "1", "d1", "d1")
-	decoder.Spec.Replicas = ptr.To(int32(4))
-	decoder.Status.Replicas = 4
-	decoder.Status.ServingReplicas = 3
-	r, c := newReconciler(t, append([]client.Object{engine, decoder, ratioPeersParent(25, 4, 3)}, pods...)...)
+	router := projectedIR(v1beta1.RouterComponent, "1", "r1", "r1")
+	router.Spec.Replicas = ptr.To(int32(4))
+	router.Status.Replicas = 4
+	router.Status.ServingReplicas = 3
+	r, c := newReconciler(t, append([]client.Object{engine, router, ratioPeersParent(25, 4, 3)}, pods...)...)
 	engineReq := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(engine)}
 
 	res, err := r.Reconcile(ctx, engineReq)
@@ -425,22 +426,22 @@ func TestReconcile_PeerServingCountReleasesARatioHold(t *testing.T) {
 		t.Fatalf("get engine: %v", err)
 	}
 	if held.Status.RolloutHold == nil || held.Status.RolloutHold.Gate != v1beta1.RolloutHoldGateRatio {
-		t.Fatalf("the engine must record a Ratio hold while the decoder serves 3 of 4, got %+v", held.Status.RolloutHold)
+		t.Fatalf("the engine must record a Ratio hold while the router serves 3 of 4, got %+v", held.Status.RolloutHold)
 	}
 	if !res.Requeue || res.RequeueAfter != 0 { //nolint:staticcheck // the rate-limited backoff is the only spelling of an unconfigured cadence
 		t.Fatalf("with no gate cadence configured the denied pass rides the rate-limited backoff, got %+v", res)
 	}
 
-	// The decoder's fourth instance comes back into rotation: its serving
+	// The router's fourth instance comes back into rotation: its serving
 	// count rises and nothing else about it changes.
 	before := &v1beta1.InferenceReplica{}
-	if err := c.Get(ctx, client.ObjectKeyFromObject(decoder), before); err != nil {
-		t.Fatalf("get decoder: %v", err)
+	if err := c.Get(ctx, client.ObjectKeyFromObject(router), before); err != nil {
+		t.Fatalf("get router: %v", err)
 	}
 	after := before.DeepCopy()
 	after.Status.ServingReplicas = 4
 	if err := c.Status().Update(ctx, after); err != nil {
-		t.Fatalf("decoder serving count rises: %v", err)
+		t.Fatalf("router serving count rises: %v", err)
 	}
 	woken := peerWatchRequests(r, before, after)
 	if len(woken) != 1 || woken[0] != engineReq {
@@ -455,7 +456,7 @@ func TestReconcile_PeerServingCountReleasesARatioHold(t *testing.T) {
 		t.Fatalf("get engine: %v", err)
 	}
 	if released.Status.RolloutHold != nil {
-		t.Fatalf("once the decoder serves 4 of 4 the engine's start must be admitted, still held: %+v", released.Status.RolloutHold)
+		t.Fatalf("once the router serves 4 of 4 the engine's start must be admitted, still held: %+v", released.Status.RolloutHold)
 	}
 	updating := 0
 	for _, inst := range released.Status.InstanceStatuses {
@@ -467,7 +468,7 @@ func TestReconcile_PeerServingCountReleasesARatioHold(t *testing.T) {
 		t.Fatal("the released pass must start an update on at least one Instance")
 	}
 
-	// With the hold cleared, the decoder's further counter churn is nobody's
+	// With the hold cleared, the router's further counter churn is nobody's
 	// release and must enqueue nothing.
 	churned := after.DeepCopy()
 	churned.Status.ReadyReplicas = 4

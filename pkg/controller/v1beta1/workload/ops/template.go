@@ -30,9 +30,9 @@ type podTemplate struct {
 }
 
 // desiredTemplate is the Component's current template, stamped with rev.
-// It is the template of the roll target and of nothing else: a caller
-// stamping any other revision renders storedTemplate. A zero rev leaves
-// the pods unlabeled, for a row that records no revision at all.
+// A caller stamping another revision renders storedTemplate. An unknown
+// identity can describe a legacy pod set, but pod creation requires a
+// named revision before it renders any new member.
 func desiredTemplate(input workload.ReconcileInput, plan workload.ComponentPlan, rev query.RevisionID) podTemplate {
 	return podTemplate{
 		revision:        rev,
@@ -55,13 +55,20 @@ func pinnedTemplate(ctx context.Context, reads client.Reader, input workload.Rec
 }
 
 // createTemplate is the template a Create attempt pinned to rev renders; an
-// attempt naming no revision renders the current template unstamped. found
-// is false when the pinned revision has no ControllerRevision left.
+// attempt naming no revision has an unknown template identity, which the
+// create guard rejects. found is false when its ControllerRevision is gone.
 func createTemplate(ctx context.Context, reads client.Reader, input workload.ReconcileInput, plan workload.ComponentPlan, target *appsv1.ControllerRevision, rev string) (podTemplate, bool, error) {
 	if rev == "" {
 		return desiredTemplate(input, plan, query.RevisionID{}), true, nil
 	}
 	return pinnedTemplate(ctx, reads, input, plan, target, rev)
+}
+
+// revisionNamed is the name of the ControllerRevision whose hash a pod's
+// revision label carries, composed as the adapter mints it: the owner
+// prefix, the Component and the hash.
+func revisionNamed(input workload.ReconcileInput, component workload.ComponentType, hash string) string {
+	return revision.Name(revision.Key{Namespace: input.Key.Namespace, Name: input.Key.OwnerName + "-" + string(component)}, hash)
 }
 
 // storedTemplate is the template the named ControllerRevision records,

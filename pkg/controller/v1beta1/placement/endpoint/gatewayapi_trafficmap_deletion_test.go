@@ -15,9 +15,8 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-func TestGatewayAPITrafficMapWithdrawalWaitsForRouteDeletion(t *testing.T) {
-	scheme := pubScheme(t)
-	c := newGatewayFakeClientBuilder(t, scheme).Build()
+func TestGatewayAPITrafficMapApply_HostRemovedWhileRouteHeld_WaitsKeepingServices(t *testing.T) {
+	c := gatewayClient(t)
 	cfg := baseConfig()
 	cfg.GlobalHostTemplate = ""
 	p := NewGatewayAPITrafficMapPublisher(c, c, cfg)
@@ -51,9 +50,8 @@ func TestGatewayAPITrafficMapWithdrawalWaitsForRouteDeletion(t *testing.T) {
 	assert.True(t, apierrors.IsNotFound(c.Get(context.Background(), serviceKey, &corev1.Service{})))
 }
 
-func TestGatewayAPITrafficMapUnpublishWaitsForRouteDeletion(t *testing.T) {
-	scheme := pubScheme(t)
-	c := newGatewayFakeClientBuilder(t, scheme).Build()
+func TestGatewayAPITrafficMapUnpublish_RouteHeldByFinalizer_WaitsKeepingServices(t *testing.T) {
+	c := gatewayClient(t)
 	p := NewGatewayAPITrafficMapPublisher(c, c, baseConfig())
 	owner := testISVC()
 	trafficMap := gatewayTrafficMap(owner, gatewayTrafficMapEntry("cluster-a", "a.example", 5))

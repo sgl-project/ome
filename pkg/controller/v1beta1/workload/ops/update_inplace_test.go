@@ -2,7 +2,9 @@ package ops
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +23,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	workload "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
@@ -352,7 +356,7 @@ func TestInPlaceImageTransitionRetargetsUnconfirmedImages(t *testing.T) {
 	isvc, _ := legacyISVCReadyAtIncarnation("llama-70b", "prod", 1)
 	pod := legacyPodAtIncarnation(isvc, 0, 1, true, true)
 	pod.Spec.Containers = []corev1.Container{{Name: "main", Image: "example.com/app:v1"}}
-	pod.Annotations = map[string]string{inPlaceImageTransitionAnnotation: `{"targetImages":{"main":"example.com/app:v2"}}`}
+	pod.Annotations = map[string]string{constants.InferenceServiceInPlaceImageTransitionAnnotationKey: `{"targetImages":{"main":"example.com/app:v2"}}`}
 	c := legacyNewFakeClient(t, pod)
 	stored := &corev1.Pod{}
 	if err := c.Get(context.Background(), client.ObjectKeyFromObject(pod), stored); err != nil {
@@ -394,7 +398,7 @@ func TestInPlaceImageTransitionInvalidMarkersFailClosed(t *testing.T) {
 			isvc, _ := legacyISVCReadyAtIncarnation("llama-70b", "prod", 1)
 			pod := legacyPodAtIncarnation(isvc, 0, 1, true, true)
 			pod.Spec = *target.DeepCopy()
-			pod.Annotations = map[string]string{inPlaceImageTransitionAnnotation: test.raw}
+			pod.Annotations = map[string]string{constants.InferenceServiceInPlaceImageTransitionAnnotationKey: test.raw}
 			pod.Status.ContainerStatuses = []corev1.ContainerStatus{
 				{Name: "main", Image: "mirror.example.com/app:v2"},
 				{Name: "helper", Image: "mirror.example.com/helper:v1"},
@@ -437,7 +441,7 @@ func TestInPlaceImageTransitionInvalidMarkersFailClosed(t *testing.T) {
 func TestRemoveInPlaceImageTransitionClearsOnlyTheMarker(t *testing.T) {
 	isvc, _ := legacyISVCReadyAtIncarnation("llama-70b", "prod", 1)
 	pod := legacyPodAtIncarnation(isvc, 0, 1, true, true)
-	pod.Annotations = map[string]string{inPlaceImageTransitionAnnotation: `{"targetImages":{"main":"example.com/app:v2"}}`}
+	pod.Annotations = map[string]string{constants.InferenceServiceInPlaceImageTransitionAnnotationKey: `{"targetImages":{"main":"example.com/app:v2"}}`}
 	c := legacyNewFakeClient(t, pod)
 
 	stale := &corev1.Pod{}
@@ -457,7 +461,7 @@ func TestRemoveInPlaceImageTransitionClearsOnlyTheMarker(t *testing.T) {
 	if err := c.Get(context.Background(), client.ObjectKeyFromObject(pod), got); err != nil {
 		t.Fatalf("get pod: %v", err)
 	}
-	if _, present := got.Annotations[inPlaceImageTransitionAnnotation]; present {
+	if _, present := got.Annotations[constants.InferenceServiceInPlaceImageTransitionAnnotationKey]; present {
 		t.Fatal("the transition marker survived its removal")
 	}
 	if got.Annotations["example.com/concurrent"] != "write" {
@@ -604,17 +608,18 @@ func TestUpdateInPlace_InvalidPatch_DisposesAndHoldsRevision(t *testing.T) {
 	}
 }
 
-// The in-place writers: each patch is issued only when the pod actually
-// owes the change, and each carries the optimistic precondition that
-// makes a concurrent mutation lose rather than silently win.
+// The in-place writer: the one patch is issued only when the pod actually
+// owes a change, and it carries the optimistic precondition that makes a
+// concurrent mutation lose rather than silently win.
 
-// TestPatchPodImages_ReportsIssued pins the issued-return contract: a
-// no-diff patch must report issued=false (the caller only requeues for
-// a kubelet roll when a patch actually went out), a real diff true.
-func TestPatchPodImages_ReportsIssued(t *testing.T) {
+// TestPatchPodTemplate_ReportsIssued pins the issued-return contract: a pod
+// already on the template reports issued=false, a real diff true, and the
+// one patch lands the image and the revision label together.
+func TestPatchPodTemplate_ReportsIssued(t *testing.T) {
 	isvc, _ := legacyISVCReadyAtIncarnation("llama-70b", "prod", 1)
 	pod := legacyPodAtIncarnation(isvc, 0, 1, true, true)
 	pod.Spec.Containers = []corev1.Container{{Name: "main", Image: "llama:v1"}}
+	pod.Labels[query.LabelRevisionHash] = "rev-v1"
 	c := legacyNewFakeClient(t, pod)
 	stored := &corev1.Pod{}
 	if err := c.Get(context.Background(), client.ObjectKeyFromObject(pod), stored); err != nil {
@@ -622,21 +627,19 @@ func TestPatchPodImages_ReportsIssued(t *testing.T) {
 	}
 	pod = stored
 
-	issued, err := patchPodImages(context.Background(), c, pod, &corev1.PodSpec{
-		Containers: []corev1.Container{{Name: "main", Image: "llama:v1"}},
-	})
+	same := podTemplateChanges{spec: &corev1.PodSpec{Containers: []corev1.Container{{Name: "main", Image: "llama:v1"}}}, revisionHash: "rev-v1"}
+	issued, err := patchPodTemplate(context.Background(), c, pod, same)
 	if err != nil {
-		t.Fatalf("patchPodImages (no diff): %v", err)
+		t.Fatalf("patchPodTemplate (no diff): %v", err)
 	}
 	if issued {
 		t.Errorf("issued: got true want false when nothing needs patching")
 	}
 
-	issued, err = patchPodImages(context.Background(), c, pod, &corev1.PodSpec{
-		Containers: []corev1.Container{{Name: "main", Image: "llama:v2"}},
-	})
+	next := podTemplateChanges{spec: &corev1.PodSpec{Containers: []corev1.Container{{Name: "main", Image: "llama:v2"}}}, revisionHash: "rev-v2"}
+	issued, err = patchPodTemplate(context.Background(), c, pod, next)
 	if err != nil {
-		t.Fatalf("patchPodImages (diff): %v", err)
+		t.Fatalf("patchPodTemplate (diff): %v", err)
 	}
 	if !issued {
 		t.Errorf("issued: got false want true for a real image diff")
@@ -648,9 +651,12 @@ func TestPatchPodImages_ReportsIssued(t *testing.T) {
 	if got.Spec.Containers[0].Image != "llama:v2" {
 		t.Errorf("pod image: got %q want llama:v2", got.Spec.Containers[0].Image)
 	}
+	if got.Labels[query.LabelRevisionHash] != "rev-v2" {
+		t.Errorf("revision label: got %q want rev-v2 from the same patch as the image", got.Labels[query.LabelRevisionHash])
+	}
 }
 
-func TestPatchPodImagesRejectsStaleResourceVersion(t *testing.T) {
+func TestPatchPodTemplateRejectsStaleResourceVersion(t *testing.T) {
 	isvc, _ := legacyISVCReadyAtIncarnation("llama-70b", "prod", 1)
 	pod := legacyPodAtIncarnation(isvc, 0, 1, true, true)
 	pod.Spec.Containers = []corev1.Container{{Name: "main", Image: "llama:v1"}}
@@ -666,14 +672,13 @@ func TestPatchPodImagesRejectsStaleResourceVersion(t *testing.T) {
 		t.Fatalf("concurrent update: %v", err)
 	}
 
-	issued, err := patchPodImages(context.Background(), c, stale, &corev1.PodSpec{
-		Containers: []corev1.Container{{Name: "main", Image: "llama:v2"}},
-	})
+	next := podTemplateChanges{spec: &corev1.PodSpec{Containers: []corev1.Container{{Name: "main", Image: "llama:v2"}}}, revisionHash: "rev-v2"}
+	issued, err := patchPodTemplate(context.Background(), c, stale, next)
 	if !apierrors.IsConflict(err) {
-		t.Fatalf("patchPodImages error = %v, want conflict", err)
+		t.Fatalf("patchPodTemplate error = %v, want conflict", err)
 	}
 	if issued {
-		t.Fatal("conflicted image patch reported issued=true")
+		t.Fatal("conflicted template patch reported issued=true")
 	}
 }
 
@@ -1487,10 +1492,419 @@ func TestUpdateInPlace_ExpiredExpectationsReleaseThePass(t *testing.T) {
 		fc.Step(3 * time.Minute)
 		done, s, pods := run(t, f, exp)
 		if done || s.Operation == nil || s.Operation.Step != workload.UpdateStepDrain || s.Incarnation != 2 {
-			t.Errorf("row: got done=%v op=%+v incarnation=%d want the recreate restamped at the bumped incarnation", done, s.Operation, s.Incarnation)
+			t.Errorf("row: got done=%v op=%+v generation=%d want the recreate recorded at the next generation", done, s.Operation, s.Incarnation)
 		}
 		if pods != 1 {
 			t.Errorf("pods: got %d want the replacement rendered at the target revision", pods)
 		}
 	})
+}
+
+// podWriteRecord is one write a pass made to a pod, with the pod as the
+// apiserver stored it once the write landed.
+type podWriteRecord struct {
+	kind string
+	pod  *corev1.Pod
+}
+
+// podWriteRecorder intercepts every pod write and reads the pod back after
+// each one. Once stopAfter answers true the process counts as stopped at
+// that write, and every later pod write fails as it does at a shutdown.
+type podWriteRecorder struct {
+	writes    []podWriteRecord
+	stopAfter func(stored *corev1.Pod) bool
+	stopped   bool
+}
+
+func (r *podWriteRecorder) record(ctx context.Context, reader client.Reader, obj client.Object, kind string) error {
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		return nil
+	}
+	stored := &corev1.Pod{}
+	if err := reader.Get(ctx, client.ObjectKeyFromObject(pod), stored); err != nil {
+		return err
+	}
+	r.writes = append(r.writes, podWriteRecord{kind: kind, pod: stored})
+	if r.stopAfter != nil && r.stopAfter(stored) {
+		r.stopped = true
+	}
+	return nil
+}
+
+func (r *podWriteRecorder) refused(obj client.Object) error {
+	if _, ok := obj.(*corev1.Pod); ok && r.stopped {
+		return context.Canceled
+	}
+	return nil
+}
+
+func (r *podWriteRecorder) funcs() interceptor.Funcs {
+	return interceptor.Funcs{
+		Patch: func(ctx context.Context, cl client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+			if err := r.refused(obj); err != nil {
+				return err
+			}
+			if err := cl.Patch(ctx, obj, patch, opts...); err != nil {
+				return err
+			}
+			return r.record(ctx, cl, obj, "patch")
+		},
+		SubResourcePatch: func(ctx context.Context, cl client.Client, subResource string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+			if err := r.refused(obj); err != nil {
+				return err
+			}
+			if err := cl.SubResource(subResource).Patch(ctx, obj, patch, opts...); err != nil {
+				return err
+			}
+			return r.record(ctx, cl, obj, subResource+"-patch")
+		},
+	}
+}
+
+// revisionTemplate is what a revision asks a pod to run, as far as the
+// in-place patch moves it: the image of the single container and the
+// template annotations.
+type revisionTemplate struct {
+	image       string
+	annotations map[string]string
+}
+
+// podLabelMatchesTemplate reports whether the pod runs the template of the
+// revision its revision-hash label names, with the reason when it does not.
+// A label naming no known revision is not judged.
+func podLabelMatchesTemplate(pod *corev1.Pod, templates map[string]revisionTemplate) (bool, string) {
+	hash := pod.Labels[query.LabelRevisionHash]
+	want, known := templates[hash]
+	if !known {
+		return true, ""
+	}
+	if got := pod.Spec.Containers[0].Image; got != want.image {
+		return false, fmt.Sprintf("label %s names image %s, the pod runs %s", hash, want.image, got)
+	}
+	for key, value := range want.annotations {
+		if got := pod.Annotations[key]; got != value {
+			return false, fmt.Sprintf("label %s names annotation %s=%s, the pod carries %q", hash, key, value, got)
+		}
+	}
+	return true, ""
+}
+
+// TestUpdateInPlace_TemplatePatchCarriesTheRevisionLabel: the write that
+// moves a pod onto the target template moves its revision label with it, so
+// a manager stopped right after that write leaves no mislabelled pod behind.
+func TestUpdateInPlace_TemplatePatchCarriesTheRevisionLabel(t *testing.T) {
+	cases := []struct {
+		name                      string
+		runningImage, targetImage string
+		runningMeta, targetMeta   *metav1.ObjectMeta
+	}{
+		{
+			name:         "image change",
+			runningImage: "example.com/app:v1",
+			targetImage:  "example.com/app:v2",
+		},
+		{
+			name:         "annotation-only change",
+			runningImage: "example.com/app:v1",
+			targetImage:  "example.com/app:v1",
+			runningMeta:  &metav1.ObjectMeta{Annotations: map[string]string{"example.com/release": "one"}},
+			targetMeta:   &metav1.ObjectMeta{Annotations: map[string]string{"example.com/release": "two"}},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			legacyResetExpectations(t)
+			isvc, ir := legacyISVCReadyAtIncarnation("llama-70b", "prod", 1)
+			pod := legacyRunningPodAtRevision(isvc, 0, 1, tc.runningImage)
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "main", Image: tc.runningImage}}
+			if tc.runningMeta != nil {
+				pod.Annotations = map[string]string{}
+				for k, v := range tc.runningMeta.Annotations {
+					pod.Annotations[k] = v
+				}
+			}
+			templateMoved := func(stored *corev1.Pod) bool {
+				if stored.Spec.Containers[0].Image != tc.runningImage {
+					return true
+				}
+				for key, value := range stored.Annotations {
+					if key == constants.InferenceServiceInPlaceImageTransitionAnnotationKey {
+						continue
+					}
+					if tc.runningMeta == nil || tc.runningMeta.Annotations[key] != value {
+						return true
+					}
+				}
+				return false
+			}
+			rec := &podWriteRecorder{stopAfter: templateMoved}
+			c := legacyNewFakeClientWithInterceptors(t, rec.funcs(), isvc, ir, pod)
+			legacySeedRunningRevisionWithMeta(t, c, isvc, workload.ComponentEngine, 0, legacyTargetSpecImage(tc.runningImage), tc.runningMeta)
+			running := legacyInstanceStatusesOnIR(c, isvc, workload.ComponentEngine)[0].RunningRevision
+			legacyStampPodRevisionHash(t, c, pod, running)
+			targetSpec := legacyTargetSpecImage(tc.targetImage)
+			target := legacyEnsureTargetCRWithMeta(t, c, isvc, targetSpec, tc.targetMeta)
+			templates := map[string]revisionTemplate{
+				query.RevisionHashFromControllerRevisionName(running): {image: tc.runningImage, annotations: annotationsOf(tc.runningMeta)},
+				query.RevisionOf(target).Hash():                       {image: tc.targetImage, annotations: annotationsOf(tc.targetMeta)},
+			}
+			markNotReady := false
+			plan := legacyComponentPlan(workload.UpdateStrategyInPlaceIfPossible,
+				&workload.InPlaceUpdateStrategy{MarkNotReadyDuringLifecycle: &markNotReady})
+
+			var passErr error
+			for pass := 1; pass <= 3 && !rec.stopped; pass++ {
+				_, passErr = Update(context.Background(), legacyTestDeps(c), legacyTestInput(isvc, c, workload.ComponentEngine), plan, plan.Instances[0], target, targetSpec)
+			}
+			if !rec.stopped {
+				t.Fatalf("no write moved the pod onto the target template within 3 passes (last error: %v); writes: %d", passErr, len(rec.writes))
+			}
+			stored := &corev1.Pod{}
+			if err := c.Get(context.Background(), client.ObjectKeyFromObject(pod), stored); err != nil {
+				t.Fatalf("get pod: %v", err)
+			}
+			if got, want := stored.Labels[query.LabelRevisionHash], query.RevisionOf(target).Hash(); got != want {
+				t.Fatalf("after the write that moved the pod onto the target template the manager stopped; the pod carries revision label %q and runs the target template, want label %q in the same write: the old revision's routing Service would select this pod until the next leader's first pass (pass error: %v)", got, want, passErr)
+			}
+			for i, write := range rec.writes {
+				if ok, why := podLabelMatchesTemplate(write.pod, templates); !ok {
+					t.Errorf("write %d (%s) left the pod's label and template apart: %s", i+1, write.kind, why)
+				}
+			}
+
+			// The restarted manager's pass finds nothing to relabel and
+			// finishes the patch as any in-place patch: no write of it
+			// leaves the label and the template apart either.
+			rec.stopped, rec.stopAfter = false, nil
+			before := len(rec.writes)
+			if _, err := Update(context.Background(), legacyTestDeps(c), legacyTestInput(isvc, c, workload.ComponentEngine), plan, plan.Instances[0], target, targetSpec); err != nil {
+				t.Fatalf("the pass after the restart: %v", err)
+			}
+			for i, write := range rec.writes[before:] {
+				if ok, why := podLabelMatchesTemplate(write.pod, templates); !ok {
+					t.Errorf("write %d of the pass after the restart (%s) left the pod's label and template apart: %s", i+1, write.kind, why)
+				}
+			}
+		})
+	}
+}
+
+func annotationsOf(meta *metav1.ObjectMeta) map[string]string {
+	if meta == nil {
+		return nil
+	}
+	return meta.Annotations
+}
+
+// TestUpdateInPlace_HalfPatchedPodIsRelabelledBeforeAnythingElse: a pod
+// running the target template under the previous revision's label is
+// relabelled by the first write of the next pass, ahead of any drain.
+func TestUpdateInPlace_HalfPatchedPodIsRelabelledBeforeAnythingElse(t *testing.T) {
+	legacyResetExpectations(t)
+	isvc, ir := legacyISVCReadyAtIncarnation("llama-70b", "prod", 1)
+	targetSpec := legacyTargetSpecImage("example.com/app:v2")
+	pod := legacyRunningPodAtRevision(isvc, 0, 1, "example.com/app:v2")
+	pod.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "main", Image: "example.com/app:v2", ContainerID: "containerd://target"}}
+	marker, err := json.Marshal(&inPlaceImageTransition{TargetImages: map[string]string{"main": "example.com/app:v2"}, RestartCounts: map[string]int32{"main": 0}})
+	if err != nil {
+		t.Fatalf("marshal marker: %v", err)
+	}
+	pod.Annotations = map[string]string{constants.InferenceServiceInPlaceImageTransitionAnnotationKey: string(marker)}
+	rec := &podWriteRecorder{}
+	c := legacyNewFakeClientWithInterceptors(t, rec.funcs(), isvc, ir, pod)
+	legacySeedRunningRevision(t, c, isvc, workload.ComponentEngine, 0, legacyTargetSpecImage("example.com/app:v1"))
+	running := legacyInstanceStatusesOnIR(c, isvc, workload.ComponentEngine)[0].RunningRevision
+	legacyStampPodRevisionHash(t, c, pod, running)
+	target := legacyEnsureTargetCR(t, c, isvc, targetSpec)
+	targetHash := query.RevisionOf(target).Hash()
+
+	// The attempt as the stopped manager left it on the row.
+	live := &v1beta1.InferenceReplica{}
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(ir), live); err != nil {
+		t.Fatalf("re-read IR: %v", err)
+	}
+	live.Status.InstanceStatuses[0].Phase = v1beta1.OMENativeInstanceUpdating
+	live.Status.InstanceStatuses[0].TargetRevision = target.Name
+	live.Status.InstanceStatuses[0].Operation = &v1beta1.InstanceOperation{
+		ID:             "update-0-1",
+		Type:           v1beta1.InstanceOperationUpdate,
+		Step:           workload.UpdateStepInPlace,
+		TargetRevision: target.Name,
+		Strategy:       string(v1beta1.UpdateStrategyInPlaceIfPossible),
+		StartedAt:      metav1.NewTime(time.Now().Add(-time.Minute)),
+		LastProgressAt: metav1.NewTime(time.Now().Add(-time.Minute)),
+		Deadline:       metav1.NewTime(time.Now().Add(29 * time.Minute)),
+	}
+	if err := c.Status().Update(context.Background(), live); err != nil {
+		t.Fatalf("seed the in-flight attempt: %v", err)
+	}
+	// The pod is in rotation under the previous revision's routing
+	// Service, so a drain would have to wait for its endpoint to leave.
+	previousService := query.PerRevisionServiceName(isvc.Name, workload.ComponentEngine, query.RevisionHashFromControllerRevisionName(running))
+	if err := c.Create(context.Background(), legacySliceWithEndpoint(isvc.Namespace, "engine-previous", previousService, pod, true)); err != nil {
+		t.Fatalf("seed the previous revision's EndpointSlice: %v", err)
+	}
+	markNotReady := true
+	plan := legacyComponentPlan(workload.UpdateStrategyInPlaceIfPossible,
+		&workload.InPlaceUpdateStrategy{MarkNotReadyDuringLifecycle: &markNotReady})
+
+	done, err := Update(context.Background(), legacyTestDeps(c), legacyTestInput(isvc, c, workload.ComponentEngine), plan, plan.Instances[0], target, targetSpec)
+	if err != nil {
+		t.Fatalf("the pass after the restart: %v", err)
+	}
+	if len(rec.writes) == 0 {
+		t.Fatal("the pass after the restart wrote nothing to the half-patched pod")
+	}
+	first := rec.writes[0]
+	if got := first.pod.Labels[query.LabelRevisionHash]; first.kind != "patch" || got != targetHash {
+		t.Fatalf("the first pod write of the pass after the restart was a %s that left revision label %q; want the label restamped to %q before any other write (the pod already runs the target template)", first.kind, got, targetHash)
+	}
+	stored := &corev1.Pod{}
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(pod), stored); err != nil {
+		t.Fatalf("get pod: %v", err)
+	}
+	if !podreadiness.IsServing(stored) {
+		t.Fatal("the pass drained a pod that already runs the target template; a relabelled pod has nothing left to drain for")
+	}
+
+	for pass := 2; pass <= 4 && !done; pass++ {
+		if done, err = Update(context.Background(), legacyTestDeps(c), legacyTestInput(isvc, c, workload.ComponentEngine), plan, plan.Instances[0], target, targetSpec); err != nil {
+			t.Fatalf("pass %d: %v", pass, err)
+		}
+	}
+	if !done {
+		t.Fatal("the relabelled pod did not promote within 4 passes")
+	}
+	final := legacyInstanceStatusesOnIR(c, isvc, workload.ComponentEngine)[0]
+	if final.Phase != v1beta1.OMENativeInstanceReady || final.RunningRevision != target.Name || final.Operation != nil {
+		t.Fatalf("final status: %+v", final)
+	}
+}
+
+func TestRunInPlacePhases_StopsAtTheFirstPhaseThatEndsThePass(t *testing.T) {
+	var ran []string
+	phase := func(name string, next bool, err error) inPlacePhase {
+		return func(context.Context) (bool, error) {
+			ran = append(ran, name)
+			return next, err
+		}
+	}
+	run := func(phases ...inPlacePhase) (done bool, order string, err error) {
+		ran = nil
+		done, err = runInPlacePhases(context.Background(), phases)
+		return done, strings.Join(ran, ","), err
+	}
+
+	done, order, err := run(phase("first", true, nil), phase("second", true, nil))
+	if err != nil || !done || order != "first,second" {
+		t.Fatalf("every phase went on: done=%v err=%v ran=%q, want done=true err=nil ran=first,second", done, err, order)
+	}
+	done, order, err = run(phase("first", true, nil), phase("stops", false, nil), phase("never", true, nil))
+	if err != nil || done || order != "first,stops" {
+		t.Fatalf("a phase ended the pass: done=%v err=%v ran=%q, want done=false err=nil ran=first,stops", done, err, order)
+	}
+	patchFailed := errors.New("patch pod onto the target revision")
+	done, order, err = run(phase("fails", true, patchFailed), phase("never", true, nil))
+	if !errors.Is(err, patchFailed) || done || order != "fails" {
+		t.Fatalf("a phase failed: done=%v err=%v ran=%q, want done=false the phase's error ran=fails", done, err, order)
+	}
+}
+
+// TestUpdateInPlace_RevertBeforeTheForwardPatchIsRecordedRemovesItsAnnotation:
+// a pod patched in place onto version 2, whose template carries an
+// annotation version 1 does not, is reverted to version 1 while the row
+// still names version 1 as the running revision. Once the pod's image and
+// revision label are back on version 1 it carries none of version 2's
+// template annotations: a runtime that reads its configuration from pod
+// annotations would otherwise run version 2's under version 1's name.
+func TestUpdateInPlace_RevertBeforeTheForwardPatchIsRecordedRemovesItsAnnotation(t *testing.T) {
+	legacyResetExpectations(t)
+	const (
+		imageOne      = "example.com/app:v1"
+		imageTwo      = "example.com/app:v2"
+		annotationKey = "example.com/release"
+	)
+	isvc, ir := legacyISVCReadyAtIncarnation("llama-70b", "prod", 1)
+	pod := legacyRunningPodAtRevision(isvc, 0, 1, imageOne)
+	pod.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "main", Image: imageOne, ContainerID: "containerd://one"}}
+	c := legacyNewFakeClient(t, isvc, ir, pod)
+	specOne := legacyTargetSpecImage(imageOne)
+	legacySeedRunningRevision(t, c, isvc, workload.ComponentEngine, 0, specOne)
+	versionOne := legacyEnsureTargetCR(t, c, isvc, specOne)
+	if running := legacyInstanceStatusesOnIR(c, isvc, workload.ComponentEngine)[0].RunningRevision; running != versionOne.Name {
+		t.Fatalf("version 1 revision %q is not the recorded running revision %q", versionOne.Name, running)
+	}
+	hashOne := query.RevisionOf(versionOne).Hash()
+	labelled := &corev1.Pod{}
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(pod), labelled); err != nil {
+		t.Fatalf("get pod to label it with version 1: %v", err)
+	}
+	labelled.Labels[query.LabelRevisionHash] = hashOne
+	if err := c.Update(context.Background(), labelled); err != nil {
+		t.Fatalf("label the pod with version 1: %v", err)
+	}
+	specTwo := legacyTargetSpecImage(imageTwo)
+	versionTwo := legacyEnsureTargetCRWithMeta(t, c, isvc, specTwo,
+		&metav1.ObjectMeta{Annotations: map[string]string{annotationKey: "two"}})
+	hashTwo := query.RevisionOf(versionTwo).Hash()
+	markNotReady := false
+	plan := legacyComponentPlan(workload.UpdateStrategyInPlaceIfPossible,
+		&workload.InPlaceUpdateStrategy{MarkNotReadyDuringLifecycle: &markNotReady})
+	run := func(target *appsv1.ControllerRevision, spec *corev1.PodSpec) bool {
+		t.Helper()
+		done, err := Update(context.Background(), legacyTestDeps(c), legacyTestInput(isvc, c, workload.ComponentEngine), plan, plan.Instances[0], target, spec)
+		if err != nil {
+			t.Fatalf("Update toward %s: %v", target.Name, err)
+		}
+		return done
+	}
+	getPod := func() *corev1.Pod {
+		t.Helper()
+		got := &corev1.Pod{}
+		if err := c.Get(context.Background(), client.ObjectKeyFromObject(pod), got); err != nil {
+			t.Fatalf("get pod: %v", err)
+		}
+		return got
+	}
+
+	// Forward: the patch onto version 2 lands on the pod, but the kubelet
+	// keeps reporting the version 1 image, so the row never records it.
+	forward := getPod()
+	for pass := 1; pass <= 3 && forward.Spec.Containers[0].Image != imageTwo; pass++ {
+		if run(versionTwo, specTwo) {
+			t.Fatalf("forward pass %d promoted version 2 although the kubelet still reports %s", pass, imageOne)
+		}
+		forward = getPod()
+	}
+	if forward.Spec.Containers[0].Image != imageTwo || forward.Labels[query.LabelRevisionHash] != hashTwo || forward.Annotations[annotationKey] != "two" {
+		t.Fatalf("the forward patch did not land within 3 passes: image %s, label %s, annotations %v",
+			forward.Spec.Containers[0].Image, forward.Labels[query.LabelRevisionHash], forward.Annotations)
+	}
+	if row := legacyInstanceStatusesOnIR(c, isvc, workload.ComponentEngine)[0]; row.Phase != v1beta1.OMENativeInstanceUpdating || row.RunningRevision != versionOne.Name {
+		t.Fatalf("the row recorded the forward patch before the revert: %+v", row)
+	}
+
+	// Revert to version 1 while the row still names version 1 as running.
+	done := false
+	for pass := 1; pass <= 5 && !done; pass++ {
+		done = run(versionOne, specOne)
+		got := getPod()
+		if got.Spec.Containers[0].Image != imageOne || got.Labels[query.LabelRevisionHash] != hashOne {
+			continue
+		}
+		if value, present := got.Annotations[annotationKey]; present {
+			t.Fatalf("revert pass %d: the pod is back on version 1 (image %s, label %s) but still carries version 2's template annotation %s=%s",
+				pass, imageOne, hashOne, annotationKey, value)
+		}
+	}
+	if !done {
+		t.Fatal("the revert to version 1 did not promote within 5 passes")
+	}
+	if final := legacyInstanceStatusesOnIR(c, isvc, workload.ComponentEngine)[0]; final.Phase != v1beta1.OMENativeInstanceReady || final.RunningRevision != versionOne.Name || final.Operation != nil {
+		t.Fatalf("final status: %+v", final)
+	}
+	if value, present := getPod().Annotations[annotationKey]; present {
+		t.Fatalf("the pod is Ready on version 1 and still carries version 2's template annotation %s=%s", annotationKey, value)
+	}
 }

@@ -54,20 +54,20 @@ func HasInFlightMigrationForInstance(ledger *Ledger, component string, idx int32
 	return false
 }
 
-// CountAutoRecoverAttempts returns the number of ledger entries (any
-// phase) for this (component, instance) whose Reason == AutoRecover.
-// Gates the operator-config relocation budget.
+// CountAutoRecoverAttempts returns the number of ledger entries for this
+// (component, instance) whose Reason is AutoRecover, whatever their
+// phase. Gates the relocation budget (AutoMigrateMaxAttempts).
 //
-// Counts ALL entries (legacy Started + terminal directives) — a prior
-// attempt counts toward the cap regardless of its phase, so a
-// misconfigured pod doesn't repeatedly chew through the relocation
-// budget.
+// Every such entry counts, open or terminal, because each one is a
+// relocation attempt that took a slot of the budget. Counting by reason
+// alone keeps an Instance whose pod fails for a cause no node fixes from
+// earning the budget over again.
 //
-// Bound: the shared owner ledger ring-buffers terminal entries
-// (maxTerminalEntries in audit.go), so an extremely churny owner can
-// evict old AutoRecover directives — and with them this budget count
-// and the node-exclusion memory. Accepted bound on how long the memory
-// persists.
+// Bound: the shared owner ledger keeps at most maxTerminalEntries
+// terminal entries (audit.go), so an owner with very many migrations can
+// evict old AutoRecover entries, and with them this count and the
+// node-exclusion memory. That is the accepted bound on how long the
+// memory lasts.
 func CountAutoRecoverAttempts(ledger *Ledger, component string, idx int32) int32 {
 	if ledger == nil {
 		return 0

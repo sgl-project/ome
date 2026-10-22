@@ -19,18 +19,18 @@ import (
 )
 
 // reconcileSinglePlanned commits race nominations and the observed winner
-// before member writes. Race cleanup is distinct from moving a retained home.
+// before member writes. Race cleanup is distinct from moving a retained member.
 func (r *Reconciler) reconcileSinglePlanned(ctx context.Context, source *v1beta1.InferenceService, clusters []v1beta1.WorkloadCluster, eligible []string, observations *placementObservations) (ctrl.Result, error) {
 	if source.Status.Placement != nil && source.Status.Placement.Plan != nil && source.Status.Placement.Plan.SingleMove != nil {
 		return r.reconcileSingleMove(ctx, source, clusters, eligible, observations)
 	}
 	winner := winnerCluster(source)
 	if winner != "" {
-		home, ok := observations.get(winner)
+		member, ok := observations.get(winner)
 		if !ok {
-			home = observations.refresh(ctx, r, source, winner)
+			member = observations.refresh(ctx, r, source, winner)
 		}
-		if home.state == homeUnknown || home.terminal {
+		if member.state == memberUnknown || member.terminal {
 			return r.writeSinglePlanStatus(ctx, source, observations, "", "")
 		}
 		retainZero, err := r.retainZeroFloorWinner(ctx, source, winner)
@@ -38,7 +38,7 @@ func (r *Reconciler) reconcileSinglePlanned(ctx context.Context, source *v1beta1
 			r.Log.Error(err, "planned member observation failed", "cluster", winner)
 			return r.writeSinglePlanStatus(ctx, source, observations, "AwaitingMemberConvergence", "")
 		}
-		if home.state == homeAbsent || (home.candidate.Phase != v1beta1.CandidatePhaseAdmitted && !retainZero) {
+		if member.state == memberAbsent || (member.candidate.Phase != v1beta1.CandidatePhaseAdmitted && !retainZero) {
 			if r.graceRemaining(source.UID, time.Now()) > 0 {
 				return r.writeSinglePlanStatus(ctx, source, observations, "AwaitingWinnerRecovery", "")
 			}
@@ -104,8 +104,8 @@ func (r *Reconciler) reconcileSinglePlanned(ctx context.Context, source *v1beta1
 	}
 	if winner == "" {
 		for _, name := range slices.Sorted(maps.Keys(applied)) {
-			home := observations.homes[name]
-			if home.state != homePresent || home.terminal || home.candidate.Phase != v1beta1.CandidatePhaseAdmitted {
+			member := observations.members[name]
+			if member.state != memberPresent || member.terminal || member.candidate.Phase != v1beta1.CandidatePhaseAdmitted {
 				continue
 			}
 			proposal.Winner = name
@@ -137,7 +137,7 @@ func (r *Reconciler) reconcileSinglePlanned(ctx context.Context, source *v1beta1
 	if winner == "" && len(nominated) > 0 {
 		waiting = true
 		for _, name := range nominated {
-			waiting = waiting && applied[name] && observations.homes[name].state == homePresent
+			waiting = waiting && applied[name] && observations.members[name].state == memberPresent
 		}
 	}
 	result, err := r.writePlacement(ctx, accepted, r.singlePlanStatus(ctx, accepted, observations, "", ""))
@@ -215,7 +215,7 @@ func (r *Reconciler) singleProposal(ctx context.Context, source *v1beta1.Inferen
 		}
 		if targets[name] != "" {
 			cctx, cancel := context.WithTimeout(ctx, r.placeTimeout())
-			home, resolveErr := r.resolveFullHome(cctx, source, desired, name, a.ClusterUID, out.InputDigest)
+			member, resolveErr := r.resolveFullPolicy(cctx, source, desired, name, a.ClusterUID, out.InputDigest)
 			cancel()
 			if resolveErr != nil {
 				if name == winner {
@@ -223,8 +223,8 @@ func (r *Reconciler) singleProposal(ctx context.Context, source *v1beta1.Inferen
 				}
 				a.HomeInputsPending = true
 			} else {
-				a.CurrentHome, a.DesiredHome = home.DeepCopy(), home
-				a.CurrentReplicas, _ = protocol.ValidateReplicaFloors(home.ReplicaFloors)
+				a.CurrentHome, a.DesiredHome = member.DeepCopy(), member
+				a.CurrentReplicas, _ = protocol.ValidateReplicaFloors(member.ReplicaFloors)
 				a.DesiredReplicas = a.CurrentReplicas
 				a.DrainRequested = false
 				if name == winner {
@@ -242,7 +242,7 @@ func (r *Reconciler) singleProposal(ctx context.Context, source *v1beta1.Inferen
 	return out, nil
 }
 
-// sweepPlannedRace uses only persisted race-loser permission. A retained home
+// sweepPlannedRace uses only persisted race-loser permission. A retained member
 // cannot acquire this cleanup permission merely by changing affinity.
 func (r *Reconciler) sweepPlannedRace(ctx context.Context, source *v1beta1.InferenceService) {
 	for _, candidate := range source.Status.Placement.Candidates {
@@ -288,11 +288,11 @@ func (r *Reconciler) singlePlanStatus(ctx context.Context, source *v1beta1.Infer
 		names = append(slices.Clone(names), winner)
 	}
 	for _, name := range names {
-		home, ok := observations.get(name)
+		member, ok := observations.get(name)
 		if !ok {
-			home = observations.refresh(ctx, r, source, name)
+			member = observations.refresh(ctx, r, source, name)
 		}
-		candidate := home.candidate
+		candidate := member.candidate
 		if candidate.Cluster == "" {
 			candidate = identityCandidate(name)
 		}
@@ -306,21 +306,21 @@ func (r *Reconciler) singlePlanStatus(ctx context.Context, source *v1beta1.Infer
 				}
 			}
 		}
-		candidate.ObservationKnown = home.state != homeUnknown
-		// A pass that cannot read the home keeps the plan it last acknowledged;
-		// a conclusively absent home acknowledges nothing.
+		candidate.ObservationKnown = member.state != memberUnknown
+		// A pass that cannot read the member keeps the plan it last acknowledged;
+		// a conclusively absent member acknowledges nothing.
 		candidate.AppliedPlanID = ""
-		if candidate.Allocation != nil && home.state != homeAbsent {
+		if candidate.Allocation != nil && member.state != memberAbsent {
 			candidate.AppliedPlanID = stored.AppliedPlanID
 		}
 		if candidate.Allocation != nil {
-			observed, err := r.observePlannedHome(ctx, source, candidate, declaredComponents(source))
+			observed, err := r.observePlannedMember(ctx, source, candidate, declaredComponents(source))
 			if err != nil {
 				r.Log.Error(err, "planned member observation failed", "cluster", name)
 			} else {
 				candidate.AppliedPlanID = observed.Candidate.AppliedPlanID
 			}
-			if candidate.Allocation.RaceCandidate && (err != nil || !observed.Home.Absent) {
+			if candidate.Allocation.RaceCandidate && (err != nil || !observed.MemberState.Absent) {
 				cleanupPending = true
 			}
 			// The winner-applied decision reads this pass, never a kept value.
@@ -328,38 +328,38 @@ func (r *Reconciler) singlePlanStatus(ctx context.Context, source *v1beta1.Infer
 				winnerApplied = true
 				winnerIdle = observed.IdleZeroFloor
 			}
-			// An idle home proves Placed only through a readable observation. An
+			// An idle member proves Placed only through a readable observation. An
 			// unreadable pass keeps the Placed verdict the last readable pass reached
 			// for this same plan instead of retracting evidence it did not disprove.
-			if err != nil && name == winner && candidate.AppliedPlanID == source.Status.Placement.Plan.ID && zeroHomeFloor(candidate.Allocation.CurrentHome) {
+			if err != nil && name == winner && candidate.AppliedPlanID == source.Status.Placement.Plan.ID && hasZeroReplicaFloor(candidate.Allocation.CurrentHome) {
 				winnerKeptPlaced = source.Status.Placement.Phase == v1beta1.PlacementPhasePlaced
 			}
 		}
-		if candidate.Allocation != nil || (home.state != homeAbsent && !sourceHasPendingWinnerIdentity(source)) {
+		if candidate.Allocation != nil || (member.state != memberAbsent && !sourceHasPendingWinnerIdentity(source)) {
 			res.candidates = append(res.candidates, candidate)
 		}
 		if winner == "" {
-			if home.state != homeAbsent {
+			if member.state != memberAbsent {
 				res.phase = v1beta1.PlacementPhaseAdmitting
 			}
-			res.readinessUnknown = res.readinessUnknown || home.state == homeUnknown
+			res.readinessUnknown = res.readinessUnknown || member.state == memberUnknown
 			continue
 		}
 		if name != winner {
 			continue
 		}
 		switch {
-		case home.terminal:
+		case member.terminal:
 			res.phase = v1beta1.PlacementPhaseFailed
-		case home.state == homeAbsent:
+		case member.state == memberAbsent:
 			res.placementLost = true
-		case home.state == homeUnknown:
+		case member.state == memberUnknown:
 			res.phase = source.Status.Placement.Phase
 			res.readinessUnknown = true
 			res.url = candidate.Endpoint
 		case candidate.Phase == v1beta1.CandidatePhaseAdmitted || winnerIdle || winnerKeptPlaced:
 			res.phase = v1beta1.PlacementPhasePlaced
-			res.ready = home.serving
+			res.ready = member.serving
 			res.url = candidate.Endpoint
 		default:
 			res.phase = v1beta1.PlacementPhaseAdmitting

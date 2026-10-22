@@ -2,6 +2,7 @@
 package affinity
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 
@@ -33,9 +34,16 @@ type term struct {
 	weight int64
 }
 
-// Compile validates and snapshots an affinity. Nil means no restriction; an
-// explicitly empty list is invalid. allowWeights is true only for static Split.
+// Compile validates and snapshots an affinity whose matches carry the engine's
+// weight. Nil means no restriction; an explicitly empty list is invalid.
+// allowWeights is true only for static Split.
 func Compile(terms []v1beta1.ClusterAffinityTerm, allowWeights bool) (*Selector, error) {
+	return CompileFor(terms, allowWeights, v1beta1.EngineComponent)
+}
+
+// CompileFor is Compile with matches that carry the named component's weight.
+// Every component matches the same clusters.
+func CompileFor(terms []v1beta1.ClusterAffinityTerm, allowWeights bool, component v1beta1.ComponentType) (*Selector, error) {
 	if terms == nil {
 		return &Selector{unconstrained: true}, nil
 	}
@@ -48,10 +56,54 @@ func Compile(terms []v1beta1.ClusterAffinityTerm, allowWeights bool) (*Selector,
 		if err != nil {
 			return nil, fmt.Errorf("clusterAffinity[%d]: %w", i, err)
 		}
-		selector.weighted = selector.weighted || input.Weight != nil
+		if weight := termWeight(input, component); weight != nil {
+			selector.weighted = true
+			compiled.weight = int64(*weight)
+		}
 		selector.terms = append(selector.terms, compiled)
 	}
 	return selector, nil
+}
+
+// termWeight returns the weight a term gives a component, or nil when it gives
+// none. The deprecated weight reads as weights.default. The engine takes
+// engine, then default; the decoder takes decoder, then default, then the
+// engine's; the router takes router, then the engine's.
+func termWeight(input v1beta1.ClusterAffinityTerm, component v1beta1.ComponentType) *int32 {
+	weights := input.Weights
+	if weights == nil {
+		weights = &v1beta1.ClusterAffinityWeights{}
+	}
+	fallback := cmp.Or(weights.Default, scalarWeight(input))
+	engine := cmp.Or(weights.Engine, fallback)
+	switch component {
+	case v1beta1.EngineComponent:
+		return engine
+	case v1beta1.DecoderComponent:
+		return cmp.Or(weights.Decoder, fallback, engine)
+	case v1beta1.RouterComponent:
+		return cmp.Or(weights.Router, engine)
+	}
+	return nil
+}
+
+// scalarWeight reads the deprecated weight, which means weights.default. It is
+// the only reader, so every other caller goes through the weights rules here.
+func scalarWeight(input v1beta1.ClusterAffinityTerm) *int32 {
+	return input.Weight //nolint:staticcheck // The deprecated weight still means weights.default.
+}
+
+// SetsWeights reports whether any term holds a weights block, which can give
+// the decoder and router weights other than the engine's.
+func SetsWeights(terms []v1beta1.ClusterAffinityTerm) bool {
+	return slices.ContainsFunc(terms, func(t v1beta1.ClusterAffinityTerm) bool { return t.Weights != nil })
+}
+
+// DividesRouters reports whether any term sets a router weight. Routers are
+// then divided across the matched clusters; otherwise each runs the full
+// router policy.
+func DividesRouters(terms []v1beta1.ClusterAffinityTerm) bool {
+	return slices.ContainsFunc(terms, func(t v1beta1.ClusterAffinityTerm) bool { return t.Weights != nil && t.Weights.Router != nil })
 }
 
 func compileTerm(input v1beta1.ClusterAffinityTerm, allowWeights bool) (term, error) {
@@ -62,14 +114,16 @@ func compileTerm(input v1beta1.ClusterAffinityTerm, allowWeights bool) (term, er
 		return term{}, fmt.Errorf("matchExpressions and matchFields each allow at most %d requirements", v1beta1.MaxClusterSelectorRequirements)
 	}
 	out := term{labels: labels.Everything(), weight: 1}
-	if input.Weight != nil {
+	if weight := scalarWeight(input); weight != nil {
 		if !allowWeights {
 			return term{}, fmt.Errorf("weight is permitted only in Split mode")
 		}
-		if *input.Weight < 1 {
+		if *weight < 1 {
 			return term{}, fmt.Errorf("weight must be positive")
 		}
-		out.weight = int64(*input.Weight)
+	}
+	if err := validateWeights(input, allowWeights); err != nil {
+		return term{}, err
 	}
 	for i, req := range input.MatchExpressions {
 		if len(req.Values) > v1beta1.MaxClusterSelectorValues {
@@ -101,6 +155,38 @@ func compileTerm(input v1beta1.ClusterAffinityTerm, allowWeights bool) (term, er
 		out.fields = append(out.fields, req)
 	}
 	return out, nil
+}
+
+// validateWeights checks a term's weights block against the same rules the
+// schema enforces, for objects admitted while a rule was absent.
+func validateWeights(input v1beta1.ClusterAffinityTerm, allowWeights bool) error {
+	w := input.Weights
+	if w == nil {
+		return nil
+	}
+	if !allowWeights {
+		return fmt.Errorf("weights is permitted only in Split mode")
+	}
+	set := 0
+	for _, field := range []struct {
+		name  string
+		value *int32
+	}{{"default", w.Default}, {"engine", w.Engine}, {"decoder", w.Decoder}, {"router", w.Router}} {
+		if field.value == nil {
+			continue
+		}
+		set++
+		if *field.value < 1 {
+			return fmt.Errorf("weights.%s must be positive", field.name)
+		}
+	}
+	if set == 0 {
+		return fmt.Errorf("weights must set at least one component")
+	}
+	if scalarWeight(input) != nil && (w.Default != nil || w.Engine != nil) {
+		return fmt.Errorf("weight means weights.default; it may sit beside weights.decoder and weights.router, but not beside weights.default or weights.engine")
+	}
+	return nil
 }
 
 var labelOperators = map[corev1.NodeSelectorOperator]selection.Operator{

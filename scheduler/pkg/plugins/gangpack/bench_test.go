@@ -9,7 +9,7 @@ import (
 )
 
 // BenchmarkFreeByDomain measures the all-domain projection paid when an unplaced
-// gang chooses or replans a domain. Pinned members match only within their domain.
+// gang chooses or replans a domain. Assigned members match only within their domain.
 func BenchmarkFreeByDomain(b *testing.B) {
 	pod := gpuPod("4")
 	for _, n := range []int{100, 1000, 10000} {

@@ -7,6 +7,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/rollout"
 )
 
 // Tests for a rejected revision that stays rejected: no run is pinned and a
@@ -18,8 +19,9 @@ import (
 // target, a cleared hold or a straggler outside the rejection: a target
 // back on the stable revision ends the hold with nothing to roll, a plan or
 // policy edit, a reference that stops or starts resolving, a missing or
-// converged replica, a coordination phase and the rollback verb all leave
-// the service with no run and RolloutPlanReady True NoActiveRun.
+// converged replica, a coordination phase, the rollback verb and the
+// executor parking the unit for want of its stable revision all leave the
+// service with no run and RolloutPlanReady True NoActiveRun.
 func TestAStandingHoldOpensNothing(t *testing.T) {
 	held := func() *v1beta1.InferenceReplica { return divergedIR(oldRev, newRev) }
 	refHeld := func(t *testing.T) *v1beta1.InferenceService {
@@ -115,6 +117,23 @@ func TestAStandingHoldOpensNothing(t *testing.T) {
 				}
 			},
 		},
+		{
+			// The settled hold's stable revision left the replica's history and
+			// the executor parked the unit Failed for want of it; the member
+			// still targets the rejected revision.
+			name: "canary.parked",
+			setup: func(t *testing.T) (*v1beta1.InferenceService, []runtime.Object) {
+				isvc := rejectedISVC(t, v1beta1.RolloutPhaseFailed)
+				isvc.Status.Rollout = rolledBackRunOnFile(t)
+				rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent).Failed = &v1beta1.CanaryFailure{Reason: v1beta1.CanaryFailureStableRevisionMissing}
+				return isvc, []runtime.Object{held()}
+			},
+			check: func(t *testing.T, isvc *v1beta1.InferenceService) {
+				if cs := rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent); cs.Failed == nil || cs.RolledBackRevisionHash != hashOf(t, newRev) {
+					t.Fatalf("the run layer touched the parked unit's record: %+v", cs)
+				}
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -130,5 +149,88 @@ func TestAStandingHoldOpensNothing(t *testing.T) {
 				tc.check(t, isvc)
 			}
 		})
+	}
+}
+
+// rolledBackRunOnFile is the run record a settled rejection of newRev leaves
+// on file: the run closed RolledBack with the engine recorded at newRev over
+// its stable oldRev.
+func rolledBackRunOnFile(t *testing.T) *v1beta1.RolloutStatus {
+	t.Helper()
+	return &v1beta1.RolloutStatus{LastRun: &v1beta1.RolloutRunRecord{
+		Outcome: v1beta1.RolloutRunRolledBack,
+		TargetRevisions: []v1beta1.RolloutRunTarget{
+			{Component: v1beta1.EngineComponent, Revision: hashOf(t, newRev), StableRevision: hashOf(t, oldRev)},
+		},
+	}}
+}
+
+// The hold ended and the rejected revision comes back. The unit rolled the
+// new revision back, the operator set the spec back to the stable revision,
+// and the hold ended with nothing to roll: the service reads Closed with the
+// unit's record still naming the rejection and the rolled-back run on file.
+// A push back to the rejected revision meets the standing rejection again:
+// no run opens, no plan is held back, and the service reads RejectedSticky
+// on every later pass. The member set of the rejection is read from the rolled-back
+// run record; with no run record on file (a status written by a controller
+// without the run model) it is rebuilt from the observed targets, with the
+// same reading.
+func TestTheRejectedRevisionPushedAgainAfterTheHoldEndedIsHeldAgain(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		record *v1beta1.RolloutStatus
+	}{
+		{name: "the member set comes from the rolled-back run record", record: rolledBackRunOnFile(t)},
+		{name: "the member set comes from the observed targets", record: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			isvc := rejectedISVC(t, v1beta1.RolloutPhaseRolledBack)
+			isvc.Status.Rollout = tc.record
+			// The spec is back on the stable revision: the hold ends with
+			// nothing to roll and the record keeps the rejection.
+			requireNoRunAfter(t, isvc, settledIR(oldRev))
+			if cs := rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent); cs.RolledBackRevisionHash != hashOf(t, newRev) {
+				t.Fatalf("the ended hold dropped the rejection from the record: %+v", cs)
+			}
+			// The rejected revision is pushed again.
+			for i := 0; i < 2; i++ {
+				out := pass(t, isvc, divergedIR(oldRev, newRev))
+				if out.Parked || out.Opened || out.StateChanged || out.RequeueAfter != 0 {
+					t.Fatalf("pass %d: outcome = %+v, want the push read as a hold", i, out)
+				}
+				requireNoRun(t, isvc, v1beta1.RolloutPlanReasonNoRun)
+			}
+			if tc.record != nil && (isvc.Status.Rollout.LastRun == nil || isvc.Status.Rollout.LastRun.Outcome != v1beta1.RolloutRunRolledBack) {
+				t.Fatalf("the hold touched the run record: %+v", isvc.Status.Rollout.LastRun)
+			}
+			// The hold names the member: a target off the rejected revision would open a run.
+			if out := pass(t, isvc, divergedIR(oldRev, thirdRev)); !out.Opened {
+				t.Fatalf("a different target must open a run, got %+v", out)
+			}
+		})
+	}
+}
+
+// A resume written after the hold ended. The unit rolled the new revision
+// back, the operator set the spec back to the stable revision, and then
+// wrote the resume verb naming the rejected revision. No member targets that
+// revision any more, so the executor refuses the verb and writes nothing:
+// the record keeps its rejection, the phase stays RolledBack, only the
+// annotation is removed. The run layer then reads a settled hold with
+// nothing to roll, on this pass and the next: no run opens, nothing is
+// adopted.
+func TestARefusedResumeAfterTheHoldEndedOpensNothing(t *testing.T) {
+	isvc := rejectedISVC(t, v1beta1.RolloutPhaseRolledBack)
+	isvc.Status.Rollout = rolledBackRunOnFile(t)
+	requireNoRunAfter(t, isvc, settledIR(oldRev))
+	for i := 1; i <= 2; i++ {
+		out := pass(t, isvc, settledIR(oldRev))
+		if out.Opened || out.Adopted || out.StateChanged || v1beta1.RolloutRunActive(isvc) {
+			t.Fatalf("pass %d after the refused resume: outcome = %+v, want nothing opened or adopted", i, out)
+		}
+	}
+	cs := rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent)
+	if cs == nil || cs.RolledBackRevisionHash != hashOf(t, newRev) || isvc.Status.Components[v1beta1.EngineComponent].RolloutPhase != v1beta1.RolloutPhaseRolledBack {
+		t.Fatalf("the run layer must leave the refused unit's hold as it found it, got %+v", cs)
 	}
 }

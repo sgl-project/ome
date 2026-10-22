@@ -122,7 +122,7 @@ func freshReport(servable float64) string {
 	return string(b)
 }
 
-func TestNewCapacityPollerRequiresRuntimeDependenciesAndLimit(t *testing.T) {
+func TestNewCapacityPoller_NilDependencyOrNonPositiveBound_ReturnsError(t *testing.T) {
 	executor, err := NewObserverExecutor(1, 1)
 	if err != nil {
 		t.Fatalf("NewObserverExecutor() error = %v", err)
@@ -172,7 +172,7 @@ func TestCapacityPoller_AcceptsAFreshReport(t *testing.T) {
 
 func TestCapacityPoller_AcceptsAReportOfZero(t *testing.T) {
 	// Zero is a real signal ("I can serve nothing"), not an absent report. The
-	// ceiling drives the home's weight to 0, which is the point.
+	// ceiling drives the cluster's weight to 0, which is the point.
 	srv := capacityServer(t, http.StatusOK, freshReport(0))
 	p := newTestPoller(t)
 
@@ -204,7 +204,7 @@ func TestCapacityPoller_CeilingReadsOnlyTheServableField(t *testing.T) {
 func TestCapacityPoller_FailsOpenOnEveryBadAnswer(t *testing.T) {
 	// Every one of these must leave the control-plane plan standing. Fail-closed
 	// would turn a control-plane-to-data-plane blip into a fleet-wide cutoff,
-	// and a malformed or stale number must never be able to black-hole a home.
+	// and a malformed or stale number must never be able to black-hole a cluster.
 	stale, _ := json.Marshal(CapacityReport{Servable: kptr.To(int32(2)), ObservedAt: capacityTestNow.Add(-time.Hour)})
 	future, _ := json.Marshal(CapacityReport{Servable: kptr.To(int32(2)), ObservedAt: capacityTestNow.Add(time.Hour)})
 	negative, _ := json.Marshal(CapacityReport{Servable: kptr.To(int32(-1)), ObservedAt: capacityTestNow})
@@ -343,7 +343,7 @@ func TestCapacityPoller_RecordDetectsCeilingOrFallbackReasonChanges(t *testing.T
 	if !p.record(tgt, policy, &three, "") {
 		t.Fatal("a changed report was not marked as a state change")
 	}
-	// A home that stops reporting releases its ceiling, which changes the
+	// A cluster that stops reporting releases its ceiling, which changes the
 	// projected weights.
 	if !p.record(tgt, policy, nil, "capacity endpoint unreachable") {
 		t.Fatal("losing a report was not marked as a state change")
@@ -599,24 +599,24 @@ func TestConfig_ValidateHonorsInstallationGate(t *testing.T) {
 	}
 }
 
-func TestAllocationSource(t *testing.T) {
+func TestAllocationSource_ReportBelowPlanOrNot_EndpointOrControlPlane(t *testing.T) {
 	// Endpoint is claimed only when a report actually lowered the plan.
-	// Attributing a control-plane number to the home would send an operator
+	// Attributing a control-plane number to the cluster would send an operator
 	// looking at the wrong side of the system.
 	two, nine := int32(2), int32(9)
 	tests := []struct {
-		name string
-		home Home
-		want string
+		name    string
+		cluster ClusterCapacity
+		want    string
 	}{
-		{"no report is control plane", Home{Allocated: 7}, "ControlPlane"},
-		{"report above plan is control plane", Home{Allocated: 7, Reported: &nine}, "ControlPlane"},
-		{"report equal to plan is control plane", Home{Allocated: 2, Reported: &two}, "ControlPlane"},
-		{"report below plan is endpoint", Home{Allocated: 7, Reported: &two}, "Endpoint"},
+		{"no report is control plane", ClusterCapacity{Allocated: 7}, "ControlPlane"},
+		{"report above plan is control plane", ClusterCapacity{Allocated: 7, Reported: &nine}, "ControlPlane"},
+		{"report equal to plan is control plane", ClusterCapacity{Allocated: 2, Reported: &two}, "ControlPlane"},
+		{"report below plan is endpoint", ClusterCapacity{Allocated: 7, Reported: &two}, "Endpoint"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := string(allocationSource(tt.home)); got != tt.want {
+			if got := string(allocationSource(tt.cluster)); got != tt.want {
 				t.Fatalf("allocationSource() = %q, want %q", got, tt.want)
 			}
 		})
@@ -624,7 +624,7 @@ func TestAllocationSource(t *testing.T) {
 }
 
 func TestCapacityPoller_BodyIsBounded(t *testing.T) {
-	// A home streaming an unbounded body must not be able to exhaust
+	// A cluster streaming an unbounded body must not be able to exhaust
 	// control-plane memory, and truncation must not be mistaken for decoding.
 	body := freshReport(2)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -680,7 +680,7 @@ func TestCapacityPoller_AcceptsBodyAtConfiguredLimit(t *testing.T) {
 	}
 }
 
-func TestCapacityPollerReconcileUsesAbsoluteDeadlines(t *testing.T) {
+func TestCapacityPollerReconcile_CalledEarlyLateOrOverdue_PollsOnlyWhenDue(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
@@ -739,7 +739,7 @@ func TestCapacityPollerReconcileUsesAbsoluteDeadlines(t *testing.T) {
 	}
 }
 
-func TestCapacityPollerReconcileExpiresAReportBeforeTheNextPoll(t *testing.T) {
+func TestCapacityPollerReconcile_ReportAgesOutBeforeNextPoll_DropsItAsStale(t *testing.T) {
 	var requests atomic.Int32
 	observedAt := capacityTestNow.Add(-25 * time.Second)
 	body, err := json.Marshal(CapacityReport{Servable: kptr.To(int32(3)), ObservedAt: observedAt})
@@ -790,7 +790,7 @@ func TestCapacityPollerReconcileExpiresAReportBeforeTheNextPoll(t *testing.T) {
 	}
 }
 
-func TestCapacityPollerExpiresSamplesIndividually(t *testing.T) {
+func TestCapacityPoller_OneSampleOfThreeAgesOut_KeepsQuorumFromTheRest(t *testing.T) {
 	config := testCapacityConfig()
 	config.Period = 10 * time.Second
 	config.Timeout = time.Second
@@ -818,7 +818,7 @@ func TestCapacityPollerExpiresSamplesIndividually(t *testing.T) {
 	}
 }
 
-func TestCapacityPollerReconcileKeepsServicesIndependent(t *testing.T) {
+func TestCapacityPollerReconcile_TwoServicesPolled_KeepsSchedulesAndQuorumsApart(t *testing.T) {
 	var firstRequests, secondRequests atomic.Int32
 	firstServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		firstRequests.Add(1)
@@ -896,7 +896,7 @@ func TestCapacityPollerReconcileKeepsServicesIndependent(t *testing.T) {
 	}
 }
 
-func TestCapacityPollerReconcilePolicyChangeResetsState(t *testing.T) {
+func TestCapacityPollerReconcile_PolicyChanges_DropsOldSamplesAndRebuildsQuorum(t *testing.T) {
 	var servable atomic.Int32
 	servable.Store(2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -953,7 +953,7 @@ func TestCapacityPollerReconcilePolicyChangeResetsState(t *testing.T) {
 	}
 }
 
-func TestCapacityPollerReconcilePrunesOnlyRequestedMap(t *testing.T) {
+func TestCapacityPollerReconcile_NoTargetsOrDisabledPolicy_PrunesOnlyThatMap(t *testing.T) {
 	policy := testCapacityPolicy(t, singleSampleConfig())
 	first := testCapacityTarget("cluster-a", "https://cluster-a.example")
 	second := Target{
@@ -990,7 +990,7 @@ func TestCapacityPollerReconcilePrunesOnlyRequestedMap(t *testing.T) {
 	}
 }
 
-func TestCapacityPollerReconcileRejectsAmbiguousRequests(t *testing.T) {
+func TestCapacityPollerReconcile_NilOrInconsistentRequest_ReturnsError(t *testing.T) {
 	policy := testCapacityPolicy(t, singleSampleConfig())
 	validTarget := testCapacityTarget("cluster-a", "https://cluster-a.example")
 	poller := newTestPoller(t)
@@ -1039,7 +1039,7 @@ func TestCapacityPollerReconcileRejectsAmbiguousRequests(t *testing.T) {
 	}
 }
 
-func TestCapacityPollerReconcileFailedPollFallsOpen(t *testing.T) {
+func TestCapacityPollerReconcile_PollReturnsHTTP503_DropsReportWithReason(t *testing.T) {
 	var status atomic.Int32
 	status.Store(http.StatusOK)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -1075,7 +1075,7 @@ func TestCapacityPollerReconcileFailedPollFallsOpen(t *testing.T) {
 	}
 }
 
-func TestCapacityPollerReconcileMalformedCapacityPathFallsOpenOnCadence(t *testing.T) {
+func TestCapacityPollerReconcile_MalformedCapacityPath_NoReportRetriesOnPeriod(t *testing.T) {
 	config := singleSampleConfig()
 	config.Path = "/%zz"
 	policy := testCapacityPolicy(t, config)
@@ -1099,7 +1099,7 @@ func TestCapacityPollerReconcileMalformedCapacityPathFallsOpenOnCadence(t *testi
 	}
 }
 
-func TestCapacityPollerReconcileSubmitsThroughExecutor(t *testing.T) {
+func TestCapacityPollerReconcile_ExecutorNotRunning_NoRequestAndReasonRecorded(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
@@ -1215,7 +1215,7 @@ func feed(t *testing.T, cfg CapacityConfig, readings ...float64) *float64 {
 }
 
 func TestCapacityPoller_QuorumToleratesAMisbehavingReporter(t *testing.T) {
-	// The control plane polls one address per home, so consecutive readings may
+	// The control plane polls one address per cluster, so consecutive readings may
 	// come from different reporters behind a balancer. A strict minimum would
 	// let whichever reporter is broken set the ceiling alone -- and with a
 	// round-robin balancer and a window at least as long as the replica count,
@@ -1255,7 +1255,7 @@ func TestCapacityPoller_QuorumToleratesAMisbehavingReporter(t *testing.T) {
 			want:     ptr(float64(3)),
 		},
 		{
-			// A home that really can serve nothing must still be able to say so.
+			// A cluster that really can serve nothing must still be able to say so.
 			name:     "a unanimous zero is believed",
 			readings: []float64{0, 0, 0, 0},
 			want:     ptr(float64(0)),
@@ -1303,7 +1303,7 @@ func TestCapacityPoller_NoCeilingUntilCorroborated(t *testing.T) {
 }
 
 func TestCapacityPoller_WindowAgesOutAStaleLow(t *testing.T) {
-	// Bounded so a home recovers. An all-time minimum would pin it at its worst
+	// Bounded so a cluster recovers. An all-time minimum would pin it at its worst
 	// reading forever.
 	cfg := testCapacityConfig()
 	cfg.Samples, cfg.Quorum = 3, 2
@@ -1314,7 +1314,7 @@ func TestCapacityPoller_WindowAgesOutAStaleLow(t *testing.T) {
 
 func TestCapacityPoller_FailedPollReleasesTheWindow(t *testing.T) {
 	// Fail-open means the ceiling is released, so the window cannot survive --
-	// retaining readings would keep constraining a home we can no longer see.
+	// retaining readings would keep constraining a cluster we can no longer see.
 	cfg := testCapacityConfig()
 	cfg.Samples, cfg.Quorum = 4, 2
 	p := newTestPoller(t)

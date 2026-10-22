@@ -61,6 +61,47 @@ func TestNewLifecycleConfig(t *testing.T) {
 			},
 		},
 		{
+			name: "prefillDecodeRoll rules",
+			configMapData: map[string]string{
+				LifecycleConfigName: `{"prefillDecodeRoll":{"keepRatio":true,"firstSide":"decoder"}}`,
+			},
+			validate: func(t *testing.T, cfg *LifecycleConfig) {
+				keepRatio, firstSide, err := cfg.ToPrefillDecodeRoll()
+				require.NoError(t, err)
+				assert.True(t, keepRatio)
+				assert.Equal(t, PrefillDecodeFirstSideDecoder, firstSide)
+			},
+		},
+		{
+			// An omitted rule reads as off, and an omitted block leaves both
+			// rules off: the two sides then roll on their own budgets.
+			name: "prefillDecodeRoll with one rule leaves the other off",
+			configMapData: map[string]string{
+				LifecycleConfigName: `{"prefillDecodeRoll":{"keepRatio":true}}`,
+			},
+			validate: func(t *testing.T, cfg *LifecycleConfig) {
+				keepRatio, firstSide, err := cfg.ToPrefillDecodeRoll()
+				require.NoError(t, err)
+				assert.True(t, keepRatio)
+				assert.Empty(t, firstSide)
+			},
+		},
+		{
+			// A side the engine does not know is invalid: the error names it,
+			// the side reads as empty and keepRatio stands as written.
+			name: "prefillDecodeRoll with an unknown firstSide is invalid",
+			configMapData: map[string]string{
+				LifecycleConfigName: `{"prefillDecodeRoll":{"keepRatio":true,"firstSide":"router"}}`,
+			},
+			validate: func(t *testing.T, cfg *LifecycleConfig) {
+				keepRatio, firstSide, err := cfg.ToPrefillDecodeRoll()
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "firstSide")
+				assert.True(t, keepRatio)
+				assert.Empty(t, firstSide)
+			},
+		},
+		{
 			// Absent lifecycle key: unconfigured, NOT an error. The nil
 			// config is the fail-safe-Held signal for the IR reconciler.
 			name:          "absent lifecycle key yields nil config, no error",

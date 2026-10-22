@@ -8,11 +8,10 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestOMENativeStateReady(t *testing.T) {
@@ -121,8 +120,6 @@ func TestRawDeploymentStateReady(t *testing.T) {
 }
 
 func TestOMENativeCutoverReadyUsesLiveState(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, v1beta1.AddToScheme(scheme))
 	desired := int32(1)
 	expected := &v1beta1.InferenceReplica{
 		ObjectMeta: metav1.ObjectMeta{Name: "engine", Namespace: "default", UID: types.UID("ir-uid"), Generation: 2},
@@ -132,7 +129,7 @@ func TestOMENativeCutoverReadyUsesLiveState(t *testing.T) {
 	live.Status.ObservedGeneration = live.Generation
 	live.Status.ReadyReplicas = desired
 	live.Status.AvailableReplicas = desired
-	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(live).Build()
+	reader := fakeclient.New(t, fakeclient.WithObjects(live))
 
 	ready, err := OMENativeCutoverReady(context.Background(), reader, expected)
 	require.NoError(t, err)
@@ -141,15 +138,13 @@ func TestOMENativeCutoverReadyUsesLiveState(t *testing.T) {
 	newer := live.DeepCopy()
 	newer.Generation++
 	newer.Status.ObservedGeneration = newer.Generation
-	reader = fake.NewClientBuilder().WithScheme(scheme).WithObjects(newer).Build()
+	reader = fakeclient.New(t, fakeclient.WithObjects(newer))
 	ready, err = OMENativeCutoverReady(context.Background(), reader, expected)
 	require.NoError(t, err)
 	assert.False(t, ready)
 }
 
 func TestRawDeploymentCutoverReadyUsesLiveState(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, appsv1.AddToScheme(scheme))
 	desired := int32(1)
 	expected := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "engine", Namespace: "default", UID: types.UID("deployment-uid"), Generation: 2},
@@ -159,7 +154,7 @@ func TestRawDeploymentCutoverReadyUsesLiveState(t *testing.T) {
 	live.Status.ObservedGeneration = live.Generation
 	live.Status.ReadyReplicas = desired
 	live.Status.AvailableReplicas = desired
-	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(live).Build()
+	reader := fakeclient.New(t, fakeclient.WithObjects(live))
 
 	ready, err := RawDeploymentCutoverReady(context.Background(), reader, expected)
 	require.NoError(t, err)
@@ -168,7 +163,7 @@ func TestRawDeploymentCutoverReadyUsesLiveState(t *testing.T) {
 	newer := live.DeepCopy()
 	newer.Generation++
 	newer.Status.ObservedGeneration = newer.Generation
-	reader = fake.NewClientBuilder().WithScheme(scheme).WithObjects(newer).Build()
+	reader = fakeclient.New(t, fakeclient.WithObjects(newer))
 	ready, err = RawDeploymentCutoverReady(context.Background(), reader, expected)
 	require.NoError(t, err)
 	assert.False(t, ready)

@@ -8,6 +8,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -163,6 +164,8 @@ func StampFailedKeepingOperation(termination *types.InstanceTermination) func(*t
 // settled row — has none. termination, when non-nil, is recorded on
 // LastFailure in the same write so the wedged pod's diagnostics survive
 // the recreate or teardown that follows; nil leaves LastFailure alone.
+// The kept operation carries no deadline (keepOperationWithoutDeadline);
+// its step and retry count stay for the repair's retry schedule.
 //
 // blamedIncarnation is the incarnation label of the pod the stamp blames,
 // zero when it carries none. The stamp is decided on the pass's
@@ -183,6 +186,9 @@ func StampFailedOnStuckPod(termination *types.InstanceTermination, blamedIncarna
 			return false
 		}
 		s.Phase = types.InstancePhaseFailed
+		if s.Operation != nil {
+			keepOperationWithoutDeadline(s)
+		}
 		if termination != nil {
 			captured := *termination
 			s.LastFailure = &captured
@@ -211,17 +217,29 @@ func StampFailedParkingAttempt(ctx context.Context, input types.ReconcileInput, 
 			return false
 		}
 		s.Phase = types.InstancePhaseFailed
-		op := *s.Operation
+		op := keepOperationWithoutDeadline(s)
 		op.Step = types.UpdateStepParked
 		op.Waiting = waiting
-		op.Deadline = metav1.Time{}
-		s.Operation = &op
 		if termination != nil {
 			captured := *termination
 			s.LastFailure = &captured
 		}
 		return true
 	})
+}
+
+// keepOperationWithoutDeadline leaves the row's operation in place with its
+// deadline cleared and returns the copy it wrote, for a row written Failed
+// with the operation kept because its pod set still stands. A Failed row is
+// outside every pass that reads the clock, so a deadline left on it would
+// name a time nobody acts on; the zero deadline reads as "never expires".
+// Every other field stays: the step, the identity and the retry count the
+// repair's retry schedule reads survive the write.
+func keepOperationWithoutDeadline(s *types.InstanceStatus) *types.InstanceOperation {
+	op := *s.Operation
+	op.Deadline = metav1.Time{}
+	s.Operation = &op
+	return s.Operation
 }
 
 // SameAttempt reports whether two operations are the same attempt: the
@@ -292,16 +310,19 @@ func ApplyStamp(ctx context.Context, input types.ReconcileInput, idx int32, stam
 	return committed, err
 }
 
-// EnterReady flips s into Ready and stamps ReadySince when this is an
-// entry into Ready rather than an idempotent re-apply. Container
-// restarts that finished before the stamp — boot crashes, in-place
-// update restarts — therefore never read as post-Ready failures.
-func EnterReady(s *types.InstanceStatus, now time.Time) {
+// EnterReady requires a known running revision and stamps the Ready entry
+// time. A rejected transition leaves the row untouched, including its
+// operation and the timestamp used to distinguish boot from later crashes.
+func EnterReady(s *types.InstanceStatus, now time.Time) bool {
+	if s == nil || query.RequireNamedRevision(query.RevisionFromName(s.RunningRevision)) != nil {
+		return false
+	}
 	if s.Phase != types.InstancePhaseReady {
 		t := metav1.NewTime(now)
 		s.ReadySince = &t
 	}
 	s.Phase = types.InstancePhaseReady
+	return true
 }
 
 // DemoteUnbacked applies the truth pass to one row: a status-only
@@ -315,16 +336,27 @@ func EnterReady(s *types.InstanceStatus, now time.Time) {
 // The precondition is re-checked on the fresh row, so an operation that
 // claimed the row since selection keeps it and the demotion no-ops.
 func DemoteUnbacked(ctx context.Context, input types.ReconcileInput, idx int32) (bool, error) {
-	demoted := false
+	return PendingForUnbackedReady(ctx, input, idx)
+}
+
+// PendingForUnbackedReady writes Pending over a settled Ready row, Ready
+// with no operation, that no pod backs any more; the revision, the
+// counters and the Ready anchor stay on the row for the pass that
+// rebuilds it. The truth pass of a paused Component and the status
+// publication's write of the one projected phase the engine reads back
+// as written are the same write. The row is re-checked on the fresh
+// copy, so a row an operation claimed meanwhile is left alone.
+func PendingForUnbackedReady(ctx context.Context, input types.ReconcileInput, idx int32) (bool, error) {
+	written := false
 	err := input.MutateInstance(ctx, idx, func(s *types.InstanceStatus) bool {
 		if s.Phase != types.InstancePhaseReady || s.Operation != nil {
 			return false
 		}
 		s.Phase = types.InstancePhasePending
-		demoted = true
+		written = true
 		return true
 	})
-	return demoted, err
+	return written, err
 }
 
 // UnparkServing returns a crash-loop park, a Failed row with no operation
@@ -421,7 +453,12 @@ func StampUpdatingInPlace(ctx context.Context, input types.ReconcileInput, idx i
 // same target does not block the bump; an attempt parked after its
 // disposition sits on its own step, so a new attempt opens over it and
 // the bump makes the parked set the one it drains.
-func StampRecreating(ctx context.Context, input types.ReconcileInput, idx int32, targetRev, reason string, strategy types.UpdateStrategyType, timeout time.Duration) (int64, error) {
+//
+// runningNeverServed says the row's running revision names a set the
+// Instance never served, a repair's record of the rebuild it rendered.
+// The recreate tears that set down, so the same write drops the record
+// and the row names no running revision until a set of its own promotes.
+func StampRecreating(ctx context.Context, input types.ReconcileInput, idx int32, targetRev, reason string, strategy types.UpdateStrategyType, timeout time.Duration, runningNeverServed bool) (int64, error) {
 	var observedIncarnation int64
 	var openSince *metav1.Time
 	err := input.MutateInstance(ctx, idx, func(s *types.InstanceStatus) bool {
@@ -442,6 +479,9 @@ func StampRecreating(ctx context.Context, input types.ReconcileInput, idx int32,
 		observedIncarnation = s.Incarnation
 		s.Phase = types.InstancePhaseUpdating
 		s.TargetRevision = targetRev
+		if runningNeverServed {
+			s.RunningRevision = ""
+		}
 		now := metav1.NewTime(input.Now())
 		s.Operation = &types.InstanceOperation{
 			ID:             fmt.Sprintf("update-%d-%d", idx, now.Unix()),
@@ -656,6 +696,9 @@ func StampSurgeDrainStep(ctx context.Context, input types.ReconcileInput, idx in
 // revision-equality before it diffs per-pod. Success at rev also prunes
 // rev's RetryBlock — a converged subject leaves no active block.
 func StampReadyOnRevision(ctx context.Context, input types.ReconcileInput, idx int32, rev string) error {
+	if err := query.RequireNamedRevision(query.RevisionFromName(rev)); err != nil {
+		return fmt.Errorf("instance %d cannot become Ready: %w", idx, err)
+	}
 	mutation := ReadyOnRevisionMutation(idx, rev, input.Now())
 	if err := input.MutateInstance(ctx, mutation.Index, mutation.Mutate); err != nil {
 		return err
@@ -668,15 +711,20 @@ func StampReadyOnRevision(ctx context.Context, input types.ReconcileInput, idx i
 // RetryBlock prune is the stamp's other half and stays with the caller
 // that owns the batch.
 func ReadyOnRevisionMutation(idx int32, rev string, now time.Time) types.InstanceMutation {
-	return types.InstanceMutation{Index: idx, Mutate: func(s *types.InstanceStatus) bool {
+	return types.InstanceMutation{Index: idx, Precondition: func(*types.InstanceStatus) bool {
+		return query.RequireNamedRevision(query.RevisionFromName(rev)) == nil
+	}, Mutate: func(s *types.InstanceStatus) bool {
+		if query.RequireNamedRevision(query.RevisionFromName(rev)) != nil {
+			return false
+		}
 		if s.Phase == types.InstancePhaseReady &&
 			s.Operation == nil &&
 			s.RunningRevision == rev &&
 			s.TargetRevision == "" {
 			return false
 		}
-		EnterReady(s, now)
 		s.RunningRevision = rev
+		EnterReady(s, now)
 		s.TargetRevision = ""
 		s.Operation = nil
 		return true
@@ -731,6 +779,9 @@ func StampAbandonedSurgeSource(ctx context.Context, input types.ReconcileInput, 
 // is the new canonical pod, and future restart and scale-up paths must
 // address that slot. Success at rev also prunes rev's RetryBlock.
 func StampReadyAtOrdinal(ctx context.Context, input types.ReconcileInput, idx int32, rev string, newOrdinal int32) error {
+	if err := query.RequireNamedRevision(query.RevisionFromName(rev)); err != nil {
+		return fmt.Errorf("instance %d cannot become Ready: %w", idx, err)
+	}
 	err := input.MutateInstance(ctx, idx, func(s *types.InstanceStatus) bool {
 		if s.Phase == types.InstancePhaseReady &&
 			s.Operation == nil &&
@@ -739,8 +790,8 @@ func StampReadyAtOrdinal(ctx context.Context, input types.ReconcileInput, idx in
 			s.ActiveOrdinal == newOrdinal {
 			return false
 		}
-		EnterReady(s, input.Now())
 		s.RunningRevision = rev
+		EnterReady(s, input.Now())
 		s.TargetRevision = ""
 		s.Operation = nil
 		s.ActiveOrdinal = newOrdinal

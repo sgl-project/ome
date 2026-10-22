@@ -15,8 +15,8 @@ import (
 // — are steered toward domains that are already partly used, so partly-filled
 // domains fill before empty ones are opened. That keeps whole domains free for
 // multi-host gangs instead of letting single-host replicas fragment every slice.
-// Gang members are left alone: their domain is already pinned in PreFilter, so
-// PreScore skips when a pin exists.
+// Gang members are left alone: their domain is already assigned in PreFilter, so
+// PreScore skips when an assignment exists.
 //
 // The built-in node-level MostAllocated cannot do this: accelerator nodes are
 // whole-node, so every empty candidate looks identical; the packing signal only
@@ -49,15 +49,15 @@ var (
 	_ framework.ScoreExtensions = &GangPack{}
 )
 
-// packingTopologyKey returns the domain label to pack an unpinned pod against,
+// packingTopologyKey returns the domain label to pack an unassigned pod against,
 // or "" when packing does not apply: it is disabled, no topology key is
-// configured, or the pod is a pinned gang member (domain already chosen in
+// configured, or the pod is an assigned gang member (domain already chosen in
 // PreFilter, so scoring must not fight it).
 func (g *GangPack) packingTopologyKey(state framework.CycleState) string {
 	if !g.standaloneDomainPacking {
 		return ""
 	}
-	if readPin(state) != nil {
+	if readAssignment(state) != nil {
 		return ""
 	}
 	return g.topologyKey

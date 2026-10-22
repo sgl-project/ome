@@ -26,12 +26,13 @@ import (
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	placementcontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/placement"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 type testTrafficMapPublishPlan struct {
@@ -150,7 +151,7 @@ func (p *recordingTrafficMapPublisher) Unpublish(
 	return nil
 }
 
-func TestTrafficMapPublisherAddsFinalizerBeforeEffects(t *testing.T) {
+func TestTrafficMapPublisher_FirstPass_AddsFinalizerBeforeAnyEffect(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	publisher := &recordingTrafficMapPublisher{
 		name: "example-publisher", stateful: true, claims: []string{"target-a"},
@@ -167,7 +168,7 @@ func TestTrafficMapPublisherAddsFinalizerBeforeEffects(t *testing.T) {
 	assert.Nil(t, current.Status.Publisher)
 }
 
-func TestTrafficMapPublisherModeOnlyPlacement(t *testing.T) {
+func TestTrafficMapPublisher_PolicyAndModeVariants_AppliesOnlyForClusterAffinity(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
 		policy v1beta1.PlacementPolicy
@@ -215,7 +216,7 @@ func TestTrafficMapPublisherModeOnlyPlacement(t *testing.T) {
 	}
 }
 
-func TestTrafficMapPublisherRequiresMatchingSourceUIDBeforePlanning(t *testing.T) {
+func TestTrafficMapPublisher_SourceUIDMissingOrMismatched_ReportsInvalidOwnerNoPlan(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		sourceUID types.UID
@@ -256,14 +257,14 @@ func TestTrafficMapPublisherRequiresMatchingSourceUIDBeforePlanning(t *testing.T
 	}
 }
 
-func TestTrafficMapPublisherChecksSourceUIDThroughAPIReader(t *testing.T) {
+func TestTrafficMapPublisher_CacheShowsSourceUIDLiveDoesNot_ReportsInvalidOwner(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 	trafficMap.Status.SourceUID = ""
 	baseClient := newTrafficMapPublisherClient(t, owner, trafficMap)
 	stale := trafficMap.DeepCopy()
 	stale.Status.SourceUID = owner.UID
-	cacheClient := &staleTrafficMapClient{Client: baseClient, stale: stale}
+	cacheClient := fakeclient.Wrap(t, baseClient, fakeclient.StaleRead(stale))
 	planCalls := 0
 	publisher := &recordingTrafficMapPublisher{
 		name: "example-publisher", stateful: true, claims: []string{"target-a"},
@@ -292,14 +293,13 @@ func TestTrafficMapPublisherChecksSourceUIDThroughAPIReader(t *testing.T) {
 	assert.Equal(t, trafficMapPublisherReasonInvalidOwner, condition.Reason)
 }
 
-func TestTrafficMapPublisherRetriesInitialOwnerReadFailure(t *testing.T) {
+func TestTrafficMapPublisher_FirstOwnerReadFails_ReturnsErrorWithoutPlanning(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 	baseClient := newTrafficMapPublisherClient(t, owner, trafficMap)
-	reader := &failingInferenceServiceGetReader{
-		Reader: baseClient,
-		err:    apierrors.NewInternalError(errors.New("owner read failed")),
-	}
+	reader := fakeclient.Wrap(t, baseClient,
+		fakeclient.FailingVerb(fakeclient.Get, fakeclient.EveryCall, apierrors.NewInternalError(errors.New("owner read failed"))).
+			OnKind(&v1beta1.InferenceService{}))
 	planCalls := 0
 	publisher := &recordingTrafficMapPublisher{
 		name: "example-publisher", stateful: true, claims: []string{"target-a"},
@@ -327,7 +327,7 @@ func TestTrafficMapPublisherRetriesInitialOwnerReadFailure(t *testing.T) {
 	assert.Equal(t, trafficMapPublisherReasonInvalidOwner, condition.Reason)
 }
 
-func TestTrafficMapPublisherRechecksSourceAndOwnerAtPreEffectFence(t *testing.T) {
+func TestTrafficMapPublisher_OwnerOrSourceChangesAfterPlanning_AppliesNothing(t *testing.T) {
 	changes := []struct {
 		name             string
 		mutateTrafficMap func(*v1beta1.TrafficMap)
@@ -405,11 +405,7 @@ func TestTrafficMapPublisherRechecksSourceAndOwnerAtPreEffectFence(t *testing.T)
 					trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 				}
 				baseClient := newTrafficMapPublisherClient(t, owner, trafficMap)
-				reader := &preEffectChangingReader{
-					Reader:           baseClient,
-					mutateTrafficMap: change.mutateTrafficMap,
-					mutateOwner:      change.mutateOwner,
-				}
+				reader := fakeclient.Wrap(t, baseClient, changedOnLaterReads(change.mutateTrafficMap, change.mutateOwner, nil))
 				planCalls := 0
 				var claims []string
 				if stateful {
@@ -445,7 +441,7 @@ func TestTrafficMapPublisherRechecksSourceAndOwnerAtPreEffectFence(t *testing.T)
 	}
 }
 
-func TestTrafficMapPublisherRetriesOwnerReadFailureAtPreEffectFence(t *testing.T) {
+func TestTrafficMapPublisher_OwnerReadFailsAfterPlanning_ReturnsErrorNoEffects(t *testing.T) {
 	for _, stateful := range []bool{false, true} {
 		t.Run(fmt.Sprintf("stateful=%t", stateful), func(t *testing.T) {
 			owner, trafficMap := publisherTestObjects()
@@ -453,10 +449,8 @@ func TestTrafficMapPublisherRetriesOwnerReadFailureAtPreEffectFence(t *testing.T
 				trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 			}
 			baseClient := newTrafficMapPublisherClient(t, owner, trafficMap)
-			reader := &preEffectChangingReader{
-				Reader:   baseClient,
-				ownerErr: apierrors.NewInternalError(errors.New("owner read failed")),
-			}
+			reader := fakeclient.Wrap(t, baseClient,
+				changedOnLaterReads(nil, nil, apierrors.NewInternalError(errors.New("owner read failed"))))
 			planCalls := 0
 			var claims []string
 			if stateful {
@@ -490,7 +484,7 @@ func TestTrafficMapPublisherRetriesOwnerReadFailureAtPreEffectFence(t *testing.T
 	}
 }
 
-func TestTrafficMapPublisherWaitsForLegacyEndpointCleanup(t *testing.T) {
+func TestTrafficMapPublisher_LegacyEndpointFinalizerPresent_WaitsThenPublishes(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	legacyOwner := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{
 		Name: "legacy", Namespace: "team-b", UID: "legacy-uid",
@@ -536,7 +530,7 @@ func TestTrafficMapPublisherWaitsForLegacyEndpointCleanup(t *testing.T) {
 	assert.Contains(t, current.Finalizers, TrafficMapPublisherFinalizer)
 }
 
-func TestTrafficMapPublisherForeignJournalDoesNotBypassLegacyCleanup(t *testing.T) {
+func TestTrafficMapPublisher_AnotherPublishersRecordAndLegacyActive_StillWaits(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 	trafficMap.Status.Publisher = &v1beta1.TrafficMapPublisherStatus{PublisherName: "other-publisher"}
@@ -560,7 +554,7 @@ func TestTrafficMapPublisherForeignJournalDoesNotBypassLegacyCleanup(t *testing.
 	assert.Equal(t, trafficMapPublisherReasonLegacyActive, condition.Reason)
 }
 
-func TestTrafficMapPublisherEstablishedJournalDoesNotUseMigrationFence(t *testing.T) {
+func TestTrafficMapPublisher_OwnRecordAlreadyEstablished_AppliesDespiteLegacy(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 	trafficMap.Status.Publisher = &v1beta1.TrafficMapPublisherStatus{
@@ -580,13 +574,12 @@ func TestTrafficMapPublisherEstablishedJournalDoesNotUseMigrationFence(t *testin
 	assert.Equal(t, []string{"apply"}, publisher.events)
 }
 
-func TestTrafficMapPublisherRetriesLegacyStateReadFailure(t *testing.T) {
+func TestTrafficMapPublisher_LegacyISVCListFails_ReturnsErrorNoEffects(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	baseClient := newTrafficMapPublisherClient(t, owner, trafficMap)
-	reader := &failInferenceServiceListReader{
-		Reader: baseClient,
-		err:    errors.New("injected InferenceService list failure"),
-	}
+	reader := fakeclient.Wrap(t, baseClient,
+		fakeclient.FailingVerb(fakeclient.List, fakeclient.EveryCall, errors.New("injected InferenceService list failure")).
+			OnKind(&v1beta1.InferenceServiceList{}))
 	publisher := &recordingTrafficMapPublisher{
 		name: "example-publisher", stateful: true, claims: []string{"target-a"},
 	}
@@ -603,7 +596,7 @@ func TestTrafficMapPublisherRetriesLegacyStateReadFailure(t *testing.T) {
 	assert.Equal(t, trafficMapPublisherReasonLegacyActive, condition.Reason)
 }
 
-func TestTrafficMapPublisherPreclaimsBeforeDrainAndApply(t *testing.T) {
+func TestTrafficMapPublisher_NewClaims_RecordsThemBeforeDrainAndApply(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 	trafficMap.Status.Publisher = &v1beta1.TrafficMapPublisherStatus{
@@ -685,7 +678,7 @@ func TestTrafficMapPublisherPreclaimsBeforeDrainAndApply(t *testing.T) {
 	assert.Equal(t, "TrafficMap is published by publisher \"example-publisher\"", published.Message)
 }
 
-func TestTrafficMapPublisherCapturesCompletePositivePlanAfterApply(t *testing.T) {
+func TestTrafficMapPublisher_PositivePlanApplied_RecordsEveryClaimAsLastPositive(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 	trafficMap.Status.Published = true
@@ -755,7 +748,7 @@ func TestTrafficMapPublisherCapturesCompletePositivePlanAfterApply(t *testing.T)
 	assert.Equal(t, trafficMapPublisherReasonCurrentPlan, fallback.Reason)
 }
 
-func TestTrafficMapPublisherReplaysEligibleLastPositivePlan(t *testing.T) {
+func TestTrafficMapPublisher_PlacementLostWithLastPositive_ReplaysIt(t *testing.T) {
 	owner, trafficMap := eligiblePlacementLossPublisherObjects()
 	claims := []string{"target-a", "target-b"}
 	lastPositive := &v1beta1.TrafficMapPublisherLastPositive{
@@ -824,7 +817,7 @@ func TestTrafficMapPublisherReplaysEligibleLastPositivePlan(t *testing.T) {
 	assert.Equal(t, trafficMap.Generation, fallback.ObservedGeneration)
 }
 
-func TestTrafficMapPublisherReplaysAllHomesUnreadyForOptedInPublisher(t *testing.T) {
+func TestTrafficMapPublisher_AllHomesUnreadyAndPublisherOptedIn_ReplaysLastPositive(t *testing.T) {
 	owner, trafficMap := allHomesUnreadyPublisherObjects()
 	currentClaims := []string{"target-a", "target-b", "target-c"}
 	durableClaims := []string{"target-a", "target-b", "target-c", "target-retired"}
@@ -883,7 +876,7 @@ func TestTrafficMapPublisherReplaysAllHomesUnreadyForOptedInPublisher(t *testing
 	assert.Equal(t, v1beta1.TrafficMapReasonLastPositiveRetained, fallback.Reason)
 }
 
-func TestTrafficMapPublisherAllHomesUnreadyFallbackRequiresPublisherOptIn(t *testing.T) {
+func TestTrafficMapPublisher_AllHomesUnreadyWithoutOptIn_AppliesZeroesNoReplay(t *testing.T) {
 	owner, trafficMap := allHomesUnreadyPublisherObjects()
 	durableClaims := []string{"target-a", "target-b", "target-c", "target-retired"}
 	trafficMap.Status.Publisher = &v1beta1.TrafficMapPublisherStatus{
@@ -930,7 +923,7 @@ func TestTrafficMapPublisherAllHomesUnreadyFallbackRequiresPublisherOptIn(t *tes
 	assert.Nil(t, getPublisherTrafficMap(t, kubeClient, trafficMap).Status.Publisher.LastPositive)
 }
 
-func TestTrafficMapPublisherInvalidSnapshotClearsBeforeApplyingCurrentPlan(t *testing.T) {
+func TestTrafficMapPublisher_LastPositiveDigestMismatch_ClearsItBeforeApply(t *testing.T) {
 	owner, trafficMap := eligiblePlacementLossPublisherObjects()
 	claims := []string{"target-a"}
 	trafficMap.Status.ObservedTrafficMapGeneration = trafficMap.Generation - 1
@@ -978,7 +971,7 @@ func TestTrafficMapPublisherInvalidSnapshotClearsBeforeApplyingCurrentPlan(t *te
 	assert.Equal(t, trafficMapPublisherReasonApplyCurrent, fallback.Reason)
 }
 
-func TestTrafficMapPublisherStrictClaimSubsetInvalidatesFallback(t *testing.T) {
+func TestTrafficMapPublisher_ClaimsShrinkToASubset_ClearsLastPositiveNoReplay(t *testing.T) {
 	owner, trafficMap := eligiblePlacementLossPublisherObjects()
 	claims := []string{"target-a", "target-b"}
 	trafficMap.Status.ObservedTrafficMapGeneration = trafficMap.Generation - 1
@@ -1025,7 +1018,7 @@ func TestTrafficMapPublisherStrictClaimSubsetInvalidatesFallback(t *testing.T) {
 	assert.Nil(t, current.Status.Publisher.LastPositive)
 }
 
-func TestTrafficMapPublisherApplyCurrentClearsEmptyAndAllZeroPlans(t *testing.T) {
+func TestTrafficMapPublisher_ApplyCurrentPolicyEmptyOrZeroPlan_ClearsLastPositive(t *testing.T) {
 	tests := []struct {
 		name       string
 		claims     []string
@@ -1111,7 +1104,7 @@ func TestTrafficMapPublisherApplyCurrentClearsEmptyAndAllZeroPlans(t *testing.T)
 	}
 }
 
-func TestTrafficMapPublisherReportedWithdrawalUsesCurrentTable(t *testing.T) {
+func TestTrafficMapPublisher_ReportedZeroWhileStatusLags_AppliesCurrentTable(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		mutate    func(*v1beta1.InferenceService, *v1beta1.TrafficMap)
@@ -1182,7 +1175,7 @@ func TestTrafficMapPublisherReportedWithdrawalUsesCurrentTable(t *testing.T) {
 	}
 }
 
-func TestTrafficMapPublisherReplaysReportedTableWithoutReport(t *testing.T) {
+func TestTrafficMapPublisher_ReportedModeWithoutReportsAndLoss_ReplaysLastPositive(t *testing.T) {
 	// A Reported table without a report has fallen back to replica counts, so a
 	// lost placement keeps the last positive plan exactly as in Ceiling mode.
 	owner, trafficMap := eligiblePlacementLossPublisherObjects()
@@ -1222,7 +1215,7 @@ func TestTrafficMapPublisherReplaysReportedTableWithoutReport(t *testing.T) {
 	).Status)
 }
 
-func TestTrafficMapPublisherReplaysNoAddressableHome(t *testing.T) {
+func TestTrafficMapPublisher_NoAddressableHome_ReplaysLastPositive(t *testing.T) {
 	owner, trafficMap := eligiblePlacementLossPublisherObjects()
 	owner.Status.Placement = &v1beta1.PlacementStatus{
 		Phase: v1beta1.PlacementPhasePlaced,
@@ -1271,7 +1264,7 @@ func TestTrafficMapPublisherReplaysNoAddressableHome(t *testing.T) {
 	).Status)
 }
 
-func TestTrafficMapPublisherPlacementUnknownPreservesSnapshotUntilRestartReplay(t *testing.T) {
+func TestTrafficMapPublisher_PlacementUnknown_KeepsLastPositiveAndReplaysOnceKnown(t *testing.T) {
 	tests := []struct {
 		name           string
 		routableReason string
@@ -1279,7 +1272,7 @@ func TestTrafficMapPublisherPlacementUnknownPreservesSnapshotUntilRestartReplay(
 		makeEligible   func(*v1beta1.InferenceService)
 	}{
 		{
-			name:           "single-home loss",
+			name:           "single-cluster loss",
 			routableReason: v1beta1.TrafficMapReasonNotPlaced,
 			makeUnknown: func(owner *v1beta1.InferenceService) {
 				owner.Status.Conditions[0].Reason = placementcontroller.PlacementReadyReasonUnknown
@@ -1289,7 +1282,7 @@ func TestTrafficMapPublisherPlacementUnknownPreservesSnapshotUntilRestartReplay(
 			},
 		},
 		{
-			name:           "placed home temporarily unobservable",
+			name:           "placed cluster temporarily unobservable",
 			routableReason: v1beta1.TrafficMapReasonNoAddressableHome,
 			makeUnknown: func(owner *v1beta1.InferenceService) {
 				owner.Status.Placement = &v1beta1.PlacementStatus{
@@ -1414,7 +1407,7 @@ func TestTrafficMapPublisherPlacementUnknownPreservesSnapshotUntilRestartReplay(
 	}
 }
 
-func TestTrafficMapPublisherLaggingEmptyPlanReasonPreservesSnapshotUntilCatchUp(t *testing.T) {
+func TestTrafficMapPublisher_RoutableReasonLagsTheSource_WaitsThenReplays(t *testing.T) {
 	tests := []struct {
 		name            string
 		laggingReason   string
@@ -1554,7 +1547,7 @@ func TestTrafficMapPublisherLaggingEmptyPlanReasonPreservesSnapshotUntilCatchUp(
 	}
 }
 
-func TestTrafficMapPublisherLaggingNotPlacedPreservesUntilPositiveRecovery(t *testing.T) {
+func TestTrafficMapPublisher_NotPlacedLagsAReadySource_WaitsThenAppliesPositivePlan(t *testing.T) {
 	owner, trafficMap := eligiblePlacementLossPublisherObjects()
 	endpoint, err := apis.ParseURL("https://model.example.com")
 	require.NoError(t, err)
@@ -1664,7 +1657,7 @@ func TestTrafficMapPublisherLaggingNotPlacedPreservesUntilPositiveRecovery(t *te
 	).Status)
 }
 
-func TestTrafficMapPublisherPositiveRecoveryReplacesFallbackSnapshot(t *testing.T) {
+func TestTrafficMapPublisher_PositivePlanAfterFallback_AppliesItAndRecordsIt(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 	oldSnapshot := &v1beta1.TrafficMapPublisherLastPositive{
@@ -1732,7 +1725,7 @@ func TestTrafficMapPublisherPositiveRecoveryReplacesFallbackSnapshot(t *testing.
 	assert.Equal(t, trafficMapPublisherReasonCurrentPlan, fallback.Reason)
 }
 
-func TestTrafficMapPublisherKeepsEarlierSnapshotUntilPositiveRecoveryApplies(t *testing.T) {
+func TestTrafficMapPublisher_PositiveApplyFails_KeepsTheEarlierLastPositive(t *testing.T) {
 	owner, trafficMap := allHomesUnreadyPublisherObjects()
 	owner.Status.Conditions[0].Status = corev1.ConditionTrue
 	owner.Status.Conditions[0].Reason = "PlacementReady"
@@ -1799,7 +1792,7 @@ func TestTrafficMapPublisherKeepsEarlierSnapshotUntilPositiveRecoveryApplies(t *
 	assert.Equal(t, lastPositive, current.Status.Publisher.LastPositive)
 }
 
-func TestTrafficMapPublisherUnknownEligibilityPreservesSnapshotWithoutEffects(t *testing.T) {
+func TestTrafficMapPublisher_SourceStatusLagsItsSpec_KeepsLastPositiveNoEffects(t *testing.T) {
 	owner, trafficMap := eligiblePlacementLossPublisherObjects()
 	owner.Status.ObservedGeneration--
 	claims := []string{"target-a"}
@@ -1839,7 +1832,7 @@ func TestTrafficMapPublisherUnknownEligibilityPreservesSnapshotWithoutEffects(t 
 	assert.Equal(t, trafficMapPublisherReasonEligibilityUnknown, fallback.Reason)
 }
 
-func TestTrafficMapPublisherFailedReplayPreservesSnapshotForFullRestartRetry(t *testing.T) {
+func TestTrafficMapPublisher_ReplayApplyFails_KeepsLastPositiveAndReplaysWhole(t *testing.T) {
 	owner, trafficMap := eligiblePlacementLossPublisherObjects()
 	claims := []string{"target-a", "target-b"}
 	lastPositive := &v1beta1.TrafficMapPublisherLastPositive{
@@ -1917,7 +1910,7 @@ func TestTrafficMapPublisherFailedReplayPreservesSnapshotForFullRestartRetry(t *
 	).Status)
 }
 
-func TestTrafficMapPublisherRestartReplaysAfterFallbackSuccessStatusFailure(t *testing.T) {
+func TestTrafficMapPublisher_SuccessStatusWriteLostAfterReplay_ReplaysAgain(t *testing.T) {
 	owner, trafficMap := eligiblePlacementLossPublisherObjects()
 	claims := []string{"target-a"}
 	lastPositive := &v1beta1.TrafficMapPublisherLastPositive{
@@ -1932,9 +1925,8 @@ func TestTrafficMapPublisherRestartReplaysAfterFallbackSuccessStatusFailure(t *t
 		LastPositive: copyTrafficMapLastPositive(lastPositive),
 	}
 	baseClient := newTrafficMapPublisherClient(t, owner, trafficMap)
-	failingClient := &failNthStatusApplyClient{
-		Client: baseClient, failAt: 2, err: errors.New("lost fallback success status"),
-	}
+	failingClient := fakeclient.Wrap(t, baseClient,
+		fakeclient.FailingVerb(fakeclient.StatusApply, 2, errors.New("lost fallback success status")))
 	replayCalls := 0
 	applyCalls := 0
 	newPublisher := func() *fallbackTrafficMapPublisher {
@@ -1987,7 +1979,7 @@ func TestTrafficMapPublisherRestartReplaysAfterFallbackSuccessStatusFailure(t *t
 	).Status)
 }
 
-func TestTrafficMapPublisherDoesNotConfirmDifferentSnapshotAfterReplay(t *testing.T) {
+func TestTrafficMapPublisher_LastPositiveChangedDuringApply_DoesNotConfirmIt(t *testing.T) {
 	owner, trafficMap := eligiblePlacementLossPublisherObjects()
 	claims := []string{"target-a"}
 	lastPositive := &v1beta1.TrafficMapPublisherLastPositive{
@@ -2033,7 +2025,7 @@ func TestTrafficMapPublisherDoesNotConfirmDifferentSnapshotAfterReplay(t *testin
 		"status must not confirm a snapshot other than the one actually replayed")
 }
 
-func TestTrafficMapPublisherRejectsPositiveCaptureReportedAsWithdrawn(t *testing.T) {
+func TestTrafficMapPublisher_PositivePlanAppliedAsRemoval_FailsAndRecordsNothing(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 	base := &recordingTrafficMapPublisher{
@@ -2063,7 +2055,7 @@ func TestTrafficMapPublisherRejectsPositiveCaptureReportedAsWithdrawn(t *testing
 	assert.False(t, current.Status.Published)
 }
 
-func TestTrafficMapPublisherPreflightRunsAfterPreclaimBeforeEffects(t *testing.T) {
+func TestTrafficMapPublisher_PreflightFails_ClaimsRecordedNoDrainOrApply(t *testing.T) {
 	tests := []struct {
 		name      string
 		preflight error
@@ -2118,7 +2110,7 @@ func TestTrafficMapPublisherPreflightRunsAfterPreclaimBeforeEffects(t *testing.T
 	}
 }
 
-func TestTrafficMapPublisherWithdrawnResultRecordsConvergence(t *testing.T) {
+func TestTrafficMapPublisher_ApplyReportsRemoval_ClearsPublishedStateKeepsClaims(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 	trafficMap.Status.Published = true
@@ -2166,7 +2158,7 @@ func TestTrafficMapPublisherWithdrawnResultRecordsConvergence(t *testing.T) {
 	assert.Equal(t, trafficMap.Generation, published.ObservedGeneration)
 }
 
-func TestTrafficMapPublisherCapturedWithdrawalClearsSnapshotBeforeEffects(t *testing.T) {
+func TestTrafficMapPublisher_PlanIsARemoval_ClearsLastPositiveBeforeEffects(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 	trafficMap.Status.Publisher = &v1beta1.TrafficMapPublisherStatus{
@@ -2209,7 +2201,7 @@ func TestTrafficMapPublisherCapturedWithdrawalClearsSnapshotBeforeEffects(t *tes
 	assert.Equal(t, trafficMapPublisherReasonWithdrawn, fallback.Reason)
 }
 
-func TestTrafficMapPublisherRejectsUnsafeClaimsBeforeEffects(t *testing.T) {
+func TestTrafficMapPublisher_InvalidOrConflictingClaims_ReportsAndDoesNothing(t *testing.T) {
 	tests := []struct {
 		name       string
 		claims     []string
@@ -2293,7 +2285,7 @@ func TestTrafficMapPublisherRejectsUnsafeClaimsBeforeEffects(t *testing.T) {
 	}
 }
 
-func TestTrafficMapPublisherClaimArbitrationUsesUncachedState(t *testing.T) {
+func TestTrafficMapPublisher_SecondMapClaimsATakenTarget_RejectedFromLiveState(t *testing.T) {
 	ownerA, trafficMapA := publisherTestObjects()
 	trafficMapA.Finalizers = []string{TrafficMapPublisherFinalizer}
 
@@ -2311,13 +2303,11 @@ func TestTrafficMapPublisherClaimArbitrationUsesUncachedState(t *testing.T) {
 	trafficMapB.Status.SourceUID = ownerB.UID
 
 	liveClient := newTrafficMapPublisherClient(t, ownerA, trafficMapA, ownerB, trafficMapB)
-	cacheClient := &frozenTrafficMapCacheClient{
-		Client: liveClient,
-		trafficMaps: map[types.NamespacedName]*v1beta1.TrafficMap{
-			client.ObjectKeyFromObject(trafficMapA): trafficMapA.DeepCopy(),
-			client.ObjectKeyFromObject(trafficMapB): trafficMapB.DeepCopy(),
-		},
-	}
+	// The cache never observes the publisher's status writes: both maps read
+	// as seeded, whatever the live store holds.
+	trafficMapGets := fakeclient.CountingVerb(fakeclient.Get).OnKind(&v1beta1.TrafficMap{})
+	cacheClient := fakeclient.Wrap(t, liveClient, trafficMapGets,
+		fakeclient.StaleRead(trafficMapA.DeepCopy(), trafficMapB.DeepCopy()))
 	publisher := &recordingTrafficMapPublisher{
 		name: "example-publisher", stateful: true, claims: []string{"shared-target"},
 	}
@@ -2343,11 +2333,11 @@ func TestTrafficMapPublisherClaimArbitrationUsesUncachedState(t *testing.T) {
 	require.NotNil(t, published)
 	assert.Equal(t, metav1.ConditionFalse, published.Status)
 	assert.Equal(t, trafficMapPublisherReasonClaimRejected, published.Reason)
-	assert.Equal(t, 2, cacheClient.trafficMapGets,
+	assert.Equal(t, 2, trafficMapGets.Count(),
 		"both reconcile inputs came from the frozen informer view")
 }
 
-func TestTrafficMapPublisherRejectsInvalidOptionsWithoutEffects(t *testing.T) {
+func TestTrafficMapPublisher_OptionsResolverRejects_ReportsInvalidOptionsNoEffects(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	publisher := &recordingTrafficMapPublisher{
 		name: "example-publisher", stateful: true,
@@ -2369,7 +2359,7 @@ func TestTrafficMapPublisherRejectsInvalidOptionsWithoutEffects(t *testing.T) {
 	assert.NotContains(t, condition.Message, "protected option")
 }
 
-func TestTrafficMapPublisherValidatesOwnerIdentityBeforeOptionsOrPlan(t *testing.T) {
+func TestTrafficMapPublisher_MapNameServiceOrGenerationOff_ReportsInvalidOwnerFirst(t *testing.T) {
 	tests := []struct {
 		name   string
 		mutate func(*v1beta1.InferenceService, *v1beta1.TrafficMap)
@@ -2425,7 +2415,7 @@ func TestTrafficMapPublisherValidatesOwnerIdentityBeforeOptionsOrPlan(t *testing
 	}
 }
 
-func TestTrafficMapPublisherRepairsFinalizerBeforeRejectingExistingClaims(t *testing.T) {
+func TestTrafficMapPublisher_ClaimsRecordedButFinalizerMissing_RestoresItFirst(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	owner.Generation++
 	trafficMap.Status.Publisher = &v1beta1.TrafficMapPublisherStatus{
@@ -2450,7 +2440,7 @@ func TestTrafficMapPublisherRepairsFinalizerBeforeRejectingExistingClaims(t *tes
 	assert.Equal(t, []string{"target"}, current.Status.Publisher.ClaimedTargets)
 }
 
-func TestStatefulTrafficMapPublisherRepairsFinalizerForZeroClaimState(t *testing.T) {
+func TestTrafficMapPublisher_RecordWithNoClaimsAndNoFinalizer_RestoresFinalizer(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	owner.Generation++
 	trafficMap.Status.Publisher = &v1beta1.TrafficMapPublisherStatus{
@@ -2468,7 +2458,7 @@ func TestStatefulTrafficMapPublisherRepairsFinalizerForZeroClaimState(t *testing
 	assert.Empty(t, publisher.events)
 }
 
-func TestTrafficMapStatelessPublisherCannotReturnClaims(t *testing.T) {
+func TestTrafficMapPublisher_StatelessPublisherReturnsClaims_ReportsInvalidPlan(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	publisher := &recordingTrafficMapPublisher{
 		name: "example-publisher", stateful: false, claims: []string{"unexpected"},
@@ -2485,7 +2475,7 @@ func TestTrafficMapStatelessPublisherCannotReturnClaims(t *testing.T) {
 	assert.Equal(t, trafficMapPublisherFailureMessage(trafficMapPublisherReasonInvalidPlan), condition.Message)
 }
 
-func TestTrafficMapStatelessPublisherHonorsGlobalSwitchFence(t *testing.T) {
+func TestTrafficMapPublisher_StatelessWhileAnotherPublisherHoldsClaims_IsRejected(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	other := publisherClaimedTrafficMap("other", "different-publisher", []string{"their-target"})
 	publisher := &recordingTrafficMapPublisher{name: "example-publisher", stateful: false}
@@ -2500,7 +2490,7 @@ func TestTrafficMapStatelessPublisherHonorsGlobalSwitchFence(t *testing.T) {
 	assert.Equal(t, trafficMapPublisherReasonClaimRejected, condition.Reason)
 }
 
-func TestTrafficMapPublisherSkipsWhenInactiveOrOwnerStops(t *testing.T) {
+func TestTrafficMapPublisher_InactiveOrOwnerOptsOut_PlansNothingKeepsFinalizer(t *testing.T) {
 	falseValue := false
 	tests := []struct {
 		name            string
@@ -2570,7 +2560,7 @@ func TestTrafficMapPublisherSkipsWhenInactiveOrOwnerStops(t *testing.T) {
 	}
 }
 
-func TestTrafficMapPublisherInactiveOwnerCannotEraseForeignSnapshot(t *testing.T) {
+func TestTrafficMapPublisher_OwnerOptedOutAndAnotherPublishersRecord_LeavesIt(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	falseValue := false
 	owner.Spec.Routing = &v1beta1.RoutingSpec{Enabled: &falseValue}
@@ -2614,7 +2604,7 @@ func TestTrafficMapPublisherInactiveOwnerCannotEraseForeignSnapshot(t *testing.T
 	assert.Equal(t, metav1.ConditionUnknown, fallback.Status)
 }
 
-func TestTrafficMapPublisherApplyFailureKeepsPreclaimForRetry(t *testing.T) {
+func TestTrafficMapPublisher_ApplyFailsOnce_KeepsClaimsAndSucceedsOnRetry(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 	attempts := 0
@@ -2649,7 +2639,7 @@ func TestTrafficMapPublisherApplyFailureKeepsPreclaimForRetry(t *testing.T) {
 	assert.Equal(t, 2, attempts)
 }
 
-func TestTrafficMapPublisherDrainFailureKeepsClaimsForRetry(t *testing.T) {
+func TestTrafficMapPublisher_DrainFailsOnce_KeepsClaimsAndSucceedsOnRetry(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 	trafficMap.Status.Publisher = &v1beta1.TrafficMapPublisherStatus{
@@ -2686,7 +2676,7 @@ func TestTrafficMapPublisherDrainFailureKeepsClaimsForRetry(t *testing.T) {
 	assert.True(t, current.Status.Published)
 }
 
-func TestTrafficMapPublisherDoesNotRecreateLostJournalAfterApply(t *testing.T) {
+func TestTrafficMapPublisher_RecordLostDuringApply_RequeuesWithoutRewritingIt(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 	publisher := &recordingTrafficMapPublisher{
@@ -2711,13 +2701,12 @@ func TestTrafficMapPublisherDoesNotRecreateLostJournalAfterApply(t *testing.T) {
 	assert.Nil(t, current.Status.GatewayRef)
 }
 
-func TestTrafficMapPublisherRetriesAfterSuccessStatusWriteFails(t *testing.T) {
+func TestTrafficMapPublisher_SuccessStatusWriteFails_ReappliesOnRetry(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 	baseClient := newTrafficMapPublisherClient(t, owner, trafficMap)
-	wrapped := &failNthStatusApplyClient{
-		Client: baseClient, failAt: 2, err: errors.New("injected status write failure"),
-	}
+	wrapped := fakeclient.Wrap(t, baseClient,
+		fakeclient.FailingVerb(fakeclient.StatusApply, 2, errors.New("injected status write failure")))
 	applyCalls := 0
 	publisher := &recordingTrafficMapPublisher{
 		name: "example-publisher", stateful: true, claims: []string{"target"},
@@ -2744,7 +2733,7 @@ func TestTrafficMapPublisherRetriesAfterSuccessStatusWriteFails(t *testing.T) {
 	assert.True(t, current.Status.Published)
 }
 
-func TestTrafficMapPublisherFinalizesWhenInactiveWithoutOwner(t *testing.T) {
+func TestTrafficMapPublisher_DeletingMapInactiveNoOwner_UnpublishesThenFinalizes(t *testing.T) {
 	_, trafficMap := publisherTestObjects()
 	trafficMap.Status.SourceUID = ""
 	now := metav1.Now()
@@ -2803,7 +2792,7 @@ func TestTrafficMapPublisherFinalizesWhenInactiveWithoutOwner(t *testing.T) {
 	assert.True(t, apierrors.IsNotFound(err), "removing the last finalizer completes direct deletion")
 }
 
-func TestTrafficMapPublisherFinalizationIgnoresSourceUID(t *testing.T) {
+func TestTrafficMapPublisher_DeletingMapSourceUIDMissingOrWrong_StillUnpublishes(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		sourceUID types.UID
@@ -2833,7 +2822,7 @@ func TestTrafficMapPublisherFinalizationIgnoresSourceUID(t *testing.T) {
 	}
 }
 
-func TestTrafficMapPublisherBlocksCleanupForMismatchedJournal(t *testing.T) {
+func TestTrafficMapPublisher_DeletingMapRecordNamesAnotherPublisher_KeepsFinalizer(t *testing.T) {
 	_, trafficMap := publisherTestObjects()
 	now := metav1.Now()
 	trafficMap.DeletionTimestamp = &now
@@ -2856,7 +2845,7 @@ func TestTrafficMapPublisherBlocksCleanupForMismatchedJournal(t *testing.T) {
 	assert.Equal(t, trafficMapPublisherReasonPublisherChanged, condition.Reason)
 }
 
-func TestTrafficMapPublisherFinalizationUsesUncachedJournal(t *testing.T) {
+func TestTrafficMapPublisher_DeletingMapWithStaleCache_UnpublishesLiveClaims(t *testing.T) {
 	_, trafficMap := publisherTestObjects()
 	now := metav1.Now()
 	trafficMap.DeletionTimestamp = &now
@@ -2867,7 +2856,7 @@ func TestTrafficMapPublisherFinalizationUsesUncachedJournal(t *testing.T) {
 	baseClient := newTrafficMapPublisherClient(t, trafficMap)
 	stale := trafficMap.DeepCopy()
 	stale.Status.Publisher = nil
-	cacheClient := &staleTrafficMapClient{Client: baseClient, stale: stale}
+	cacheClient := fakeclient.Wrap(t, baseClient, fakeclient.StaleRead(stale))
 	var gotClaims []string
 	publisher := &recordingTrafficMapPublisher{
 		name: "example-publisher", stateful: true,
@@ -2885,7 +2874,7 @@ func TestTrafficMapPublisherFinalizationUsesUncachedJournal(t *testing.T) {
 	assert.Equal(t, []string{"live-claim"}, gotClaims)
 }
 
-func TestTrafficMapPublisherFinalizationRechecksJournalAfterUnpublish(t *testing.T) {
+func TestTrafficMapPublisher_ClaimsGrowDuringUnpublish_RepeatsBeforeFinalizing(t *testing.T) {
 	_, trafficMap := publisherTestObjects()
 	now := metav1.Now()
 	trafficMap.DeletionTimestamp = &now
@@ -2930,7 +2919,7 @@ func TestTrafficMapPublisherFinalizationRechecksJournalAfterUnpublish(t *testing
 	assert.True(t, apierrors.IsNotFound(err))
 }
 
-func TestClearPublisherJournalClearsPublisherOwnedStatus(t *testing.T) {
+func TestClearPublisherJournal_PublishedMap_ClearsEveryPublisherOwnedField(t *testing.T) {
 	_, trafficMap := publisherTestObjects()
 	desiredStatus := v1beta1.TrafficMapStatus{
 		Published:                    true,
@@ -2968,12 +2957,13 @@ func TestClearPublisherJournalClearsPublisherOwnedStatus(t *testing.T) {
 	assert.Equal(t, trafficMapPublisherReasonUnpublished, published.Reason)
 }
 
-func TestTrafficMapPublisherStatusApplyRetriesOnConflict(t *testing.T) {
+func TestTrafficMapPublisher_StatusWriteConflictsOnce_RetriesAndPublishes(t *testing.T) {
 	owner, trafficMap := publisherTestObjects()
 	trafficMap.Finalizers = []string{TrafficMapPublisherFinalizer}
 	baseClient := newTrafficMapPublisherClient(t, owner, trafficMap)
-	wrapped := &conflictOnceClient{Client: baseClient}
-	wrapped.beforeConflict = func() {
+	conflicted := false
+	concurrentRoutingWrite := func() {
+		conflicted = true
 		live := getPublisherTrafficMap(t, baseClient, trafficMap)
 		apimeta.SetStatusCondition(&live.Status.Conditions, metav1.Condition{
 			Type: v1beta1.TrafficMapRoutable, Status: metav1.ConditionTrue,
@@ -2981,6 +2971,7 @@ func TestTrafficMapPublisherStatusApplyRetriesOnConflict(t *testing.T) {
 		})
 		require.NoError(t, baseClient.Status().Update(context.Background(), live))
 	}
+	wrapped := fakeclient.Wrap(t, baseClient, statusWriteConflictsOnce(concurrentRoutingWrite))
 	publisher := &recordingTrafficMapPublisher{
 		name: "example-publisher", stateful: true, claims: []string{"target"},
 	}
@@ -2991,13 +2982,13 @@ func TestTrafficMapPublisherStatusApplyRetriesOnConflict(t *testing.T) {
 	_, err := reconcileTrafficMapPublisher(t, reconciler, trafficMap)
 	require.NoError(t, err)
 	current := getPublisherTrafficMap(t, baseClient, trafficMap)
-	assert.True(t, wrapped.conflicted)
+	assert.True(t, conflicted)
 	published := apimeta.FindStatusCondition(current.Status.Conditions, v1beta1.TrafficMapPublished)
 	require.NotNil(t, published)
 	assert.Equal(t, metav1.ConditionTrue, published.Status)
 }
 
-func TestTrafficMapPublisherStatusApplyIsFieldIsolated(t *testing.T) {
+func TestTrafficMapPublisherStatusApply_Rendered_CarriesOnlyPublisherOwnedFields(t *testing.T) {
 	_, trafficMap := publisherTestObjects()
 	trafficMap.ResourceVersion = "17"
 	trafficMap.Status.Published = true
@@ -3048,7 +3039,7 @@ func TestTrafficMapPublisherStatusApplyIsFieldIsolated(t *testing.T) {
 	assert.Equal(t, int64(0), status["observedTrafficMapGeneration"])
 }
 
-func TestTrafficMapPublisherHelpers(t *testing.T) {
+func TestTrafficMapPublisherHelpers_DigestEnqueueAndClaimChecks_MatchTheirContracts(t *testing.T) {
 	first, err := publisherOptionsDigest("publisher-a", map[string]string{"b": "2", "a": "1"})
 	require.NoError(t, err)
 	second, err := publisherOptionsDigest("publisher-a", map[string]string{"a": "1", "b": "2"})
@@ -3075,7 +3066,7 @@ func TestTrafficMapPublisherHelpers(t *testing.T) {
 		"a nonempty strict subset is a claim-set change")
 }
 
-func TestTrafficMapFallbackEligibilityAllowlist(t *testing.T) {
+func TestTrafficMapFallbackEligibility_LossAndLagShapes_ClassifiesEligibleAndKnown(t *testing.T) {
 	tests := []struct {
 		name     string
 		mutate   func(*v1beta1.InferenceService, *v1beta1.TrafficMap)
@@ -3176,7 +3167,7 @@ func TestTrafficMapFallbackEligibilityAllowlist(t *testing.T) {
 			},
 		},
 		{
-			name: "all homes unready", known: true,
+			name: "all clusters unready", known: true,
 			mutate: func(_ *v1beta1.InferenceService, trafficMap *v1beta1.TrafficMap) {
 				apimeta.FindStatusCondition(
 					trafficMap.Status.Conditions, v1beta1.TrafficMapRoutable,
@@ -3192,7 +3183,7 @@ func TestTrafficMapFallbackEligibilityAllowlist(t *testing.T) {
 			},
 		},
 		{
-			name: "all homes probe failed", known: true,
+			name: "all clusters probe failed", known: true,
 			mutate: func(_ *v1beta1.InferenceService, trafficMap *v1beta1.TrafficMap) {
 				apimeta.FindStatusCondition(
 					trafficMap.Status.Conditions, v1beta1.TrafficMapRoutable,
@@ -3273,7 +3264,7 @@ func TestTrafficMapFallbackEligibilityAllowlist(t *testing.T) {
 			},
 		},
 		{
-			name: "placement unknown during single-home loss", known: false,
+			name: "placement unknown during single-cluster loss", known: false,
 			mutate: func(owner *v1beta1.InferenceService, _ *v1beta1.TrafficMap) {
 				owner.Status.Conditions[0].Reason = placementcontroller.PlacementReadyReasonUnknown
 			},
@@ -3303,7 +3294,7 @@ func TestTrafficMapFallbackEligibilityAllowlist(t *testing.T) {
 			},
 		},
 		{
-			name: "placement unknown during all-homes-unready observation", known: false,
+			name: "placement unknown during all-clusters-unready observation", known: false,
 			mutate: func(owner *v1beta1.InferenceService, trafficMap *v1beta1.TrafficMap) {
 				owner.Status.Placement = &v1beta1.PlacementStatus{Phase: v1beta1.PlacementPhasePlaced}
 				owner.Status.Conditions[0].Reason = placementcontroller.PlacementReadyReasonUnknown
@@ -3313,7 +3304,7 @@ func TestTrafficMapFallbackEligibilityAllowlist(t *testing.T) {
 			},
 		},
 		{
-			name: "definitive all-homes-unready observation", known: true,
+			name: "definitive all-clusters-unready observation", known: true,
 			mutate: func(owner *v1beta1.InferenceService, trafficMap *v1beta1.TrafficMap) {
 				owner.Status.Placement = &v1beta1.PlacementStatus{Phase: v1beta1.PlacementPhasePlaced}
 				owner.Status.Conditions[0].Status = corev1.ConditionFalse
@@ -3412,7 +3403,7 @@ func TestTrafficMapFallbackEligibilityAllowlist(t *testing.T) {
 	}
 }
 
-func TestTrafficMapFallbackEligibilityAllHomesUnreadyExtension(t *testing.T) {
+func TestTrafficMapFallbackEligibility_AllHomesUnreadyOptIn_EligibleOnlyWhenDefinite(t *testing.T) {
 	tests := []struct {
 		name     string
 		mutate   func(*v1beta1.InferenceService, *v1beta1.TrafficMap)
@@ -3433,7 +3424,7 @@ func TestTrafficMapFallbackEligibilityAllHomesUnreadyExtension(t *testing.T) {
 				withZeroReports(trafficMap)
 			},
 		},
-		{name: "definitive all-homes-unready", allow: true, eligible: true, known: true},
+		{name: "definitive all-clusters-unready", allow: true, eligible: true, known: true},
 		{
 			name: "publisher does not opt in", known: true,
 		},
@@ -3515,7 +3506,7 @@ func TestTrafficMapFallbackEligibilityAllHomesUnreadyExtension(t *testing.T) {
 	}
 }
 
-func TestValidateTrafficMapLastPositive(t *testing.T) {
+func TestValidateTrafficMapLastPositive_ValidAndEachDefect_AcceptsOrRejects(t *testing.T) {
 	valid := &v1beta1.TrafficMapPublisherLastPositive{
 		TrafficMapGeneration:    3,
 		ObservedISVCGeneration:  7,
@@ -3562,7 +3553,7 @@ func TestValidateTrafficMapLastPositive(t *testing.T) {
 	}
 }
 
-func TestValidateTrafficMapLastPositiveFromEarlierGeneration(t *testing.T) {
+func TestValidateTrafficMapLastPositiveFromEarlierGeneration_OlderNotNewer_Accepts(t *testing.T) {
 	valid := &v1beta1.TrafficMapPublisherLastPositive{
 		TrafficMapGeneration:    3,
 		ObservedISVCGeneration:  6,
@@ -3583,7 +3574,7 @@ func TestValidateTrafficMapLastPositiveFromEarlierGeneration(t *testing.T) {
 	))
 }
 
-func TestPublisherClaimsReplayCompatibleForAllHomesUnready(t *testing.T) {
+func TestPublisherClaimsReplayCompatibleForAllHomesUnready_ClaimsVary_ZeroesMayDrop(t *testing.T) {
 	snapshot := &v1beta1.TrafficMapPublisherLastPositive{Targets: []v1beta1.TrafficMapPublisherTarget{
 		{Target: "a", Weight: 75},
 		{Target: "b", Weight: 25},
@@ -3609,7 +3600,7 @@ func TestPublisherClaimsReplayCompatibleForAllHomesUnready(t *testing.T) {
 	}
 }
 
-func TestValidateTrafficMapPlanCapture(t *testing.T) {
+func TestValidateTrafficMapPlanCapture_ValidAndEachDefect_SortsOrRejects(t *testing.T) {
 	valid := TrafficMapPublishPlanCapture{
 		Targets: []v1beta1.TrafficMapPublisherTarget{
 			{Target: "b", Weight: 0},
@@ -3687,7 +3678,7 @@ func TestValidateTrafficMapPlanCapture(t *testing.T) {
 	assert.Error(t, validateTrafficMapPlanCapture(&retained, []string{"a", "b"}))
 }
 
-func TestTrafficMapPublisherSetupValidation(t *testing.T) {
+func TestValidateSetup_NoLeaderElectionOrNoResync_ReturnsError(t *testing.T) {
 	publisher := &recordingTrafficMapPublisher{name: "example-publisher", stateful: true}
 	kubeClient := newTrafficMapPublisherClient(t)
 	reconciler := &TrafficMapPublisherReconciler{
@@ -3710,7 +3701,7 @@ func TestTrafficMapPublisherSetupValidation(t *testing.T) {
 	require.NoError(t, reconciler.validateSetup())
 }
 
-func TestTrafficMapPublisherOwnerPredicate(t *testing.T) {
+func TestTrafficMapPublisherOwnerChange_AnyRelevantFieldChanges_PassesUnchangedDrops(t *testing.T) {
 	oldOwner := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{
 		Name: "model", Namespace: "team-a", Generation: 1,
 	}}
@@ -3893,7 +3884,7 @@ func newTrafficMapPublisherReconciler(
 	t *testing.T,
 	publisher TrafficMapPublisher,
 	objects ...client.Object,
-) (*TrafficMapPublisherReconciler, client.Client) {
+) (*TrafficMapPublisherReconciler, client.WithWatch) {
 	t.Helper()
 	kubeClient := newTrafficMapPublisherClient(t, objects...)
 	return &TrafficMapPublisherReconciler{
@@ -3901,15 +3892,9 @@ func newTrafficMapPublisherReconciler(
 	}, kubeClient
 }
 
-func newTrafficMapPublisherClient(t *testing.T, objects ...client.Object) client.Client {
+func newTrafficMapPublisherClient(t *testing.T, objects ...client.Object) client.WithWatch {
 	t.Helper()
-	scheme := runtime.NewScheme()
-	require.NoError(t, v1beta1.AddToScheme(scheme))
-	return fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithStatusSubresource(&v1beta1.TrafficMap{}).
-		WithObjects(objects...).
-		Build()
+	return fakeclient.New(t, fakeclient.WithStatusSubresource(&v1beta1.TrafficMap{}), fakeclient.WithObjects(objects...))
 }
 
 func reconcileTrafficMapPublisher(
@@ -3937,223 +3922,79 @@ func publisherApplyContent(t *testing.T, apply runtime.ApplyConfiguration) map[s
 	return unstructuredApply.UnstructuredContent()
 }
 
-type conflictOnceClient struct {
-	client.Client
-	beforeConflict func()
-	conflicted     bool
+// changedOnLaterReads answers the first read of the TrafficMap and of its
+// owner from the store and changes every later one: mutateTrafficMap and
+// mutateOwner run on the copy read, or the owner read fails with ownerErr.
+// That is what a reconciler meets when the objects move between its first
+// authoritative read and the one before its effects.
+func changedOnLaterReads(
+	mutateTrafficMap func(*v1beta1.TrafficMap),
+	mutateOwner func(*v1beta1.InferenceService),
+	ownerErr error,
+) fakeclient.Option {
+	trafficMapGets, ownerGets := 0, 0
+	return fakeclient.WithInterceptors(interceptor.Funcs{
+		Get: func(ctx context.Context, next client.WithWatch, key client.ObjectKey, object client.Object, opts ...client.GetOption) error {
+			switch object.(type) {
+			case *v1beta1.TrafficMap:
+				trafficMapGets++
+			case *v1beta1.InferenceService:
+				ownerGets++
+				if ownerGets > 1 && ownerErr != nil {
+					return ownerErr
+				}
+			}
+			if err := next.Get(ctx, key, object, opts...); err != nil {
+				return err
+			}
+			switch typed := object.(type) {
+			case *v1beta1.TrafficMap:
+				if trafficMapGets > 1 && mutateTrafficMap != nil {
+					mutateTrafficMap(typed)
+				}
+			case *v1beta1.InferenceService:
+				if ownerGets > 1 && mutateOwner != nil {
+					mutateOwner(typed)
+				}
+			}
+			return nil
+		},
+	})
 }
 
-type failNthStatusApplyClient struct {
-	client.Client
-	failAt int
-	calls  int
-	err    error
-}
-
-// staleTrafficMapClient simulates a cache returning one stale TrafficMap read.
-// The reconciler must still use APIReader for the deletion journal.
-type staleTrafficMapClient struct {
-	client.Client
-	stale  *v1beta1.TrafficMap
-	served bool
-}
-
-// frozenTrafficMapCacheClient models an informer cache that has not observed
-// publisher status writes yet. Mutations still reach the live API client, as
-// they do through controller-runtime's delegating client.
-type frozenTrafficMapCacheClient struct {
-	client.Client
-	trafficMaps    map[types.NamespacedName]*v1beta1.TrafficMap
-	trafficMapGets int
-}
-
-type preEffectChangingReader struct {
-	client.Reader
-	trafficMapGets   int
-	ownerGets        int
-	mutateTrafficMap func(*v1beta1.TrafficMap)
-	mutateOwner      func(*v1beta1.InferenceService)
-	ownerErr         error
-}
-
-func (r *preEffectChangingReader) Get(
-	ctx context.Context,
-	key client.ObjectKey,
-	object client.Object,
-	options ...client.GetOption,
-) error {
-	switch object.(type) {
-	case *v1beta1.TrafficMap:
-		r.trafficMapGets++
-	case *v1beta1.InferenceService:
-		r.ownerGets++
-		if r.ownerGets > 1 && r.ownerErr != nil {
-			return r.ownerErr
+// statusWriteConflictsOnce refuses the first status write, an apply or a
+// patch, with a conflict after running beforeConflict, which stands for the
+// writer that won; every later write reaches the store.
+func statusWriteConflictsOnce(beforeConflict func()) fakeclient.Option {
+	conflicted := false
+	conflict := func(name string) error {
+		if conflicted {
+			return nil
 		}
-	}
-	if err := r.Reader.Get(ctx, key, object, options...); err != nil {
-		return err
-	}
-	switch typed := object.(type) {
-	case *v1beta1.TrafficMap:
-		if r.trafficMapGets > 1 && r.mutateTrafficMap != nil {
-			r.mutateTrafficMap(typed)
-		}
-	case *v1beta1.InferenceService:
-		if r.ownerGets > 1 && r.mutateOwner != nil {
-			r.mutateOwner(typed)
-		}
-	}
-	return nil
-}
-
-type failInferenceServiceListReader struct {
-	client.Reader
-	err error
-}
-
-type failingInferenceServiceGetReader struct {
-	client.Reader
-	err error
-}
-
-func (r *failingInferenceServiceGetReader) Get(
-	ctx context.Context,
-	key client.ObjectKey,
-	object client.Object,
-	options ...client.GetOption,
-) error {
-	if _, ok := object.(*v1beta1.InferenceService); ok {
-		return r.err
-	}
-	return r.Reader.Get(ctx, key, object, options...)
-}
-
-func (r *failInferenceServiceListReader) List(
-	ctx context.Context,
-	list client.ObjectList,
-	options ...client.ListOption,
-) error {
-	if _, ok := list.(*v1beta1.InferenceServiceList); ok {
-		return r.err
-	}
-	return r.Reader.List(ctx, list, options...)
-}
-
-func (c *staleTrafficMapClient) Get(
-	ctx context.Context,
-	key client.ObjectKey,
-	object client.Object,
-	options ...client.GetOption,
-) error {
-	trafficMap, ok := object.(*v1beta1.TrafficMap)
-	if !c.served && ok && key == client.ObjectKeyFromObject(c.stale) {
-		c.served = true
-		c.stale.DeepCopyInto(trafficMap)
-		return nil
-	}
-	return c.Client.Get(ctx, key, object, options...)
-}
-
-func (c *frozenTrafficMapCacheClient) Get(
-	ctx context.Context,
-	key client.ObjectKey,
-	object client.Object,
-	options ...client.GetOption,
-) error {
-	trafficMap, ok := object.(*v1beta1.TrafficMap)
-	if !ok {
-		return c.Client.Get(ctx, key, object, options...)
-	}
-	snapshot, found := c.trafficMaps[key]
-	if !found {
-		return apierrors.NewNotFound(v1beta1.Resource("trafficmaps"), key.Name)
-	}
-	c.trafficMapGets++
-	snapshot.DeepCopyInto(trafficMap)
-	return nil
-}
-
-func (c *frozenTrafficMapCacheClient) List(
-	ctx context.Context,
-	list client.ObjectList,
-	options ...client.ListOption,
-) error {
-	trafficMaps, ok := list.(*v1beta1.TrafficMapList)
-	if !ok {
-		return c.Client.List(ctx, list, options...)
-	}
-	trafficMaps.Items = trafficMaps.Items[:0]
-	for _, snapshot := range c.trafficMaps {
-		trafficMaps.Items = append(trafficMaps.Items, *snapshot.DeepCopy())
-	}
-	return nil
-}
-
-func (c *conflictOnceClient) Status() client.SubResourceWriter {
-	return &conflictOnceStatusWriter{SubResourceWriter: c.Client.Status(), client: c}
-}
-
-func (c *failNthStatusApplyClient) Status() client.SubResourceWriter {
-	return &failNthStatusApplyWriter{SubResourceWriter: c.Client.Status(), client: c}
-}
-
-type failNthStatusApplyWriter struct {
-	client.SubResourceWriter
-	client *failNthStatusApplyClient
-}
-
-func (w *failNthStatusApplyWriter) Apply(
-	ctx context.Context,
-	obj runtime.ApplyConfiguration,
-	opts ...client.SubResourceApplyOption,
-) error {
-	w.client.calls++
-	if w.client.calls == w.client.failAt {
-		return w.client.err
-	}
-	return w.SubResourceWriter.Apply(ctx, obj, opts...)
-}
-
-type conflictOnceStatusWriter struct {
-	client.SubResourceWriter
-	client *conflictOnceClient
-}
-
-func (w *conflictOnceStatusWriter) Apply(
-	ctx context.Context,
-	obj runtime.ApplyConfiguration,
-	opts ...client.SubResourceApplyOption,
-) error {
-	if !w.client.conflicted {
-		w.client.conflicted = true
-		w.client.beforeConflict()
+		conflicted = true
+		beforeConflict()
 		return apierrors.NewConflict(
 			schema.GroupResource{Group: v1beta1.SchemeGroupVersion.Group, Resource: "trafficmaps"},
-			"model", errors.New("injected status conflict"),
+			name, errors.New("injected status conflict"),
 		)
 	}
-	return w.SubResourceWriter.Apply(ctx, obj, opts...)
+	return fakeclient.WithInterceptors(interceptor.Funcs{
+		SubResourceApply: func(ctx context.Context, next client.Client, sub string, obj runtime.ApplyConfiguration, opts ...client.SubResourceApplyOption) error {
+			if err := conflict("model"); err != nil {
+				return err
+			}
+			return next.SubResource(sub).Apply(ctx, obj, opts...)
+		},
+		SubResourcePatch: func(ctx context.Context, next client.Client, sub string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+			if err := conflict(obj.GetName()); err != nil {
+				return err
+			}
+			return next.SubResource(sub).Patch(ctx, obj, patch, opts...)
+		},
+	})
 }
 
-func (w *conflictOnceStatusWriter) Patch(
-	ctx context.Context,
-	obj client.Object,
-	patch client.Patch,
-	opts ...client.SubResourcePatchOption,
-) error {
-	if !w.client.conflicted {
-		w.client.conflicted = true
-		w.client.beforeConflict()
-		return apierrors.NewConflict(
-			schema.GroupResource{Group: v1beta1.SchemeGroupVersion.Group, Resource: "trafficmaps"},
-			obj.GetName(), errors.New("injected status conflict"),
-		)
-	}
-	return w.SubResourceWriter.Patch(ctx, obj, patch, opts...)
-}
-
-func TestTrafficMapPublicationWatchFiltersAcknowledgements(t *testing.T) {
+func TestTrafficMapPublicationChange_PublisherOwnedStatusOnly_DroppedOthersPass(t *testing.T) {
 	_, old := publisherTestObjects()
 	current := old.DeepCopy()
 	current.Status.Published = true
@@ -4167,4 +4008,57 @@ func TestTrafficMapPublicationWatchFiltersAcknowledgements(t *testing.T) {
 	}
 	require.True(t, trafficMapPublicationChange.Create(event.CreateEvent{Object: old}))
 	require.True(t, trafficMapPublicationChange.Delete(event.DeleteEvent{Object: old}))
+}
+
+func TestRunPublisherSteps_StopsAtTheFirstStepThatEndsThePass(t *testing.T) {
+	var ran []string
+	step := func(name string, next bool, err error) publisherStep {
+		return func(context.Context) (bool, error) {
+			ran = append(ran, name)
+			return next, err
+		}
+	}
+	run := func(steps ...publisherStep) (done bool, order string, err error) {
+		ran = nil
+		done, err = runPublisherSteps(context.Background(), steps)
+		return done, strings.Join(ran, ","), err
+	}
+
+	done, order, err := run(step("first", true, nil), step("second", true, nil))
+	if err != nil || !done || order != "first,second" {
+		t.Fatalf("every step went on: done=%v err=%v ran=%q, want done=true err=nil ran=first,second", done, err, order)
+	}
+	done, order, err = run(step("first", true, nil), step("ends", false, nil), step("never", true, nil))
+	if err != nil || done || order != "first,ends" {
+		t.Fatalf("a step ended the pass: done=%v err=%v ran=%q, want done=false err=nil ran=first,ends", done, err, order)
+	}
+	writeFailed := errors.New("write the status")
+	done, order, err = run(step("fails", true, writeFailed), step("never", true, nil))
+	if !errors.Is(err, writeFailed) || done || order != "fails" {
+		t.Fatalf("a step failed: done=%v err=%v ran=%q, want done=false the step's error ran=fails", done, err, order)
+	}
+
+	pass := &publisherPass{}
+	requeue := ctrl.Result{Requeue: true}
+	done, order, err = run(step("first", true, nil), func(context.Context) (bool, error) {
+		ran = append(ran, "ends")
+		return pass.end(requeue, nil)
+	}, step("never", true, nil))
+	if err != nil || done || order != "first,ends" || pass.result != requeue {
+		t.Fatalf("a step ended the pass with a result: done=%v err=%v ran=%q result=%+v, want done=false err=nil ran=first,ends result=%+v", done, err, order, pass.result, requeue)
+	}
+}
+
+func TestEndClaimRecordWrite_RecordChangedOrWriteFailed_RequeuesOrReturnsError(t *testing.T) {
+	pass := &publisherPass{}
+	next, err := pass.endClaimRecordWrite(fmt.Errorf("%w: claims moved", errTrafficMapPublisherJournalChanged))
+	if next || err != nil || !pass.result.Requeue {
+		t.Fatalf("a changed claim record requeues without an error: next=%v err=%v result=%+v", next, err, pass.result)
+	}
+	pass = &publisherPass{}
+	writeFailed := errors.New("patch status")
+	next, err = pass.endClaimRecordWrite(writeFailed)
+	if next || !errors.Is(err, writeFailed) || pass.result != (ctrl.Result{}) {
+		t.Fatalf("any other write failure returns its error: next=%v err=%v result=%+v", next, err, pass.result)
+	}
 }

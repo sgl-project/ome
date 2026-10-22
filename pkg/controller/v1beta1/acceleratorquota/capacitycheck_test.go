@@ -47,7 +47,7 @@ func nodesFor(t *testing.T, quotas ...*v1beta1.AcceleratorQuota) []*tree.Node {
 // the check could be wrong in a direction nobody would notice: silently
 // tolerating an over-budget tenant, or freezing a whole fleet over capacity
 // that was simply never measured.
-func TestCapacityViolations(t *testing.T) {
+func TestCapacityViolations_BudgetVsMark_ReportsOverBudgetAndUnmeasuredPairs(t *testing.T) {
 	tests := []struct {
 		name     string
 		quotas   []*v1beta1.AcceleratorQuota

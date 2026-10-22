@@ -31,7 +31,7 @@ func affinityToLeader(pgName string) *v1.Affinity {
 	}}
 }
 
-// TestPermitActivationRescuesAffinityBlockedWorker pins prompt convergence of
+// TestPermitActivationRescuesAffinityBlockedWorker locks prompt convergence of
 // the worker-first ordering of a multi-pod gang: the worker carries a REQUIRED
 // podAffinity term to its leader (worker-follows-leader, never mutual — a
 // mutual requirement would deadlock the very first pod scheduled), gated
@@ -95,7 +95,7 @@ func TestPermitActivationRescuesAffinityBlockedWorker(t *testing.T) {
 	}
 }
 
-// TestTemplateCompletionRescuesLeaderFirstGang pins the opposite creation order
+// TestTemplateCompletionRescuesLeaderFirstGang locks the opposite creation order
 // of the same worker-follows-leader shape, which is how a multi-node controller
 // typically creates a gang: leader first, then the worker. The leader is popped
 // before the worker exists and parks waiting for the full member template set.
@@ -105,7 +105,7 @@ func TestPermitActivationRescuesAffinityBlockedWorker(t *testing.T) {
 // first. Neither member reaches Permit, so Permit's sibling activation never
 // runs either. The plugin must therefore treat "the member set became complete"
 // as an explicit wake-up: the worker's PreFilter, the first to observe the full
-// set, activates the parked leader; the leader then pins the domain, waits at
+// set, activates the parked leader; the leader then takes the domain, waits at
 // Permit, and its activation pulls the worker through.
 //
 // The tight bind window is the assertion: without that wake-up both pods sit in
@@ -163,7 +163,7 @@ func TestTemplateCompletionRescuesLeaderFirstGang(t *testing.T) {
 // cluster with two feasible domains: "a" (2 free nodes, the best fit for a
 // 2-member gang) and "b" (8 free nodes). A worker whose required affinity
 // targets a leader that is not yet assumed cannot pass Filter on any node, so
-// if it planned and pinned a domain anyway, the failure would be recorded
+// if it planned and took a domain anyway, the failure would be recorded
 // against that domain and the leader's own attempt would plan around it,
 // landing the gang in the looser domain. The worker must instead yield without
 // planning, leaving the leader to make the placement decision.

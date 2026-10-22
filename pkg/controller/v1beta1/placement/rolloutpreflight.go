@@ -39,7 +39,7 @@ type resolvedRolloutPolicy struct {
 
 // rolloutPreflight is the in-memory rollout-policy bookkeeping for the
 // placement controller: the staged preflight condition, the per-source
-// resolved policies the derive-time inflation consumes, the per-(source,home)
+// resolved policies the derive-time inflation consumes, the per-(source,member)
 // lifted run provenance, and the manual-Pause warning dedupe. The API
 // deliberately carries no such state; a control-plane restart clears it and
 // the next pass rebuilds it from the spec (conservative: resolution reruns,
@@ -53,8 +53,8 @@ type rolloutPreflight struct {
 	// plans is the latest successfully-resolved policy set per source; the
 	// fan-out's derive reads it to inflate ref-only groups.
 	plans map[types.UID]map[string]resolvedRolloutPolicy
-	// homes is the latest lifted rollout-run observation per (source, home).
-	homes map[types.UID]map[string]*v1beta1.CandidateRolloutStatus
+	// members is the latest lifted rollout-run observation per (source, member).
+	members map[types.UID]map[string]*v1beta1.CandidateRolloutStatus
 	// warned is the last manual-Pause warning message emitted per source, so
 	// the poll-cadence reconcile does not re-emit an unchanged warning.
 	warned map[types.UID]string
@@ -94,28 +94,28 @@ func (p *rolloutPreflight) plansFor(uid types.UID) map[string]resolvedRolloutPol
 	return p.plans[uid]
 }
 
-func (p *rolloutPreflight) recordHome(uid types.UID, cluster string, obs *v1beta1.CandidateRolloutStatus) {
+func (p *rolloutPreflight) recordMember(uid types.UID, cluster string, obs *v1beta1.CandidateRolloutStatus) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.homes == nil {
-		p.homes = make(map[types.UID]map[string]*v1beta1.CandidateRolloutStatus)
+	if p.members == nil {
+		p.members = make(map[types.UID]map[string]*v1beta1.CandidateRolloutStatus)
 	}
-	if p.homes[uid] == nil {
-		p.homes[uid] = make(map[string]*v1beta1.CandidateRolloutStatus)
+	if p.members[uid] == nil {
+		p.members[uid] = make(map[string]*v1beta1.CandidateRolloutStatus)
 	}
-	p.homes[uid][cluster] = obs
+	p.members[uid][cluster] = obs
 }
 
-func (p *rolloutPreflight) homeFor(uid types.UID, cluster string) *v1beta1.CandidateRolloutStatus {
+func (p *rolloutPreflight) memberFor(uid types.UID, cluster string) *v1beta1.CandidateRolloutStatus {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.homes[uid][cluster]
+	return p.members[uid][cluster]
 }
 
-func (p *rolloutPreflight) forgetHome(uid types.UID, cluster string) {
+func (p *rolloutPreflight) forgetMember(uid types.UID, cluster string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	delete(p.homes[uid], cluster)
+	delete(p.members[uid], cluster)
 }
 
 // warnOnce reports whether msg is new content for this source (and records
@@ -139,7 +139,7 @@ func (p *rolloutPreflight) forget(uid types.UID) {
 	defer p.mu.Unlock()
 	delete(p.preflight, uid)
 	delete(p.plans, uid)
-	delete(p.homes, uid)
+	delete(p.members, uid)
 	delete(p.warned, uid)
 }
 
@@ -399,20 +399,20 @@ func (r *Reconciler) warnManualPauseGates(isvc *v1beta1.InferenceService, manual
 }
 
 // observeDerivedRolloutStatus lifts a freshly read derived ISVC's rollout-run
-// provenance into the in-memory home observations, from which the next status
+// provenance into the in-memory member observations, from which the next status
 // write populates candidates[].rollout. No-op for a source whose rollout
 // groups reference no policy (the zero-cost path).
 func (r *Reconciler) observeDerivedRolloutStatus(src *v1beta1.InferenceService, cluster string, derived *v1beta1.InferenceService) {
 	if !hasRolloutPolicyRefs(src) {
 		return
 	}
-	r.rolloutState().recordHome(src.UID, cluster, liftCandidateRollout(derived))
+	r.rolloutState().recordMember(src.UID, cluster, liftCandidateRollout(derived))
 }
 
 // liftCandidateRollout maps one derived ISVC's status.rollout into the bounded
-// per-home CandidateRolloutStatus: the active run's ID and per-group
+// per-member CandidateRolloutStatus: the active run's ID and per-group
 // provenance (source, policy name, portable digest) plus the last closed run's
-// outcome and combined digest. Never the plan bodies. Nil when the home
+// outcome and combined digest. Never the plan bodies. Nil when the member
 // reports no run state yet.
 func liftCandidateRollout(derived *v1beta1.InferenceService) *v1beta1.CandidateRolloutStatus {
 	rs := derived.Status.Rollout
@@ -463,7 +463,7 @@ func cloneCandidateRollout(in *v1beta1.CandidateRolloutStatus) *v1beta1.Candidat
 }
 
 // rolloutStatusForWrite decorates the pass's placement result right before the
-// status write: it attaches the lifted per-home rollout provenance to the
+// status write: it attaches the lifted per-member rollout provenance to the
 // candidates and returns the staged PlacementPolicyPreflight condition (merged
 // with the autoscaler preflight's by the caller). For a source whose rollout
 // carries no policy ref and no schema-sensitive field it only drops stale
@@ -480,7 +480,7 @@ func (r *Reconciler) rolloutStatusForWrite(isvc *v1beta1.InferenceService, res *
 		conds = append(conds, pre)
 	}
 	for i := range res.candidates {
-		if obs := rp.homeFor(isvc.UID, res.candidates[i].Cluster); obs != nil {
+		if obs := rp.memberFor(isvc.UID, res.candidates[i].Cluster); obs != nil {
 			res.candidates[i].Rollout = cloneCandidateRollout(obs)
 		}
 	}

@@ -211,6 +211,7 @@ func armLadderCanaryWire(t *testing.T, steps []v1beta1.RolloutGroupStep, t0 time
 	rec := record.NewFakeRecorder(16)
 	w := &timedCanaryWire{ctx: ctx, client: c, rec: rec, isvc: isvc, ns: ns,
 		deps: DispatchDeps{Client: c, Reader: c, Recorder: rec, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{}), Now: t0}}
+	syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 	if _, err := Dispatch(ctx, w.deps); err != nil {
 		t.Fatalf("Dispatch arming the canary: %v", err)
 	}
@@ -241,6 +242,7 @@ func (w *timedCanaryWire) setRunner(t *testing.T, name string, status corev1.Con
 func (w *timedCanaryWire) dispatchAt(t *testing.T, now time.Time) {
 	t.Helper()
 	w.deps.Now = now
+	syncInstanceRows(t, w.client, w.isvc, v1beta1.EngineComponent)
 	if _, err := Dispatch(w.ctx, w.deps); err != nil {
 		t.Fatalf("Dispatch at %v: %v", now, err)
 	}

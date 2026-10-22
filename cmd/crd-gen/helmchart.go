@@ -2,8 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -15,7 +13,14 @@ import (
 	"strings"
 
 	"sigs.k8s.io/yaml"
+
+	"sigs.k8s.io/ome/pkg/digest"
 )
+
+// partialHashLength is the length of the content hash in a schema partial's
+// name. The checked-in templates carry names of this length, so it is part
+// of the generated chart's contract.
+const partialHashLength = 12
 
 // helmChartOptions controls how repeated schema subtrees become Helm partials.
 type helmChartOptions struct {
@@ -77,7 +82,7 @@ func buildHelmChart(inputs []string, opts helmChartOptions) (map[string][]byte, 
 	partials := map[string]string{}
 	for canon, n := range counts {
 		if n >= 2 {
-			partials[canon] = opts.Prefix + "." + shortHash(canon)
+			partials[canon] = opts.Prefix + "." + digest.Short([]byte(canon), partialHashLength)
 		}
 	}
 
@@ -179,11 +184,6 @@ func canonical(node map[string]interface{}) string {
 		panic(err) // decoded JSON always re-encodes
 	}
 	return string(b)
-}
-
-func shortHash(s string) string {
-	sum := sha256.Sum256([]byte(s))
-	return hex.EncodeToString(sum[:])[:12]
 }
 
 // childEligible says whether the value under key may become a partial. A

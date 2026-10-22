@@ -1,47 +1,26 @@
 package v1beta1
 
 import (
-	"bytes"
 	"encoding/json"
 )
 
-// UnmarshalJSON preserves null affinity as an invalid value rather than an
+// UnmarshalJSON preserves null affinity as an invalid empty list rather than an
 // unconstrained omission, including when admission webhooks are unavailable.
-// A clusterAffinity object, which this version cannot read, is held as invalid
-// instead of failing to decode the whole service.
 func (p *PlacementSpec) UnmarshalJSON(data []byte) error {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
-	_, affinityPresent := fields["clusterAffinity"]
-	if isJSONObject(fields["clusterAffinity"]) {
-		delete(fields, "clusterAffinity")
-		readable, err := json.Marshal(fields)
-		if err != nil {
-			return err
-		}
-		data = readable
-	}
 	type plain PlacementSpec
 	var decoded plain
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return err
 	}
-	if affinityPresent && decoded.ClusterAffinity == nil {
-		decoded.ClusterAffinity = []ClusterAffinityTerm{}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
 	}
-	if _, exists := fields["componentAffinity"]; exists && decoded.ComponentAffinity == nil {
-		decoded.ComponentAffinity = &ComponentClusterAffinity{}
+	if _, exists := fields["clusterAffinity"]; exists && decoded.ClusterAffinity == nil {
+		decoded.ClusterAffinity = []ClusterAffinityTerm{}
 	}
 	*p = PlacementSpec(decoded)
 	return nil
-}
-
-// isJSONObject reports whether a raw JSON value is an object.
-func isJSONObject(raw json.RawMessage) bool {
-	trimmed := bytes.TrimLeft(raw, " \t\r\n")
-	return len(trimmed) > 0 && trimmed[0] == '{'
 }
 
 // MarshalJSON keeps explicit invalid restrictions visible across a read/write

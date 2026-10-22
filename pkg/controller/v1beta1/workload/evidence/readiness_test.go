@@ -1,4 +1,4 @@
-package evidence_test
+package evidence
 
 // The two readiness limbos, as the classifiers see them: running every
 // container yet never ContainersReady, and containers ready yet a
@@ -10,8 +10,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/evidence"
 )
 
 // TestPodRunningNotReady_ExcludesWaitingContainers pins the detector: only a Running pod whose
@@ -20,10 +18,10 @@ import (
 // the stuck-pod evidence classifies, not this shape.
 func TestPodRunningNotReady_ExcludesWaitingContainers(t *testing.T) {
 	now := time.Now()
-	if !evidence.PodRunningNotReady(runningNotReadyPod("engine-0-default-0", now)) {
+	if !PodRunningNotReady(runningNotReadyPod("engine-0-default-0", now)) {
 		t.Errorf("running pod with ContainersReady=False: got false want true")
 	}
-	if evidence.PodRunningNotReady(servingPod("engine-0-default-0")) {
+	if PodRunningNotReady(servingPod("engine-0-default-0")) {
 		t.Errorf("serving pod: got true want false")
 	}
 
@@ -31,10 +29,10 @@ func TestPodRunningNotReady_ExcludesWaitingContainers(t *testing.T) {
 	backoff.Status.ContainerStatuses[0].State = corev1.ContainerState{
 		Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"},
 	}
-	if evidence.PodRunningNotReady(backoff) {
+	if PodRunningNotReady(backoff) {
 		t.Errorf("CrashLoopBackOff pod: got true want false (a kubelet wedge, not a readiness limbo)")
 	}
-	if evidence.PodRunningNotReady(nil) {
+	if PodRunningNotReady(nil) {
 		t.Errorf("nil pod: got true want false")
 	}
 }
@@ -45,16 +43,16 @@ func TestPodRunningNotReady_ExcludesWaitingContainers(t *testing.T) {
 func TestPodGateNotFolded_IsDisjointFromRunningNotReady(t *testing.T) {
 	now := time.Now()
 	pod := gateNotFoldedPod("engine-0-default-0", now)
-	if !evidence.PodGateNotFolded(pod) {
+	if !podGateNotFolded(pod) {
 		t.Errorf("containers ready with Ready=False: got false want true")
 	}
-	if evidence.PodRunningNotReady(pod) {
+	if PodRunningNotReady(pod) {
 		t.Errorf("gate limbo also read as a containers-not-ready limbo: the two shapes must be disjoint")
 	}
-	if evidence.PodGateNotFolded(runningNotReadyPod("engine-0-default-0", now)) {
+	if podGateNotFolded(runningNotReadyPod("engine-0-default-0", now)) {
 		t.Errorf("containers-not-ready pod: got true want false")
 	}
-	if evidence.PodGateNotFolded(servingPod("engine-0-default-0")) {
+	if podGateNotFolded(servingPod("engine-0-default-0")) {
 		t.Errorf("serving pod: got true want false")
 	}
 
@@ -62,10 +60,10 @@ func TestPodGateNotFolded_IsDisjointFromRunningNotReady(t *testing.T) {
 	backoff.Status.ContainerStatuses[0].State = corev1.ContainerState{
 		Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"},
 	}
-	if evidence.PodGateNotFolded(backoff) {
+	if podGateNotFolded(backoff) {
 		t.Errorf("CrashLoopBackOff pod: got true want false (a kubelet wedge, not a gate limbo)")
 	}
-	if evidence.PodGateNotFolded(nil) {
+	if podGateNotFolded(nil) {
 		t.Errorf("nil pod: got true want false")
 	}
 }

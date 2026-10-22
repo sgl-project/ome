@@ -112,7 +112,7 @@ func (r *Reconciler) observationNow() time.Time {
 	return time.Now()
 }
 
-// unknownCandidate carries a home's last known state behind a failed read.
+// unknownCandidate carries a member's last known state behind a failed read.
 // The ready count is the routing weight, so the count from the last successful
 // read stays only until ObservationGrace has passed since the first failed
 // read. ObservationFailingSince records that first failure in status, so a
@@ -140,7 +140,7 @@ func (r *Reconciler) unknownCandidate(isvc *v1beta1.InferenceService, previous v
 
 // observationGrace is the configured grace, or none while status writes show
 // that the stored CRD drops observationFailingSince. Without the stored start
-// every pass would begin a fresh grace, and a home whose reads keep failing
+// every pass would begin a fresh grace, and a member whose reads keep failing
 // would never lose its ready count.
 func (r *Reconciler) observationGrace() time.Duration {
 	if r.failingSinceDropped.Load() {
@@ -175,7 +175,7 @@ func (r *Reconciler) noteFailingSinceStored(sent, stored []v1beta1.CandidatePlac
 	}
 }
 
-// graceWake collects, over one reconcile, the earliest time a written home
+// graceWake collects, over one reconcile, the earliest time a written member
 // that cannot be read loses its retained ready count.
 type graceWake struct {
 	at time.Time
@@ -183,7 +183,7 @@ type graceWake struct {
 
 type graceWakeKey struct{}
 
-// noteGraceEnds records when the observation grace of each unreadable home in
+// noteGraceEnds records when the observation grace of each unreadable member in
 // a status write ends, so the reconcile wakes in time to withdraw its ready
 // count if reads still fail.
 func (r *Reconciler) noteGraceEnds(ctx context.Context, candidates []v1beta1.CandidatePlacement) {

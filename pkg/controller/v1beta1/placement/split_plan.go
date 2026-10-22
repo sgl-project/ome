@@ -78,10 +78,7 @@ func desiredSplitPlan(source *v1beta1.InferenceService, clusters []v1beta1.Workl
 			return plan.Proposal{}, fmt.Errorf("cluster %q incarnation changed; its standing allocation is unverified", cluster.Name)
 		}
 		assignment.ClusterUID, assignment.MatchingTerms = cluster.UID, match.TermIndexes
-		assignment.ComponentMatches, err = componentMatchesOn(source, selectors, cluster)
-		if err != nil {
-			return plan.Proposal{}, err
-		}
+		assignment.ComponentMatches = componentMatchesOn(source, selectors, cluster)
 		if placementMode(source) == v1beta1.PlacementModeSplit {
 			assignment.Weight = ptr.To(match.Weight)
 			weights[cluster.Name] = match.Weight
@@ -152,34 +149,28 @@ func desiredSplitPlan(source *v1beta1.InferenceService, clusters []v1beta1.Workl
 	return proposal, nil
 }
 
-// componentMatchesOn records how each component other than the primary one
-// matches a cluster the primary component matched. The components must match
-// the same clusters; reconciliation holds before planning when they do not.
-func componentMatchesOn(source *v1beta1.InferenceService, selectors map[v1beta1.ComponentType]*affinity.Selector, cluster *v1beta1.WorkloadCluster) ([]v1beta1.ComponentAffinityMatch, error) {
-	if !source.Spec.Placement.UsesComponentAffinity() {
-		return nil, nil
+// componentMatchesOn records the weight of each component other than the
+// primary one on a cluster the primary component matched, when the terms set
+// weights in static Split: the decoder's, and the router's when routers are
+// divided. Every other plan records none, so it apportions by primary targets.
+func componentMatchesOn(source *v1beta1.InferenceService, selectors map[v1beta1.ComponentType]*affinity.Selector, cluster *v1beta1.WorkloadCluster) []v1beta1.ComponentAffinityMatch {
+	if placementMode(source) != v1beta1.PlacementModeSplit || !affinity.SetsWeights(source.Spec.Placement.ClusterAffinity) {
+		return nil
 	}
 	var out []v1beta1.ComponentAffinityMatch
 	for _, component := range placedComponents(source)[1:] {
-		selector, own := selectors[component]
-		if !own {
+		if component == v1beta1.RouterComponent && !routerDivided(source) {
 			continue
 		}
-		match, matches := selector.Match(cluster)
-		if !matches {
-			return nil, fmt.Errorf("cluster %q matches the primary component but not %s", cluster.Name, component)
+		if match, matches := selectors[component].Match(cluster); matches {
+			out = append(out, v1beta1.ComponentAffinityMatch{Component: component, Weight: ptr.To(match.Weight)})
 		}
-		recorded := v1beta1.ComponentAffinityMatch{Component: component, MatchingTerms: match.TermIndexes}
-		if placementMode(source) == v1beta1.PlacementModeSplit {
-			recorded.Weight = ptr.To(match.Weight)
-		}
-		out = append(out, recorded)
 	}
-	return out, nil
+	return out
 }
 
 // checkDesiredSplitFloors holds a plan whose secondary floors cannot be met:
-// fewer replicas than homes that hold the primary component, or, for a
+// fewer replicas than members that hold the primary component, or, for a
 // component apportioned by its own weights, a share above its scaled ceiling.
 func checkDesiredSplitFloors(source *v1beta1.InferenceService, minimums splitMinimums, targets map[string]int32, assignments map[string]v1beta1.CandidateAllocationStatus, ceiling int32) error {
 	weights := splitWeightsOf(source, assignments)

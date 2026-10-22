@@ -1,7 +1,6 @@
 package resolution
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
@@ -12,13 +11,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/runtimerevision"
 	"sigs.k8s.io/ome/pkg/runtimeselector"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 type runtimeFixture struct {
@@ -251,29 +249,8 @@ func TestResolveRuntime(t *testing.T) {
 			if tt.edit != nil {
 				tt.edit(t, &f)
 			}
-			objects := f.extra
-			if f.runtime != nil {
-				objects = append(objects, f.runtime)
-			}
-			if f.standing != nil {
-				objects = append(objects, f.standing)
-			}
-			base := fake.NewClientBuilder().WithScheme(runtimeScheme(t)).WithObjects(objects...).Build()
-			writes := 0
-			c := interceptor.NewClient(base, interceptor.Funcs{
-				Create: func(context.Context, client.WithWatch, client.Object, ...client.CreateOption) error {
-					writes++
-					return nil
-				},
-				Update: func(context.Context, client.WithWatch, client.Object, ...client.UpdateOption) error {
-					writes++
-					return nil
-				},
-				Patch: func(context.Context, client.WithWatch, client.Object, client.Patch, ...client.PatchOption) error {
-					writes++
-					return nil
-				},
-			})
+			writes := fakeclient.CountingWrites()
+			c := fixtureClient(t, f, writes)
 			before, previous := f.service.DeepCopy(), f.standing.DeepCopy()
 			got, err := (Resolver{Client: c, OperatorNamespace: f.namespace}).Resolve(t.Context(), f.service, f.standing)
 			if diff := cmp.Diff(tt.wantErr, err != nil); diff != "" {
@@ -285,7 +262,7 @@ func TestResolveRuntime(t *testing.T) {
 			if diff := cmp.Diff(previous, f.standing); diff != "" {
 				t.Errorf("standing service changed:\n%s", diff)
 			}
-			if diff := cmp.Diff(0, writes); diff != "" {
+			if diff := cmp.Diff(0, writes.Count()); diff != "" {
 				t.Errorf("read-only resolver wrote:\n%s", diff)
 			}
 			if tt.wantErr {

@@ -18,7 +18,7 @@ const podGroupLabel = "scheduling.x-k8s.io/pod-group"
 // wait at the gate for its siblings.
 type gangInfo struct {
 	key         string // namespace/podgroup-name
-	uid         string // immutable PodGroup identity; prevents stale-name pin reuse
+	uid         string // immutable PodGroup identity; a reused name inherits no assignment
 	minMember   int
 	topologyKey string
 	timeout     time.Duration
@@ -56,9 +56,9 @@ func splitGangKey(key string) (namespace, name string, ok bool) {
 }
 
 // resolveGang assembles a pod's gangInfo from its PodGroup. It returns false —
-// meaning "not a domain-pinned gang, leave placement unconstrained" — when the
+// meaning "not a domain-assigned gang, leave placement unconstrained" — when the
 // pod is not a gang member, its PodGroup is absent, its minMember is
-// non-positive, or the PodGroup declares no topology key (nothing to pin to).
+// non-positive, or the PodGroup declares no topology key (no domain to assign).
 func resolveGang(pod *v1.Pod, r podGroupReader) (gangInfo, bool) {
 	ns, name, ok := podGroupNameOf(pod)
 	if !ok {

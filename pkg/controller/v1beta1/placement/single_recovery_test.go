@@ -30,7 +30,7 @@ func TestSingleRestorationRequiresPhysicalAbsence(t *testing.T) {
 			a.CurrentReplicas, a.CurrentHome = 0, nil
 		}},
 		{name: "unknown original retains current policy", edit: func(_ *plannedObservationFixture, o *placementObservations, _ *[]string) {
-			o.homes["member-a"] = homeObservation{state: homeUnknown}
+			o.members["member-a"] = memberObservation{state: memberUnknown}
 		}},
 		{name: "member reappeared after initial observation", resources: true},
 		{name: "terminating member retains authority", resources: true, edit: func(f *plannedObservationFixture, _ *placementObservations, _ *[]string) {
@@ -73,7 +73,7 @@ func TestSingleRestorationRequiresPhysicalAbsence(t *testing.T) {
 			b.ClusterUID, b.OriginalReplicas = "member-b-uid", 0
 			b.DesiredReplicas, b.DesiredHome = 1, b.CurrentHome.DeepCopy()
 			source.Status.Placement.Candidates = append(source.Status.Placement.Candidates, v1beta1.CandidatePlacement{Cluster: "member-b", Allocation: b})
-			standing := &placementObservations{matches: map[string]bool{"member-a": true}, homes: map[string]homeObservation{"member-a": {state: homeAbsent}}}
+			standing := &placementObservations{matches: map[string]bool{"member-a": true}, members: map[string]memberObservation{"member-a": {state: memberAbsent}}}
 			eligible := []string{"member-a"}
 			if tt.edit != nil {
 				tt.edit(&fixture, standing, &eligible)

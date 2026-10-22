@@ -51,14 +51,14 @@ func TestPlacementSatisfaction(t *testing.T) {
 			s.Status.Placement.Candidates[0].ObservationKnown = false
 			s.Status.Placement.Plan.AssignedReplicas, s.Status.Placement.Plan.RequestedReplicas = 12, 12
 		}, status: corev1.ConditionTrue, reason: "AssignedFloorsAdmitted"},
-		{name: "zero home requires member acknowledgement", edit: func(s *v1beta1.InferenceService) {
+		{name: "zero-floor member requires acknowledgement", edit: func(s *v1beta1.InferenceService) {
 			c := &s.Status.Placement.Candidates[0]
 			c.Allocation.DesiredReplicas = 0
 			c.Allocation.DesiredHome = &v1beta1.PlacementHomePolicy{InputDigest: "source-intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.EngineComponent}}}
 			c.AppliedPlanID = ""
 			s.Status.Placement.Plan.AssignedReplicas, s.Status.Placement.Plan.RequestedReplicas = 12, 12
 		}, status: corev1.ConditionUnknown, reason: "AwaitingMemberApplication"},
-		{name: "acknowledged zero home needs no admitted replicas", edit: func(s *v1beta1.InferenceService) {
+		{name: "acknowledged zero-floor member needs no admitted replicas", edit: func(s *v1beta1.InferenceService) {
 			c := &s.Status.Placement.Candidates[0]
 			c.Allocation.DesiredReplicas, c.AdmittedReplicas = 0, 0
 			c.Allocation.DesiredHome = &v1beta1.PlacementHomePolicy{InputDigest: "source-intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.EngineComponent}}}

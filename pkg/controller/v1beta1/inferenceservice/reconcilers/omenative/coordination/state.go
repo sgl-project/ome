@@ -14,8 +14,15 @@ type ComponentObservation struct {
 	// Component identifies this observation.
 	Component v1beta1.ComponentType
 
-	// DesiredReplicas is the Component's MinReplicas (or 1).
+	// DesiredReplicas is the replica's status.replicas: the Instance rows it
+	// manages, in any phase. Zero until its status is first written.
 	DesiredReplicas int32
+
+	// SpecReplicas is the Instance count the replica's spec asks for now, the
+	// operator's latest intent (minReplicas, or an autoscaler's count), read
+	// as at least one since a count of zero cannot anchor a ratio. Zero only
+	// while the replica does not exist yet.
+	SpecReplicas int32
 
 	// TotalPods is the live pod count, any revision.
 	TotalPods int32
@@ -60,12 +67,20 @@ type ComponentObservation struct {
 	// components leave it 0 (they use the canary reconciler's own path).
 	Partition int32
 
-	// AtDesiredShape is true when the component has converged to its desired
-	// staged shape (status.ReachedDesiredShape): (Replicas-Partition)
-	// instances Ready on the target revision and Partition instances Ready on
-	// the prior revision. The state machine rests (Staged) and Sequential
-	// hands off on this.
+	// AtDesiredShape is true when the component rests at its staged shape
+	// (status.ReachedDesiredShape): every Instance Ready, the ones still on
+	// the prior revision held by the partition, at most Partition of them
+	// and every one of them when fewer than Partition remain. The state
+	// machine rests (Staged) and Sequential hands off on this.
 	AtDesiredShape bool
+
+	// ReadyAt is the instant the Component's replica last reported its roll
+	// done: the Ready condition's last transition to True, which the replica
+	// writes once every Instance is Ready on the target or, under a
+	// partition, at its staged shape. Zero while the condition is not True.
+	// The Sequential wait after this Component is measured from it, the one
+	// clock the replica-side gate reads too.
+	ReadyAt time.Time
 
 	// Failed is true when the Component's OMENative reconciler
 	// flagged a terminal failure (Ready timeout, persistent op error).
@@ -105,11 +120,9 @@ type GroupObservation struct {
 
 	// PreviousPhaseEnteredAt is the timestamp the group last entered
 	// its current Phase, as recorded in the previously-written status.
-	// Sequential soak compares Now - PreviousPhaseEnteredAt to the
-	// group's Soak duration. Zero when no prior status is available
-	// (first reconcile) — soak is treated as not-yet-started in that
-	// case, which means the very first reconcile after completion does
-	// trip the wait correctly.
+	// The phase-dwell metric reads it; no transition is decided on it,
+	// since it moves on every base-phase change. Zero when no prior
+	// status is available (first reconcile).
 	PreviousPhaseEnteredAt time.Time
 }
 
@@ -460,22 +473,25 @@ func sequentialTransition(obs GroupObservation) GroupTransition {
 	// Sequential's invariant: at most one Component rolls at a time.
 	if c, ok := activeSequentialComponent(obs.Group.Order, obs.Components); ok {
 		comp := obs.Components[c]
-		// Soak gate: if a previous Component just completed and the
-		// group is still inside its operator-configured soak window,
-		// hold this Component at Sequential.Awaiting until the wait
-		// elapses. The soak timer reads from the previously-written
-		// status's LastTransitionTime (PreviousPhaseEnteredAt), so
-		// soak only fires AFTER the prior completion was observed in
-		// status — the very first time the Awaiting phase shows up.
-		if obs.Group.Soak > 0 && previousCompletedComponent(obs, c) != "" {
-			if !obs.PreviousPhaseEnteredAt.IsZero() {
-				elapsed := obs.Now.Sub(obs.PreviousPhaseEnteredAt)
+		// The wait after a member: while the operator's window since the
+		// previous Component finished is still running, this Component
+		// reads Sequential.Awaiting. The window is measured from that
+		// Component's Ready transition, the instant its roll was recorded
+		// done and the clock the replica-side gate reads, so it is measured
+		// once after each member finishes: the group's own transition time
+		// moves on every base-phase change and would restart the window on
+		// each phase of this Component's roll, or on a pause. No Ready
+		// transition means no window to measure, and the Component's phase
+		// shows.
+		if prev := previousCompletedComponent(obs, c); obs.Group.Soak > 0 && prev != "" {
+			if finished := obs.Components[prev].ReadyAt; !finished.IsZero() {
+				elapsed := obs.Now.Sub(finished)
 				if elapsed < obs.Group.Soak {
 					return GroupTransition{
 						Phase:             v1beta1.CoordinationPhaseIdle,
 						CompositePhase:    v1beta1.CompositePhaseSequentialAwaiting,
 						CurrentComponent:  c,
-						PreviousComponent: previousCompletedComponent(obs, c),
+						PreviousComponent: prev,
 						Message: "Sequential soak: " + (obs.Group.Soak - elapsed).String() +
 							" remaining before " + string(c) + " starts",
 					}

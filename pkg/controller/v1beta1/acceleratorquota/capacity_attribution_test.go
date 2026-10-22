@@ -11,12 +11,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 
 	"sigs.k8s.io/ome/pkg/quota/capacity"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
-func TestCapacityReportsDistinguishZeroAndIncompleteAttribution(t *testing.T) {
+func TestReconcileCapacity_FleetShapes_TellsMeasuredZeroFromIncomplete(t *testing.T) {
 	type observation struct {
 		Flavor      string
 		Allocatable string
@@ -54,7 +55,7 @@ func TestCapacityReportsDistinguishZeroAndIncompleteAttribution(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			root := cohort(rootName, "")
 			objects := append([]client.Object{root}, tt.objects...)
-			cl := fake.NewClientBuilder().WithScheme(capacityScheme(t)).WithObjects(objects...).WithStatusSubresource(root).Build()
+			cl := fakeclient.New(t, fakeclient.WithTypes(kueuev1beta2.AddToScheme), fakeclient.WithObjects(objects...), fakeclient.WithStatusSubresource(root))
 			r := &Reconciler{Client: cl, APIReader: cl, Capacity: CapacityOptions{Resources: []string{"example.com/gpu"}}}
 			require.NoError(t, cl.Get(context.Background(), client.ObjectKeyFromObject(root), root))
 			require.NoError(t, r.reconcileCapacity(context.Background(), root))
@@ -77,7 +78,7 @@ func TestCapacityReportsDistinguishZeroAndIncompleteAttribution(t *testing.T) {
 	}
 }
 
-func TestCapacityAttributionFingerprint(t *testing.T) {
+func TestAttributeCapacity_FlavorSetOrResourcesChange_HashMovesOnlyThen(t *testing.T) {
 	flavors := []capacity.Flavor{
 		{Name: "gpu-a", UID: "a-uid", NodeLabels: map[string]string{"hardware": "a"}},
 		{Name: "gpu-b", UID: "b-uid", NodeLabels: map[string]string{"hardware": "b"}},
@@ -132,12 +133,12 @@ func TestCapacityAttributionFingerprint(t *testing.T) {
 	}
 }
 
-func TestCapacityReportUpdatesWhenFlavorIdentityChanges(t *testing.T) {
+func TestReconcileCapacity_FlavorRecreated_ReportsNewUIDAndNewHash(t *testing.T) {
 	ctx := context.Background()
 	root := cohort(rootName, "")
 	flavor := resourceFlavor("gpu-a", map[string]string{"hardware": "gpu"})
 	flavor.UID = "old-uid"
-	cl := fake.NewClientBuilder().WithScheme(capacityScheme(t)).WithObjects(root, flavor).WithStatusSubresource(root).Build()
+	cl := fakeclient.New(t, fakeclient.WithTypes(kueuev1beta2.AddToScheme), fakeclient.WithObjects(root, flavor), fakeclient.WithStatusSubresource(root))
 	r := &Reconciler{Client: cl, APIReader: cl, Capacity: CapacityOptions{Resources: []string{"example.com/gpu"}}}
 	require.NoError(t, cl.Get(ctx, client.ObjectKeyFromObject(root), root))
 	require.NoError(t, r.reconcileCapacity(ctx, root))

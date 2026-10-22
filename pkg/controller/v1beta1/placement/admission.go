@@ -122,7 +122,7 @@ func AllComponentsAdmitted(isvc *v1beta1.InferenceService, statuses map[v1beta1.
 }
 
 // admittedReplicaCount returns how many instances in an IR status are admitted
-// (their pods cleared the Kueue gate) — the per-home admitted-replica count
+// (their pods cleared the Kueue gate) — the per-member admitted-replica count
 // Split accounts against the desired floor. Zero for a nil status.
 func admittedReplicaCount(st *v1beta1.InferenceReplicaStatus) int32 {
 	if st == nil {

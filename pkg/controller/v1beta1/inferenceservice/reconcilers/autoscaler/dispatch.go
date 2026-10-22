@@ -30,10 +30,8 @@ type DispatchParams struct {
 	// Update / Delete the HPA + ScaledObject.
 	Client client.Client
 
-	// Scheme is the controller-runtime scheme threaded for parity with
-	// the legacy reconciler signatures. DispatchAutoscaler uses Owner
-	// directly for owner-ref stamping rather than going through
-	// controllerutil.SetControllerReference.
+	// Scheme is not read: the dispatch sets owner references from Owner.
+	// Callers may leave it nil.
 	Scheme *runtime.Scheme
 
 	// Owner is the OwnerReference stamped on every emitted HPA /
@@ -228,20 +226,18 @@ func autoscalerClass(a *v1beta1.ComponentAutoscaler) v1beta1.AutoscalerClass {
 	return a.Class
 }
 
-// ensureHPA stamps the expected owner-ref on the generator output and runs
-// the HPA reconciler. The HPAReconciler.Reconcile() loop is idempotent
-// (Get-then-diff) so re-running on a steady state is a cheap no-op.
+// ensureHPA writes the desired HPA for p, with the expected owner on it. The
+// reconciler reads the live HPA first, so a steady state writes nothing.
 func ensureHPA(ctx context.Context, p DispatchParams) error {
-	if err := newHPAReconciler(p).Reconcile(); err != nil {
+	if err := newHPAReconciler(p).Reconcile(ctx); err != nil {
 		return fmt.Errorf("HPA reconcile (ns=%s, name=%s): %w", p.Namespace, p.Name, err)
 	}
-	_ = ctx // reconciler currently uses context.TODO internally; threaded here for future ctx-aware refactor
 	return nil
 }
 
 // desiredHPA returns the HPA ensureHPA would apply.
 func desiredHPA(p DispatchParams) *autoscalingv2.HorizontalPodAutoscaler {
-	return newHPAReconciler(p).HPA
+	return newHPAReconciler(p).Desired
 }
 
 func newHPAReconciler(p DispatchParams) *hpa.HPAReconciler {
@@ -251,7 +247,6 @@ func newHPAReconciler(p DispatchParams) *hpa.HPAReconciler {
 	}
 	return hpa.NewHPAReconcilerForTarget(
 		p.Client,
-		p.Scheme,
 		buildComponentMeta(p, nil),
 		p.ScaleTargetRef,
 		hpaSpec,
@@ -260,11 +255,11 @@ func newHPAReconciler(p DispatchParams) *hpa.HPAReconciler {
 	)
 }
 
-// ensureScaledObject stamps the expected owner-ref on the generator output
-// and runs the KEDA reconciler. The KEDAReconciler.Reconcile() loop is
-// idempotent (Get-then-diff). When the plan takes over the Component's HPA,
-// the ScaledObject names that HPA and carries KEDA's transfer annotation,
-// which KEDA's webhook requires before it accepts a ScaledObject for a target
+// ensureScaledObject writes the desired ScaledObject for p, with the expected
+// owner on it. The reconciler reads the live ScaledObject first, so a steady
+// state writes nothing. When the plan takes over the Component's HPA, the
+// ScaledObject names that HPA and carries KEDA's transfer annotation, which
+// KEDA's webhook requires before it accepts a ScaledObject for a target
 // another HPA already scales.
 func ensureScaledObject(ctx context.Context, p DispatchParams, plan scaledObjectHPAPlan) error {
 	var transfer map[string]string
@@ -280,17 +275,15 @@ func ensureScaledObject(ctx context.Context, p DispatchParams, plan scaledObject
 
 	r := keda.NewKEDAReconcilerForTarget(
 		p.Client,
-		p.Scheme,
 		componentMeta,
 		kedaScaleTarget(p.ScaleTargetRef),
 		kedaSpec,
 		p.MinReplicas,
 		p.MaxReplicas,
 	)
-	if err := r.Reconcile(); err != nil {
+	if err := r.Reconcile(ctx); err != nil {
 		return fmt.Errorf("ScaledObject reconcile (ns=%s, name=%s): %w", p.Namespace, p.Name, err)
 	}
-	_ = ctx
 	return nil
 }
 

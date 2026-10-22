@@ -689,9 +689,14 @@ TEST_ENV = \
 # $(1): Package list variable
 # $(2): Output suffix (e.g., cmd, pkg, internal)
 # $(3): Optional suffix for filename (e.g., -no-xet)
+# go test stops one package after 10 minutes unless told otherwise. The
+# in-process rollout models and the replay goldens run close to that on a
+# two-core runner; this budget covers them with room to grow.
+GO_TEST_TIMEOUT ?= 30m
+
 define run_go_test
 	@echo "🧪 Running $(2) tests $(3)..."
-	@$(TEST_ENV) $(GO_CMD) test $(1) \
+	@$(TEST_ENV) $(GO_CMD) test -timeout $(GO_TEST_TIMEOUT) $(1) \
 		-coverprofile=coverage-$(2)$(3).out.tmp \
 		--covermode=atomic
 	@grep -v -E $(EXCLUDE_PATTERNS) coverage-$(2)$(3).out.tmp > coverage-$(2)$(3).out

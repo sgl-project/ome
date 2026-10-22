@@ -1,4 +1,4 @@
-package evidence_test
+package evidence
 
 import (
 	"errors"
@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/evidence"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -123,7 +122,7 @@ func TestClassifyAPIError(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := evidence.ClassifyAPIError(tc.err)
+			got := ClassifyAPIError(tc.err)
 			if got.Class != tc.wantClass {
 				t.Fatalf("Class: got %v want %v", got.Class, tc.wantClass)
 			}
@@ -144,7 +143,7 @@ func TestClassifyAPIError(t *testing.T) {
 // error before it reaches the classifier, so classification must unwrap.
 func TestClassifyAPIError_WrappedError(t *testing.T) {
 	wrapped := errors.Join(errors.New("create pod engine-0-default-0"), quotaError())
-	if got := evidence.ClassifyAPIError(wrapped); got.Class != types.APIRejectionCapacityBlocked {
+	if got := ClassifyAPIError(wrapped); got.Class != types.APIRejectionCapacityBlocked {
 		t.Errorf("wrapped quota rejection: got %v want CapacityBlocked", got.Class)
 	}
 }
@@ -179,7 +178,7 @@ func TestAdmissionUnavailable(t *testing.T) {
 		{name: "nil", err: nil, want: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := evidence.AdmissionUnavailable(tc.err); got != tc.want {
+			if got := AdmissionUnavailable(tc.err); got != tc.want {
 				t.Errorf("AdmissionUnavailable: got %v want %v", got, tc.want)
 			}
 		})
@@ -205,7 +204,7 @@ func TestClassifyAPIError_AdmissionUnavailable(t *testing.T) {
 		{name: "invalid pod spec keeps its own class", err: apierrors.NewInvalid(podGK, "engine-0-default-0", field.ErrorList{field.Required(field.NewPath("spec", "containers"), "required")}), wantClass: types.APIRejectionPermanentWorkload, wantReason: types.RejectionReasonInvalidPodSpec},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := evidence.ClassifyAPIError(tc.err)
+			got := ClassifyAPIError(tc.err)
 			if got.Class != tc.wantClass {
 				t.Fatalf("Class: got %v want %v", got.Class, tc.wantClass)
 			}

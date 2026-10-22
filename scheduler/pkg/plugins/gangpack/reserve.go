@@ -13,18 +13,18 @@ import (
 )
 
 // Reserve drains one whole node from the gang's domain reservation: this member
-// has now been assigned a real node (PreFilter pinned the domain and reserved the
-// gang's full capacity there; Filter kept it in-domain), so it becomes live
-// occupancy in the snapshot and its reserved slot is handed off via Place. That
-// hand-off is what stops two gangs racing into one domain — the reservation holds
-// the not-yet-placed capacity, and draining it as members land avoids
-// double-counting against the snapshot. A pod that is not a pinned gang member
-// reserves nothing.
+// has now been assigned a real node (PreFilter assigned the domain and reserved
+// the gang's full capacity there; Filter kept it in-domain), so it becomes live
+// occupancy in the snapshot and its reserved slot is handed to the snapshot via
+// Place. That transfer is what stops two gangs racing into one domain — the
+// reservation holds the not-yet-placed capacity, and draining it as members
+// land avoids double-counting against the snapshot. A pod that is not an
+// assigned gang member reserves nothing.
 func (g *GangPack) Reserve(_ context.Context, state framework.CycleState, _ *v1.Pod, _ string) *framework.Status {
-	if pin := readPin(state); pin != nil {
-		_, drained := g.pins.PlaceIf(pin.gang.key, pin.commitment)
+	if assignment := readAssignment(state); assignment != nil {
+		_, drained := g.assignments.PlaceIf(assignment.gang.key, assignment.commitment)
 		if drained {
-			g.clearFailedDomains(pin.gang)
+			g.clearFailedDomains(assignment.gang)
 			g.activateReservationBlocked()
 		}
 	}
@@ -34,8 +34,8 @@ func (g *GangPack) Reserve(_ context.Context, state framework.CycleState, _ *v1.
 // Unreserve unwinds a gang when one of its members fails to schedule — a Permit
 // timeout, or a bind failure after the gate opened. It does two things:
 //
-//   - releases the domain pin, so the gang's retry re-runs best-fit instead of
-//     reusing a stale commitment (the old domain may no longer be the best, or
+//   - releases the domain assignment, so the gang's retry re-runs best-fit
+//     instead of reusing a stale commitment (the old domain may no longer be the best, or
 //     may be why the member failed);
 //   - rejects every sibling still waiting at the gate, so a half-formed gang
 //     unwinds together in one shot rather than each member waiting out its own
@@ -46,28 +46,30 @@ func (g *GangPack) Reserve(_ context.Context, state framework.CycleState, _ *v1.
 // is left alone.
 //
 // The gang key comes from the pod's OWN pod-group label, not a PodGroup lookup, so
-// the pin and reservation are still released even if the PodGroup was deleted
-// mid-flight (which is when Unreserve tends to fire) — otherwise they would leak.
+// the assignment and reservation are still released even if the PodGroup was
+// deleted mid-flight (which is when Unreserve tends to fire) — otherwise they
+// would leak.
 func (g *GangPack) Unreserve(_ context.Context, state framework.CycleState, pod *v1.Pod, _ string) {
-	pin := readPin(state)
-	if pin == nil {
+	assignment := readAssignment(state)
+	if assignment == nil {
 		return
 	}
-	g.releaseAttempt(pin, pod, false)
+	g.releaseAttempt(assignment, pod, false)
 }
 
 // releaseAttempt drops the attempt's commitment. It reports whether this call
-// released it and, with failedDomain, whether the pinned domain was new to the
-// gang's failed-domain memory.
-func (g *GangPack) releaseAttempt(pin *pinState, pod *v1.Pod, failedDomain bool) (released, newFailedDomain bool) {
-	key := pin.gang.key
-	token := pin.commitment
+// released it and, with failedDomain, whether the assigned domain was new to
+// the gang's failed-domain memory.
+func (g *GangPack) releaseAttempt(assignment *assignmentState, pod *v1.Pod, failedDomain bool) (released, newFailedDomain bool) {
+	key := assignment.gang.key
+	token := assignment.commitment
 	// Count the unwind once per gang: only the first member's Unreserve actually
 	// releases the matching attempt. Rejected siblings from an older attempt cannot
-	// release or reject a newer retry because the token must still own the pin.
-	released = g.pins.ReleaseIf(key, token, func() {
+	// release or reject a newer retry because the token must still own the
+	// assignment.
+	released = g.assignments.ReleaseIf(key, token, func() {
 		if failedDomain {
-			newFailedDomain = g.markFailedDomain(pin.gang, placement.Domain{TopologyKey: pin.topologyKey, Name: pin.domain})
+			newFailedDomain = g.markFailedDomain(assignment.gang, placement.Domain{TopologyKey: assignment.topologyKey, Name: assignment.domain})
 		}
 		if g.handle != nil {
 			g.handle.IterateOverWaitingPods(func(wp framework.WaitingPod) {
@@ -79,7 +81,7 @@ func (g *GangPack) releaseAttempt(pin *pinState, pod *v1.Pod, failedDomain bool)
 	})
 	if released {
 		gangUnwindTotal.Inc()
-		pinnedGroups.Set(float64(g.pins.Len()))
+		assignedGroups.Set(float64(g.assignments.Len()))
 		g.activateReservationBlocked()
 	}
 	g.forgetAttempt(pod, token)
@@ -100,16 +102,17 @@ func (g *GangPack) hasWaitingAttempt(key string, token uint64) bool {
 }
 
 // releaseStaleGang removes a name-keyed commitment when its PodGroup is absent.
-// The immutable UID check in pinGang handles the corresponding recreate case.
+// The immutable UID check in currentAssignment handles the corresponding
+// recreate case.
 func (g *GangPack) releaseStaleGang(key string) {
-	if g.pins == nil {
+	if g.assignments == nil {
 		return
 	}
-	_, token, _, found := g.pins.GetOwned(key)
+	_, token, _, found := g.assignments.GetOwned(key)
 	if !found {
 		return
 	}
-	g.releaseAttempt(&pinState{gang: gangInfo{key: key}, commitment: token}, nil, false)
+	g.releaseAttempt(&assignmentState{gang: gangInfo{key: key}, commitment: token}, nil, false)
 	g.failedMu.Lock()
 	for failedKey := range g.failedDomains {
 		if strings.HasPrefix(failedKey, key+"\x00") {
@@ -183,7 +186,7 @@ func (g *GangPack) forgetReservationBlocked(pod *v1.Pod) {
 	g.blockedMu.Unlock()
 }
 
-// activateReservationBlocked wakes every pod parked on a reservation, once. A
+// activateReservationBlocked requeues every pod a reservation kept out, once. A
 // pod that still finds its domain reserved re-registers on its next attempt, so
 // each activation corresponds to one reservation draining or being released.
 func (g *GangPack) activateReservationBlocked() {
@@ -203,8 +206,8 @@ func (g *GangPack) activateReservationBlocked() {
 // PostBind clears successful-cycle bookkeeping. Failed binding cycles take the
 // Unreserve path instead.
 func (g *GangPack) PostBind(_ context.Context, state framework.CycleState, pod *v1.Pod, _ string) {
-	if pin := readPin(state); pin != nil {
-		g.forgetAttempt(pod, pin.commitment)
+	if assignment := readAssignment(state); assignment != nil {
+		g.forgetAttempt(pod, assignment.commitment)
 	}
 	g.forgetReservationBlocked(pod)
 }

@@ -1,6 +1,13 @@
 package v1beta1convert
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -663,4 +670,188 @@ func TestInstanceOperationStrategyRoundtrip(t *testing.T) {
 			}
 		})
 	}
+}
+
+// --- enum tables ----------------------------------------------------------
+
+// enumTableUnderTest lowers one table to strings so every table can go
+// through the same checks: its pairs, the two lookups, and the names of the
+// types its constants are declared on in the API and workload packages.
+type enumTableUnderTest struct {
+	name         string
+	apiType      string
+	workloadType string
+	pairs        map[string]string
+	toWorkload   func(string) string
+	fromWorkload func(string) string
+}
+
+func lowerEnumTable[API ~string, Workload ~string](name, apiType, workloadType string, table enumTable[API, Workload]) enumTableUnderTest {
+	pairs := make(map[string]string, len(table.workloadOf))
+	for api, workload := range table.workloadOf {
+		pairs[string(api)] = string(workload)
+	}
+	return enumTableUnderTest{
+		name:         name,
+		apiType:      apiType,
+		workloadType: workloadType,
+		pairs:        pairs,
+		toWorkload:   func(v string) string { return string(table.toWorkload(API(v))) },
+		fromWorkload: func(w string) string { return string(table.fromWorkload(Workload(w))) },
+	}
+}
+
+func enumTablesUnderTest() []enumTableUnderTest {
+	return []enumTableUnderTest{
+		lowerEnumTable("component types", "ComponentType", "ComponentType", componentTypes),
+		lowerEnumTable("instance phases", "OMENativeInstancePhase", "InstancePhase", instancePhases),
+		lowerEnumTable("update strategy types", "UpdateStrategyType", "UpdateStrategyType", updateStrategyTypes),
+		lowerEnumTable("instance operation types", "InstanceOperationType", "InstanceOperationType", instanceOperationTypes),
+		lowerEnumTable("instance restart policies", "InstanceRestartPolicy", "RestartPolicy", instanceRestartPolicies),
+		lowerEnumTable("instance ready policies", "InstanceReadyPolicy", "InstanceReadyPolicy", instanceReadyPolicies),
+		lowerEnumTable("migration modes", "MigrationPolicyMode", "MigrationMode", migrationModes),
+	}
+}
+
+func TestEnumTablesRoundTripEveryPair(t *testing.T) {
+	for _, table := range enumTablesUnderTest() {
+		t.Run(table.name, func(t *testing.T) {
+			if len(table.pairs) == 0 {
+				t.Fatal("the table is empty")
+			}
+			for api, workload := range table.pairs {
+				if got := table.toWorkload(api); got != workload {
+					t.Errorf("toWorkload(%q) = %q, want %q", api, got, workload)
+				}
+				if got := table.fromWorkload(workload); got != api {
+					t.Errorf("fromWorkload(%q) = %q, want %q", workload, got, api)
+				}
+			}
+		})
+	}
+}
+
+func TestEnumTablesReadAnUnknownValueAsEmpty(t *testing.T) {
+	for _, table := range enumTablesUnderTest() {
+		t.Run(table.name, func(t *testing.T) {
+			if got := table.toWorkload("NotDeclared"); got != "" {
+				t.Errorf("toWorkload of an undeclared value = %q, want empty", got)
+			}
+			if got := table.fromWorkload("NotDeclared"); got != "" {
+				t.Errorf("fromWorkload of an undeclared value = %q, want empty", got)
+			}
+		})
+	}
+}
+
+// Every constant the API package and the workload package declare for an
+// enum must be in that enum's table, or a value the operator can write
+// would cross this seam as the empty value.
+func TestEnumTablesListEveryDeclaredConstant(t *testing.T) {
+	api := declaredStringConstants(t, filepath.Join("..", "..", "..", "apis", "ome", "v1beta1"))
+	workload := declaredStringConstants(t, filepath.Join("..", "workload", "types"))
+	for _, table := range enumTablesUnderTest() {
+		t.Run(table.name, func(t *testing.T) {
+			declaredAPI := api.ofType(t, table.apiType)
+			for value, constant := range declaredAPI {
+				if _, ok := table.pairs[value]; !ok {
+					t.Errorf("API constant %s (%q) is not in the table", constant, value)
+				}
+			}
+			workloadValues := make(map[string]bool, len(table.pairs))
+			for _, w := range table.pairs {
+				workloadValues[w] = true
+			}
+			for value, constant := range workload.ofType(t, table.workloadType) {
+				if !workloadValues[value] {
+					t.Errorf("workload constant %s (%q) is not in the table", constant, value)
+				}
+			}
+		})
+	}
+}
+
+// declaredConstants holds, per type name, the string constants a package
+// declares (value to constant name) and the names of any constant of that
+// type whose value the reader could not take as a plain string literal.
+type declaredConstants struct {
+	byType map[string]map[string]string
+	unread map[string][]string
+}
+
+func (d declaredConstants) ofType(t *testing.T, typeName string) map[string]string {
+	t.Helper()
+	if names := d.unread[typeName]; len(names) > 0 {
+		t.Fatalf("constants of type %s are not plain string literals: %s", typeName, strings.Join(names, ", "))
+	}
+	values := d.byType[typeName]
+	if len(values) == 0 {
+		t.Fatalf("no string constant of type %s is declared", typeName)
+	}
+	return values
+}
+
+// declaredStringConstants parses the non-test, non-generated Go files of
+// one package directory and collects its typed string constants.
+func declaredStringConstants(t *testing.T, dir string) declaredConstants {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read %s: %v", dir, err)
+	}
+	out := declaredConstants{byType: map[string]map[string]string{}, unread: map[string][]string{}}
+	fset := token.NewFileSet()
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || strings.HasPrefix(name, "zz_generated") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatalf("parse %s: %v", name, err)
+		}
+		for _, decl := range file.Decls {
+			gen, ok := decl.(*ast.GenDecl)
+			if !ok || gen.Tok != token.CONST {
+				continue
+			}
+			for _, spec := range gen.Specs {
+				out.collect(spec.(*ast.ValueSpec))
+			}
+		}
+	}
+	return out
+}
+
+func (d declaredConstants) collect(spec *ast.ValueSpec) {
+	typeName, ok := spec.Type.(*ast.Ident)
+	if !ok {
+		return
+	}
+	for i, ident := range spec.Names {
+		value, ok := stringLiteral(spec.Values, i)
+		if !ok {
+			d.unread[typeName.Name] = append(d.unread[typeName.Name], ident.Name)
+			continue
+		}
+		if d.byType[typeName.Name] == nil {
+			d.byType[typeName.Name] = map[string]string{}
+		}
+		d.byType[typeName.Name][value] = ident.Name
+	}
+}
+
+func stringLiteral(values []ast.Expr, i int) (string, bool) {
+	if i >= len(values) {
+		return "", false
+	}
+	lit, ok := values[i].(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return "", false
+	}
+	value, err := strconv.Unquote(lit.Value)
+	if err != nil {
+		return "", false
+	}
+	return value, true
 }

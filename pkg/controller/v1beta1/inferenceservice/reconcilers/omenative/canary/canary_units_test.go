@@ -189,12 +189,29 @@ func TestStepPartition(t *testing.T) {
 			}},
 		}}}}}
 	ext := &v1beta1.ComponentExtensionSpec{MinReplicas: &n, MaxReplicas: 4}
-	p := StepPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, ext)
+	p := StepPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, DesiredReplicas(nil, ext))
 	if p == nil || *p != 2 {
 		t.Fatalf("step0 50%% of 4 → partition 2, got %v", p)
 	}
 	if ext.Lifecycle != nil {
 		t.Fatal("the step partition must not create the user's lifecycle chain")
+	}
+
+	// The step is sized against the replica's live count: scaled to ten above
+	// a declared minimum of four, a 50% step holds five and stages five. The
+	// resolver the projector evaluates sizes the same way.
+	if p := StepPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, DesiredReplicas(i32(10), ext)); p == nil || *p != 5 {
+		t.Fatalf("step0 50%% of the live ten → partition 5, got %v", p)
+	}
+	resolve := PartitionResolver(isvc, rollout.Policies{}, v1beta1.EngineComponent)
+	if resolve == nil {
+		t.Fatal("an effective canary group governs its member's partition")
+	}
+	if p := resolve(10); p == nil || *p != 5 {
+		t.Fatalf("the resolver at ten → partition 5, got %v", p)
+	}
+	if PartitionResolver(isvc, rollout.Policies{}, v1beta1.RouterComponent) != nil {
+		t.Fatal("a Component outside every canary group has no partition resolver")
 	}
 
 	// A user-set rollingUpdate.partition survives the canary untouched: the
@@ -203,7 +220,7 @@ func TestStepPartition(t *testing.T) {
 	extUser := &v1beta1.ComponentExtensionSpec{MinReplicas: &n, MaxReplicas: 4,
 		Lifecycle: &v1beta1.LifecycleSpec{UpdateStrategy: &v1beta1.UpdateStrategy{
 			RollingUpdate: &v1beta1.RollingUpdate{Partition: &user}}}}
-	if p := StepPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, extUser); p == nil || *p != 2 {
+	if p := StepPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, DesiredReplicas(nil, extUser)); p == nil || *p != 2 {
 		t.Fatalf("step partition must be computed regardless of the user partition, got %v", p)
 	}
 	if got := extUser.Lifecycle.UpdateStrategy.RollingUpdate.Partition; got == nil || *got != 1 {
@@ -212,7 +229,7 @@ func TestStepPartition(t *testing.T) {
 
 	// No canary → nil (and the lifecycle chain is not created).
 	ext2 := &v1beta1.ComponentExtensionSpec{MinReplicas: &n}
-	if p := StepPartition(&v1beta1.InferenceService{}, rollout.Policies{}, v1beta1.EngineComponent, ext2); p != nil {
+	if p := StepPartition(&v1beta1.InferenceService{}, rollout.Policies{}, v1beta1.EngineComponent, DesiredReplicas(nil, ext2)); p != nil {
 		t.Fatalf("no canary must yield no partition, got %d", *p)
 	}
 	if ext2.Lifecycle != nil {
@@ -223,7 +240,7 @@ func TestStepPartition(t *testing.T) {
 	// write can go below 0) must clamp to step 0, not panic indexing plan.Steps.
 	isvc.Status.Canary = &v1beta1.CanaryStatus{CurrentStep: -1}
 	ext3 := &v1beta1.ComponentExtensionSpec{MinReplicas: &n, MaxReplicas: 4}
-	if p := StepPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, ext3); p == nil || *p != 2 {
+	if p := StepPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, DesiredReplicas(nil, ext3)); p == nil || *p != 2 {
 		t.Fatalf("negative step must clamp to step-0 partition 2, got %v", p)
 	}
 }
@@ -240,14 +257,28 @@ func TestPlanGateHoldPartition(t *testing.T) {
 			PolicyRef:  &v1beta1.RolloutPolicyRef{Name: "unresolved", Progression: v1beta1.RolloutProgressionCanary},
 		}}}}}
 	ext := &v1beta1.ComponentExtensionSpec{MinReplicas: &n, MaxReplicas: 4}
-	if p := PlanGateHoldPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, ext); p == nil || *p != 4 {
+	if p := PlanGateHoldPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, DesiredReplicas(nil, ext)); p == nil || *p != 4 {
 		t.Fatalf("canary-kind group without a plan must hold every Instance (4), got %v", p)
 	}
 	if ext.Lifecycle != nil {
 		t.Fatal("the plan-gate hold must not create the user's lifecycle chain")
 	}
-	if p := PlanGateHoldPartition(isvc, rollout.Policies{}, v1beta1.RouterComponent, ext); p != nil {
+	// Every Instance means the replica's live count: a fleet scaled to ten
+	// above its declared minimum of four is held at ten, through the
+	// resolver the projector evaluates as well.
+	if p := PlanGateHoldPartition(isvc, rollout.Policies{}, v1beta1.EngineComponent, DesiredReplicas(i32(10), ext)); p == nil || *p != 10 {
+		t.Fatalf("the plan-gate hold must cover the live ten Instances, got %v", p)
+	}
+	if resolve := PartitionResolver(isvc, rollout.Policies{}, v1beta1.EngineComponent); resolve == nil {
+		t.Fatal("a declared canary-kind group governs its member's partition")
+	} else if p := resolve(10); p == nil || *p != 10 {
+		t.Fatalf("the resolver must hold the live ten Instances, got %v", p)
+	}
+	if p := PlanGateHoldPartition(isvc, rollout.Policies{}, v1beta1.RouterComponent, DesiredReplicas(nil, ext)); p != nil {
 		t.Fatalf("a Component outside the canary-kind group must get no hold, got %d", *p)
+	}
+	if !Governs(isvc, rollout.Policies{}, v1beta1.EngineComponent) || Governs(isvc, rollout.Policies{}, v1beta1.RouterComponent) {
+		t.Fatal("a canary governs exactly the members of its declared group")
 	}
 }
 

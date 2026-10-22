@@ -26,9 +26,9 @@ import (
 type CapacityReport struct {
 	// Servable is an absolute replica count in Ceiling mode. A report without
 	// one omits the field, so a report written for Reported mode cannot tell a
-	// Ceiling consumer that the home serves zero replicas.
+	// Ceiling consumer that the cluster serves zero replicas.
 	Servable *int32 `json:"servable,omitempty"`
-	// Weight is the home's capacity in replicas for Reported mode, already
+	// Weight is the cluster's capacity in replicas for Reported mode, already
 	// normalized by the producer for its hardware and workload.
 	Weight     *float64  `json:"weight,omitempty"`
 	ObservedAt time.Time `json:"observedAt"`
@@ -39,7 +39,7 @@ type capacitySample struct {
 	expires  time.Time
 }
 
-// capacityState is the poller's running view of one home.
+// capacityState is the poller's running view of one cluster.
 type capacityState struct {
 	// generation identifies the polling pass allowed to update this state. A
 	// completion from an older pass cannot overwrite a newer observation.
@@ -48,7 +48,7 @@ type capacityState struct {
 	// derived from them by estimate.
 	window []capacitySample
 	// reported is the accepted value, or nil without a fresh quorum. Nil means
-	// the home keeps its replica count in either mode.
+	// the cluster keeps its replica count in either mode.
 	reported *float64
 	// reason describes a failed observation or insufficient evidence. A failed
 	// poll can leave a fresh cached value in Reported mode.
@@ -101,8 +101,8 @@ func (st *capacityState) observe(v float64, expires time.Time, config CapacityCo
 // readings.
 //
 // As a ceiling it is the quorum-th smallest reading, so a lower value needs
-// quorum readings to corroborate it. In Reported mode the value is the home's
-// capacity, and a high reading can overload the home as surely as a low one
+// quorum readings to corroborate it. In Reported mode the value is the cluster's
+// capacity, and a high reading can overload the cluster as surely as a low one
 // starves it. So the value is the lower median: a single outlier cannot move it
 // in a window of three or more readings, and of two readings the smaller wins.
 func (st *capacityState) estimate(config CapacityConfig) (float64, bool) {
@@ -154,7 +154,7 @@ func (st *capacityState) expire(config CapacityConfig, now time.Time) bool {
 
 // CapacityPoller collects capacity using the prober's HTTP client and worker
 // limits. Ceiling mode falls back to replica counts on failures. Reported mode
-// keeps fresh accepted samples through a failed poll; without them the home
+// keeps fresh accepted samples through a failed poll; without them the cluster
 // falls back to its replica count.
 type CapacityPoller struct {
 	Log    logr.Logger
@@ -402,7 +402,7 @@ func normalizeCapacityTargets(req CapacityReconcileRequest) ([]Target, error) {
 	return targets, nil
 }
 
-// pollOne fetches and validates one home's capacity report. It returns the
+// pollOne fetches and validates one cluster's capacity report. It returns the
 // accepted count, or nil plus the reason the plan stands instead.
 func (c *CapacityPoller) pollOne(
 	ctx context.Context,
@@ -664,7 +664,7 @@ func (c *CapacityPoller) nextDelay(
 	return next.Sub(now)
 }
 
-// record stores a home's outcome without a polling generation. It supports
+// record stores a cluster's outcome without a polling generation. It supports
 // synchronous callers and tests; executor jobs use recordCurrent so a late
 // predecessor cannot overwrite current state.
 func (c *CapacityPoller) record(
@@ -755,7 +755,7 @@ func (c *CapacityPoller) recordLocked(
 		}
 	} else if config.Mode == v1beta1.RoutingCapacityModeReported {
 		// A failed poll cannot refresh a report. Samples inside their original age
-		// bound still stand; once they expire the home keeps its replica count.
+		// bound still stand; once they expire the cluster keeps its replica count.
 		st.expire(config, now)
 		if v, ok := st.estimate(config); ok {
 			applied = &v
@@ -765,7 +765,7 @@ func (c *CapacityPoller) recordLocked(
 		}
 	} else {
 		// A failed poll falls open and releases the ceiling, so the window must
-		// not survive it: retaining readings would keep constraining a home we
+		// not survive it: retaining readings would keep constraining a cluster we
 		// can no longer observe, which is the opposite of failing open.
 		st.window = nil
 		if reason == "" {
@@ -790,7 +790,7 @@ func (c *CapacityPoller) abandon(key capacityKey, generation uint64) {
 }
 
 // sameReport compares two optional values, treating nil as its own value so a
-// home that stops reporting is a change rather than a no-op.
+// cluster that stops reporting is a change rather than a no-op.
 func sameReport(a, b *float64) bool {
 	switch {
 	case a == nil && b == nil:

@@ -21,15 +21,17 @@ import (
 
 // targetPair is one grouped Component's observed revision state, read from its
 // InferenceReplica: current is where the Component is, target where its spec
-// points (empty values mean no IR, or no revision minted yet), and the
+// points (empty values mean no IR, or no revision minted yet), the
 // replica counters that expose STRAGGLERS — instances not on the target
 // revision even when current==target, which is exactly the state a mid-roll
-// revert produces (target back to v1 while instances sit on v2).
+// revert produces (target back to v1 while instances sit on v2) — and the
+// partition its spec keeps on the prior revision.
 type targetPair struct {
-	current  string
-	target   string
-	replicas int32
-	updated  int32
+	current   string
+	target    string
+	replicas  int32
+	updated   int32
+	partition int32
 }
 
 // straggling reports Instances still off the target revision. Paired with an
@@ -39,45 +41,72 @@ func (t targetPair) straggling() bool {
 	return t.replicas > 0 && t.updated < t.replicas
 }
 
+// stagedByPartition reports a Component whose rows rest at the shape its
+// partition asks for: at least one Instance and at most the partition still
+// run a revision other than the target, so every Instance the partition lets
+// move already counts on the target. The reading is the rows' revisions
+// alone. A pod of either revision that is not Ready is the replica's repair,
+// not a roll, so it does not change the answer; only a spec change does (the
+// partition, the count or the target).
+func (t targetPair) stagedByPartition() bool {
+	held := t.replicas - t.updated
+	return t.partition > 0 && held >= 1 && held <= t.partition
+}
+
 // observeGroupTargets reads the IR revision pair for every Component named in
-// any spec rollout group, via the live reader (the run decision must not act
-// on a cache-lagged target). fresh is false while any observed IR's status
-// lags its generation — revision names from an older IR generation describe a
-// different desired workload, so the caller waits for one consistent snapshot
-// rather than opening a run against it.
-func observeGroupTargets(ctx context.Context, reads client.Reader, isvc *v1beta1.InferenceService) (map[v1beta1.ComponentType]targetPair, bool, error) {
+// any spec rollout group, and for every Component the open run recorded (a
+// run whose groups left the spec is still judged by the members it recorded),
+// via the live reader (the run decision must not act on a cache-lagged
+// target). fresh is false while any observed IR's status lags its
+// generation — revision names from an older IR generation describe a
+// different desired workload, so the caller waits for one consistent
+// snapshot rather than opening a run against it.
+func observeGroupTargets(ctx context.Context, reads client.Reader, isvc *v1beta1.InferenceService, active *v1beta1.RolloutRun) (map[v1beta1.ComponentType]targetPair, bool, error) {
 	out := map[v1beta1.ComponentType]targetPair{}
-	if isvc.Spec.Rollout == nil {
-		return out, true, nil
-	}
 	fresh := true
-	for gi := range isvc.Spec.Rollout.Groups {
-		for _, comp := range isvc.Spec.Rollout.Groups[gi].Components {
-			if _, seen := out[comp]; seen {
-				continue
+	observe := func(comp v1beta1.ComponentType) error {
+		if _, seen := out[comp]; seen {
+			return nil
+		}
+		ir := &v1beta1.InferenceReplica{}
+		key := irprojector.RoleReplicaKey(isvc, comp)
+		if err := reads.Get(ctx, key, ir); err != nil {
+			if apierrors.IsNotFound(err) {
+				out[comp] = targetPair{}
+				return nil
 			}
-			ir := &v1beta1.InferenceReplica{}
-			key := irprojector.RoleReplicaKey(isvc, comp)
-			if err := reads.Get(ctx, key, ir); err != nil {
-				if apierrors.IsNotFound(err) {
-					out[comp] = targetPair{}
-					continue
+			return err
+		}
+		if ir.Status.ObservedGeneration != ir.Generation || projectionTrails(isvc, ir) {
+			fresh = false
+		}
+		current := query.RevisionFromName(ir.Status.CurrentRevision).Hash()
+		target := query.RevisionFromName(ir.Status.UpdateRevision).Hash()
+		if target == "" {
+			target = current
+		}
+		out[comp] = targetPair{
+			current:   current,
+			target:    target,
+			replicas:  ir.Status.Replicas,
+			updated:   ir.Status.UpdatedReplicas,
+			partition: irprojector.IRPartition(ir),
+		}
+		return nil
+	}
+	if isvc.Spec.Rollout != nil {
+		for gi := range isvc.Spec.Rollout.Groups {
+			for _, comp := range isvc.Spec.Rollout.Groups[gi].Components {
+				if err := observe(comp); err != nil {
+					return nil, false, err
 				}
+			}
+		}
+	}
+	if active != nil {
+		for _, target := range active.TargetRevisions {
+			if err := observe(target.Component); err != nil {
 				return nil, false, err
-			}
-			if ir.Status.ObservedGeneration != ir.Generation || projectionTrails(isvc, ir) {
-				fresh = false
-			}
-			current := query.RevisionFromName(ir.Status.CurrentRevision).Hash()
-			target := query.RevisionFromName(ir.Status.UpdateRevision).Hash()
-			if target == "" {
-				target = current
-			}
-			out[comp] = targetPair{
-				current:  current,
-				target:   target,
-				replicas: ir.Status.Replicas,
-				updated:  ir.Status.UpdatedReplicas,
 			}
 		}
 	}
@@ -250,7 +279,17 @@ func groupHasComponent(g *v1beta1.RolloutGroup, comp v1beta1.ComponentType) bool
 // reject), or stragglers remain — instances not on the target even though
 // the revision pair agrees, the state a mid-roll revert leaves behind.
 // Without the straggler clause a revert-to-current would open no run, and
-// the plan gate would then hold the straggler updates forever.
+// the plan gate would then hold the straggler updates forever. A member of
+// a non-canary group whose rows rest at the shape its partition asks for is
+// exempt from both clauses: a lifecycle partition holds its Instances off
+// the target by design, so neither its unpromoted pair nor its held
+// Instances are a roll to do. The rest is read on the rows' revisions, so a
+// run that closed Completed on it stays closed through a pod losing
+// readiness or a pause, and opens again only on a spec change: the
+// partition cleared or lowered below the held count, or a new target. A
+// canary-governed member is not read this way: its projected partition is
+// the step's hold, the run layer's own device, never a shape the operator
+// asked for.
 func divergedMember(isvc *v1beta1.InferenceService, targets map[v1beta1.ComponentType]targetPair) bool {
 	rejected := stickyRejectHashes(isvc, targets)
 	if isvc.Spec.Rollout == nil {
@@ -264,6 +303,9 @@ func divergedMember(isvc *v1beta1.InferenceService, targets map[v1beta1.Componen
 			// keeps being the IR's spec target throughout the hold, so both
 			// clauses below would otherwise re-open a run toward it forever.
 			if groupKind(g) == v1beta1.RolloutProgressionCanary && t.target != "" && t.target == rejected[comp] {
+				continue
+			}
+			if groupKind(g) != v1beta1.RolloutProgressionCanary && t.stagedByPartition() {
 				continue
 			}
 			if t.straggling() {
@@ -285,12 +327,18 @@ func divergedMember(isvc *v1beta1.InferenceService, targets map[v1beta1.Componen
 // convergence). A revert still draining counts: the rejected target opens
 // no run of its own, and the plan gate admits the roll back to stable only
 // under a pinned run. A settled rolled-back hold is terminal, not
-// in-progress. The done sentinel is read against the effective body; a
-// group whose reference does not resolve has none, so any non-terminal
-// state counts and the open then parks on the reference. The step is read
+// in-progress. A record written for targets the members no longer have is
+// not in progress either: its roll was taken back, and the executor ends
+// the record once every member rests on the target it has now (a member
+// still trailing is a divergence, which opens a run of its own). The done
+// sentinel is read against the effective body. A group whose reference
+// does not resolve has none, so the unit's phase answers instead: a unit
+// that reads Stable finished its cutover and keeps its record as the done
+// mark, so nothing is in flight; any other phase is a canary short of its
+// last step, whose open is then held on the reference. The step is read
 // the way the canary executor reads it, so a negative step written onto a
 // unit that reads Stable is past the last step, not a step still to run.
-func canaryMidFlight(isvc *v1beta1.InferenceService, policies rollout.Policies) bool {
+func canaryMidFlight(isvc *v1beta1.InferenceService, policies rollout.Policies, targets map[v1beta1.ComponentType]targetPair) bool {
 	if isvc == nil || isvc.Spec.Rollout == nil {
 		return false
 	}
@@ -309,10 +357,27 @@ func canaryMidFlight(isvc *v1beta1.InferenceService, policies rollout.Policies) 
 		}
 		return revertInFlight(isvc, g)
 	}
+	if !recordTargetsStand(declaredCanaryGroup(isvc), primary, cs, targets) {
+		return false
+	}
 	if g != nil {
 		return stepShortOfEnd(isvc, primary, cs, g.Canary.Steps)
 	}
-	return true
+	return isvc.Status.Components[primary].RolloutPhase != v1beta1.RolloutPhaseStable
+}
+
+// recordTargetsStand reports whether the targets a canary record was written
+// for are still the ones the group's members observe: by the record's
+// target fingerprint against one over the observed targets, or, for a
+// record with no fingerprint, by the primary's canary revision against its
+// observed target. A member with no observed target leaves the question
+// open, which reads as standing.
+func recordTargetsStand(g *v1beta1.RolloutGroup, primary v1beta1.ComponentType, cs *v1beta1.CanaryStatus, targets map[v1beta1.ComponentType]targetPair) bool {
+	if cs.TargetID != "" && g != nil {
+		observed := rollout.CanaryTargetID(g.Components, func(c v1beta1.ComponentType) string { return targets[c].target })
+		return observed == "" || observed == cs.TargetID
+	}
+	return cs.CanaryRevisionHash == "" || targets[primary].target == "" || targets[primary].target == cs.CanaryRevisionHash
 }
 
 // stepShortOfEnd reports whether a unit's recorded step is below its plan's

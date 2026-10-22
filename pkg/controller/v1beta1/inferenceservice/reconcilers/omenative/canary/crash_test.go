@@ -573,6 +573,7 @@ func TestDispatch_CanaryPodDeathParksFromPodsAndRows(t *testing.T) {
 			ctx := context.Background()
 			rec := record.NewFakeRecorder(16)
 			deps := DispatchDeps{Client: c, Reader: c, Recorder: rec, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{}), Now: t0}
+			syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 			if _, err := Dispatch(ctx, deps); err != nil {
 				t.Fatalf("Dispatch arming the canary: %v", err)
 			}
@@ -625,6 +626,7 @@ func TestDispatch_CanaryPodDeathParksFromPodsAndRows(t *testing.T) {
 				t.Fatal(err)
 			}
 			deps.Now = t0.Add(30 * time.Second)
+			syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 			if _, err := Dispatch(ctx, deps); err != nil {
 				t.Fatalf("Dispatch after the death: %v", err)
 			}

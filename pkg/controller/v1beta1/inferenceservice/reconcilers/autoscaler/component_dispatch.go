@@ -33,10 +33,8 @@ type IRDispatchInput struct {
 	// or ScaledObject.
 	Client client.Client
 
-	// Scheme is the runtime scheme, threaded for parity with the
-	// legacy reconciler signatures. DispatchAutoscaler stamps owner-
-	// refs directly via the metav1 path so this is reserved for
-	// future ctx-aware refactors.
+	// Scheme is not read: the dispatch sets owner references from the
+	// replica. Callers may leave it nil.
 	Scheme *runtime.Scheme
 
 	// IR is the committed InferenceReplica returned by

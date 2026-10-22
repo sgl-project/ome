@@ -3,6 +3,7 @@ package holds
 import (
 	"context"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -13,6 +14,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
+	fixture "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -151,7 +153,7 @@ func TestSourceRotation_ReportsASourceTakenOutFromUnderTheSurge(t *testing.T) {
 		store, _ := newStore(surgingRow(types.WaitingReasonUnschedulable))
 		pods := []*corev1.Pod{
 			sourcePod("svc-a-engine-0-default-0", false, false),
-			unschedulablePod("svc-a-engine-0-default-1", schedulerMessage, metav1.Now()),
+			fixture.UnschedulablePod("svc-a-engine-0-default-1", schedulerMessage, time.Now()),
 		}
 		applySurge(t, store, pods)
 		if got := store.waiting(0); got != types.WaitingReasonUnschedulable {

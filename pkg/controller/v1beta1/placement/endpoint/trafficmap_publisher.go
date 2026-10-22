@@ -187,273 +187,524 @@ type TrafficMapPublisherReconciler struct {
 // +kubebuilder:rbac:groups=ome.io,resources=trafficmaps/finalizers,verbs=update
 // +kubebuilder:rbac:groups=ome.io,resources=trafficmaps/status,verbs=get;update;patch
 
+// Reconcile runs one pass of the publisher over the TrafficMap req names.
+// publisherPass.run lists the steps of a pass in order.
 func (r *TrafficMapPublisherReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	if r.Publisher == nil {
-		return ctrl.Result{}, fmt.Errorf("TrafficMap publisher is not configured")
-	}
-	if r.APIReader == nil {
-		return ctrl.Result{}, fmt.Errorf("TrafficMap publisher API reader is not configured")
-	}
-	if err := validatePublisherName(r.Publisher.Name()); err != nil {
-		return ctrl.Result{}, err
-	}
-	if _, capable := r.Publisher.(TrafficMapPublisherFallback); capable && !r.Publisher.Stateful() {
-		return ctrl.Result{}, fmt.Errorf(
-			"TrafficMap publisher %q exposes retained-plan fallback but is stateless", r.Publisher.Name(),
-		)
-	}
+	pass := &publisherPass{reconciler: r, key: req.NamespacedName}
+	return pass.run(ctx)
+}
 
+// publisherPass is one reconcile pass over one TrafficMap: what the pass
+// read, what it planned, and the result a step ended it with.
+type publisherPass struct {
+	reconciler *TrafficMapPublisherReconciler
+	key        types.NamespacedName
+	trafficMap *v1beta1.TrafficMap
+	owner      *v1beta1.InferenceService
+	// effectiveOptions are the publisher's options once the installation's
+	// and the service's inline ones are resolved; the status records their
+	// digest.
+	effectiveOptions map[string]string
+	plan             TrafficMapPublishPlan
+	desiredClaims    []string
+	// capture is the publisher-neutral view of the plan; nil for a publisher
+	// without retained-plan fallback.
+	capture *TrafficMapPublishPlanCapture
+	// preparation is what preclaim recorded: the claims before and after it,
+	// and whether a retained positive plan replaces the current one. Nil for
+	// a stateless publisher.
+	preparation *trafficMapPublicationPreparation
+	// applyPlan is the plan Apply receives: the current plan, or the retained
+	// positive plan the publisher replayed.
+	applyPlan TrafficMapPublishPlan
+	applied   TrafficMapPublishResult
+	// result is what the pass returns when a step ends it.
+	result ctrl.Result
+}
+
+// publisherStep is one step of a pass. It reports whether the pass goes on;
+// a step that ends the pass has recorded the result through end.
+type publisherStep func(context.Context) (bool, error)
+
+// run takes the pass through its steps in order and stops at the first one
+// that ends it. The list is the whole order of a pass; publish picks the
+// branch the publisher's kind needs.
+func (p *publisherPass) run(ctx context.Context) (ctrl.Result, error) {
+	_, err := runPublisherSteps(ctx, []publisherStep{
+		p.checkConfiguration,
+		p.readTrafficMap,
+		p.finalizeDeleting,
+		p.repairFinalizer,
+		p.stopWhenInactive,
+		p.readOwner,
+		p.stopForInactiveOwner,
+		p.waitForEndpointFinalizerCleanup,
+		p.resolveOptions,
+		p.planPublication,
+		p.capturePlan,
+		p.publish,
+	})
+	return p.result, err
+}
+
+// runPublisherSteps runs the steps in order and reports whether every one
+// let the pass go on. It stops at the first step that ends the pass or
+// fails and returns that step's error.
+func runPublisherSteps(ctx context.Context, steps []publisherStep) (bool, error) {
+	for _, step := range steps {
+		if next, err := step(ctx); !next || err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+// end records the result a step ends the pass with and reports that the
+// pass does not go on.
+func (p *publisherPass) end(result ctrl.Result, err error) (bool, error) {
+	p.result = result
+	return false, err
+}
+
+// endClaimRecordWrite ends the pass after a status write failed: a claim
+// record another pass changed requeues; any other failure returns its error.
+func (p *publisherPass) endClaimRecordWrite(err error) (bool, error) {
+	if errors.Is(err, errTrafficMapPublisherJournalChanged) {
+		return p.end(ctrl.Result{Requeue: true}, nil)
+	}
+	return p.end(ctrl.Result{}, err)
+}
+
+// checkConfiguration ends the pass when the reconciler is not wired: no
+// publisher, no uncached reader, an invalid publisher name, or a stateless
+// publisher that offers retained-plan fallback.
+func (p *publisherPass) checkConfiguration(context.Context) (bool, error) {
+	publisher := p.reconciler.Publisher
+	if publisher == nil {
+		return p.end(ctrl.Result{}, fmt.Errorf("TrafficMap publisher is not configured"))
+	}
+	if p.reconciler.APIReader == nil {
+		return p.end(ctrl.Result{}, fmt.Errorf("TrafficMap publisher API reader is not configured"))
+	}
+	if err := validatePublisherName(publisher.Name()); err != nil {
+		return p.end(ctrl.Result{}, err)
+	}
+	if _, capable := publisher.(TrafficMapPublisherFallback); capable && !publisher.Stateful() {
+		return p.end(ctrl.Result{}, fmt.Errorf(
+			"TrafficMap publisher %q exposes retained-plan fallback but is stateless", publisher.Name(),
+		))
+	}
+	return true, nil
+}
+
+// readTrafficMap reads the map from the cache and records its fallback
+// metric. A map that is gone ends the pass once its metric is removed.
+func (p *publisherPass) readTrafficMap(ctx context.Context) (bool, error) {
 	trafficMap := &v1beta1.TrafficMap{}
-	if err := r.Get(ctx, req.NamespacedName, trafficMap); err != nil {
+	if err := p.reconciler.Get(ctx, p.key, trafficMap); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			deleteTrafficMapPublicationFallbackMetric(req.Namespace, req.Name, r.Publisher.Name())
+			deleteTrafficMapPublicationFallbackMetric(p.key.Namespace, p.key.Name, p.reconciler.Publisher.Name())
 		}
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		return p.end(ctrl.Result{}, client.IgnoreNotFound(err))
 	}
-	recordTrafficMapPublicationFallbackMetric(trafficMap, r.Publisher.Name())
-	if !trafficMap.DeletionTimestamp.IsZero() {
-		return r.finalize(ctx, trafficMap)
-	}
-	// Claims are a durable record of external state. Repair a missing finalizer
-	// before any gate or validation can stop reconciliation and leave that state
-	// unprotected from deletion.
-	if publisherStatusNeedsFinalizer(trafficMap.Status, r.Publisher.Stateful()) &&
-		!controllerutil.ContainsFinalizer(trafficMap, TrafficMapPublisherFinalizer) {
-		added, err := r.ensureFinalizer(ctx, trafficMap)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if added {
-			return ctrl.Result{Requeue: true}, nil
-		}
-	}
-	if !r.Active {
-		return r.successResult(), nil
-	}
+	recordTrafficMapPublicationFallbackMetric(trafficMap, p.reconciler.Publisher.Name())
+	p.trafficMap = trafficMap
+	return true, nil
+}
 
-	owner, err := r.owner(ctx, trafficMap)
+// finalizeDeleting hands a deleting map to finalization.
+func (p *publisherPass) finalizeDeleting(ctx context.Context) (bool, error) {
+	if p.trafficMap.DeletionTimestamp.IsZero() {
+		return true, nil
+	}
+	return p.end(p.reconciler.finalize(ctx, p.trafficMap))
+}
+
+// repairFinalizer adds the finalizer a map with durable claims must carry,
+// before any gate or validation can stop the pass and leave those claims
+// unprotected from deletion.
+func (p *publisherPass) repairFinalizer(ctx context.Context) (bool, error) {
+	if !publisherStatusNeedsFinalizer(p.trafficMap.Status, p.reconciler.Publisher.Stateful()) ||
+		controllerutil.ContainsFinalizer(p.trafficMap, TrafficMapPublisherFinalizer) {
+		return true, nil
+	}
+	return p.ensureFinalizer(ctx)
+}
+
+// ensureFinalizer adds the publisher finalizer when the map lacks it and
+// requeues the pass once it is added.
+func (p *publisherPass) ensureFinalizer(ctx context.Context) (bool, error) {
+	added, err := p.reconciler.ensureFinalizer(ctx, p.trafficMap)
+	if err != nil {
+		return p.end(ctrl.Result{}, err)
+	}
+	if added {
+		return p.end(ctrl.Result{Requeue: true}, nil)
+	}
+	return true, nil
+}
+
+// stopWhenInactive ends the pass of an installation whose publisher is
+// switched off; the routing controller owns the map's deletion.
+func (p *publisherPass) stopWhenInactive(context.Context) (bool, error) {
+	if p.reconciler.Active {
+		return true, nil
+	}
+	return p.end(p.reconciler.successResult(), nil)
+}
+
+// readOwner reads the owning InferenceService through the uncached reader
+// and checks the map's provenance against it. A failed read retries; an
+// invalid binding is rejected.
+func (p *publisherPass) readOwner(ctx context.Context) (bool, error) {
+	owner, err := p.reconciler.owner(ctx, p.trafficMap)
 	if err != nil {
 		if errors.Is(err, errTrafficMapPublisherOwnerRead) {
-			return r.retryFailure(ctx, trafficMap, trafficMapPublisherReasonInvalidOwner, err)
+			return p.end(p.reconciler.retryFailure(ctx, p.trafficMap, trafficMapPublisherReasonInvalidOwner, err))
 		}
-		return r.reject(ctx, trafficMap, trafficMapPublisherReasonInvalidOwner, err)
+		return p.end(p.reconciler.reject(ctx, p.trafficMap, trafficMapPublisherReasonInvalidOwner, err))
 	}
-	if !publisherOwnerActive(owner) {
-		if _, err := normalizedPublisherJournal(trafficMap.Status.Publisher, r.Publisher.Name()); err != nil {
-			return r.reject(ctx, trafficMap, trafficMapPublisherReasonPublisherChanged, err)
-		}
-		if err := r.markInactive(ctx, trafficMap); err != nil {
-			if errors.Is(err, errTrafficMapPublisherJournalChanged) {
-				return ctrl.Result{Requeue: true}, nil
-			}
-			return ctrl.Result{}, err
-		}
-		return r.successResult(), nil
+	p.owner = owner
+	return true, nil
+}
+
+// stopForInactiveOwner marks the map unpublished and ends the pass when its
+// owner is deleting, opted out or not placement eligible. A claim record
+// another publisher wrote is rejected instead.
+func (p *publisherPass) stopForInactiveOwner(ctx context.Context) (bool, error) {
+	if publisherOwnerActive(p.owner) {
+		return true, nil
 	}
-	if r.Publisher.Stateful() && (trafficMap.Status.Publisher == nil ||
-		trafficMap.Status.Publisher.PublisherName != r.Publisher.Name()) {
-		legacyOwners, err := r.legacyEndpointOwners(ctx)
-		if err != nil {
-			return r.retryFailure(ctx, trafficMap, trafficMapPublisherReasonLegacyActive,
-				fmt.Errorf("check legacy endpoint publication state: %w", err))
-		}
-		if legacyOwners != 0 {
-			return r.reject(ctx, trafficMap, trafficMapPublisherReasonLegacyActive, fmt.Errorf(
-				"%d InferenceService(s) retain the legacy endpoint publisher finalizer; complete their cleanup before publishing TrafficMaps",
-				legacyOwners,
-			))
-		}
+	if _, err := normalizedPublisherJournal(p.trafficMap.Status.Publisher, p.reconciler.Publisher.Name()); err != nil {
+		return p.end(p.reconciler.reject(ctx, p.trafficMap, trafficMapPublisherReasonPublisherChanged, err))
 	}
-	inlineOptions := routingPublisherOptions(owner)
-	effectiveOptions, err := r.Publisher.ResolveOptions(
-		clonePublisherOptions(r.GlobalOptions),
-		clonePublisherOptions(inlineOptions),
+	if err := p.reconciler.markInactive(ctx, p.trafficMap); err != nil {
+		return p.endClaimRecordWrite(err)
+	}
+	return p.end(p.reconciler.successResult(), nil)
+}
+
+// waitForEndpointFinalizerCleanup keeps a stateful publisher from taking its
+// first claims on a map while any InferenceService still carries the endpoint
+// publisher's finalizer. A map whose claim record this publisher wrote goes on.
+func (p *publisherPass) waitForEndpointFinalizerCleanup(ctx context.Context) (bool, error) {
+	if !p.reconciler.Publisher.Stateful() || p.claimRecordIsOurs() {
+		return true, nil
+	}
+	legacyOwners, err := p.reconciler.legacyEndpointOwners(ctx)
+	if err != nil {
+		return p.end(p.reconciler.retryFailure(ctx, p.trafficMap, trafficMapPublisherReasonLegacyActive,
+			fmt.Errorf("check legacy endpoint publication state: %w", err)))
+	}
+	if legacyOwners != 0 {
+		return p.end(p.reconciler.reject(ctx, p.trafficMap, trafficMapPublisherReasonLegacyActive, fmt.Errorf(
+			"%d InferenceService(s) retain the legacy endpoint publisher finalizer; complete their cleanup before publishing TrafficMaps",
+			legacyOwners,
+		)))
+	}
+	return true, nil
+}
+
+// claimRecordIsOurs reports a map whose claim record (status.publisher) this
+// publisher wrote.
+func (p *publisherPass) claimRecordIsOurs() bool {
+	record := p.trafficMap.Status.Publisher
+	return record != nil && record.PublisherName == p.reconciler.Publisher.Name()
+}
+
+// resolveOptions merges the installation's options with the service's inline
+// ones through the publisher.
+func (p *publisherPass) resolveOptions(ctx context.Context) (bool, error) {
+	effectiveOptions, err := p.reconciler.Publisher.ResolveOptions(
+		clonePublisherOptions(p.reconciler.GlobalOptions),
+		clonePublisherOptions(routingPublisherOptions(p.owner)),
 	)
 	if err != nil {
-		return r.reject(ctx, trafficMap, trafficMapPublisherReasonInvalidOptions, err)
+		return p.end(p.reconciler.reject(ctx, p.trafficMap, trafficMapPublisherReasonInvalidOptions, err))
 	}
-	effectiveOptions = clonePublisherOptions(effectiveOptions)
+	p.effectiveOptions = clonePublisherOptions(effectiveOptions)
+	return true, nil
+}
 
-	plan, err := r.Publisher.Plan(owner.DeepCopy(), trafficMap.DeepCopy(), clonePublisherOptions(effectiveOptions))
+// planPublication asks the publisher for its plan from copies of the owner
+// and the map, and normalizes the claims the plan may touch. The current
+// plan is what Apply receives unless a retained plan replaces it.
+func (p *publisherPass) planPublication(ctx context.Context) (bool, error) {
+	publisher := p.reconciler.Publisher
+	plan, err := publisher.Plan(p.owner.DeepCopy(), p.trafficMap.DeepCopy(), clonePublisherOptions(p.effectiveOptions))
 	if err != nil {
-		return r.reject(ctx, trafficMap, trafficMapPublisherReasonInvalidPlan, err)
+		return p.end(p.reconciler.reject(ctx, p.trafficMap, trafficMapPublisherReasonInvalidPlan, err))
 	}
 	if plan == nil {
-		return r.reject(ctx, trafficMap, trafficMapPublisherReasonInvalidPlan,
-			fmt.Errorf("TrafficMap publisher %q returned a nil plan", r.Publisher.Name()))
+		return p.end(p.reconciler.reject(ctx, p.trafficMap, trafficMapPublisherReasonInvalidPlan,
+			fmt.Errorf("TrafficMap publisher %q returned a nil plan", publisher.Name())))
 	}
 	desiredClaims, err := normalizePublisherClaims(plan.Claims())
 	if err != nil {
-		return r.reject(ctx, trafficMap, trafficMapPublisherReasonInvalidPlan, err)
+		return p.end(p.reconciler.reject(ctx, p.trafficMap, trafficMapPublisherReasonInvalidPlan, err))
 	}
-	var capture *TrafficMapPublishPlanCapture
-	if fallback, ok := r.Publisher.(TrafficMapPublisherFallback); ok {
-		captured, err := fallback.Capture(plan)
-		if err != nil {
-			return r.reject(ctx, trafficMap, trafficMapPublisherReasonInvalidPlan,
-				fmt.Errorf("capture TrafficMap publication plan: %w", err))
-		}
-		if err := validateTrafficMapPlanCapture(&captured, desiredClaims); err != nil {
-			return r.reject(ctx, trafficMap, trafficMapPublisherReasonInvalidPlan, err)
-		}
-		capture = &captured
-	}
+	p.plan, p.applyPlan, p.desiredClaims = plan, plan, desiredClaims
+	return true, nil
+}
 
-	if !r.Publisher.Stateful() {
-		if len(desiredClaims) != 0 {
-			return r.reject(ctx, trafficMap, trafficMapPublisherReasonInvalidPlan,
-				fmt.Errorf("stateless TrafficMap publisher %q planned %d target claims",
-					r.Publisher.Name(), len(desiredClaims)))
-		}
-		if err := r.preflightStateless(ctx, trafficMap, owner); err != nil {
-			if errors.Is(err, errTrafficMapPublisherPlanStale) {
-				return ctrl.Result{Requeue: true}, nil
-			}
-			if errors.Is(err, errTrafficMapPublisherOwnerRead) {
-				return r.retryFailure(ctx, trafficMap, trafficMapPublisherReasonInvalidOwner, err)
-			}
-			if errors.Is(err, errTrafficMapPublisherSourceChanged) {
-				return r.reject(ctx, trafficMap, trafficMapPublisherReasonInvalidOwner, err)
-			}
-			if errors.Is(err, errTrafficMapPublisherChanged) {
-				return r.reject(ctx, trafficMap, trafficMapPublisherReasonPublisherChanged, err)
-			}
-			var terminal *terminalPublisherError
-			if errors.As(err, &terminal) {
-				return r.reject(ctx, trafficMap, trafficMapPublisherReasonClaimRejected, terminal.err)
-			}
-			return r.retryFailure(ctx, trafficMap, trafficMapPublisherReasonClaimRejected, err)
-		}
-		if err := r.markTransitioning(ctx, trafficMap, nil, false); err != nil {
-			return ctrl.Result{}, err
-		}
-		result, err := r.Publisher.Apply(ctx, plan)
-		if err != nil {
-			return r.retryFailure(ctx, trafficMap, trafficMapPublisherReasonApplyFailed, err)
-		}
-		if err := r.markPublicationApplied(ctx, client.ObjectKeyFromObject(trafficMap), trafficMap.UID,
-			trafficMap.Generation, nil, effectiveOptions, result, nil, nil, false); err != nil {
-			if errors.Is(err, errTrafficMapPublisherJournalChanged) {
-				return ctrl.Result{Requeue: true}, nil
-			}
-			return ctrl.Result{}, err
-		}
-		return r.successResult(), nil
+// capturePlan takes the publisher-neutral view of the plan from a publisher
+// with retained-plan fallback and checks it against the claims.
+func (p *publisherPass) capturePlan(ctx context.Context) (bool, error) {
+	fallback, ok := p.reconciler.Publisher.(TrafficMapPublisherFallback)
+	if !ok {
+		return true, nil
 	}
-
-	added, err := r.ensureFinalizer(ctx, trafficMap)
+	captured, err := fallback.Capture(p.plan)
 	if err != nil {
-		return ctrl.Result{}, err
+		return p.end(p.reconciler.reject(ctx, p.trafficMap, trafficMapPublisherReasonInvalidPlan,
+			fmt.Errorf("capture TrafficMap publication plan: %w", err)))
 	}
-	if added {
-		return ctrl.Result{Requeue: true}, nil
+	if err := validateTrafficMapPlanCapture(&captured, p.desiredClaims); err != nil {
+		return p.end(p.reconciler.reject(ctx, p.trafficMap, trafficMapPublisherReasonInvalidPlan, err))
 	}
+	p.capture = &captured
+	return true, nil
+}
 
-	preparation, err := r.preclaim(ctx, trafficMap, owner, desiredClaims, capture)
+// publish runs the branch the publisher's kind needs. A stateless publisher
+// checks fresh state and applies. A stateful one claims its targets first,
+// replays a retained positive plan when preclaim chose one, drains the
+// claims it no longer needs, applies, and records the outcome.
+func (p *publisherPass) publish(ctx context.Context) (bool, error) {
+	if !p.reconciler.Publisher.Stateful() {
+		return runPublisherSteps(ctx, []publisherStep{
+			p.rejectStatelessClaims,
+			p.preflightStateless,
+			p.markTransitioning,
+			p.apply,
+			p.recordStatelessPublication,
+		})
+	}
+	return runPublisherSteps(ctx, []publisherStep{
+		p.ensureFinalizer,
+		p.preclaim,
+		p.replayRetainedPlan,
+		p.preflight,
+		p.drainStaleClaims,
+		p.apply,
+		p.rejectWithdrawnReplay,
+		p.checkCapturedWithdrawal,
+		p.recordPublication,
+	})
+}
+
+// rejectStatelessClaims rejects a plan from a stateless publisher that names
+// target claims; such a publisher keeps no claim record to claim them in.
+func (p *publisherPass) rejectStatelessClaims(ctx context.Context) (bool, error) {
+	if len(p.desiredClaims) == 0 {
+		return true, nil
+	}
+	return p.end(p.reconciler.reject(ctx, p.trafficMap, trafficMapPublisherReasonInvalidPlan,
+		fmt.Errorf("stateless TrafficMap publisher %q planned %d target claims",
+			p.reconciler.Publisher.Name(), len(p.desiredClaims))))
+}
+
+// preflightStateless rechecks the map, its owner and the claim record from
+// fresh state before a stateless apply.
+func (p *publisherPass) preflightStateless(ctx context.Context) (bool, error) {
+	if err := p.reconciler.preflightStateless(ctx, p.trafficMap, p.owner); err != nil {
+		return p.endPreEffectFailure(ctx, err)
+	}
+	return true, nil
+}
+
+// endPreEffectFailure ends the pass after the fresh-state check before any
+// external effect failed: a changed map requeues, a failed owner read
+// retries, a changed source or publisher is rejected, a terminal claim
+// problem is rejected, and any other failure retries.
+func (p *publisherPass) endPreEffectFailure(ctx context.Context, err error) (bool, error) {
+	switch {
+	case errors.Is(err, errTrafficMapPublisherPlanStale):
+		return p.end(ctrl.Result{Requeue: true}, nil)
+	case errors.Is(err, errTrafficMapPublisherOwnerRead):
+		return p.end(p.reconciler.retryFailure(ctx, p.trafficMap, trafficMapPublisherReasonInvalidOwner, err))
+	case errors.Is(err, errTrafficMapPublisherSourceChanged):
+		return p.end(p.reconciler.reject(ctx, p.trafficMap, trafficMapPublisherReasonInvalidOwner, err))
+	case errors.Is(err, errTrafficMapPublisherChanged):
+		return p.end(p.reconciler.reject(ctx, p.trafficMap, trafficMapPublisherReasonPublisherChanged, err))
+	}
+	var terminal *terminalPublisherError
+	if errors.As(err, &terminal) {
+		return p.end(p.reconciler.reject(ctx, p.trafficMap, trafficMapPublisherReasonClaimRejected, terminal.err))
+	}
+	return p.end(p.reconciler.retryFailure(ctx, p.trafficMap, trafficMapPublisherReasonClaimRejected, err))
+}
+
+// markTransitioning writes the transitioning condition before a stateless
+// apply.
+func (p *publisherPass) markTransitioning(ctx context.Context) (bool, error) {
+	if err := p.reconciler.markTransitioning(ctx, p.trafficMap, nil, false); err != nil {
+		return p.end(ctrl.Result{}, err)
+	}
+	return true, nil
+}
+
+// apply realizes the plan through the publisher.
+func (p *publisherPass) apply(ctx context.Context) (bool, error) {
+	result, err := p.reconciler.Publisher.Apply(ctx, p.applyPlan)
 	if err != nil {
-		if errors.Is(err, errTrafficMapPublisherPlanStale) {
-			return ctrl.Result{Requeue: true}, nil
-		}
+		return p.end(p.reconciler.retryFailure(ctx, p.trafficMap, trafficMapPublisherReasonApplyFailed, err))
+	}
+	p.applied = result
+	return true, nil
+}
+
+// recordStatelessPublication writes the applied generation and options
+// digest, with no claims, and ends the pass.
+func (p *publisherPass) recordStatelessPublication(ctx context.Context) (bool, error) {
+	if err := p.reconciler.markPublicationApplied(ctx, client.ObjectKeyFromObject(p.trafficMap), p.trafficMap.UID,
+		p.trafficMap.Generation, nil, p.effectiveOptions, p.applied, nil, nil, false); err != nil {
+		return p.endClaimRecordWrite(err)
+	}
+	return p.end(p.reconciler.successResult(), nil)
+}
+
+// preclaim writes the claims this pass may touch into the map's claim record
+// from fresh state, before any external effect, and decides whether a
+// retained positive plan is replayed. An unknown fallback eligibility ends the
+// pass without effects.
+func (p *publisherPass) preclaim(ctx context.Context) (bool, error) {
+	preparation, err := p.reconciler.preclaim(ctx, p.trafficMap, p.owner, p.desiredClaims, p.capture)
+	if err != nil {
 		if errors.Is(err, errTrafficMapPublisherEligibilityUnknown) {
-			return r.successResult(), nil
+			return p.end(p.reconciler.successResult(), nil)
 		}
-		if errors.Is(err, errTrafficMapPublisherOwnerRead) {
-			return r.retryFailure(ctx, trafficMap, trafficMapPublisherReasonInvalidOwner, err)
-		}
-		if errors.Is(err, errTrafficMapPublisherSourceChanged) {
-			return r.reject(ctx, trafficMap, trafficMapPublisherReasonInvalidOwner, err)
-		}
-		if errors.Is(err, errTrafficMapPublisherChanged) {
-			return r.reject(ctx, trafficMap, trafficMapPublisherReasonPublisherChanged, err)
-		}
-		var terminal *terminalPublisherError
-		if errors.As(err, &terminal) {
-			return r.reject(ctx, trafficMap, trafficMapPublisherReasonClaimRejected, terminal.err)
-		}
-		return r.retryFailure(ctx, trafficMap, trafficMapPublisherReasonClaimRejected, err)
+		return p.endPreEffectFailure(ctx, err)
 	}
-	applyPlan := plan
-	if preparation.useFallback {
-		fallback := r.Publisher.(TrafficMapPublisherFallback)
-		replayed, replayErr := fallback.Replay(*copyTrafficMapLastPositive(preparation.lastPositive))
-		if replayErr == nil && replayed == nil {
-			replayErr = fmt.Errorf("publisher returned a nil replay plan")
-		}
-		if replayErr == nil {
-			replayedClaims, claimsErr := normalizePublisherClaims(replayed.Claims())
-			if claimsErr != nil {
-				replayErr = claimsErr
-			} else if !slices.Equal(replayedClaims, preparation.expectedClaims) {
-				replayErr = fmt.Errorf("replay claims %v do not exactly match durable claims %v",
-					replayedClaims, preparation.expectedClaims)
-			}
-		}
-		if replayErr != nil {
-			if err := r.invalidateLastPositive(ctx, trafficMap, preparation.expectedClaims); err != nil {
-				if errors.Is(err, errTrafficMapPublisherJournalChanged) {
-					return ctrl.Result{Requeue: true}, nil
-				}
-				return ctrl.Result{}, err
-			}
-			preparation.useFallback = false
-			preparation.lastPositive = nil
-		} else {
-			applyPlan = replayed
-		}
+	p.preparation = preparation
+	return true, nil
+}
+
+// replayRetainedPlan swaps in the retained positive plan when preclaim chose
+// to replay one. A replay that fails, returns no plan or names other claims
+// than the record holds clears the retained plan, and the current plan applies.
+func (p *publisherPass) replayRetainedPlan(ctx context.Context) (bool, error) {
+	if !p.preparation.useFallback {
+		return true, nil
 	}
-	if preflighter, ok := r.Publisher.(trafficMapPublisherPreflighter); ok {
-		if err := preflighter.Preflight(ctx, applyPlan); err != nil {
-			var terminal *terminalPublisherError
-			if errors.As(err, &terminal) {
-				return r.reject(ctx, trafficMap, trafficMapPublisherReasonClaimRejected, terminal.err)
-			}
-			return r.retryFailure(ctx, trafficMap, trafficMapPublisherReasonClaimRejected, err)
-		}
+	replayed, err := p.replayedPlan()
+	if err == nil {
+		p.applyPlan = replayed
+		return true, nil
 	}
-	staleClaims := []string(nil)
-	if !preparation.useFallback {
-		staleClaims = publisherClaimDifference(preparation.previousClaims, desiredClaims)
+	if err := p.reconciler.invalidateLastPositive(ctx, p.trafficMap, p.preparation.expectedClaims); err != nil {
+		return p.endClaimRecordWrite(err)
 	}
-	if len(staleClaims) != 0 {
-		if err := r.Publisher.Drain(ctx, client.ObjectKeyFromObject(trafficMap), slices.Clone(staleClaims)); err != nil {
-			return r.retryFailure(ctx, trafficMap, trafficMapPublisherReasonDrainFailed, err)
-		}
-	}
-	result, err := r.Publisher.Apply(ctx, applyPlan)
+	p.preparation.useFallback = false
+	p.preparation.lastPositive = nil
+	return true, nil
+}
+
+// replayedPlan asks the publisher to rebuild the retained positive plan and
+// checks that its claims match the recorded ones exactly.
+func (p *publisherPass) replayedPlan() (TrafficMapPublishPlan, error) {
+	fallback := p.reconciler.Publisher.(TrafficMapPublisherFallback)
+	replayed, err := fallback.Replay(*copyTrafficMapLastPositive(p.preparation.lastPositive))
 	if err != nil {
-		return r.retryFailure(ctx, trafficMap, trafficMapPublisherReasonApplyFailed, err)
+		return nil, err
 	}
-	if preparation.useFallback && result.Withdrawn {
-		return r.retryFailure(ctx, trafficMap, trafficMapPublisherReasonApplyFailed,
-			fmt.Errorf("publisher reported withdrawal while replaying a retained positive plan"))
+	if replayed == nil {
+		return nil, fmt.Errorf("publisher returned a nil replay plan")
 	}
-	if !preparation.useFallback && capture != nil && result.Withdrawn != capture.Withdrawn {
-		if err := r.invalidateLastPositive(ctx, trafficMap, preparation.expectedClaims); err != nil {
-			if errors.Is(err, errTrafficMapPublisherJournalChanged) {
-				return ctrl.Result{Requeue: true}, nil
-			}
-			return ctrl.Result{}, err
-		}
-		return r.retryFailure(ctx, trafficMap, trafficMapPublisherReasonApplyFailed, fmt.Errorf(
-			"publisher Apply withdrawal result %t does not match captured plan withdrawal %t",
-			result.Withdrawn, capture.Withdrawn,
-		))
+	replayedClaims, err := normalizePublisherClaims(replayed.Claims())
+	if err != nil {
+		return nil, err
 	}
+	if !slices.Equal(replayedClaims, p.preparation.expectedClaims) {
+		return nil, fmt.Errorf("replay claims %v do not exactly match durable claims %v",
+			replayedClaims, p.preparation.expectedClaims)
+	}
+	return replayed, nil
+}
+
+// preflight lets a publisher that validates shared external state do so once
+// its claims are durable and before any drain or apply.
+func (p *publisherPass) preflight(ctx context.Context) (bool, error) {
+	preflighter, ok := p.reconciler.Publisher.(trafficMapPublisherPreflighter)
+	if !ok {
+		return true, nil
+	}
+	err := preflighter.Preflight(ctx, p.applyPlan)
+	if err == nil {
+		return true, nil
+	}
+	var terminal *terminalPublisherError
+	if errors.As(err, &terminal) {
+		return p.end(p.reconciler.reject(ctx, p.trafficMap, trafficMapPublisherReasonClaimRejected, terminal.err))
+	}
+	return p.end(p.reconciler.retryFailure(ctx, p.trafficMap, trafficMapPublisherReasonClaimRejected, err))
+}
+
+// drainStaleClaims keeps at zero the claims the record holds and the current
+// plan no longer names. A replayed plan keeps every claim.
+func (p *publisherPass) drainStaleClaims(ctx context.Context) (bool, error) {
+	if p.preparation.useFallback {
+		return true, nil
+	}
+	staleClaims := publisherClaimDifference(p.preparation.previousClaims, p.desiredClaims)
+	if len(staleClaims) == 0 {
+		return true, nil
+	}
+	if err := p.reconciler.Publisher.Drain(ctx, client.ObjectKeyFromObject(p.trafficMap), slices.Clone(staleClaims)); err != nil {
+		return p.end(p.reconciler.retryFailure(ctx, p.trafficMap, trafficMapPublisherReasonDrainFailed, err))
+	}
+	return true, nil
+}
+
+// rejectWithdrawnReplay retries when the publisher withdrew publication while
+// replaying a retained positive plan, which must publish.
+func (p *publisherPass) rejectWithdrawnReplay(ctx context.Context) (bool, error) {
+	if !p.preparation.useFallback || !p.applied.Withdrawn {
+		return true, nil
+	}
+	return p.end(p.reconciler.retryFailure(ctx, p.trafficMap, trafficMapPublisherReasonApplyFailed,
+		fmt.Errorf("publisher reported withdrawal while replaying a retained positive plan")))
+}
+
+// checkCapturedWithdrawal retries when Apply's withdrawal differs from the
+// captured plan's, after clearing the retained plan the capture would have
+// confirmed.
+func (p *publisherPass) checkCapturedWithdrawal(ctx context.Context) (bool, error) {
+	if p.preparation.useFallback || p.capture == nil || p.applied.Withdrawn == p.capture.Withdrawn {
+		return true, nil
+	}
+	if err := p.reconciler.invalidateLastPositive(ctx, p.trafficMap, p.preparation.expectedClaims); err != nil {
+		return p.endClaimRecordWrite(err)
+	}
+	return p.end(p.reconciler.retryFailure(ctx, p.trafficMap, trafficMapPublisherReasonApplyFailed, fmt.Errorf(
+		"publisher Apply withdrawal result %t does not match captured plan withdrawal %t",
+		p.applied.Withdrawn, p.capture.Withdrawn,
+	)))
+}
+
+// recordPublication writes the applied generation, claims and options digest
+// and, for a positive current plan applied as captured, the retained positive
+// plan, then ends the pass.
+func (p *publisherPass) recordPublication(ctx context.Context) (bool, error) {
 	var committed *v1beta1.TrafficMapPublisherLastPositive
-	if !preparation.useFallback && capture != nil && trafficMapPlanCapturePositive(capture) && !capture.Withdrawn {
+	if p.commitsCapturedPlan() {
 		committed = trafficMapLastPositiveFromCapture(
-			trafficMap.Generation, owner.Generation, preparation.expectedClaims, capture,
+			p.trafficMap.Generation, p.owner.Generation, p.preparation.expectedClaims, p.capture,
 		)
 	}
-	if err := r.markPublicationApplied(ctx, client.ObjectKeyFromObject(trafficMap), trafficMap.UID,
-		trafficMap.Generation, preparation.expectedClaims, effectiveOptions, result,
-		preparation.lastPositive, committed, preparation.useFallback); err != nil {
-		if errors.Is(err, errTrafficMapPublisherJournalChanged) {
-			return ctrl.Result{Requeue: true}, nil
-		}
-		return ctrl.Result{}, err
+	if err := p.reconciler.markPublicationApplied(ctx, client.ObjectKeyFromObject(p.trafficMap), p.trafficMap.UID,
+		p.trafficMap.Generation, p.preparation.expectedClaims, p.effectiveOptions, p.applied,
+		p.preparation.lastPositive, committed, p.preparation.useFallback); err != nil {
+		return p.endClaimRecordWrite(err)
 	}
-	return r.successResult(), nil
+	return p.end(p.reconciler.successResult(), nil)
+}
+
+// commitsCapturedPlan reports a current plan with positive weight that was
+// applied as captured; its capture becomes the retained positive plan.
+func (p *publisherPass) commitsCapturedPlan() bool {
+	return !p.preparation.useFallback && p.capture != nil &&
+		trafficMapPlanCapturePositive(p.capture) && !p.capture.Withdrawn
 }
 
 func (r *TrafficMapPublisherReconciler) owner(
@@ -1095,7 +1346,7 @@ func trafficMapFallbackEligibilityWithAllHomesUnready(
 		return false, false
 	}
 	if trafficMap.Spec.CapacityMode == v1beta1.RoutingCapacityModeReported && trafficMapCarriesReport(trafficMap) {
-		// A current report decides its home's weight, so replica or condition lag
+		// A current report decides its cluster's weight, so replica or condition lag
 		// cannot delay the table and an earlier positive plan cannot replace it.
 		// Source identity and generation are checked before publication. A table
 		// without a report has fallen back to replica counts, like a Ceiling table.

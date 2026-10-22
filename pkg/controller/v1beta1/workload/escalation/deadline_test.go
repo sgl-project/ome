@@ -7,6 +7,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/escalation"
 	workloadtypes "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
@@ -819,5 +820,143 @@ func TestReconcileGatedDeadlines_ParkedAttemptKeepsItsDeadlineParked(t *testing.
 	}
 	if d := (*store)[0].Operation.Deadline; !d.IsZero() {
 		t.Errorf("Deadline: got %v want parked (zero) for an attempt its ladder paces", d)
+	}
+}
+
+// migrationClockFixture wires a ReconcileInput whose MutateMigration applies
+// the callback to a local copy of the move records, as the adapter's status
+// writer does, and counts the writes that landed. The clock is the input's.
+type migrationClockFixture struct {
+	input  workloadtypes.ReconcileInput
+	store  []workloadtypes.MigrationRecord
+	writes int
+	clk    *clocktesting.FakeClock
+}
+
+func newMigrationClockFixture(now time.Time, records ...workloadtypes.MigrationRecord) *migrationClockFixture {
+	f := &migrationClockFixture{store: append([]workloadtypes.MigrationRecord(nil), records...), clk: clocktesting.NewFakeClock(now)}
+	f.input = workloadtypes.ReconcileInput{
+		Clock: f.clk,
+		MutateMigration: func(_ context.Context, uuid string, mutate func(*workloadtypes.MigrationRecord) bool) error {
+			for i := range f.store {
+				if f.store[i].RequestUUID != uuid {
+					continue
+				}
+				fresh := f.store[i]
+				if mutate(&fresh) {
+					f.store[i] = fresh
+					f.writes++
+				}
+				return nil
+			}
+			return nil
+		},
+	}
+	return f
+}
+
+// reconcile runs the pause step over the records as the adapter last
+// persisted them.
+func (f *migrationClockFixture) reconcile(t *testing.T, paused bool, timeout time.Duration) {
+	t.Helper()
+	f.input.ObservedState.Migrations = append([]workloadtypes.MigrationRecord(nil), f.store...)
+	if err := escalation.ReconcilePausedMigrationDeadlines(context.Background(), f.input, paused, timeout); err != nil {
+		t.Fatalf("ReconcilePausedMigrationDeadlines(paused=%t): %v", paused, err)
+	}
+}
+
+func (f *migrationClockFixture) record(t *testing.T, uuid string) workloadtypes.MigrationRecord {
+	t.Helper()
+	for _, rec := range f.store {
+		if rec.RequestUUID == uuid {
+			return rec
+		}
+	}
+	t.Fatalf("no record %s", uuid)
+	return workloadtypes.MigrationRecord{}
+}
+
+// A pause clears the deadline of every open move record, as it clears the
+// deadlines of the move's two rows, and the first pass without the pause
+// gives each of them a full window measured from that pass. A closed
+// record and a relocation record are not touched, a paused pass that finds
+// the clocks already cleared writes nothing, and a record that no pause
+// held keeps the deadline the accept pass gave it.
+func TestReconcilePausedMigrationDeadlines_PauseClearsTheRecordsClockAndTheUnpauseStartsItAgain(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	const window = 30 * time.Minute
+	surge := int32(3)
+	f := newMigrationClockFixture(now,
+		workloadtypes.MigrationRecord{RequestUUID: "allocated-move", Trigger: workloadtypes.MigrationTriggerManual, Phase: workloadtypes.MigrationPhaseSurgePending, SourceInstance: 2, SurgeInstance: &surge, StartedAt: metav1.NewTime(now.Add(-10 * time.Second)), Deadline: metav1.NewTime(now.Add(window - 10*time.Second))},
+		workloadtypes.MigrationRecord{RequestUUID: "fresh-request", Trigger: workloadtypes.MigrationTriggerManual, Phase: workloadtypes.MigrationPhaseAccepted, SourceInstance: 1, StartedAt: metav1.NewTime(now), Deadline: metav1.NewTime(now.Add(window))},
+		workloadtypes.MigrationRecord{RequestUUID: "closed-move", Trigger: workloadtypes.MigrationTriggerManual, Phase: workloadtypes.MigrationPhaseCompleted, SourceInstance: 0, Deadline: metav1.NewTime(now.Add(-time.Hour))},
+		workloadtypes.MigrationRecord{RequestUUID: "relocation", Trigger: workloadtypes.MigrationTriggerAuto, Phase: workloadtypes.MigrationPhaseRelocated, SourceInstance: 0, Deadline: metav1.NewTime(now.Add(window))},
+	)
+
+	// The pause lands: the two open records lose their deadlines.
+	f.reconcile(t, true, window)
+	for _, uuid := range []string{"allocated-move", "fresh-request"} {
+		if d := f.record(t, uuid).Deadline; !d.IsZero() {
+			t.Errorf("%s under the pause: deadline = %v, want none", uuid, d)
+		}
+	}
+	if d := f.record(t, "closed-move").Deadline; d.IsZero() {
+		t.Errorf("a closed record's deadline was cleared")
+	}
+	if d := f.record(t, "relocation").Deadline; d.IsZero() {
+		t.Errorf("a relocation record's deadline was cleared")
+	}
+	if f.writes != 2 {
+		t.Fatalf("the pause wrote %d record(s), want the 2 open ones", f.writes)
+	}
+
+	// Thirty-one minutes under the pause: nothing is written again.
+	f.clk.Step(window + time.Minute)
+	f.reconcile(t, true, window)
+	if f.writes != 2 {
+		t.Fatalf("a later paused pass wrote %d more record(s), want none", f.writes-2)
+	}
+
+	// The pause clears: both records get a full window from this pass.
+	f.reconcile(t, false, window)
+	want := f.clk.Now().Add(window)
+	for _, uuid := range []string{"allocated-move", "fresh-request"} {
+		if d := f.record(t, uuid).Deadline; !d.Time.Equal(want) {
+			t.Errorf("%s after the pause: deadline = %v, want %v, a full window from the pass the pause clears", uuid, d.Time, want)
+		}
+	}
+	if f.writes != 4 {
+		t.Fatalf("the unpause wrote %d record(s) in all, want 4", f.writes)
+	}
+
+	// A later pass leaves the running clocks alone.
+	f.clk.Step(time.Minute)
+	f.reconcile(t, false, window)
+	if f.writes != 4 {
+		t.Fatalf("a pass with no pause wrote %d more record(s), want none", f.writes-4)
+	}
+	if d := f.record(t, "allocated-move").Deadline; !d.Time.Equal(want) {
+		t.Errorf("a running clock was moved by a pass with no pause: %v, want %v", d.Time, want)
+	}
+}
+
+// With no readiness window configured there is no clock to start again:
+// the pause clears the deadline and it stays cleared after the pause,
+// which reads as never expiring, as a row's zero deadline does.
+func TestReconcilePausedMigrationDeadlines_NoWindowLeavesAClearedClockStanding(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	f := newMigrationClockFixture(now,
+		workloadtypes.MigrationRecord{RequestUUID: "move", Trigger: workloadtypes.MigrationTriggerManual, Phase: workloadtypes.MigrationPhaseSurgePending, StartedAt: metav1.NewTime(now), Deadline: metav1.NewTime(now.Add(time.Hour))},
+	)
+	f.reconcile(t, true, 0)
+	if d := f.record(t, "move").Deadline; !d.IsZero() {
+		t.Fatalf("under the pause: deadline = %v, want none", d)
+	}
+	f.reconcile(t, false, 0)
+	if d := f.record(t, "move").Deadline; !d.IsZero() {
+		t.Fatalf("after the pause with no window configured: deadline = %v, want none", d)
+	}
+	if f.writes != 1 {
+		t.Fatalf("writes = %d, want 1 (the clearing)", f.writes)
 	}
 }

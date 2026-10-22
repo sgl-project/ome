@@ -77,11 +77,7 @@ func (c *ControllerIdentityConfig) Matches(user authenticationv1.UserInfo) bool 
 // ConfigCache (a nil cache reads the apiserver directly). An absent or blank
 // key yields (nil, nil).
 func NewInferenceReplicaConfigCached(cache *ConfigCache, clientset kubernetes.Interface) (*InferenceReplicaConfig, error) {
-	configMap, err := cache.get(clientset)
-	if err != nil {
-		return nil, err
-	}
-	return parseInferenceReplicaConfig(configMap)
+	return loadBlockCached(cache, clientset, parseInferenceReplicaConfig)
 }
 
 // The block's JSON keys, which the strict key walk matches exactly.

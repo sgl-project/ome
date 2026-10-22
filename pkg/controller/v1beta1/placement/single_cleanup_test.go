@@ -26,14 +26,14 @@ func TestSingleRaceCleanupAuthority(t *testing.T) {
 		{name: "winner cannot be removed", wantErr: true, edit: func(s *v1beta1.InferenceService, _ *v1beta1.CandidatePlacement, _ *v1beta1.InferenceService) {
 			s.Status.Placement.Plan.Winner = "member-a"
 		}},
-		{name: "retained home has no race exception", wantErr: true, edit: func(s *v1beta1.InferenceService, c *v1beta1.CandidatePlacement, _ *v1beta1.InferenceService) {
+		{name: "retained member has no race exception", wantErr: true, edit: func(s *v1beta1.InferenceService, c *v1beta1.CandidatePlacement, _ *v1beta1.InferenceService) {
 			c.Allocation.RaceCandidate = false
 			s.Status.Placement.Candidates[0] = *c.DeepCopy()
 		}},
 		{name: "detached race permission cannot delete", wantErr: true, edit: func(s *v1beta1.InferenceService, _ *v1beta1.CandidatePlacement, _ *v1beta1.InferenceService) {
 			s.Status.Placement.Candidates[0].Allocation.RaceCandidate = false
 		}},
-		{name: "desired home is retained", wantErr: true, edit: func(s *v1beta1.InferenceService, c *v1beta1.CandidatePlacement, _ *v1beta1.InferenceService) {
+		{name: "desired member is retained", wantErr: true, edit: func(s *v1beta1.InferenceService, c *v1beta1.CandidatePlacement, _ *v1beta1.InferenceService) {
 			c.Allocation.DesiredReplicas = 1
 			s.Status.Placement.Candidates[0] = *c.DeepCopy()
 		}},

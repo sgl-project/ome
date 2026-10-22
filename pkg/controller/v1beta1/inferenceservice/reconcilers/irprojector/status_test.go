@@ -11,10 +11,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 // engineOMENativeModes is the per-Component mode map for tests whose
@@ -88,11 +88,7 @@ func TestAggregateIRStatus_NonOMENativeMode_NoOp(t *testing.T) {
 			Lifecycle: &v1beta1.LifecycleStatus{Replicas: 99},
 		},
 	}
-	c := fake.NewClientBuilder().
-		WithScheme(testScheme(t)).
-		WithStatusSubresource(&v1beta1.InferenceService{}).
-		WithObjects(isvc).
-		Build()
+	c := fakeclient.New(t, fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}), fakeclient.WithObjects(isvc))
 
 	g.Expect(AggregateIRStatus(context.Background(), c, c, isvc, engineDirectModes)).To(gomega.Succeed())
 
@@ -110,11 +106,7 @@ func TestAggregateIRStatus_NonOMENativeMode_NoOp(t *testing.T) {
 func TestAggregateIRStatus_OMENative_NoIR_NoErr(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
-	c := fake.NewClientBuilder().
-		WithScheme(testScheme(t)).
-		WithStatusSubresource(&v1beta1.InferenceService{}).
-		WithObjects(isvc).
-		Build()
+	c := fakeclient.New(t, fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}), fakeclient.WithObjects(isvc))
 
 	err := AggregateIRStatus(context.Background(), c, c, isvc, engineOMENativeModes)
 	g.Expect(err).NotTo(gomega.HaveOccurred(),
@@ -134,11 +126,9 @@ func TestAggregateIRStatus_OMENative_CopiesStatusFromIR(t *testing.T) {
 	isvc.Generation = 5
 	ir := liveIR("llama", "prod", 3)
 	ir.Annotations[constants.InferenceReplicaParentGenerationAnnotationKey] = "5"
-	c := fake.NewClientBuilder().
-		WithScheme(testScheme(t)).
-		WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}).
-		WithObjects(isvc, ir).
-		Build()
+	c := fakeclient.New(t,
+		fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}),
+		fakeclient.WithObjects(isvc, ir))
 
 	g.Expect(AggregateIRStatus(context.Background(), c, c, isvc, engineOMENativeModes)).To(gomega.Succeed())
 
@@ -200,11 +190,9 @@ func TestAggregateIRStatus_OMENative_OnlyTouchesOMENativeComponents(t *testing.T
 	}
 	ir := liveIR("llama", "prod", 2)
 
-	c := fake.NewClientBuilder().
-		WithScheme(testScheme(t)).
-		WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}).
-		WithObjects(isvc, ir).
-		Build()
+	c := fakeclient.New(t,
+		fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}),
+		fakeclient.WithObjects(isvc, ir))
 
 	componentModes := map[v1beta1.ComponentType]constants.DeploymentModeType{
 		v1beta1.EngineComponent:  constants.OMENative,
@@ -243,7 +231,7 @@ func TestAggregateIRStatus_NilClient_Rejected(t *testing.T) {
 // dropped the reconcile target.
 func TestAggregateIRStatus_NilISVC_Rejected(t *testing.T) {
 	g := gomega.NewWithT(t)
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	err := AggregateIRStatus(context.Background(), c, c, nil, engineOMENativeModes)
 	g.Expect(err).To(gomega.HaveOccurred())
 	g.Expect(err.Error()).To(gomega.ContainSubstring("nil ISVC"))
@@ -265,11 +253,9 @@ func TestAggregateIRStatus_OMENative_PreservesNonOMENativeFields(t *testing.T) {
 		},
 	}
 	ir := liveIR("llama", "prod", 1)
-	c := fake.NewClientBuilder().
-		WithScheme(testScheme(t)).
-		WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}).
-		WithObjects(isvc, ir).
-		Build()
+	c := fakeclient.New(t,
+		fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}),
+		fakeclient.WithObjects(isvc, ir))
 
 	g.Expect(AggregateIRStatus(context.Background(), c, c, isvc, engineOMENativeModes)).To(gomega.Succeed())
 
@@ -299,11 +285,9 @@ func TestAggregateIRStatus_EmitsEngineReadyCondition(t *testing.T) {
 	isvc := baselineISVC("llama", "prod")
 	// liveIR with replicas=1, all-ready counters — the shape described above.
 	ir := liveIR("llama", "prod", 1)
-	c := fake.NewClientBuilder().
-		WithScheme(testScheme(t)).
-		WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}).
-		WithObjects(isvc, ir).
-		Build()
+	c := fakeclient.New(t,
+		fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}),
+		fakeclient.WithObjects(isvc, ir))
 
 	g.Expect(AggregateIRStatus(context.Background(), c, c, isvc, engineOMENativeModes)).To(gomega.Succeed())
 
@@ -353,11 +337,9 @@ func TestAggregateIRStatus_EmitsEngineReadyConditionFalse(t *testing.T) {
 	// InstanceStatuses see the partial-ready state.
 	ir.Status.InstanceStatuses[0].Phase = v1beta1.OMENativeInstanceCreating
 	ir.Status.InstanceStatuses[0].ReadyPodCount = 0
-	c := fake.NewClientBuilder().
-		WithScheme(testScheme(t)).
-		WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}).
-		WithObjects(isvc, ir).
-		Build()
+	c := fakeclient.New(t,
+		fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}),
+		fakeclient.WithObjects(isvc, ir))
 
 	g.Expect(AggregateIRStatus(context.Background(), c, c, isvc, engineOMENativeModes)).To(gomega.Succeed())
 
@@ -408,11 +390,9 @@ func TestAggregateIRStatus_PDBPolicyDoesNotRelaxEngineReady(t *testing.T) {
 			ir.Status.ReadyReplicas = 9
 			ir.Status.ServingReplicas = 9
 
-			c := fake.NewClientBuilder().
-				WithScheme(testScheme(t)).
-				WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}).
-				WithObjects(isvc, ir).
-				Build()
+			c := fakeclient.New(t,
+				fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}),
+				fakeclient.WithObjects(isvc, ir))
 
 			g.Expect(AggregateIRStatus(context.Background(), c, c, isvc, engineOMENativeModes)).To(gomega.Succeed())
 			got := &v1beta1.InferenceService{}
@@ -443,11 +423,9 @@ func TestAggregateIRStatus_UsesCommittedIRLifecycleBudget(t *testing.T) {
 	ir.Status.ReadyReplicas = 8
 	ir.Status.ServingReplicas = 8
 
-	c := fake.NewClientBuilder().
-		WithScheme(testScheme(t)).
-		WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}).
-		WithObjects(isvc, ir).
-		Build()
+	c := fakeclient.New(t,
+		fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}),
+		fakeclient.WithObjects(isvc, ir))
 
 	g.Expect(AggregateIRStatus(context.Background(), c, c, isvc, engineOMENativeModes)).To(gomega.Succeed())
 	got := &v1beta1.InferenceService{}
@@ -463,11 +441,9 @@ func TestAggregateIRStatus_UsesProjectedMergedLifecycleBudget(t *testing.T) {
 	isvc := baselineISVC("llama", "prod")
 	isvc.Spec.Engine.Lifecycle = nil
 
-	c := fake.NewClientBuilder().
-		WithScheme(testScheme(t)).
-		WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}).
-		WithObjects(isvc).
-		Build()
+	c := fakeclient.New(t,
+		fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}),
+		fakeclient.WithObjects(isvc))
 
 	desired := 10
 	maximum := intstr.FromString("25%")
@@ -548,11 +524,9 @@ func TestAggregateIRStatus_MultiComponent_EmitsBothConditions(t *testing.T) {
 		},
 	}
 
-	c := fake.NewClientBuilder().
-		WithScheme(testScheme(t)).
-		WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}).
-		WithObjects(isvc, engineIR, decoderIR).
-		Build()
+	c := fakeclient.New(t,
+		fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}),
+		fakeclient.WithObjects(isvc, engineIR, decoderIR))
 
 	componentModes := map[v1beta1.ComponentType]constants.DeploymentModeType{
 		v1beta1.EngineComponent:  constants.OMENative,
@@ -595,11 +569,9 @@ func TestAggregateIRStatus_NoWriteWhenUnchanged(t *testing.T) {
 	g := gomega.NewWithT(t)
 	isvc := baselineISVC("llama", "prod")
 	ir := liveIR("llama", "prod", 1)
-	c := fake.NewClientBuilder().
-		WithScheme(testScheme(t)).
-		WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}).
-		WithObjects(isvc, ir).
-		Build()
+	c := fakeclient.New(t,
+		fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}),
+		fakeclient.WithObjects(isvc, ir))
 	key := types.NamespacedName{Name: isvc.Name, Namespace: isvc.Namespace}
 
 	// First pass: status changes (subtree + EngineReady condition) → write.
@@ -630,11 +602,9 @@ func TestAggregateIRStatus_ObservedGenerationTracksParentStamp(t *testing.T) {
 	isvc.Generation = 7
 	ir := liveIR("llama", "prod", 1)
 	ir.Annotations[constants.InferenceReplicaParentGenerationAnnotationKey] = "7"
-	c := fake.NewClientBuilder().
-		WithScheme(testScheme(t)).
-		WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}).
-		WithObjects(isvc, ir).
-		Build()
+	c := fakeclient.New(t,
+		fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}, &v1beta1.InferenceReplica{}),
+		fakeclient.WithObjects(isvc, ir))
 	isvcKey := client.ObjectKeyFromObject(isvc)
 	irKey := client.ObjectKeyFromObject(ir)
 

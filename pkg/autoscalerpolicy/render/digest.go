@@ -1,12 +1,11 @@
 package render
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/digest"
 )
 
 const (
@@ -29,7 +28,7 @@ func PortableDigest(spec *v1beta1.AutoscalerPolicySpec) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("encode policy spec for digest: %w", err)
 	}
-	return portableDigestPrefix + shortHash(encoded), nil
+	return portableDigestPrefix + digest.Short(encoded, digestHexLength), nil
 }
 
 // canonicalizeSpec returns a defaulted deep copy of the spec. Keep this in
@@ -60,10 +59,5 @@ func resolvedDigestFor(rendered *v1beta1.ComponentAutoscaler, rctx Context, serv
 	if err != nil {
 		return "", fmt.Errorf("encode rendered autoscaler for digest: %w", err)
 	}
-	return resolvedDigestPrefix + shortHash(encoded), nil
-}
-
-func shortHash(data []byte) string {
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])[:digestHexLength]
+	return resolvedDigestPrefix + digest.Short(encoded, digestHexLength), nil
 }

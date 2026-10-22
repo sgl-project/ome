@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-func TestValidateRouting(t *testing.T) {
+func TestValidateRouting_PolicyShapes_RequiresPositiveCapacityFactors(t *testing.T) {
 	t.Run("nil spec and absent routing are valid", func(t *testing.T) {
 		require.NoError(t, ValidateRouting(nil))
 		require.NoError(t, ValidateRouting(&v1beta1.InferenceServiceSpec{}))
@@ -60,7 +60,7 @@ func TestValidateRouting(t *testing.T) {
 
 }
 
-func TestValidateRoutingProbe(t *testing.T) {
+func TestValidateRouting_ProbeFields_RejectsEachMalformedField(t *testing.T) {
 	t.Run("disabled alone is valid", func(t *testing.T) {
 		require.NoError(t, ValidateRouting(routingSpec(&v1beta1.RoutingSpec{
 			Probe: &v1beta1.RoutingProbeSpec{Disabled: true},
@@ -119,7 +119,7 @@ func TestValidateRoutingProbe(t *testing.T) {
 	}
 }
 
-func TestValidateRoutingCapacity(t *testing.T) {
+func TestValidateRouting_CapacityFields_RejectsEachMalformedField(t *testing.T) {
 	t.Run("disabled alone is valid", func(t *testing.T) {
 		require.NoError(t, ValidateRouting(routingSpec(&v1beta1.RoutingSpec{
 			Capacity: &v1beta1.RoutingCapacitySpec{Disabled: true},
@@ -177,7 +177,7 @@ func TestValidateRoutingCapacity(t *testing.T) {
 	}
 }
 
-func TestValidateRoutingPublisher(t *testing.T) {
+func TestValidateRouting_PublisherOptions_RejectsBlankLongOrTooMany(t *testing.T) {
 	tests := []struct {
 		name        string
 		options     map[string]string
@@ -249,7 +249,7 @@ func validRoutingCapacity() *v1beta1.RoutingCapacitySpec {
 	}
 }
 
-func TestValidateRouterCapacityEndpoint(t *testing.T) {
+func TestValidateRouting_RouterCapacityEndpoint_PathPortAndPollPathMustAgree(t *testing.T) {
 	spec := func(path string, port int32, capacity *v1beta1.RoutingCapacitySpec) *v1beta1.InferenceServiceSpec {
 		s := &v1beta1.InferenceServiceSpec{Router: &v1beta1.RouterSpec{
 			CapacityEndpoint: &v1beta1.RouterCapacityEndpoint{Path: path, Port: port},
