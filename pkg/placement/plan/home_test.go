@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func fullHomeProposal() Proposal {
@@ -40,7 +41,7 @@ func TestFullHomeAuthoritySurvivesStorage(t *testing.T) {
 				}
 				return cl.SubResource(sub).Update(ctx, obj, opts...)
 			}}
-			store := storeFixture(t, source, hooks)
+			store := storeFixture(t, source, fakeclient.WithInterceptors(hooks))
 			got, err := store.Persist(t.Context(), source, fullHomeProposal())
 			if tt.prune != nil {
 				if !errors.Is(err, ErrSchemaUnsupported) {

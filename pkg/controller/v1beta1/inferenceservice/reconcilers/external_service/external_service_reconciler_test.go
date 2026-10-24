@@ -8,23 +8,18 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestExternalServiceReconciler_shouldCreateExternalService(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = v1beta1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
 	tests := []struct {
 		name          string
 		isvc          *v1beta1.InferenceService
@@ -142,10 +137,10 @@ func TestExternalServiceReconciler_shouldCreateExternalService(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := ctrlclient.NewClientBuilder().WithScheme(scheme).Build()
+			client := fakeclient.New(t)
 			clientset := fake.NewSimpleClientset()
 
-			reconciler := NewExternalServiceReconciler(client, clientset, scheme, tt.ingressConfig)
+			reconciler := NewExternalServiceReconciler(client, clientset, client.Scheme(), tt.ingressConfig)
 			result := reconciler.shouldCreateExternalService(tt.isvc)
 
 			assert.Equal(t, tt.expected, result, tt.description)
@@ -154,10 +149,6 @@ func TestExternalServiceReconciler_shouldCreateExternalService(t *testing.T) {
 }
 
 func TestExternalServiceReconciler_determineTargetSelector(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = v1beta1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
 	tests := []struct {
 		name             string
 		isvc             *v1beta1.InferenceService
@@ -203,11 +194,11 @@ func TestExternalServiceReconciler_determineTargetSelector(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := ctrlclient.NewClientBuilder().WithScheme(scheme).Build()
+			client := fakeclient.New(t)
 			clientset := fake.NewSimpleClientset()
 			ingressConfig := &controllerconfig.IngressConfig{}
 
-			reconciler := NewExternalServiceReconciler(client, clientset, scheme, ingressConfig)
+			reconciler := NewExternalServiceReconciler(client, clientset, client.Scheme(), ingressConfig)
 			result := reconciler.determineTargetSelector(tt.isvc)
 
 			assert.Equal(t, tt.expectedSelector, result, tt.description)
@@ -216,10 +207,6 @@ func TestExternalServiceReconciler_determineTargetSelector(t *testing.T) {
 }
 
 func TestExternalServiceReconciler_buildExternalService(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = v1beta1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
 	tests := []struct {
 		name               string
 		isvc               *v1beta1.InferenceService
@@ -308,11 +295,11 @@ func TestExternalServiceReconciler_buildExternalService(t *testing.T) {
 				objects = append(objects, tt.internalService)
 			}
 
-			client := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+			client := fakeclient.New(t, fakeclient.WithObjects(objects...))
 			clientset := fake.NewSimpleClientset()
 			ingressConfig := &controllerconfig.IngressConfig{}
 
-			reconciler := NewExternalServiceReconciler(client, clientset, scheme, ingressConfig)
+			reconciler := NewExternalServiceReconciler(client, clientset, client.Scheme(), ingressConfig)
 			service, err := reconciler.buildExternalService(context.TODO(), tt.isvc)
 
 			assert.NoError(t, err, "should not return error when building external service")
@@ -337,10 +324,6 @@ func TestExternalServiceReconciler_buildExternalService(t *testing.T) {
 }
 
 func TestExternalServiceReconciler_Reconcile(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = v1beta1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
 	tests := []struct {
 		name            string
 		isvc            *v1beta1.InferenceService
@@ -510,10 +493,10 @@ func TestExternalServiceReconciler_Reconcile(t *testing.T) {
 				objects = append(objects, tt.internalService)
 			}
 
-			client := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+			client := fakeclient.New(t, fakeclient.WithObjects(objects...))
 			clientset := fake.NewSimpleClientset()
 
-			reconciler := NewExternalServiceReconciler(client, clientset, scheme, tt.ingressConfig)
+			reconciler := NewExternalServiceReconciler(client, clientset, client.Scheme(), tt.ingressConfig)
 
 			err := reconciler.Reconcile(context.TODO(), tt.isvc)
 
@@ -542,10 +525,6 @@ func TestExternalServiceReconciler_Reconcile(t *testing.T) {
 }
 
 func TestExternalServiceReconciler_getDeploymentMode(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = v1beta1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
 	tests := []struct {
 		name         string
 		isvc         *v1beta1.InferenceService
@@ -603,11 +582,11 @@ func TestExternalServiceReconciler_getDeploymentMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := ctrlclient.NewClientBuilder().WithScheme(scheme).Build()
+			client := fakeclient.New(t)
 			clientset := fake.NewSimpleClientset()
 			ingressConfig := &controllerconfig.IngressConfig{}
 
-			reconciler := NewExternalServiceReconciler(client, clientset, scheme, ingressConfig)
+			reconciler := NewExternalServiceReconciler(client, clientset, client.Scheme(), ingressConfig)
 			result := reconciler.getDeploymentMode(tt.isvc)
 
 			assert.Equal(t, tt.expectedMode, result, tt.description)

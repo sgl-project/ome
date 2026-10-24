@@ -36,7 +36,9 @@ Alfred.
 Start with the [Helm defaults](../../charts/ome-alfred/values.yaml) or
 [Kustomize configuration](../../config/alfred). The default is `recommend-only`:
 Alfred can publish reports and Events but does not request migrations. Node
-health conditions and maintenance conditions, labels and taints are configurable.
+health conditions and maintenance conditions, labels and taints are configurable. A maintenance
+rule can also ask Alfred to cordon its nodes in execute mode; that needs the
+separate `maintenanceCordon` opt-in, and Alfred never uncordons.
 
 Execution requires compatible scheduler workers, explicit migration-v1 startup
 configuration, execution policy, admission guards and a retained dispatch
@@ -55,7 +57,9 @@ Pause-related recommendations and dispatch diagnostics can currently report
 generic ineligibility or source-change reasons rather than identifying the pause.
 
 Current execution supports eligible OMENative instances only. RawDeployment,
-LWS and other workloads have no eviction adapter. Simulation reserves no
+LWS and other workloads have no eviction adapter. TPU instances move only with
+`tpuSliceMigrationEnabled`, when OME provisions one slice per Instance; those
+moves check free slice capacity instead of simulating placement. Simulation reserves no
 capacity; target hints are preferences, not scheduling-time health guarantees.
 One unresolved request blocks new dispatches. Do not erase the journal to
 unblock it. These limits and the recorded qualification results are not a

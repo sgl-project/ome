@@ -7,13 +7,12 @@ import (
 	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestBuildServiceFiltersAnnotations(t *testing.T) {
@@ -329,10 +328,6 @@ func TestBuildServiceSetsConfiguredPortAppProtocols(t *testing.T) {
 }
 
 func TestServiceReconcilerAddsAppProtocolToExistingService(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(scheme); err != nil {
-		t.Fatalf("add corev1: %v", err)
-	}
 	existing := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-service", Namespace: "default"},
 		Spec: corev1.ServiceSpec{
@@ -344,7 +339,7 @@ func TestServiceReconcilerAddsAppProtocolToExistingService(t *testing.T) {
 			}},
 		},
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(existing))
 	podSpec := &corev1.PodSpec{Containers: []corev1.Container{{
 		Name: "router",
 		Ports: []corev1.ContainerPort{{
@@ -357,7 +352,7 @@ func TestServiceReconcilerAddsAppProtocolToExistingService(t *testing.T) {
 	}
 	reconciler := NewServiceReconciler(
 		c,
-		scheme,
+		c.Scheme(),
 		metav1.ObjectMeta{Name: "test-service", Namespace: "default"},
 		componentExt,
 		podSpec,
@@ -395,13 +390,6 @@ func TestServiceReconciler_OMENativeShape(t *testing.T) {
 	component := v1beta1.EngineComponent
 	serviceName := isvcName + "-" + string(component) // matches query.StableServiceName
 
-	scheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(scheme); err != nil {
-		t.Fatalf("add corev1: %v", err)
-	}
-	if err := v1beta1.AddToScheme(scheme); err != nil {
-		t.Fatalf("add v1beta1: %v", err)
-	}
 	isvc := &v1beta1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      isvcName,
@@ -409,10 +397,7 @@ func TestServiceReconciler_OMENativeShape(t *testing.T) {
 			UID:       types.UID(isvcName + "-uid"),
 		},
 	}
-	c := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(isvc).
-		Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(isvc))
 
 	// componentMeta as the OMENative caller assembles it: name matches
 	// query.StableServiceName(isvcName, component), with the
@@ -450,7 +435,7 @@ func TestServiceReconciler_OMENativeShape(t *testing.T) {
 	componentExt := &v1beta1.ComponentExtensionSpec{
 		ServicePortAppProtocols: map[string]string{"http": "kubernetes.io/h2c"},
 	}
-	sr := NewServiceReconciler(c, scheme, componentMeta, componentExt, podSpec, selector)
+	sr := NewServiceReconciler(c, c.Scheme(), componentMeta, componentExt, podSpec, selector)
 	if _, err := sr.Reconcile(); err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}

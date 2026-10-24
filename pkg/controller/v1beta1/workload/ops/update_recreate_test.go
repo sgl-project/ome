@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	fixture "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	workload "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -36,15 +37,15 @@ func TestRecreateUpdate_WaitsForPodReadyAfterEnablingServing(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			legacyResetExpectations(t)
-			isvc, ir := legacyISVCReadyAtIncarnation("llama-70b", "prod", 1)
-			c := legacyNewFakeClient(t, isvc, ir)
-			targetSpec := legacyTargetSpecImage("llama:v2")
-			target := legacyEnsureTargetCR(t, c, isvc, targetSpec)
+			fixture.ResetExpectations(t)
+			isvc, ir := fixture.ServiceWithReadyInstance("llama-70b", "prod", 1)
+			c := fixture.FakeClient(t, isvc, ir)
+			targetSpec := fixture.PodSpecWithImage("llama:v2")
+			target := fixture.EnsureTargetRevision(t, c, isvc, targetSpec)
 
 			// Mid-recreate state: Phase A drained and deleted the incarnation-1
 			// pod, Phase B created the incarnation-2 pod; only Phase C is left.
-			if err := legacyMutateInstance(c, isvc, workload.ComponentEngine)(context.Background(), 0, func(s *workload.InstanceStatus) bool {
+			if err := fixture.MutateInstanceOnReplica(c, isvc, workload.ComponentEngine)(context.Background(), 0, func(s *workload.InstanceStatus) bool {
 				s.Incarnation = 2
 				s.Phase = workload.InstancePhaseUpdating
 				s.TargetRevision = target.Name
@@ -54,7 +55,7 @@ func TestRecreateUpdate_WaitsForPodReadyAfterEnablingServing(t *testing.T) {
 				t.Fatalf("seed in-flight recreate: %v", err)
 			}
 
-			pod := legacyPodAtIncarnation(isvc, 0, 2, true /* ContainersReady */, true /* serving */)
+			pod := fixture.PodAtRecreation(isvc, 0, 2, true /* ContainersReady */, true /* serving */)
 			pod.Spec = *targetSpec.DeepCopy()
 			if tc.podReady {
 				pod.Status.Conditions = append(pod.Status.Conditions, corev1.PodCondition{Type: corev1.PodReady, Status: corev1.ConditionTrue})
@@ -63,16 +64,16 @@ func TestRecreateUpdate_WaitsForPodReadyAfterEnablingServing(t *testing.T) {
 				t.Fatalf("create replacement pod: %v", err)
 			}
 
-			input := legacyTestInput(isvc, c, workload.ComponentEngine)
-			plan := legacyComponentPlan(workload.UpdateStrategyRecreatePod, nil)
-			done, err := recreateUpdate(context.Background(), legacyTestDeps(c), input, plan, plan.Instances[0], target, []*corev1.Pod{pod})
+			input := fixture.ReconcileInput(isvc, c, workload.ComponentEngine)
+			plan := fixture.SinglePodPlan(workload.UpdateStrategyRecreatePod, nil)
+			done, err := recreateUpdate(context.Background(), fixture.Deps(c), input, plan, plan.Instances[0], target, []*corev1.Pod{pod})
 			if err != nil {
 				t.Fatalf("recreateUpdate: %v", err)
 			}
 			if done != tc.wantDone {
 				t.Fatalf("done: got %t, want %t", done, tc.wantDone)
 			}
-			statuses := legacyInstanceStatusesOnIR(c, isvc, workload.ComponentEngine)
+			statuses := fixture.StoredInstanceStatuses(c, isvc, workload.ComponentEngine)
 			if len(statuses) != 1 {
 				t.Fatalf("instance statuses: got %d, want 1", len(statuses))
 			}
@@ -88,22 +89,22 @@ func TestRecreateUpdate_WaitsForPodReadyAfterEnablingServing(t *testing.T) {
 // the Operation and releases the unavailability budget slot) waits until
 // the pod has been Ready for the window.
 func TestRecreateUpdate_PromotionWaitsForMinReadySeconds(t *testing.T) {
-	legacyResetExpectations(t)
-	isvc, ir := legacyISVCReadyAtIncarnation("llama-70b", "prod", 1)
+	fixture.ResetExpectations(t)
+	isvc, ir := fixture.ServiceWithReadyInstance("llama-70b", "prod", 1)
 	isvc.Spec.Engine.ComponentExtensionSpec.Lifecycle = &v1beta1.LifecycleSpec{
 		UpdateStrategy: &v1beta1.UpdateStrategy{Type: v1beta1.UpdateStrategyRecreatePod},
 	}
-	newPod := legacyPodAtIncarnation(isvc, 0, 2, true, true)
+	newPod := fixture.PodAtRecreation(isvc, 0, 2, true, true)
 	newPod.Spec.Containers = []corev1.Container{{Name: "main", Image: "llama:v2"}}
 	podReadyAt(newPod, minReadyWindowStart.Add(-5*time.Second))
-	target := legacyTargetSpecImage("llama:v2")
-	c := legacyNewFakeClient(t, isvc, ir, newPod)
-	tcr := legacyEnsureTargetCR(t, c, isvc, target)
+	target := fixture.PodSpecWithImage("llama:v2")
+	c := fixture.FakeClient(t, isvc, ir, newPod)
+	tcr := fixture.EnsureTargetRevision(t, c, isvc, target)
 
 	// Mid-recreate state: Phase A drained and deleted the incarnation-1 pod,
 	// Phase B created the incarnation-2 pod; only Phase C (promotion) is left.
 	fresh := &v1beta1.InferenceReplica{}
-	key := client.ObjectKey{Namespace: isvc.Namespace, Name: legacyIRName(isvc, workload.ComponentEngine)}
+	key := client.ObjectKey{Namespace: isvc.Namespace, Name: fixture.InferenceReplicaName(isvc, workload.ComponentEngine)}
 	if err := c.Get(context.Background(), key, fresh); err != nil {
 		t.Fatalf("get IR: %v", err)
 	}
@@ -121,32 +122,32 @@ func TestRecreateUpdate_PromotionWaitsForMinReadySeconds(t *testing.T) {
 	}
 
 	clk := clocktesting.NewFakeClock(minReadyWindowStart)
-	input := legacyTestInput(isvc, c, workload.ComponentEngine)
+	input := fixture.ReconcileInput(isvc, c, workload.ComponentEngine)
 	input.Clock = clk
-	plan := legacyComponentPlan(workload.UpdateStrategyRecreatePod, nil)
+	plan := fixture.SinglePodPlan(workload.UpdateStrategyRecreatePod, nil)
 	plan.MinReadySeconds = 20
 
-	done, err := recreateUpdate(context.Background(), legacyTestDeps(c), input, plan, plan.Instances[0], tcr, []*corev1.Pod{newPod})
+	done, err := recreateUpdate(context.Background(), fixture.Deps(c), input, plan, plan.Instances[0], tcr, []*corev1.Pod{newPod})
 	if err != nil {
 		t.Fatalf("recreateUpdate inside window: %v", err)
 	}
 	if done {
 		t.Fatalf("expected done=false while the recreated pod is inside the minReadySeconds window")
 	}
-	s := legacyInstanceStatusesOnIR(c, isvc, workload.ComponentEngine)[0]
+	s := fixture.StoredInstanceStatuses(c, isvc, workload.ComponentEngine)[0]
 	if s.Phase != v1beta1.OMENativeInstanceUpdating || s.Operation == nil {
 		t.Fatalf("promoted inside the window: phase=%q operation=%+v", s.Phase, s.Operation)
 	}
 
 	clk.SetTime(minReadyWindowStart.Add(15 * time.Second))
-	done, err = recreateUpdate(context.Background(), legacyTestDeps(c), input, plan, plan.Instances[0], tcr, []*corev1.Pod{newPod})
+	done, err = recreateUpdate(context.Background(), fixture.Deps(c), input, plan, plan.Instances[0], tcr, []*corev1.Pod{newPod})
 	if err != nil {
 		t.Fatalf("recreateUpdate after window: %v", err)
 	}
 	if !done {
 		t.Fatalf("expected done=true once the recreated pod became Available")
 	}
-	s = legacyInstanceStatusesOnIR(c, isvc, workload.ComponentEngine)[0]
+	s = fixture.StoredInstanceStatuses(c, isvc, workload.ComponentEngine)[0]
 	if s.Phase != v1beta1.OMENativeInstanceReady || s.RunningRevision != tcr.Name || s.Operation != nil {
 		t.Fatalf("promotion after window: phase=%q runningRevision=%q operation=%+v", s.Phase, s.RunningRevision, s.Operation)
 	}
@@ -158,7 +159,7 @@ func TestRecreateUpdate_PromotionWaitsForMinReadySeconds(t *testing.T) {
 // done — so the pass drains and deletes it and promotes nothing.
 func TestRecreateDrain_ReadyOldIncarnationPodIsNotThePromoteSignal(t *testing.T) {
 	f := recreateDrainInFlightFixture(t)
-	old := legacyPodAtIncarnation(f.isvc, 0, 1, true /* ready */, true /* serving */)
+	old := fixture.PodAtRecreation(f.isvc, 0, 1, true /* ready */, true /* serving */)
 	old.Spec.Containers = []corev1.Container{{Name: "main", Image: "llama:v1"}}
 	if err := f.c.Create(context.Background(), old); err != nil {
 		t.Fatalf("seed the old-incarnation pod: %v", err)
@@ -212,7 +213,7 @@ func TestRecreateDrain_PodObservationsThatDecideNothing(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := recreateDrainInFlightFixture(t)
-			pod := legacyPodAtIncarnation(f.isvc, 0, tc.incarnation, true /* ContainersReady */, false /* not serving */)
+			pod := fixture.PodAtRecreation(f.isvc, 0, tc.incarnation, true /* ContainersReady */, false /* not serving */)
 			pod.Spec.Containers = []corev1.Container{{Name: "main", Image: "llama:v2"}}
 			if err := f.c.Create(context.Background(), pod); err != nil {
 				t.Fatalf("seed the observed pod: %v", err)
@@ -250,7 +251,7 @@ func TestRecreateDrain_OperatorConfigChangesDoNotChangeWhatItDecides(t *testing.
 	seed := func(t *testing.T) (*nonSurgeFixture, *corev1.Pod) {
 		t.Helper()
 		f := recreateDrainInFlightFixture(t)
-		pod := legacyPodAtIncarnation(f.isvc, 0, 2, true /* ContainersReady */, false /* not serving */)
+		pod := fixture.PodAtRecreation(f.isvc, 0, 2, true /* ContainersReady */, false /* not serving */)
 		pod.Spec.Containers = []corev1.Container{{Name: "main", Image: "llama:v2"}}
 		if err := f.c.Create(context.Background(), pod); err != nil {
 			t.Fatalf("seed the rebuilt pod: %v", err)
@@ -280,7 +281,7 @@ func TestRecreateDrain_OperatorConfigChangesDoNotChangeWhatItDecides(t *testing.
 // its Incarnation, and the pass simply has to run again.
 func TestRecreateDrain_ConflictOnTheServingFlipRetriesFromAFreshRead(t *testing.T) {
 	f := recreateDrainInFlightFixture(t)
-	pod := legacyPodAtIncarnation(f.isvc, 0, 2, true /* ContainersReady */, false /* not serving */)
+	pod := fixture.PodAtRecreation(f.isvc, 0, 2, true /* ContainersReady */, false /* not serving */)
 	pod.Spec.Containers = []corev1.Container{{Name: "main", Image: "llama:v2"}}
 	if err := f.c.Create(context.Background(), pod); err != nil {
 		t.Fatalf("seed the rebuilt pod: %v", err)
@@ -301,7 +302,7 @@ func TestRecreateDrain_ConflictOnTheServingFlipRetriesFromAFreshRead(t *testing.
 	})
 
 	in := f.input()
-	plan := legacyComponentPlan(f.strategy, nil)
+	plan := fixture.SinglePodPlan(f.strategy, nil)
 	deps := workload.Deps{Client: conflicting, Recorder: record.NewFakeRecorder(16)}
 	done, err := UpdateWithPods(context.Background(), deps, in, plan, plan.Instances[0], f.targetCR, f.targetSpec,
 		[]*corev1.Pod{pod})
@@ -312,7 +313,7 @@ func TestRecreateDrain_ConflictOnTheServingFlipRetriesFromAFreshRead(t *testing.
 		t.Errorf("error: got nil want the conflict surfaced so the pass runs again")
 	}
 
-	s := legacyInstanceStatusesOnIR(f.c, f.isvc, workload.ComponentEngine)[0]
+	s := fixture.StoredInstanceStatuses(f.c, f.isvc, workload.ComponentEngine)[0]
 	if s.Phase != v1beta1.OMENativeInstanceUpdating {
 		t.Errorf("Phase: got %q want Updating (a conflict costs a pass, not the attempt)", s.Phase)
 	}
@@ -335,7 +336,7 @@ func failedDrainContinuation(t *testing.T, f *nonSurgeFixture) {
 	t.Helper()
 	ctx := context.Background()
 	ir := &v1beta1.InferenceReplica{}
-	key := client.ObjectKey{Namespace: f.isvc.Namespace, Name: legacyIRName(f.isvc, workload.ComponentEngine)}
+	key := client.ObjectKey{Namespace: f.isvc.Namespace, Name: fixture.InferenceReplicaName(f.isvc, workload.ComponentEngine)}
 	if err := f.c.Get(ctx, key, ir); err != nil {
 		t.Fatalf("re-read IR: %v", err)
 	}
@@ -361,7 +362,7 @@ func outstandingDelete(f *nonSurgeFixture) (*workload.Expectations, *clocktestin
 // the pass consults supplied by the test.
 func runWithExpectations(f *nonSurgeFixture, exp *workload.Expectations, pods []*corev1.Pod) (bool, error) {
 	in := f.input()
-	plan := legacyComponentPlan(f.strategy, nil)
+	plan := fixture.SinglePodPlan(f.strategy, nil)
 	deps := workload.Deps{Client: f.c, Recorder: record.NewFakeRecorder(32), Expectations: exp}
 	return UpdateWithPods(context.Background(), deps, in, plan, plan.Instances[0], f.targetCR, f.targetSpec, pods)
 }
@@ -389,7 +390,7 @@ func TestRecreateUpdate_ExpiredExpectationsReleaseTheDrain(t *testing.T) {
 				if tc.failed {
 					failedDrainContinuation(t, f)
 				}
-				old := legacyPodAtIncarnation(f.isvc, 0, 1, true /* ready */, false /* not serving */)
+				old := fixture.PodAtRecreation(f.isvc, 0, 1, true /* ready */, false /* not serving */)
 				old.Spec.Containers = []corev1.Container{{Name: "main", Image: "llama:v1"}}
 				if err := f.c.Create(context.Background(), old); err != nil {
 					t.Fatalf("seed the old-incarnation pod: %v", err)
@@ -404,7 +405,7 @@ func TestRecreateUpdate_ExpiredExpectationsReleaseTheDrain(t *testing.T) {
 				if done {
 					t.Errorf("done: got true want false (Phase A is not finished)")
 				}
-				s := legacyInstanceStatusesOnIR(f.c, f.isvc, workload.ComponentEngine)[0]
+				s := fixture.StoredInstanceStatuses(f.c, f.isvc, workload.ComponentEngine)[0]
 				if s.Phase != v1beta1.OMENativeInstanceUpdating || s.Operation == nil || s.Operation.Step != workload.UpdateStepDrain {
 					t.Errorf("row: got phase %q op %+v want Updating on the Drain step", s.Phase, s.Operation)
 				}
@@ -452,14 +453,14 @@ func TestRecreateUpdate_RefusedStatusRestampLeavesTheRowAlone(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := recreateDrainInFlightFixture(t)
 			failedDrainContinuation(t, f)
-			pod := legacyPodAtIncarnation(f.isvc, 0, 2, true /* ready */, false /* not serving */)
+			pod := fixture.PodAtRecreation(f.isvc, 0, 2, true /* ready */, false /* not serving */)
 			pod.Spec.Containers = []corev1.Container{{Name: "main", Image: "llama:v2"}}
 			if err := f.c.Create(context.Background(), pod); err != nil {
 				t.Fatalf("seed the ended attempt's pod: %v", err)
 			}
 			in := f.input()
 			in.MutateInstance = func(context.Context, int32, func(*workload.InstanceStatus) bool) error { return tc.refuse }
-			plan := legacyComponentPlan(f.strategy, nil)
+			plan := fixture.SinglePodPlan(f.strategy, nil)
 			deps := workload.Deps{Client: f.c, Recorder: record.NewFakeRecorder(32)}
 
 			done, err := UpdateWithPods(context.Background(), deps, in, plan, plan.Instances[0], f.targetCR, f.targetSpec, []*corev1.Pod{pod})
@@ -469,7 +470,7 @@ func TestRecreateUpdate_RefusedStatusRestampLeavesTheRowAlone(t *testing.T) {
 			if done {
 				t.Errorf("done: got true want false")
 			}
-			s := legacyInstanceStatusesOnIR(f.c, f.isvc, workload.ComponentEngine)[0]
+			s := fixture.StoredInstanceStatuses(f.c, f.isvc, workload.ComponentEngine)[0]
 			if s.Phase != v1beta1.OMENativeInstanceFailed || s.Incarnation != 2 || s.Operation == nil || s.Operation.Step != workload.UpdateStepDrain {
 				t.Errorf("row: got phase %q incarnation %d op %+v want the Failed row with its kept recreate untouched", s.Phase, s.Incarnation, s.Operation)
 			}

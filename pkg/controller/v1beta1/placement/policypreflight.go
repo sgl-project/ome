@@ -103,29 +103,29 @@ func removeCondition(st *v1beta1.InferenceServiceStatus, t apis.ConditionType) {
 	}
 }
 
-// policyHomeObservation is one home's lifted AutoscalerPolicy state, refreshed
-// whenever the reconcile reads that home's derived ISVC.
-type policyHomeObservation struct {
-	// autoscaling is the per-home digest state mirrored onto
+// policyMemberObservation is one member's lifted AutoscalerPolicy state, refreshed
+// whenever the reconcile reads that member's derived ISVC.
+type policyMemberObservation struct {
+	// autoscaling is the per-member digest state mirrored onto
 	// status.placement.candidates[].autoscaling.
 	autoscaling *v1beta1.CandidateAutoscalingStatus
 	// placedSince anchors the skew clock: the first observation of this
-	// ref-carrying (source, home) pair, advanced to the derived's creation
+	// ref-carrying (source, member) pair, advanced to the derived's creation
 	// time only when that is later (a recreated derived restarts the clock).
 	placedSince time.Time
 	// allReported: every ref-carrying component proves the member resolved the
 	// policy — a policy-rendered resolved digest, or the shadow preview digest
 	// when an inline block outranks the ref. The ResolveTimeout detector keys
 	// on this, NOT on autoscaling.Ready, so a deliberate inline-precedence
-	// (preview) home is never flagged as skew.
+	// (preview) member is never flagged as skew.
 	allReported bool
-	// failedClosed: the home reports AutoscalerResolved=False for at least one
+	// failedClosed: the member reports AutoscalerResolved=False for at least one
 	// ref-carrying component (member holds last-known-good, loudly).
 	failedClosed bool
 }
 
 // policyPreflight holds the config-driven preflight tunables plus the
-// in-memory per-(source,home) bookkeeping the multi-cluster policy detectors
+// in-memory per-(source,member) bookkeeping the multi-cluster policy detectors
 // need. The API deliberately carries no such state; a control-plane restart
 // clears it and every clock restarts conservatively (detectors only ever fire
 // later, never spuriously).
@@ -139,14 +139,14 @@ type policyPreflight struct {
 	// preflight is the latest staged PlacementPolicyPreflight condition per
 	// source, applied on the next status write.
 	preflight map[types.UID]policyCondition
-	// homes is the latest lifted observation per (source, home).
-	homes map[types.UID]map[string]policyHomeObservation
-	// prunes counts CONSECUTIVE ref-prune reverts per (source, home).
+	// members is the latest lifted observation per (source, member).
+	members map[types.UID]map[string]policyMemberObservation
+	// prunes counts CONSECUTIVE ref-prune reverts per (source, member).
 	prunes map[types.UID]map[string]int
 	// eligibility is the last terminally-determined preflight verdict per
 	// (source, candidate). A transient member read error keeps the candidate
 	// in this last-known state instead of evicting it, so an auth blip or a
-	// slow apiserver can never re-race a serving home; only NotFound and
+	// slow apiserver can never re-race a serving member; only NotFound and
 	// digest skew (terminal verdicts) overwrite it.
 	eligibility map[types.UID]map[string]bool
 }
@@ -192,19 +192,19 @@ func (p *policyPreflight) preflightFor(uid types.UID) (policyCondition, bool) {
 	return c, ok
 }
 
-func (p *policyPreflight) recordHome(uid types.UID, cluster string, obs policyHomeObservation) {
+func (p *policyPreflight) recordMember(uid types.UID, cluster string, obs policyMemberObservation) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.homes == nil {
-		p.homes = make(map[types.UID]map[string]policyHomeObservation)
+	if p.members == nil {
+		p.members = make(map[types.UID]map[string]policyMemberObservation)
 	}
-	byCluster := p.homes[uid]
+	byCluster := p.members[uid]
 	if byCluster == nil {
-		byCluster = make(map[string]policyHomeObservation)
-		p.homes[uid] = byCluster
+		byCluster = make(map[string]policyMemberObservation)
+		p.members[uid] = byCluster
 	}
 	// The skew clock anchors at the FIRST observation of this ref-carrying
-	// (source, home) pair; the derived's creation time only ever moves the
+	// (source, member) pair; the derived's creation time only ever moves the
 	// anchor FORWARD (a recreated derived restarts the clock). Anchoring on
 	// creation alone would start a long-placed derived already past the
 	// deadline the moment a ref is added to its source.
@@ -219,17 +219,17 @@ func (p *policyPreflight) recordHome(uid types.UID, cluster string, obs policyHo
 	byCluster[cluster] = obs
 }
 
-func (p *policyPreflight) homeFor(uid types.UID, cluster string) (policyHomeObservation, bool) {
+func (p *policyPreflight) memberFor(uid types.UID, cluster string) (policyMemberObservation, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	obs, ok := p.homes[uid][cluster]
+	obs, ok := p.members[uid][cluster]
 	return obs, ok
 }
 
-func (p *policyPreflight) forgetHome(uid types.UID, cluster string) {
+func (p *policyPreflight) forgetMember(uid types.UID, cluster string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	delete(p.homes[uid], cluster)
+	delete(p.members[uid], cluster)
 	delete(p.prunes[uid], cluster)
 }
 
@@ -259,7 +259,7 @@ func (p *policyPreflight) lastEligibility(uid types.UID, cluster string) (eligib
 }
 
 // recordPrune advances (pruned) or resets (intact) the consecutive
-// prune-revert counter for one (source, home).
+// prune-revert counter for one (source, member).
 func (p *policyPreflight) recordPrune(uid types.UID, cluster string, pruned bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -276,9 +276,9 @@ func (p *policyPreflight) recordPrune(uid types.UID, cluster string, pruned bool
 	p.prunes[uid][cluster]++
 }
 
-// prunedHomes lists (sorted) the homes whose consecutive prune-revert count
+// prunedMembers lists (sorted) the members whose consecutive prune-revert count
 // reached the FieldPruned threshold.
-func (p *policyPreflight) prunedHomes(uid types.UID) []string {
+func (p *policyPreflight) prunedMembers(uid types.UID) []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	var out []string
@@ -296,7 +296,7 @@ func (p *policyPreflight) forget(uid types.UID) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	delete(p.preflight, uid)
-	delete(p.homes, uid)
+	delete(p.members, uid)
 	delete(p.prunes, uid)
 	delete(p.eligibility, uid)
 }
@@ -387,10 +387,10 @@ func (r *Reconciler) controlPlaneName() string {
 // or no eligible candidate at all).
 type policyPreflightOutcome struct {
 	eligible []string
-	// hold gates fan-out while the caller continues observing standing homes.
+	// hold gates fan-out while the caller continues observing standing members.
 	hold bool
 	// holdAsIs gates fan-out and Single re-racing while the caller continues
-	// observing and publishing standing-home health.
+	// observing and publishing standing-member health.
 	holdAsIs bool
 	// transient marks a pass whose verdict rests on a transient read error,
 	// so the caller re-checks at the poll cadence instead of the long
@@ -649,7 +649,7 @@ func (r *Reconciler) memberPolicySkew(ctx context.Context, reads client.Reader, 
 }
 
 // observeDerivedPolicyStatus lifts a freshly read derived ISVC's per-component
-// autoscaler-policy status into the in-memory home observations, from which the
+// autoscaler-policy status into the in-memory member observations, from which the
 // next status write populates candidates[].autoscaling and evaluates the
 // aggregate detectors. No-op for the common no-ref source.
 func (r *Reconciler) observeDerivedPolicyStatus(src *v1beta1.InferenceService, cluster string, derived *v1beta1.InferenceService) {
@@ -657,7 +657,7 @@ func (r *Reconciler) observeDerivedPolicyStatus(src *v1beta1.InferenceService, c
 		return
 	}
 	lifted, allReported, failedClosed := liftCandidateAutoscaling(referencedPolicyRefs(src), derived)
-	r.policyState().recordHome(src.UID, cluster, policyHomeObservation{
+	r.policyState().recordMember(src.UID, cluster, policyMemberObservation{
 		autoscaling:  lifted,
 		placedSince:  derived.CreationTimestamp.Time,
 		allReported:  allReported,
@@ -666,7 +666,7 @@ func (r *Reconciler) observeDerivedPolicyStatus(src *v1beta1.InferenceService, c
 }
 
 // liftCandidateAutoscaling maps one derived ISVC's
-// status.components.<c>.autoscaler policy fields into the per-home
+// status.components.<c>.autoscaler policy fields into the per-member
 // CandidateAutoscalingStatus: the portable digest observed per policy, the
 // per-component resolved digest, and readiness (specSource=policy with a
 // non-empty resolved digest). It also derives the two detector inputs: whether
@@ -704,7 +704,7 @@ func liftCandidateAutoscaling(refs []componentPolicyRef, derived *v1beta1.Infere
 			case as.ShadowedPolicyRef != nil && as.ShadowedPolicyRef.Name == ref.policy:
 				// Inline outranks the ref: not policy-ready, but the shadow
 				// preview proves the member resolved the policy, so the skew
-				// detector must not count this home as unresponsive.
+				// detector must not count this member as unresponsive.
 				compReported = as.ShadowedPolicyRef.WouldRenderDigest != ""
 				if observedDigest[ref.policy] == "" {
 					observedDigest[ref.policy] = as.ShadowedPolicyRef.PortableDigest
@@ -729,11 +729,8 @@ func liftCandidateAutoscaling(refs []componentPolicyRef, derived *v1beta1.Infere
 	return out, reported, failedClosed
 }
 
-// observePolicyRefStamp feeds the FieldPruned detector from the wholesale
-// re-stamp in applyDerived: when the pre-apply live remote object exists but
-// lacks a ref the desired derived spec carries, the member apiserver pruned the
-// field on the previous apply (old ISVC CRD — the one silent-mis-scale skew).
-// An intact live object resets the consecutive counter.
+// observePolicyRefStamp checks the successful write response for fields the API
+// discarded. Failed writes and stale pre-write observations cannot prove pruning.
 func (r *Reconciler) observePolicyRefStamp(src *v1beta1.InferenceService, cluster string, live, desired *v1beta1.InferenceService) {
 	if !hasPolicyRefs(desired) {
 		return
@@ -753,7 +750,7 @@ func (r *Reconciler) observePolicyRefStamp(src *v1beta1.InferenceService, cluste
 
 // policyStatusForWrite decorates the pass's placement result for a
 // policy-referencing source right before the status write: it attaches the
-// lifted per-home autoscaling state to the candidates and returns the staged
+// lifted per-member autoscaling state to the candidates and returns the staged
 // PlacementPolicyPreflight condition plus the freshly evaluated
 // AutoscalerPolicyReady aggregate. Nil (and untouched candidates) for the
 // common no-ref source.
@@ -781,18 +778,18 @@ func (r *Reconciler) policyStatusForWrite(isvc *v1beta1.InferenceService, res *p
 
 	now := pp.clock()
 	var failed, timedOut []string
-	homes, readyHomes := 0, 0
+	members, readyMembers := 0, 0
 	for i := range res.candidates {
 		c := &res.candidates[i]
-		obs, ok := pp.homeFor(isvc.UID, c.Cluster)
+		obs, ok := pp.memberFor(isvc.UID, c.Cluster)
 		if !ok {
 			continue
 		}
-		homes++
+		members++
 		if obs.autoscaling != nil {
 			c.Autoscaling = obs.autoscaling.DeepCopy()
 			if obs.autoscaling.Ready {
-				readyHomes++
+				readyMembers++
 			}
 		}
 		if obs.failedClosed {
@@ -802,11 +799,11 @@ func (r *Reconciler) policyStatusForWrite(isvc *v1beta1.InferenceService, res *p
 			timedOut = append(timedOut, c.Cluster)
 		}
 	}
-	// Only homes in THIS pass's candidate set can hold the aggregate False
+	// Only members in THIS pass's candidate set can hold the aggregate False
 	// for pruning: the counter resets solely on a successful re-apply to the
 	// offending member, which never happens once it leaves the fleet, so an
 	// un-intersected record would latch the condition forever.
-	pruned := pp.prunedHomes(isvc.UID)
+	pruned := pp.prunedMembers(isvc.UID)
 	if len(pruned) > 0 {
 		current := make(map[string]struct{}, len(res.candidates))
 		for i := range res.candidates {
@@ -833,15 +830,15 @@ func (r *Reconciler) policyStatusForWrite(isvc *v1beta1.InferenceService, res *p
 		agg = aggregateCondition(corev1.ConditionFalse, v1beta1.AutoscalerPolicyAggregateReasonResolveTimeout,
 			fmt.Sprintf("homes have not reported a resolved policy digest within %s: %s",
 				pp.skewDeadline, strings.Join(timedOut, ", ")))
-	case homes == 0:
+	case members == 0:
 		agg = aggregateCondition(corev1.ConditionTrue, v1beta1.AutoscalerPolicyAggregateReasonAllHomesResolved,
 			"no policy-referencing home placed yet")
-	case readyHomes == homes:
+	case readyMembers == members:
 		agg = aggregateCondition(corev1.ConditionTrue, v1beta1.AutoscalerPolicyAggregateReasonAllHomesResolved,
-			fmt.Sprintf("all %d homes report resolved policy digests", homes))
+			fmt.Sprintf("all %d homes report resolved policy digests", members))
 	default:
 		agg = aggregateCondition(corev1.ConditionTrue, v1beta1.AutoscalerPolicyAggregateReasonAllHomesResolved,
-			fmt.Sprintf("%d of %d homes resolved; the rest are within the skew deadline", readyHomes, homes))
+			fmt.Sprintf("%d of %d homes resolved; the rest are within the skew deadline", readyMembers, members))
 	}
 	conds = append(conds, agg)
 	return conds

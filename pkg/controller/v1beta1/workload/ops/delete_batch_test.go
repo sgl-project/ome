@@ -1436,7 +1436,7 @@ func TestSelectDeleteBatchFreshGangAwarePrefix(t *testing.T) {
 				statuses = append(statuses, workload.InstanceStatus{Index: index, Incarnation: 1, Phase: workload.InstancePhaseReady})
 				pods[index] = deleteSelectionPods(index, test.costs[index])
 			}
-			selection, err := selectDeleteBatch(statuses, test.indices, pods, test.budget)
+			selection, err := selectDeleteBatch(statuses, test.indices, pods, test.budget, nil)
 			if err != nil {
 				t.Fatalf("selectDeleteBatch: %v", err)
 			}
@@ -1470,7 +1470,7 @@ func TestSelectDeleteBatchEightPodGangs(t *testing.T) {
 		extras = append(extras, index)
 		pods[index] = deleteSelectionPods(index, 8)
 	}
-	selection, err := selectDeleteBatch(statuses, extras, pods, int32Pointer(100))
+	selection, err := selectDeleteBatch(statuses, extras, pods, int32Pointer(100), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1500,7 +1500,7 @@ func TestSelectDeleteBatchDeleteOwnedOrderingAndFreshClosure(t *testing.T) {
 		5: deleteSelectionPods(5, 2),
 		9: deleteSelectionPods(9, 1),
 	}
-	selection, err := selectDeleteBatch(statuses, []int32{9}, pods, int32Pointer(4))
+	selection, err := selectDeleteBatch(statuses, []int32{9}, pods, int32Pointer(4), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1515,13 +1515,65 @@ func TestSelectDeleteBatchDeleteOwnedOrderingAndFreshClosure(t *testing.T) {
 	}
 }
 
+// A fresh wave admits the extras with a pod on a cordoned node first,
+// highest index first among them, then the rest by highest index, so a
+// budget that splits the reduction empties the cordoned nodes first.
+func TestSelectDeleteBatchAdmitsCordonedExtrasFirst(t *testing.T) {
+	statuses := make([]workload.InstanceStatus, 0, 5)
+	pods := make(map[int32][]*corev1.Pod, 5)
+	for index := int32(1); index <= 5; index++ {
+		statuses = append(statuses, workload.InstanceStatus{Index: index, Phase: workload.InstancePhaseReady})
+		pods[index] = deleteSelectionPods(index, 1)
+	}
+	extras := []int32{1, 2, 4, 5}
+	cordoned := map[int32]struct{}{1: {}, 4: {}}
+	tests := []struct {
+		name     string
+		budget   *int32
+		want     []int32
+		deferred int
+	}{
+		{name: "split by the budget", budget: int32Pointer(2), want: []int32{4, 1}, deferred: 2},
+		{name: "unbounded", want: []int32{4, 1, 5, 2}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			selection, err := selectDeleteBatch(statuses, extras, pods, test.budget, cordoned)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := selectedDeleteIndices(selection); !equalInt32Slices(got, test.want) {
+				t.Fatalf("selected = %v, want %v", got, test.want)
+			}
+			if selection.deferred != test.deferred {
+				t.Fatalf("deferred = %d, want %d", selection.deferred, test.deferred)
+			}
+		})
+	}
+}
+
+// Committed work keeps its admission order: a cordoned node does not move
+// a delete-owned row ahead of one admitted before it.
+func TestSelectDeleteBatchDeleteOwnedOrderIgnoresCordon(t *testing.T) {
+	t0 := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	statuses := []workload.InstanceStatus{deleteOwnedStatus(2, t0.Add(time.Minute)), deleteOwnedStatus(7, t0)}
+	pods := map[int32][]*corev1.Pod{2: deleteSelectionPods(2, 2), 7: deleteSelectionPods(7, 2)}
+	selection, err := selectDeleteBatch(statuses, nil, pods, int32Pointer(2), map[int32]struct{}{2: {}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := selectedDeleteIndices(selection), []int32{7}; !equalInt32Slices(got, want) {
+		t.Fatalf("selected = %v, want %v", got, want)
+	}
+}
+
 func TestSelectDeleteBatchCountsTerminatingPods(t *testing.T) {
 	now := metav1.Now()
 	pods := deleteSelectionPods(3, 3)
 	pods[1].DeletionTimestamp = &now
 	selection, err := selectDeleteBatch(
 		[]workload.InstanceStatus{{Index: 3, Phase: workload.InstancePhaseReady}},
-		[]int32{3}, map[int32][]*corev1.Pod{3: pods}, int32Pointer(2),
+		[]int32{3}, map[int32][]*corev1.Pod{3: pods}, int32Pointer(2), nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1539,7 +1591,7 @@ func TestSelectDeleteBatchSortsCopiedPodSlices(t *testing.T) {
 	}
 	selection, err := selectDeleteBatch(
 		[]workload.InstanceStatus{{Index: 3, Phase: workload.InstancePhaseReady}},
-		[]int32{3}, map[int32][]*corev1.Pod{3: original}, nil,
+		[]int32{3}, map[int32][]*corev1.Pod{3: original}, nil, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1559,7 +1611,7 @@ func TestSelectDeleteBatchRejectsInvalidBudget(t *testing.T) {
 	for _, budget := range []int32{0, -1} {
 		_, err := selectDeleteBatch(
 			[]workload.InstanceStatus{{Index: 0, Phase: workload.InstancePhaseReady}},
-			[]int32{0}, nil, &budget,
+			[]int32{0}, nil, &budget, nil,
 		)
 		if err == nil {
 			t.Errorf("budget %d: expected error", budget)
@@ -1577,7 +1629,7 @@ func TestSelectDeleteBatchTwoThousandDeterministic(t *testing.T) {
 		extras = append(extras, index)
 		pods[index] = deleteSelectionPods(index, 1)
 	}
-	selection, err := selectDeleteBatch(statuses, extras, pods, int32Pointer(100))
+	selection, err := selectDeleteBatch(statuses, extras, pods, int32Pointer(100), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2224,10 +2276,12 @@ func TestDeleteBatchOverdueDrainAnnouncesDeferredRows(t *testing.T) {
 // attempt that showed no failure, a failure on the pod the attempt
 // replaces, a row with no attempt, a bare surge target marker, and a
 // crash loop, which is not the revision's alone. A gang surge source the
-// wave retires is read through its replacement: the marker's pods in the
-// same wave, else the failure the escalation recorded on the source's
-// row, with the cause that record classifies to. A wave of two such rows
-// is one record.
+// wave retires is read through its replacement: a replacement already
+// promoted on the pinned revision ended a successful attempt, so the wave
+// records nothing whatever the source's row still carries; otherwise the
+// marker's pods in the same wave, else the failure the escalation
+// recorded on the source's row, with the cause that record classifies
+// to. A wave of two such rows is one record.
 func TestRetiredAttemptFailure_RecordsOnlyAnAttemptFailingOnItsOwn(t *testing.T) {
 	const running, target = "model-engine-f94dbfff", "model-engine-cf0e7843"
 	parked := func(index int32, revision, reason string) *corev1.Pod {
@@ -2269,10 +2323,27 @@ func TestRetiredAttemptFailure_RecordsOnlyAnAttemptFailingOnItsOwn(t *testing.T)
 		row.Operation.StartedAt = metav1.NewTime(since)
 		return row
 	}
+	// drainingSource is a source whose replacement already took over
+	// serving and had one member exit and be rebuilt: the member's clean
+	// exit is on the source row, dated inside the attempt, as the rebuild
+	// writes it.
+	recycled := &workload.InstanceTermination{PodName: "pod-2", ContainerName: "main", Reason: "Completed", Time: metav1.NewTime(attemptStart.Add(time.Minute))}
+	drainingSource := func() workload.InstanceStatus {
+		row := gangSourceSince(attemptStart, recycled)
+		row.Operation.Step = workload.UpdateStepSurgeDrain
+		row.Operation.RetryCount = 1
+		return row
+	}
+	// promotedReplacement is the surge index once the hand-over promoted
+	// it: Ready on the pinned revision with no operation left.
+	promotedReplacement := workload.InstanceStatus{Index: surgeIdx, Incarnation: 1, Phase: workload.InstancePhaseReady, RunningRevision: target}
 	cases := []struct {
 		name       string
 		candidates []deleteBatchCandidate
-		want       *status.AttemptFailure
+		// observed is the table the wave reads the source's replacement
+		// from; the candidates alone when empty.
+		observed []workload.InstanceStatus
+		want     *status.AttemptFailure
 	}{
 		{
 			name:       "a recreate parked in ImagePullBackOff",
@@ -2342,6 +2413,26 @@ func TestRetiredAttemptFailure_RecordsOnlyAnAttemptFailingOnItsOwn(t *testing.T)
 			want: &status.AttemptFailure{TargetRevision: target, Reason: "ErrImagePull", Cause: workload.CauseWorkload},
 		},
 		{
+			// The surge finished: the replacement is promoted and the source
+			// row, left standing while its resources finalize, is what the
+			// wave removes. The member's exit on the row is the rebuild's
+			// record, not a failure of the attempt.
+			name:       "a draining gang surge source retired after its replacement was promoted, with a recycled member on its row",
+			candidates: []deleteBatchCandidate{{status: drainingSource()}},
+			observed:   []workload.InstanceStatus{drainingSource(), promotedReplacement},
+		},
+		{
+			name:       "a failed gang surge source retired after its replacement was promoted, with the escalation's record on its row",
+			candidates: []deleteBatchCandidate{{status: gangSource(&workload.InstanceTermination{PodName: "pod-2", Reason: "ErrImagePull", Time: metav1.NewTime(attemptStart.Add(time.Minute))})}},
+			observed:   []workload.InstanceStatus{gangSource(nil), promotedReplacement},
+		},
+		{
+			name:       "a draining gang surge source whose replacement is not promoted records the member's exit",
+			candidates: []deleteBatchCandidate{{status: drainingSource()}},
+			observed:   []workload.InstanceStatus{drainingSource(), gangMarker()},
+			want:       &status.AttemptFailure{TargetRevision: target, Reason: "Completed", Cause: workload.CauseUnattributed},
+		},
+		{
 			name: "a failed gang surge source with no failure recorded anywhere",
 			candidates: []deleteBatchCandidate{
 				{status: gangSource(nil), pods: []*corev1.Pod{deleteFailurePod(0, true, "f94dbfff")}},
@@ -2373,7 +2464,11 @@ func TestRetiredAttemptFailure_RecordsOnlyAnAttemptFailingOnItsOwn(t *testing.T)
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := retiredAttemptFailure(tc.candidates)
+			observed := tc.observed
+			if observed == nil {
+				observed = candidateStatuses(tc.candidates)
+			}
+			got := retiredAttemptFailure(workload.WorkloadObservedState{InstanceStatuses: observed}, tc.candidates)
 			if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
 				t.Fatalf("retiredAttemptFailure = %+v, want %+v", got, tc.want)
 			}

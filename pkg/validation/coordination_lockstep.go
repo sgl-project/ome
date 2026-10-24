@@ -1,10 +1,11 @@
-// RollingUpdate lockstep admission compare (spec.rollout.groups[]).
+// RollingUpdate update-time compare (spec.rollout.groups[]).
 //
-// A rollingUpdate group promises its Components bump together. The update-time
-// check therefore has to detect ANY change that mints a new workload revision
-// for a Component — not just an image bump. This file holds the
-// revision-affecting view of a Component's ISVC spec and the change predicate
-// validateRollingUpdateLockstep consumes.
+// A rollingUpdate group's members may change one at a time; the update-time
+// warning names the members that keep their revision. The compare therefore
+// has to detect ANY change that mints a new workload revision for a Component
+// — not just an image bump. This file holds the revision-affecting view of a
+// Component's ISVC spec and the change predicate
+// rollingUpdatePartialChangeWarning consumes.
 package validation
 
 import (
@@ -22,7 +23,7 @@ import (
 // Scaling, pacing, and autoscaling fields (replica bounds, timeout, PDB
 // budgets, deployment strategy, lifecycle, autoscaler, service port
 // protocols) are deliberately absent: they change behavior without
-// re-rendering pods, so a one-sided change to them must not trip lockstep.
+// re-rendering pods, so a change to them is not a change of the member.
 type componentRevisionSpec struct {
 	PodSpec     *v1beta1.PodSpec
 	Runner      *v1beta1.RunnerSpec

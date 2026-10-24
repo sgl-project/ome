@@ -183,19 +183,22 @@ func TestRolloutCollapse_DeclaredKinds(t *testing.T) {
 }
 
 // A ref-only group with no inline body faces no plan/budget checks here, and
-// a declared-rollingUpdate ref group obeys the lockstep contract.
-func TestValidateCoordinationUpdate_DeclaredRollingUpdateRefLockstep(t *testing.T) {
+// a declared-rollingUpdate ref group warns on a one-member bump like an
+// inline one.
+func TestCoordinationUpdateWarnings_DeclaredRollingUpdateRefOneMemberBump(t *testing.T) {
 	group := refGroup(v1beta1.RolloutProgressionRollingUpdate, v1beta1.EngineComponent, v1beta1.DecoderComponent)
 
 	oldSpec := omeNativePDSpecWithImages("v1", "v1")
 	newSpec := omeNativePDSpecWithImages("v2", "v1")
 	newSpec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{group}}
-	wantLockstepViolation(t, ValidateCoordinationUpdate(oldSpec, newSpec), "one-sided bump under a declared-rollingUpdate ref")
+	if w := CoordinationUpdateWarnings(oldSpec, newSpec); len(w) != 1 {
+		t.Errorf("one-sided bump under a declared-rollingUpdate ref: warnings = %q, want one", w)
+	}
 
 	bothBumped := omeNativePDSpecWithImages("v2", "v2")
 	bothBumped.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{group}}
-	if err := ValidateCoordinationUpdate(oldSpec, bothBumped); err != nil {
-		t.Errorf("lockstep-satisfying bump rejected: %v", err)
+	if w := CoordinationUpdateWarnings(oldSpec, bothBumped); len(w) != 0 {
+		t.Errorf("both bumped under a declared-rollingUpdate ref: unexpected warnings %q", w)
 	}
 	if err := ValidateCoordination(bothBumped); err != nil {
 		t.Errorf("ref-only rollingUpdate group must face no inline budget checks: %v", err)

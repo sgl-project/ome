@@ -3,6 +3,7 @@ package servingruntime
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,46 +54,43 @@ func TestClassifyResolveError(t *testing.T) {
 	g.Expect(classifyResolveError(errors.New("apiserver unreachable"))).To(gomega.Equal(ReasonResolverInternal))
 }
 
-func TestSetCondition_PreservesLastTransitionTimeOnNoChange(t *testing.T) {
+func TestProjectInheritanceResult_KeepsLastTransitionTimeWhenStatusHolds(t *testing.T) {
 	g := gomega.NewWithT(t)
-	earlier := metav1.NewTime(metav1.Now().Add(-1))
-	conds := []metav1.Condition{
-		{
+	earlier := metav1.NewTime(metav1.Now().Add(-time.Minute))
+	current := v1beta1.ServingRuntimeStatus{
+		Conditions: []metav1.Condition{{
 			Type:               constants.InheritanceReadyConditionType,
 			Status:             metav1.ConditionTrue,
 			Reason:             ReasonResolved,
 			LastTransitionTime: earlier,
-		},
+		}},
 	}
 
-	setCondition(&conds, metav1.Condition{
-		Type:   constants.InheritanceReadyConditionType,
-		Status: metav1.ConditionTrue,
-		Reason: ReasonResolved,
-	})
+	got := projectInheritanceResult(current, 7, []string{"profile", "rt"}, nil)
 
-	g.Expect(conds).To(gomega.HaveLen(1))
-	g.Expect(conds[0].LastTransitionTime).To(gomega.Equal(earlier))
+	// The condition stays True, so a new message or generation keeps the
+	// transition time: the time records when the status last changed.
+	g.Expect(got.Conditions).To(gomega.HaveLen(1))
+	g.Expect(got.Conditions[0].LastTransitionTime).To(gomega.Equal(earlier))
+	g.Expect(got.Conditions[0].ObservedGeneration).To(gomega.BeNumerically("==", 7))
 }
 
-func TestSetCondition_BumpsLastTransitionTimeOnStatusFlip(t *testing.T) {
+func TestProjectInheritanceResult_MovesLastTransitionTimeWhenStatusFlips(t *testing.T) {
 	g := gomega.NewWithT(t)
-	earlier := metav1.NewTime(metav1.Now().Add(-1))
-	conds := []metav1.Condition{
-		{
+	earlier := metav1.NewTime(metav1.Now().Add(-time.Minute))
+	current := v1beta1.ServingRuntimeStatus{
+		Conditions: []metav1.Condition{{
 			Type:               constants.InheritanceReadyConditionType,
 			Status:             metav1.ConditionTrue,
 			Reason:             ReasonResolved,
 			LastTransitionTime: earlier,
-		},
+		}},
 	}
 
-	setCondition(&conds, metav1.Condition{
-		Type:   constants.InheritanceReadyConditionType,
-		Status: metav1.ConditionFalse,
-		Reason: ReasonCycle,
-	})
+	got := projectInheritanceResult(current, 7, nil, &runtimeinheritance.CycleError{Cycle: []string{"rt", "rt"}})
 
-	g.Expect(conds[0].Status).To(gomega.Equal(metav1.ConditionFalse))
-	g.Expect(conds[0].LastTransitionTime).NotTo(gomega.Equal(earlier), "must bump when status flips")
+	g.Expect(got.Conditions).To(gomega.HaveLen(1))
+	g.Expect(got.Conditions[0].Status).To(gomega.Equal(metav1.ConditionFalse))
+	g.Expect(got.Conditions[0].Reason).To(gomega.Equal(ReasonCycle))
+	g.Expect(got.Conditions[0].LastTransitionTime).NotTo(gomega.Equal(earlier), "the time must move when the status flips")
 }

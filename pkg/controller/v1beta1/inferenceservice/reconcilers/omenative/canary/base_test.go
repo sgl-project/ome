@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/rollout"
 )
 
 func statusWithRecord(cs *v1beta1.CanaryStatus, phase v1beta1.RolloutPhase) *v1beta1.InferenceServiceStatus {
@@ -214,6 +215,69 @@ func TestBaseKeepsALiveHoldOverAPassThatMissedItsClockOrPhase(t *testing.T) {
 			}
 			if got, want := desired.Components[v1beta1.EngineComponent].RolloutPhase, c.live.Components[v1beta1.EngineComponent].RolloutPhase; got != want {
 				t.Fatalf("the live phase was not kept: got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// A pass that read a copy of the record from before its last write, in any
+// state the executor holds a unit in, has its decision dropped and the live
+// record, phase and traffic kept. Each case takes the live status from the
+// grid fixture of the state and reads the copy one write older.
+func TestBaseKeepsTheLiveRecordInEveryHoldingState(t *testing.T) {
+	cases := []struct {
+		name    string
+		fixture func(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs)
+		state   rollout.CanaryState
+		phase   v1beta1.RolloutPhase
+	}{
+		{"Draining", fixtureDraining, rollout.CanaryStateDraining, v1beta1.RolloutPhasePromoting},
+		{"DrainingHeld", fixtureDrainingHeld, rollout.CanaryStateDraining, v1beta1.RolloutPhasePaused},
+		{"DoneRolling", fixtureDoneRolling, rollout.CanaryStateDone, v1beta1.RolloutPhasePromoting},
+		{"Done", fixtureDone, rollout.CanaryStateDone, v1beta1.RolloutPhaseStable},
+		{"RollingBack", fixtureRollingBack, rollout.CanaryStateRollingBack, v1beta1.RolloutPhaseRollingBack},
+		{"Failed", fixtureFailed, rollout.CanaryStateFailed, v1beta1.RolloutPhaseFailed},
+		{"FailedStableMissing", fixtureFailedStableMissing, rollout.CanaryStateFailed, v1beta1.RolloutPhaseFailed},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			isvc, _ := c.fixture(t)
+			live := isvc.Status.DeepCopy()
+			steps := len(isvc.Spec.Rollout.Groups[0].Canary.Steps)
+			if got := rollout.StateOf(engineRecord(live), live.Components[v1beta1.EngineComponent].RolloutPhase, steps); got != c.state {
+				t.Fatalf("the fixture reads %q, want %q", got, c.state)
+			}
+			if got := live.Components[v1beta1.EngineComponent].RolloutPhase; got != c.phase {
+				t.Fatalf("the fixture's phase is %q, want %q", got, c.phase)
+			}
+			// The copy predates the record's last write: its step clock is a
+			// minute older, or its capacity wait is still open.
+			stale := live.DeepCopy()
+			older := engineRecord(stale)
+			if older.StepEnteredTime != nil {
+				older.StepEnteredTime = &metav1.Time{Time: older.StepEnteredTime.Add(-time.Minute)}
+			} else {
+				older.CapacityWaitSince = &metav1.Time{Time: time.Unix(1000, 0)}
+			}
+			stale.Canary = older.DeepCopy()
+			base := NewBase(isvcWith(stale))
+			// The stale pass decided from the copy and re-projected the phase.
+			desired := stale.DeepCopy()
+			entry := desired.Components[v1beta1.EngineComponent]
+			entry.RolloutPhase = v1beta1.RolloutPhasePending
+			desired.Components[v1beta1.EngineComponent] = entry
+
+			if !base.PreserveFresh(desired, live) || !base.Stale() {
+				t.Fatal("a pass that read the copy before the last write was not treated as stale")
+			}
+			if got, want := engineRecord(desired), engineRecord(live); !equality.Semantic.DeepEqual(got, want) {
+				t.Fatalf("the live record was not kept: got %+v, want %+v", got, want)
+			}
+			if got := desired.Components[v1beta1.EngineComponent].RolloutPhase; got != c.phase {
+				t.Fatalf("the live phase was not kept: got %q, want %q", got, c.phase)
+			}
+			if got, want := desired.Components[v1beta1.EngineComponent].Traffic, live.Components[v1beta1.EngineComponent].Traffic; !equality.Semantic.DeepEqual(got, want) {
+				t.Fatalf("the live traffic was not kept: got %+v, want %+v", got, want)
 			}
 		})
 	}

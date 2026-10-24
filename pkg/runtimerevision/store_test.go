@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -78,7 +79,7 @@ func TestFindOrCreate_DifferentContentCreatesNew(t *testing.T) {
 	c := newClient(t)
 	specA := minimalSpec()
 	specB := minimalSpec()
-	specB.Disabled = ptrBool(true)
+	specB.Disabled = ptr.To(true)
 
 	a, _ := FindOrCreate(context.Background(), c, omeNS, KindClusterServingRuntime, "", "srt", specA)
 	b, _ := FindOrCreate(context.Background(), c, omeNS, KindClusterServingRuntime, "", "srt", specB)
@@ -110,5 +111,3 @@ func TestFetch_NotFoundSurfacesIsNotFound(t *testing.T) {
 	g.Expect(err).To(gomega.HaveOccurred())
 	g.Expect(apierrors.IsNotFound(err)).To(gomega.BeTrue())
 }
-
-func ptrBool(v bool) *bool { return &v }

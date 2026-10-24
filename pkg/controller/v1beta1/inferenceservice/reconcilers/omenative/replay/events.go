@@ -67,7 +67,7 @@ var producedEvents = map[string]string{
 	"analysis.unavailable":   "the analysis sampler is not modelled",
 	"record.legacy":          "a persisted record that lacks an optional field is not modelled",
 	"member.staged":          "a staged member needs the user partition flow, which is not modelled",
-	"ir.missing":             "a replica is never removed in a replay; the projector would recreate it in the same pass",
+	"ir.staged":              "the replica rests at its staged shape on its own; stage the partition, ir.straggling and replica.currentWithdrawn",
 	"timer.pauseElapsed":     "a timed soak is not modelled",
 	"timer.drainElapsed":     "a drain window is not modelled",
 	"pod.canaryCrashed":      "the crash reading is not modelled",
@@ -78,7 +78,6 @@ var producedEvents = map[string]string{
 	"verb.unpause":           "the unpause is staged as spec.unpause",
 	"spec.groupEdited":       "a group edit is staged as spec.planEdit",
 	"policy.changed":         "a policy body edit is not modelled",
-	"policy.resolved":        "a policy's return is not modelled",
 }
 
 // staleReadEvents are the events that stage a pass over the previous
@@ -108,8 +107,10 @@ func init() {
 		"replica.currentWithdrawn": applyWithdraw,
 		"member.capacityLost":      applyCapacityLost,
 		"member.failed":            applyRowPhase(v1beta1.OMENativeInstanceFailed),
+		"member.surgeFailed":       applySurgeFailed,
 		"member.recovered":         applyRowPhase(v1beta1.OMENativeInstanceReady),
 		"member.dark":              applyDark,
+		"ir.missing":               applyReplicaMissing,
 		"capacity.reached":         applyCapacityReached,
 		"capacity.dropped":         applyCapacityDropped,
 		"pod.rejectedGone":         applyRejectedGone,
@@ -128,6 +129,7 @@ func init() {
 		"spec.planEdit":            applyPlanEdit,
 		"plan.unresolved":          applyPolicyRemoved,
 		"policy.unresolved":        applyPolicyRemoved,
+		"policy.resolved":          applyPolicyResolved,
 		"spec.replicas":            applyReplicas,
 		"spec.partition":           applyPartition,
 		"ctrl.staleRead":           applyStaleRead,
@@ -147,23 +149,25 @@ func init() {
 // map takes no arguments.
 var eventArgKeys = map[string][]string{
 	ClockAdvance:               {"duration"},
-	"spec.revision":            {"component", "image"},
-	"member.targetChanged":     {"component", "image"},
-	"replica.targetBumped":     {"component", "image"},
+	"spec.revision":            {"component", "image", "protocol"},
+	"member.targetChanged":     {"component", "image", "protocol"},
+	"replica.targetBumped":     {"component", "image", "protocol"},
 	"member.rollback":          {"component"},
 	"ir.converged":             {"component"},
 	"ir.straggling":            {"component", "trailing"},
-	"ir.stale":                 {"component"},
-	"member.surgePodCreated":   {"component", "index"},
-	"member.readyOnTarget":     {"component"},
-	"member.oldPodsGone":       {"component"},
+	"ir.stale":                 {"component", "lag"},
+	"member.surgePodCreated":   {"component", "index", "replacement"},
+	"member.readyOnTarget":     {"component", "index"},
+	"member.oldPodsGone":       {"component", "index"},
 	"member.converged":         {"component"},
 	"replica.currentPromoted":  {"component"},
 	"replica.currentWithdrawn": {"component"},
-	"member.capacityLost":      {"component"},
+	"member.capacityLost":      {"component", "gone"},
 	"member.failed":            {"component", "index"},
+	"member.surgeFailed":       {"component", "index"},
 	"member.recovered":         {"component", "index"},
 	"member.dark":              {"component"},
+	"ir.missing":               {"component"},
 	"capacity.reached":         {"component"},
 	"capacity.dropped":         {"component", "index"},
 	"pod.rejectedGone":         {"component"},
@@ -179,6 +183,7 @@ var eventArgKeys = map[string][]string{
 	"spec.planEdit":            {"groups"},
 	"plan.unresolved":          {"name"},
 	"policy.unresolved":        {"name"},
+	"policy.resolved":          {"name"},
 	"spec.replicas":            {"component", "to"},
 	"spec.partition":           {"component", "to"},
 	"api.flushFailed":          {"count"},
@@ -243,7 +248,8 @@ func applyResync(context.Context, *driver, TimelineEvent) (string, error) {
 
 // applyTargetChange edits a Component's template image: the service spec
 // moves, the projection targets the new revision, and the replica records
-// it as its update revision.
+// it as its update revision. With a protocol the revision the image mints
+// carries it and spec.rollout.pairingProtocol moves to it.
 func applyTargetChange(ctx context.Context, d *driver, ev TimelineEvent) (string, error) {
 	m, err := requireMember(d, ev)
 	if err != nil {
@@ -257,11 +263,21 @@ func applyTargetChange(ctx context.Context, d *driver, ev TimelineEvent) (string
 	cs.Image = image
 	d.service.Components[string(m.component)] = cs
 	m.image, m.target = image, image
+	detail := fmt.Sprintf("component=%s image=%s", m.component, image)
+	if ev.Args.Protocol != "" {
+		if d.service.RevisionProtocols == nil {
+			d.service.RevisionProtocols = map[string]string{}
+		}
+		d.service.RevisionProtocols[image] = ev.Args.Protocol
+		protocol := ev.Args.Protocol
+		d.service.PairingProtocol = &protocol
+		detail += " protocol=" + protocol
+	}
 	generation, err := d.writeSpec(ctx)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("component=%s image=%s generation=%d", m.component, image, generation), nil
+	return fmt.Sprintf("%s generation=%d", detail, generation), nil
 }
 
 // applyMemberRollback returns a member's template to its current revision
@@ -323,23 +339,41 @@ func applyStraggling(_ context.Context, d *driver, ev TimelineEvent) (string, er
 	return fmt.Sprintf("component=%s trailing=%d", m.component, ev.Args.Trailing), nil
 }
 
-// applyStale publishes the member's next status behind its generation.
+// applyStale publishes the member's next status behind its generation, or
+// with lag=status publishes nothing, so the last written status stands,
+// revision pair and rows included, as it does while the replica controller
+// has not run since the spec moved.
 func applyStale(_ context.Context, d *driver, ev TimelineEvent) (string, error) {
 	m, err := requireMember(d, ev)
 	if err != nil {
 		return "", err
 	}
-	m.stale = true
-	return "component=" + string(m.component), nil
+	switch ev.Args.Lag {
+	case "", "generation":
+		m.stale = true
+	case "status":
+		m.keepStatus = true
+	default:
+		return "", fmt.Errorf("replay: %s: lag must be generation or status, got %q", ev.Key(), ev.Args.Lag)
+	}
+	detail := "component=" + string(m.component)
+	if ev.Args.Lag != "" {
+		detail += " lag=" + ev.Args.Lag
+	}
+	return detail, nil
 }
 
 // applySurgePod creates an Instance's first pod on the target revision, not
 // yet Ready, and marks the row updating toward it; without an index every
-// Instance surges.
+// Instance surges. A start on an Instance whose failed replacement still
+// stands takes that pod's slot: the Instance keeps one replacement.
 func applySurgePod(_ context.Context, d *driver, ev TimelineEvent) (string, error) {
 	m, err := requireMember(d, ev)
 	if err != nil {
 		return "", err
+	}
+	if ev.Args.Replacement != nil {
+		return applyGangSurge(m, ev)
 	}
 	var indexes []int32
 	if ev.Args.Index != nil {
@@ -356,9 +390,85 @@ func applySurgePod(_ context.Context, d *driver, ev TimelineEvent) (string, erro
 		row := m.row(index)
 		row.phase = v1beta1.OMENativeInstanceUpdating
 		row.target = m.target
-		m.pods = append(m.pods, podState{index: index, ordinal: 1, image: m.target, ready: false})
+		if m.podOn(index, m.target) == nil {
+			m.pods = append(m.pods, podState{index: index, ordinal: 1, image: m.target, ready: false})
+		}
 	}
 	return fmt.Sprintf("component=%s instances=%d revision=%s", m.component, len(indexes), m.target), nil
+}
+
+// applyGangSurge opens a gang surge on one Instance: the replacement gang
+// is a row of its own at the named index, Creating toward the target with
+// its pod not yet Ready, and the source row names that index, as the engine
+// writes the pair. member.readyOnTarget on the replacement's index readies
+// it; member.oldPodsGone on the source's index ends the pair, the
+// replacement promoted in the source's place and the source row gone.
+func applyGangSurge(m *member, ev TimelineEvent) (string, error) {
+	if ev.Args.Index == nil {
+		return "", fmt.Errorf("replay: %s: a replacement index needs the index of the Instance it replaces", ev.Key())
+	}
+	source := m.row(*ev.Args.Index)
+	if source == nil {
+		return "", fmt.Errorf("replay: %s: no row %d", ev.Key(), *ev.Args.Index)
+	}
+	replacement := *ev.Args.Replacement
+	if m.row(replacement) != nil {
+		return "", fmt.Errorf("replay: %s: row %d exists; a replacement is built at a free index", ev.Key(), replacement)
+	}
+	if source.replacement != nil {
+		return "", fmt.Errorf("replay: %s: Instance %d of %s already has its replacement at %d", ev.Key(), source.index, m.component, *source.replacement)
+	}
+	sourceIndex := source.index
+	source.phase = v1beta1.OMENativeInstanceUpdating
+	source.target = m.target
+	source.replacement = &replacement
+	m.rows = append(m.rows, rowState{index: replacement, phase: v1beta1.OMENativeInstanceCreating, target: m.target, replaces: &sourceIndex})
+	m.pods = append(m.pods, podState{index: replacement, ordinal: 1, image: m.target, ready: false})
+	return fmt.Sprintf("component=%s instances=1 revision=%s replacement=%d", m.component, m.target, replacement), nil
+}
+
+// podOn is an Instance's pod on the given revision, nil when it has none.
+func (m *member) podOn(index int32, image string) *podState {
+	for i := range m.pods {
+		if m.pods[i].index == index && m.pods[i].image == image {
+			return &m.pods[i]
+		}
+	}
+	return nil
+}
+
+// applySurgeFailed ends an Instance's surge without its replacement
+// serving. The row reads Ready, the phase the replica publishes over the
+// engine's Failed row while the old pod serves, keeps the target revision
+// and carries no operation; the extra pod stays, never Ready, until a
+// start on the Instance replaces it.
+func applySurgeFailed(_ context.Context, d *driver, ev TimelineEvent) (string, error) {
+	m, err := requireMember(d, ev)
+	if err != nil {
+		return "", err
+	}
+	if ev.Args.Index == nil {
+		return "", fmt.Errorf("replay: %s needs the row index", ev.Key())
+	}
+	row := m.row(*ev.Args.Index)
+	if row == nil {
+		return "", fmt.Errorf("replay: %s: no row %d", ev.Key(), *ev.Args.Index)
+	}
+	if row.target == "" || row.target == row.running {
+		return "", fmt.Errorf("replay: %s: Instance %d of %s has no surge toward a target revision; stage member.surgePodCreated for it first", ev.Key(), row.index, m.component)
+	}
+	replacement := m.podOn(row.index, row.target)
+	if replacement == nil {
+		return "", fmt.Errorf("replay: %s: Instance %d of %s has no pod on the target revision; stage member.surgePodCreated for it first", ev.Key(), row.index, m.component)
+	}
+	if replacement.ready {
+		return "", fmt.Errorf("replay: %s: the replacement of Instance %d of %s is Ready; a surge that served is not a failed one", ev.Key(), row.index, m.component)
+	}
+	if old := m.podOn(row.index, row.running); old == nil || !old.ready || !old.serving {
+		return "", fmt.Errorf("replay: %s: Instance %d of %s has no serving pod on its running revision; the publication writes Ready over a failed replacement only while the old pod serves", ev.Key(), row.index, m.component)
+	}
+	row.phase = v1beta1.OMENativeInstanceReady
+	return fmt.Sprintf("component=%s index=%d revision=%s", m.component, row.index, row.target), nil
 }
 
 func (m *member) row(index int32) *rowState {
@@ -370,15 +480,19 @@ func (m *member) row(index int32) *rowState {
 	return nil
 }
 
-// applyReadyOnTarget marks every target-revision pod of a member Ready.
+// applyReadyOnTarget marks every target-revision pod of a member Ready, or
+// the one Instance's when the event names an index.
 func applyReadyOnTarget(_ context.Context, d *driver, ev TimelineEvent) (string, error) {
 	m, err := requireMember(d, ev)
 	if err != nil {
 		return "", err
 	}
+	if ev.Args.Index != nil && m.row(*ev.Args.Index) == nil {
+		return "", fmt.Errorf("replay: %s: no row %d", ev.Key(), *ev.Args.Index)
+	}
 	n := 0
 	for i := range m.pods {
-		if m.pods[i].image == m.target {
+		if m.pods[i].image == m.target && (ev.Args.Index == nil || m.pods[i].index == *ev.Args.Index) {
 			m.pods[i].ready, m.pods[i].serving = true, true
 			n++
 		}
@@ -390,42 +504,66 @@ func applyReadyOnTarget(_ context.Context, d *driver, ev TimelineEvent) (string,
 }
 
 // applyOldPodsGone removes every pod of a member that is not on the target
-// revision; each row stands Ready on the target pod that replaced its old
-// one, so a row with no target pod fails the run.
+// revision, or with an index the pods of that one Instance; each row it
+// covers stands Ready on the target pod that replaced its old one, so a
+// row with no target pod fails the run. A row whose gang surge built its
+// replacement as a row of its own ends its pair instead: the replacement
+// row is promoted Ready on the target and the source row is removed.
 func applyOldPodsGone(_ context.Context, d *driver, ev TimelineEvent) (string, error) {
 	m, err := requireMember(d, ev)
 	if err != nil {
 		return "", err
 	}
+	covers := func(index int32) bool { return ev.Args.Index == nil || *ev.Args.Index == index }
+	if ev.Args.Index != nil && m.row(*ev.Args.Index) == nil {
+		return "", fmt.Errorf("replay: %s: no row %d", ev.Key(), *ev.Args.Index)
+	}
 	kept := m.pods[:0]
 	removed := 0
 	for _, p := range m.pods {
-		if p.image == m.target {
+		if p.image == m.target || !covers(p.index) {
 			kept = append(kept, p)
 			continue
 		}
 		removed++
 	}
 	m.pods = kept
+	ended := map[int32]bool{}
 	for i := range m.rows {
-		if !m.hasPod(m.rows[i].index) {
-			return "", fmt.Errorf("replay: %s: Instance %d of %s has no pod on the target revision; stage member.surgePodCreated for it first", ev.Key(), m.rows[i].index, m.component)
+		if !covers(m.rows[i].index) {
+			continue
 		}
-		m.rows[i].running = m.target
-		m.rows[i].target = ""
-		m.rows[i].phase = v1beta1.OMENativeInstanceReady
-		m.rows[i].readySince = d.clock.Now()
-	}
-	return fmt.Sprintf("component=%s removed=%d", m.component, removed), nil
-}
-
-func (m *member) hasPod(index int32) bool {
-	for _, p := range m.pods {
-		if p.index == index {
-			return true
+		promoted := &m.rows[i]
+		if m.rows[i].replacement != nil {
+			promoted = m.row(*m.rows[i].replacement)
+			if promoted == nil {
+				return "", fmt.Errorf("replay: %s: Instance %d of %s names a replacement row %d that does not exist", ev.Key(), m.rows[i].index, m.component, *m.rows[i].replacement)
+			}
+			ended[m.rows[i].index] = true
 		}
+		if m.podOn(promoted.index, m.target) == nil {
+			return "", fmt.Errorf("replay: %s: Instance %d of %s has no pod on the target revision; stage member.surgePodCreated for it first", ev.Key(), promoted.index, m.component)
+		}
+		promoted.running = m.target
+		promoted.target = ""
+		promoted.phase = v1beta1.OMENativeInstanceReady
+		promoted.readySince = d.clock.Now()
+		promoted.replaces = nil
 	}
-	return false
+	if len(ended) > 0 {
+		rows := m.rows[:0]
+		for _, r := range m.rows {
+			if !ended[r.index] {
+				rows = append(rows, r)
+			}
+		}
+		m.rows = rows
+	}
+	detail := fmt.Sprintf("component=%s removed=%d", m.component, removed)
+	if ev.Args.Index != nil {
+		detail = fmt.Sprintf("component=%s instance=%d removed=%d", m.component, *ev.Args.Index, removed)
+	}
+	return detail, nil
 }
 
 // applyPromote promotes the replica's current revision to its target.
@@ -448,8 +586,9 @@ func applyWithdraw(_ context.Context, d *driver, ev TimelineEvent) (string, erro
 	return "component=" + string(m.component), nil
 }
 
-// applyCapacityLost takes a member's pods of one revision out of readiness:
-// the target's or the current's.
+// applyCapacityLost takes a member's pods of one revision out of readiness,
+// the target's or the current's, or with gone removes them: the rows keep
+// their revision and wait for the replica to rebuild them.
 func applyCapacityLost(_ context.Context, d *driver, ev TimelineEvent) (string, error) {
 	m, err := requireMember(d, ev)
 	if err != nil {
@@ -460,18 +599,30 @@ func applyCapacityLost(_ context.Context, d *driver, ev TimelineEvent) (string, 
 		image = m.current
 	}
 	n := 0
+	kept := m.pods[:0]
 	for i := range m.pods {
-		if m.pods[i].image == image {
-			m.pods[i].ready, m.pods[i].serving = false, false
-			n++
+		if m.pods[i].image != image {
+			kept = append(kept, m.pods[i])
+			continue
 		}
+		n++
+		if ev.Args.Gone {
+			continue
+		}
+		m.pods[i].ready, m.pods[i].serving = false, false
+		kept = append(kept, m.pods[i])
 	}
+	m.pods = kept
 	for i := range m.rows {
 		if m.rows[i].running == image && m.rows[i].phase == v1beta1.OMENativeInstanceReady {
 			m.rows[i].phase = v1beta1.OMENativeInstancePending
 		}
 	}
-	return fmt.Sprintf("component=%s revision=%s pods=%d", m.component, image, n), nil
+	detail := fmt.Sprintf("component=%s revision=%s pods=%d", m.component, image, n)
+	if ev.Args.Gone {
+		detail += " gone"
+	}
+	return detail, nil
 }
 
 // applyRowPhase writes one row's phase.
@@ -491,6 +642,26 @@ func applyRowPhase(phase v1beta1.OMENativeInstancePhase) eventApplier {
 		row.phase = phase
 		return fmt.Sprintf("component=%s index=%d phase=%s", m.component, *ev.Args.Index, phase), nil
 	}
+}
+
+// applyReplicaMissing deletes a member's InferenceReplica, as an operator
+// or a garbage collector removing the object would. The member publishes
+// nothing and syncs no pod until the projector has created the object
+// again, which the next pass does.
+func applyReplicaMissing(ctx context.Context, d *driver, ev TimelineEvent) (string, error) {
+	m, err := requireMember(d, ev)
+	if err != nil {
+		return "", err
+	}
+	ir, err := d.replica(ctx, m.component)
+	if err != nil {
+		return "", err
+	}
+	if err := d.cluster.staging(func() error { return d.cluster.cli.Delete(ctx, ir) }); err != nil {
+		return "", fmt.Errorf("replay: remove replica %s: %w", ir.Name, err)
+	}
+	m.missing = true
+	return fmt.Sprintf("component=%s replica=%s", m.component, ir.Name), nil
 }
 
 // applyDark takes every pod of a member out of rotation and demotes its
@@ -611,6 +782,29 @@ func applyLastStableRolled(_ context.Context, d *driver, ev TimelineEvent) (stri
 	m, err := requireMember(d, ev)
 	if err != nil {
 		return "", err
+	}
+	if ev.Variant == "short" {
+		// A recreate deletes the released Instance's old pod before its
+		// replacement exists: the row waits on the target with no pod while
+		// every other Instance already stands on the target.
+		recreating := 0
+		for i := range m.rows {
+			row := &m.rows[i]
+			if row.running == m.target {
+				continue
+			}
+			kept := m.pods[:0]
+			for _, p := range m.pods {
+				if p.index != row.index {
+					kept = append(kept, p)
+				}
+			}
+			m.pods = kept
+			row.phase = v1beta1.OMENativeInstanceUpdating
+			row.target = m.target
+			recreating++
+		}
+		return fmt.Sprintf("component=%s revision=%s recreating=%d", m.component, m.target, recreating), nil
 	}
 	for i := range m.rows {
 		m.setInstance(m.rows[i].index, m.target, d.clock.Now())
@@ -743,6 +937,28 @@ func applyPolicyRemoved(ctx context.Context, d *driver, ev TimelineEvent) (strin
 	if err := d.cluster.staging(func() error { return d.cluster.cli.Delete(ctx, policy) }); err != nil {
 		return "", fmt.Errorf("replay: remove policy %s: %w", ev.Args.Name, err)
 	}
+	return "policy=" + ev.Args.Name, nil
+}
+
+// applyPolicyResolved creates a RolloutPolicy again with the body it had
+// when plan.unresolved or policy.unresolved removed it, as an operator
+// restoring a deleted policy would.
+func applyPolicyResolved(ctx context.Context, d *driver, ev TimelineEvent) (string, error) {
+	if ev.Args.Name == "" {
+		return "", fmt.Errorf("replay: %s needs the policy name", ev.Key())
+	}
+	removed, ok := d.removedPolicies[ev.Args.Name]
+	if !ok {
+		return "", fmt.Errorf("replay: %s: no earlier event removed policy %s", ev.Key(), ev.Args.Name)
+	}
+	policy := &v1beta1.RolloutPolicy{
+		ObjectMeta: metav1.ObjectMeta{Namespace: removed.Namespace, Name: removed.Name},
+		Spec:       *removed.Spec.DeepCopy(),
+	}
+	if err := d.cluster.staging(func() error { return d.cluster.cli.Create(ctx, policy) }); err != nil {
+		return "", fmt.Errorf("replay: restore policy %s: %w", ev.Args.Name, err)
+	}
+	delete(d.removedPolicies, ev.Args.Name)
 	return "policy=" + ev.Args.Name, nil
 }
 
@@ -900,6 +1116,8 @@ func (d *driver) checkStaleClaim(ctx context.Context) error {
 		holds = !canaryRecordsEqual(live, stale)
 	case "read.staleCopy[canaryOwned]", "read.staleCopy[coordinationOwned]":
 		holds = !revisionFieldsEqual(live, stale)
+	case "read.staleCopy[coordinationOwnedEmpty]":
+		holds = anyRevisionRecord(live) && !anyRevisionRecord(stale)
 	}
 	if !holds {
 		return fmt.Errorf("replay: %s: the stale copy does not miss what the variant claims", claim)
@@ -946,6 +1164,17 @@ func sameRecord(a, b *v1beta1.CanaryStatus) bool {
 	return a.TargetID == b.TargetID && a.CanaryRevisionHash == b.CanaryRevisionHash && a.StableRevisionHash == b.StableRevisionHash &&
 		a.CurrentStep == b.CurrentStep && a.ObservedTrafficWeight == b.ObservedTrafficWeight && a.PromotedThrough == b.PromotedThrough &&
 		a.PreStepHold == b.PreStepHold && a.RolledBackRevisionHash == b.RolledBackRevisionHash && (a.Failed == nil) == (b.Failed == nil)
+}
+
+// anyRevisionRecord reports whether any Component of the service carries one
+// of the three rolled-out revision fields.
+func anyRevisionRecord(isvc *v1beta1.InferenceService) bool {
+	for _, cs := range isvc.Status.Components {
+		if cs.LatestReadyRevision != "" || cs.LatestRolledoutRevision != "" || cs.PreviousRolledoutRevision != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func revisionFieldsEqual(live, stale *v1beta1.InferenceService) bool {
@@ -1042,15 +1271,39 @@ func applySoakTimer(ctx context.Context, d *driver, ev TimelineEvent) (string, e
 	var deadline time.Time
 	for _, g := range groupsByName(live.Status.RolloutCoordination) {
 		soak := d.soakOf(g.Name)
-		if soak <= 0 || g.LastTransitionTime == nil {
+		if soak <= 0 || g.PreviousComponent == "" {
 			continue
 		}
-		at := g.LastTransitionTime.Time.Add(soak)
+		// The engine measures the wait from the previous member's Ready
+		// transition, the instant its replica recorded the roll done.
+		ir, err := d.replica(ctx, g.PreviousComponent)
+		if err != nil {
+			return "", err
+		}
+		finished := readyTransitionOf(ir)
+		if finished.IsZero() {
+			continue
+		}
+		at := finished.Add(soak)
 		if deadline.IsZero() || at.Before(deadline) {
 			deadline = at
 		}
 	}
 	return d.moveOnto("timer.soak", deadline, slack)
+}
+
+// readyTransitionOf is when a replica's Ready condition last turned True,
+// zero while it is not True.
+func readyTransitionOf(ir *v1beta1.InferenceReplica) time.Time {
+	if ir == nil {
+		return time.Time{}
+	}
+	for _, cond := range ir.Status.Conditions {
+		if cond.Type == "Ready" && cond.Status == metav1.ConditionTrue {
+			return cond.LastTransitionTime.Time
+		}
+	}
+	return time.Time{}
 }
 
 // soakOf is the soak the resolved group named by a status group carries:

@@ -865,6 +865,75 @@ func TestReconcile_WritesGroupStatus(t *testing.T) {
 	}
 }
 
+// A service whose two sides are resized during a roll has its ratio
+// reference rewritten to the new counts by the next pass, and the status
+// shows them: 8 prefill and 4 decode recorded, the specs now asking for 7
+// and 3.
+func TestReconcile_RatioReferenceFollowsAScaleMidRoll(t *testing.T) {
+	isvc := testOMENativeISVC()
+	isvc.Spec.Decoder = &v1beta1.DecoderSpec{
+		ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+			Annotations: map[string]string{
+				constants.DeploymentMode: string(constants.OMENative),
+			},
+		},
+	}
+	tol := int32(20)
+	isvc.Spec.Rollout = &v1beta1.RolloutSpec{
+		Groups: []v1beta1.RolloutGroup{{
+			Components:    []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+			RollingUpdate: &v1beta1.GroupRollingUpdate{},
+			MaintainRatio: &v1beta1.MaintainRatio{Tolerance: &tol},
+		}},
+	}
+	isvc.Status.RolloutCoordination = &v1beta1.RolloutCoordinationStatus{
+		Groups: []v1beta1.RolloutCoordinationGroupStatus{{
+			Name:       "0",
+			Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+			Policy:     v1beta1.CoordinationPolicyRollingUpdate,
+			Phase:      v1beta1.CoordinationPhaseSurging,
+			ObservedRatio: &v1beta1.RolloutCoordinationRatio{Original: map[v1beta1.ComponentType]int32{
+				v1beta1.EngineComponent: 8, v1beta1.DecoderComponent: 4,
+			}},
+		}},
+	}
+	engineIR := &v1beta1.InferenceReplica{
+		ObjectMeta: metav1.ObjectMeta{Name: isvc.Name + "-engine", Namespace: isvc.Namespace},
+		Spec:       v1beta1.InferenceReplicaSpec{Replicas: int32Ptr(7)},
+		Status: v1beta1.InferenceReplicaStatus{
+			Replicas: 7, ServingReplicas: 6,
+			CurrentRevision: isvc.Name + "-engine-oldHash", UpdateRevision: isvc.Name + "-engine-engineHash",
+		},
+	}
+	decoderIR := &v1beta1.InferenceReplica{
+		ObjectMeta: metav1.ObjectMeta{Name: isvc.Name + "-decoder", Namespace: isvc.Namespace},
+		Spec:       v1beta1.InferenceReplicaSpec{Replicas: int32Ptr(3)},
+		Status: v1beta1.InferenceReplicaStatus{
+			Replicas: 3, ServingReplicas: 3,
+			CurrentRevision: isvc.Name + "-decoder-oldHash", UpdateRevision: isvc.Name + "-decoder-decoderHash",
+		},
+	}
+	pods := []runtime.Object{
+		buildPod(isvc, v1beta1.EngineComponent, "oldHash", 0),
+		buildPod(isvc, v1beta1.DecoderComponent, "oldHash", 0),
+	}
+	c := testClient(append(pods, engineIR, decoderIR)...)
+	if _, err := Reconcile(context.Background(), ReconcileInputs{
+		ISVC: isvc, Client: c, Reader: c, Now: time.Now(),
+		ComponentDeploymentModes: testOMENativeModes(v1beta1.EngineComponent, v1beta1.DecoderComponent),
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	groups := isvc.Status.RolloutCoordination.Groups
+	if len(groups) != 1 || groups[0].ObservedRatio == nil {
+		t.Fatalf("expected one group with a ratio reference; got %+v", groups)
+	}
+	got := groups[0].ObservedRatio.Original
+	if got[v1beta1.EngineComponent] != 7 || got[v1beta1.DecoderComponent] != 3 {
+		t.Fatalf("the status must show the counts the specs ask for now; got original=%v want engine 7, decoder 3", got)
+	}
+}
+
 func TestReconcile_InvalidGroupShapeErrors(t *testing.T) {
 	isvc := testOMENativeISVC()
 	// A rollingUpdate group with maxSurge=0 AND maxUnavailable=0 is shape-invalid:
@@ -1542,169 +1611,31 @@ func TestCollectFailedInstanceIndices_EmptyOnNoFailures(t *testing.T) {
 	}
 }
 
-// TestBuildRatioState_DefersSnapshotWhenStatusEmpty pins the snapshot
-// deferral behind the BlueGreen+RatioBalanced anchor. The first reconcile
-// of a freshly-created ISVC observes every Component with
-// status.OMENative.Replicas == 0 (the OMENative status writer hasn't
-// run yet). Snapshotting from that empty status would anchor Original to
-// {Engine: 1, Decoder: 1} via SnapshotOriginal's zero-clamp, deadlocking
-// rollouts whose live ratio disagrees with 1:1.
-//
-// The snapshot is deferred until every Component has non-zero
-// observed Replicas. This test pins that contract: empty status →
-// empty Original; populated status → {eng: 4, dec: 2} matches the
-// cluster shape.
-func TestBuildRatioState_DefersSnapshotWhenStatusEmpty(t *testing.T) {
-	g := ResolvedGroup{
+// ratioGroup is the two-member RatioBalanced group the reference tests read.
+func ratioGroup(components ...v1beta1.ComponentType) ResolvedGroup {
+	return ResolvedGroup{
 		Name:       "0",
-		Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+		Components: components,
 		Policy:     v1beta1.CoordinationPolicyBlueGreen,
 		Pacing: v1beta1.CoordinationPacing{
 			Type: v1beta1.CoordinationPacingRatioBalanced,
 		},
 	}
+}
 
-	// IR status not yet available — DesiredReplicas==0 for both Components.
-	// buildComponentObservation returns zero-valued observations when
-	// IR summary is nil.
-	isvcEmpty := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "isvc", Namespace: "default"}}
-	emptyClient := testClient()
-	obsEmpty, err := buildGroupObservation(context.Background(), emptyClient, isvcEmpty, g, map[v1beta1.ComponentType]map[string]int32{})
-	if err != nil {
-		t.Fatalf("buildGroupObservation: %v", err)
-	}
-	stateEmpty := buildRatioState(isvcEmpty, g, obsEmpty, map[v1beta1.ComponentType]map[string]int32{})
-
-	if len(stateEmpty.Original) != 0 {
-		t.Fatalf("empty status MUST defer snapshot to avoid the SnapshotOriginal zero-clamp anchoring Original to {1, 1}; got Original=%v", stateEmpty.Original)
-	}
-
-	// Once IR status carries real Replicas counts, the snapshot should
-	// reflect the cluster shape verbatim.
-	isvcPopulated := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "isvc", Namespace: "default"}}
-	engineIR := &v1beta1.InferenceReplica{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc-engine", Namespace: "default"},
-		Status:     v1beta1.InferenceReplicaStatus{Replicas: 4},
-	}
-	decoderIR := &v1beta1.InferenceReplica{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc-decoder", Namespace: "default"},
-		Status:     v1beta1.InferenceReplicaStatus{Replicas: 2},
-	}
-	popClient := testClient(engineIR, decoderIR)
-	obsPopulated, err := buildGroupObservation(context.Background(), popClient, isvcPopulated, g, map[v1beta1.ComponentType]map[string]int32{})
-	if err != nil {
-		t.Fatalf("buildGroupObservation: %v", err)
-	}
-	statePopulated := buildRatioState(isvcPopulated, g, obsPopulated, map[v1beta1.ComponentType]map[string]int32{})
-
-	if statePopulated.Original[v1beta1.EngineComponent] != 4 {
-		t.Errorf("Original engine: got %d want 4 (matches status.OMENative.Replicas)", statePopulated.Original[v1beta1.EngineComponent])
-	}
-	if statePopulated.Original[v1beta1.DecoderComponent] != 2 {
-		t.Errorf("Original decoder: got %d want 2 (matches status.OMENative.Replicas)", statePopulated.Original[v1beta1.DecoderComponent])
+// replicaWithCounts is a member's replica whose spec asks for `desired`
+// Instances while its status reports `rows` of them.
+func replicaWithCounts(c v1beta1.ComponentType, desired, rows int32) *v1beta1.InferenceReplica {
+	return &v1beta1.InferenceReplica{
+		ObjectMeta: metav1.ObjectMeta{Name: "isvc-" + string(c), Namespace: "default"},
+		Spec:       v1beta1.InferenceReplicaSpec{Replicas: int32Ptr(desired)},
+		Status:     v1beta1.InferenceReplicaStatus{Replicas: rows},
 	}
 }
 
-// TestBuildRatioState_PartiallyPopulatedStatusDefersSnapshot covers the
-// race where one Component has been reconciled (status.OMENative.Replicas
-// populated) but the other hasn't yet. The snapshot anchor must reflect
-// the WHOLE group's shape, so until every Component reports non-zero
-// Replicas, defer. Otherwise the in-flight Component pegs the ratio
-// against a still-zero peer and immediately rejects every surge.
-func TestBuildRatioState_PartiallyPopulatedStatusDefersSnapshot(t *testing.T) {
-	g := ResolvedGroup{
-		Name:       "0",
-		Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
-		Policy:     v1beta1.CoordinationPolicyBlueGreen,
-		Pacing: v1beta1.CoordinationPacing{
-			Type: v1beta1.CoordinationPacingRatioBalanced,
-		},
-	}
-	// Engine IR populated; decoder IR not yet.
-	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "isvc", Namespace: "default"}}
-	engineIR := &v1beta1.InferenceReplica{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc-engine", Namespace: "default"},
-		Status:     v1beta1.InferenceReplicaStatus{Replicas: 4},
-	}
-	c := testClient(engineIR)
-	obs, err := buildGroupObservation(context.Background(), c, isvc, g, map[v1beta1.ComponentType]map[string]int32{})
-	if err != nil {
-		t.Fatalf("buildGroupObservation: %v", err)
-	}
-	state := buildRatioState(isvc, g, obs, map[v1beta1.ComponentType]map[string]int32{})
-	if len(state.Original) != 0 {
-		t.Fatalf("partially populated status MUST defer snapshot; got Original=%v", state.Original)
-	}
-}
-
-// TestBuildRatioState_PreservesAlreadyRecordedAnchor pins the
-// already-recorded path: when ObservedRatio.Original is already
-// persisted from a prior reconcile, buildRatioState reads it as-is
-// (verbatim) and does NOT re-snapshot — the anchor must remain stable
-// across the rollout even if MinReplicas changes mid-flight.
-func TestBuildRatioState_PreservesAlreadyRecordedAnchor(t *testing.T) {
-	g := ResolvedGroup{
-		Name:       "0",
-		Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
-		Policy:     v1beta1.CoordinationPolicyBlueGreen,
-		Pacing: v1beta1.CoordinationPacing{
-			Type: v1beta1.CoordinationPacingRatioBalanced,
-		},
-	}
-	// IR status: scaled DOWN to 2 engine + 1 decoder mid-rollout.
-	// ObservedRatio.Original captured at rollout start = 4:2 (the
-	// anchor we want to preserve, NOT the current shape).
-	isvc := &v1beta1.InferenceService{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc", Namespace: "default"},
-		Status: v1beta1.InferenceServiceStatus{
-			RolloutCoordination: &v1beta1.RolloutCoordinationStatus{
-				Groups: []v1beta1.RolloutCoordinationGroupStatus{{
-					Name: "0",
-					ObservedRatio: &v1beta1.RolloutCoordinationRatio{
-						Original: map[v1beta1.ComponentType]int32{
-							v1beta1.EngineComponent:  4,
-							v1beta1.DecoderComponent: 2,
-						},
-					},
-				}},
-			},
-		},
-	}
-	engineIR := &v1beta1.InferenceReplica{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc-engine", Namespace: "default"},
-		Status:     v1beta1.InferenceReplicaStatus{Replicas: 2},
-	}
-	decoderIR := &v1beta1.InferenceReplica{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc-decoder", Namespace: "default"},
-		Status:     v1beta1.InferenceReplicaStatus{Replicas: 1},
-	}
-	c := testClient(engineIR, decoderIR)
-	obs, err := buildGroupObservation(context.Background(), c, isvc, g, map[v1beta1.ComponentType]map[string]int32{})
-	if err != nil {
-		t.Fatalf("buildGroupObservation: %v", err)
-	}
-	state := buildRatioState(isvc, g, obs, map[v1beta1.ComponentType]map[string]int32{})
-	if state.Original[v1beta1.EngineComponent] != 4 {
-		t.Errorf("anchor preservation: engine Original got %d want 4 (the snapshot from rollout start, NOT the current 2)", state.Original[v1beta1.EngineComponent])
-	}
-	if state.Original[v1beta1.DecoderComponent] != 2 {
-		t.Errorf("anchor preservation: decoder Original got %d want 2 (the snapshot from rollout start, NOT the current 1)", state.Original[v1beta1.DecoderComponent])
-	}
-	if len(state.Original) != 2 {
-		t.Errorf("stable membership must keep the anchor verbatim; got Original=%v", state.Original)
-	}
-}
-
-// ratioMembershipISVC builds an ISVC whose group "0" carries a persisted
-// {engine: 4, decoder: 2} anchor plus any extra anchor entries.
-func ratioMembershipISVC(extra map[v1beta1.ComponentType]int32) *v1beta1.InferenceService {
-	original := map[v1beta1.ComponentType]int32{
-		v1beta1.EngineComponent:  4,
-		v1beta1.DecoderComponent: 2,
-	}
-	for c, r := range extra {
-		original[c] = r
-	}
+// recordedReferenceISVC is a service whose group "0" carries the given
+// ratio reference from an earlier pass.
+func recordedReferenceISVC(original map[v1beta1.ComponentType]int32) *v1beta1.InferenceService {
 	return &v1beta1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{Name: "isvc", Namespace: "default"},
 		Status: v1beta1.InferenceServiceStatus{
@@ -1718,165 +1649,161 @@ func ratioMembershipISVC(extra map[v1beta1.ComponentType]int32) *v1beta1.Inferen
 	}
 }
 
+// ratioReferenceOf runs the observation and the reference build the ISVC
+// pass runs for one group against the given replicas.
+func ratioReferenceOf(t *testing.T, isvc *v1beta1.InferenceService, g ResolvedGroup, irs ...runtime.Object) map[v1beta1.ComponentType]int32 {
+	t.Helper()
+	obs, err := buildGroupObservation(context.Background(), testClient(irs...), isvc, g, map[v1beta1.ComponentType]map[string]int32{})
+	if err != nil {
+		t.Fatalf("buildGroupObservation: %v", err)
+	}
+	return buildRatioState(isvc, g, obs, map[v1beta1.ComponentType]map[string]int32{}).Original
+}
+
+// TestBuildRatioState_DefersSnapshotUntilEveryReplicaExists pins where the
+// reference comes from and when it is first taken. It is read off each
+// member's replica spec, the count the operator asked for, so a replica
+// whose status is not yet written still anchors at its real shape; a group
+// with no replicas at all has nothing to anchor to and defers, never
+// recording a zero-clamped {1, 1} that would wedge every later band
+// decision.
+func TestBuildRatioState_DefersSnapshotUntilEveryReplicaExists(t *testing.T) {
+	g := ratioGroup(v1beta1.EngineComponent, v1beta1.DecoderComponent)
+	empty := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "isvc", Namespace: "default"}}
+	if got := ratioReferenceOf(t, empty, g); len(got) != 0 {
+		t.Fatalf("no replica exists yet, so nothing can be anchored; got Original=%v", got)
+	}
+
+	fresh := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "isvc", Namespace: "default"}}
+	got := ratioReferenceOf(t, fresh, g,
+		replicaWithCounts(v1beta1.EngineComponent, 4, 0),
+		replicaWithCounts(v1beta1.DecoderComponent, 2, 0))
+	if got[v1beta1.EngineComponent] != 4 || got[v1beta1.DecoderComponent] != 2 {
+		t.Errorf("the reference is the count each spec asks for, status written or not; got Original=%v want engine 4, decoder 2", got)
+	}
+}
+
+// TestBuildRatioState_OneReplicaMissingDefersSnapshot covers the pass in
+// which one member's replica exists and the other's does not yet. The
+// reference describes the whole group's shape, so it waits for every
+// replica; otherwise the first member would be measured against a peer
+// with no count.
+func TestBuildRatioState_OneReplicaMissingDefersSnapshot(t *testing.T) {
+	g := ratioGroup(v1beta1.EngineComponent, v1beta1.DecoderComponent)
+	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "isvc", Namespace: "default"}}
+	if got := ratioReferenceOf(t, isvc, g, replicaWithCounts(v1beta1.EngineComponent, 4, 4)); len(got) != 0 {
+		t.Fatalf("a group with a replica still missing must defer its reference; got Original=%v", got)
+	}
+}
+
+// TestBuildRatioState_ReferenceFollowsTheSpec pins the rule the band and
+// the lockstep measure against: the reference is the count each member's
+// spec asks for now. A service recorded at 15 prefill and 15 decode whose
+// operator resizes it to 30 and 10 is re-anchored to 30:10 on the next
+// pass, whatever the rows still show, so the band keeps the ratio the
+// operator asked for and the decode side is finished at 10. A reference
+// that matches the spec is carried as it is, even while the rows drift
+// below it (a replica mid-repair), since the rows are not the operator's
+// intent.
+func TestBuildRatioState_ReferenceFollowsTheSpec(t *testing.T) {
+	eng, dec := v1beta1.EngineComponent, v1beta1.DecoderComponent
+	g := ratioGroup(eng, dec)
+
+	resized := recordedReferenceISVC(map[v1beta1.ComponentType]int32{eng: 15, dec: 15})
+	got := ratioReferenceOf(t, resized, g, replicaWithCounts(eng, 30, 15), replicaWithCounts(dec, 10, 15))
+	if got[eng] != 30 || got[dec] != 10 {
+		t.Errorf("the reference must follow the spec's new counts; got Original=%v want engine 30, decoder 10", got)
+	}
+	if len(got) != 2 {
+		t.Errorf("the whole group is re-anchored at once; got Original=%v", got)
+	}
+
+	steady := recordedReferenceISVC(map[v1beta1.ComponentType]int32{eng: 4, dec: 2})
+	got = ratioReferenceOf(t, steady, g, replicaWithCounts(eng, 4, 2), replicaWithCounts(dec, 2, 1))
+	if got[eng] != 4 || got[dec] != 2 {
+		t.Errorf("a reference equal to the spec is kept while the rows drift; got Original=%v want engine 4, decoder 2", got)
+	}
+}
+
+// ratioMembershipISVC builds an ISVC whose group "0" carries a persisted
+// {engine: 4, decoder: 2} reference plus any extra entries.
+func ratioMembershipISVC(extra map[v1beta1.ComponentType]int32) *v1beta1.InferenceService {
+	original := map[v1beta1.ComponentType]int32{
+		v1beta1.EngineComponent:  4,
+		v1beta1.DecoderComponent: 2,
+	}
+	for c, r := range extra {
+		original[c] = r
+	}
+	return recordedReferenceISVC(original)
+}
+
 // TestBuildRatioState_LateMemberGainsAnchor: a Component added after the
-// anchor was recorded gains an entry from its observed Replicas while
-// recorded entries stay verbatim despite drifted live counts.
+// reference was recorded gains an entry from its spec, and the recorded
+// members keep the counts their specs ask for, whatever their rows show.
 func TestBuildRatioState_LateMemberGainsAnchor(t *testing.T) {
-	g := ResolvedGroup{
-		Name:       "0",
-		Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent, v1beta1.RouterComponent},
-		Policy:     v1beta1.CoordinationPolicyBlueGreen,
-		Pacing: v1beta1.CoordinationPacing{
-			Type: v1beta1.CoordinationPacingRatioBalanced,
-		},
+	g := ratioGroup(v1beta1.EngineComponent, v1beta1.DecoderComponent, v1beta1.RouterComponent)
+	// The engine's rows drifted to 2 since the reference was taken; its
+	// spec still asks for 4, and the spec is what the reference reads.
+	got := ratioReferenceOf(t, ratioMembershipISVC(nil), g,
+		replicaWithCounts(v1beta1.EngineComponent, 4, 2),
+		replicaWithCounts(v1beta1.DecoderComponent, 2, 2),
+		replicaWithCounts(v1beta1.RouterComponent, 3, 3))
+	if got[v1beta1.RouterComponent] != 3 {
+		t.Errorf("late member anchor: router Original got %d want 3 (the count its spec asks for)", got[v1beta1.RouterComponent])
 	}
-	isvc := ratioMembershipISVC(nil)
-	// Live counts drifted since the snapshot (engine 4→2): the merge
-	// must not rewrite existing anchors from live status.
-	engineIR := &v1beta1.InferenceReplica{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc-engine", Namespace: "default"},
-		Status:     v1beta1.InferenceReplicaStatus{Replicas: 2},
+	if got[v1beta1.EngineComponent] != 4 {
+		t.Errorf("engine Original got %d want 4 (its spec, not its drifted rows)", got[v1beta1.EngineComponent])
 	}
-	decoderIR := &v1beta1.InferenceReplica{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc-decoder", Namespace: "default"},
-		Status:     v1beta1.InferenceReplicaStatus{Replicas: 2},
-	}
-	routerIR := &v1beta1.InferenceReplica{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc-router", Namespace: "default"},
-		Status:     v1beta1.InferenceReplicaStatus{Replicas: 3},
-	}
-	c := testClient(engineIR, decoderIR, routerIR)
-	obs, err := buildGroupObservation(context.Background(), c, isvc, g, map[v1beta1.ComponentType]map[string]int32{})
-	if err != nil {
-		t.Fatalf("buildGroupObservation: %v", err)
-	}
-	state := buildRatioState(isvc, g, obs, map[v1beta1.ComponentType]map[string]int32{})
-	if state.Original[v1beta1.RouterComponent] != 3 {
-		t.Errorf("late member anchor: router Original got %d want 3 (its observed Replicas at join)", state.Original[v1beta1.RouterComponent])
-	}
-	if state.Original[v1beta1.EngineComponent] != 4 {
-		t.Errorf("existing anchor disturbed: engine Original got %d want 4 (must stay verbatim despite live drift to 2)", state.Original[v1beta1.EngineComponent])
-	}
-	if state.Original[v1beta1.DecoderComponent] != 2 {
-		t.Errorf("existing anchor disturbed: decoder Original got %d want 2", state.Original[v1beta1.DecoderComponent])
+	if got[v1beta1.DecoderComponent] != 2 {
+		t.Errorf("decoder Original got %d want 2", got[v1beta1.DecoderComponent])
 	}
 }
 
-// TestBuildRatioState_LateMemberWithZeroStatusDeferred: a late member
-// with zero observed Replicas (status unwritten) is not anchored on this
-// pass, matching the initial snapshot's defer-on-zero rule.
-func TestBuildRatioState_LateMemberWithZeroStatusDeferred(t *testing.T) {
-	g := ResolvedGroup{
-		Name:       "0",
-		Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent, v1beta1.RouterComponent},
-		Policy:     v1beta1.CoordinationPolicyBlueGreen,
-		Pacing: v1beta1.CoordinationPacing{
-			Type: v1beta1.CoordinationPacingRatioBalanced,
-		},
+// TestBuildRatioState_LateMemberWithoutAReplicaDeferred: a late member
+// whose replica does not exist yet is not anchored on this pass, and the
+// recorded entries are carried unchanged until it is.
+func TestBuildRatioState_LateMemberWithoutAReplicaDeferred(t *testing.T) {
+	g := ratioGroup(v1beta1.EngineComponent, v1beta1.DecoderComponent, v1beta1.RouterComponent)
+	got := ratioReferenceOf(t, ratioMembershipISVC(nil), g,
+		replicaWithCounts(v1beta1.EngineComponent, 4, 4),
+		replicaWithCounts(v1beta1.DecoderComponent, 2, 2))
+	if _, ok := got[v1beta1.RouterComponent]; ok {
+		t.Errorf("a late member without a replica must be deferred, not anchored; got router Original=%d", got[v1beta1.RouterComponent])
 	}
-	isvc := ratioMembershipISVC(nil)
-	engineIR := &v1beta1.InferenceReplica{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc-engine", Namespace: "default"},
-		Status:     v1beta1.InferenceReplicaStatus{Replicas: 4},
-	}
-	decoderIR := &v1beta1.InferenceReplica{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc-decoder", Namespace: "default"},
-		Status:     v1beta1.InferenceReplicaStatus{Replicas: 2},
-	}
-	// No router IR: its observation reads DesiredReplicas == 0.
-	c := testClient(engineIR, decoderIR)
-	obs, err := buildGroupObservation(context.Background(), c, isvc, g, map[v1beta1.ComponentType]map[string]int32{})
-	if err != nil {
-		t.Fatalf("buildGroupObservation: %v", err)
-	}
-	state := buildRatioState(isvc, g, obs, map[v1beta1.ComponentType]map[string]int32{})
-	if _, ok := state.Original[v1beta1.RouterComponent]; ok {
-		t.Errorf("zero-status late member must be deferred, not anchored; got router Original=%d", state.Original[v1beta1.RouterComponent])
-	}
-	if state.Original[v1beta1.EngineComponent] != 4 || state.Original[v1beta1.DecoderComponent] != 2 {
-		t.Errorf("existing anchors must survive a deferred late member; got Original=%v", state.Original)
+	if got[v1beta1.EngineComponent] != 4 || got[v1beta1.DecoderComponent] != 2 {
+		t.Errorf("recorded entries must survive a deferred late member; got Original=%v", got)
 	}
 }
 
-// TestBuildRatioState_RemovedMemberAnchorDropped: an anchor entry for a
-// Component no longer in the group is dropped; remaining anchors stay
-// verbatim.
+// TestBuildRatioState_RemovedMemberAnchorDropped: an entry for a Component
+// no longer in the group is dropped; the remaining entries stay.
 func TestBuildRatioState_RemovedMemberAnchorDropped(t *testing.T) {
-	g := ResolvedGroup{
-		Name:       "0",
-		Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
-		Policy:     v1beta1.CoordinationPolicyBlueGreen,
-		Pacing: v1beta1.CoordinationPacing{
-			Type: v1beta1.CoordinationPacingRatioBalanced,
-		},
+	g := ratioGroup(v1beta1.EngineComponent, v1beta1.DecoderComponent)
+	got := ratioReferenceOf(t, ratioMembershipISVC(map[v1beta1.ComponentType]int32{v1beta1.RouterComponent: 3}), g,
+		replicaWithCounts(v1beta1.EngineComponent, 4, 4),
+		replicaWithCounts(v1beta1.DecoderComponent, 2, 2))
+	if _, ok := got[v1beta1.RouterComponent]; ok {
+		t.Errorf("removed member's entry must be dropped; got router Original=%d", got[v1beta1.RouterComponent])
 	}
-	isvc := ratioMembershipISVC(map[v1beta1.ComponentType]int32{v1beta1.RouterComponent: 3})
-	engineIR := &v1beta1.InferenceReplica{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc-engine", Namespace: "default"},
-		Status:     v1beta1.InferenceReplicaStatus{Replicas: 4},
-	}
-	decoderIR := &v1beta1.InferenceReplica{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc-decoder", Namespace: "default"},
-		Status:     v1beta1.InferenceReplicaStatus{Replicas: 2},
-	}
-	c := testClient(engineIR, decoderIR)
-	obs, err := buildGroupObservation(context.Background(), c, isvc, g, map[v1beta1.ComponentType]map[string]int32{})
-	if err != nil {
-		t.Fatalf("buildGroupObservation: %v", err)
-	}
-	state := buildRatioState(isvc, g, obs, map[v1beta1.ComponentType]map[string]int32{})
-	if _, ok := state.Original[v1beta1.RouterComponent]; ok {
-		t.Errorf("removed member's anchor must be dropped; got router Original=%d", state.Original[v1beta1.RouterComponent])
-	}
-	if state.Original[v1beta1.EngineComponent] != 4 || state.Original[v1beta1.DecoderComponent] != 2 {
-		t.Errorf("remaining anchors must stay verbatim; got Original=%v", state.Original)
+	if got[v1beta1.EngineComponent] != 4 || got[v1beta1.DecoderComponent] != 2 {
+		t.Errorf("remaining entries must stay; got Original=%v", got)
 	}
 }
 
 // TestBuildRatioState_AllAnchorsStaleFallsBackToSnapshot: when every
-// persisted anchor belongs to removed members, the group is treated as
-// never-snapshotted and the initial snapshot path runs.
+// recorded entry belongs to removed members, the current membership is
+// anchored from its specs.
 func TestBuildRatioState_AllAnchorsStaleFallsBackToSnapshot(t *testing.T) {
-	g := ResolvedGroup{
-		Name:       "0",
-		Components: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
-		Policy:     v1beta1.CoordinationPolicyBlueGreen,
-		Pacing: v1beta1.CoordinationPacing{
-			Type: v1beta1.CoordinationPacingRatioBalanced,
-		},
+	g := ratioGroup(v1beta1.EngineComponent, v1beta1.DecoderComponent)
+	got := ratioReferenceOf(t, recordedReferenceISVC(map[v1beta1.ComponentType]int32{v1beta1.RouterComponent: 3}), g,
+		replicaWithCounts(v1beta1.EngineComponent, 4, 4),
+		replicaWithCounts(v1beta1.DecoderComponent, 2, 2))
+	if got[v1beta1.EngineComponent] != 4 || got[v1beta1.DecoderComponent] != 2 {
+		t.Errorf("an all-stale reference must anchor the current membership; got Original=%v", got)
 	}
-	isvc := &v1beta1.InferenceService{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc", Namespace: "default"},
-		Status: v1beta1.InferenceServiceStatus{
-			RolloutCoordination: &v1beta1.RolloutCoordinationStatus{
-				Groups: []v1beta1.RolloutCoordinationGroupStatus{{
-					Name: "0",
-					ObservedRatio: &v1beta1.RolloutCoordinationRatio{
-						Original: map[v1beta1.ComponentType]int32{v1beta1.RouterComponent: 3},
-					},
-				}},
-			},
-		},
-	}
-	engineIR := &v1beta1.InferenceReplica{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc-engine", Namespace: "default"},
-		Status:     v1beta1.InferenceReplicaStatus{Replicas: 4},
-	}
-	decoderIR := &v1beta1.InferenceReplica{
-		ObjectMeta: metav1.ObjectMeta{Name: "isvc-decoder", Namespace: "default"},
-		Status:     v1beta1.InferenceReplicaStatus{Replicas: 2},
-	}
-	c := testClient(engineIR, decoderIR)
-	obs, err := buildGroupObservation(context.Background(), c, isvc, g, map[v1beta1.ComponentType]map[string]int32{})
-	if err != nil {
-		t.Fatalf("buildGroupObservation: %v", err)
-	}
-	state := buildRatioState(isvc, g, obs, map[v1beta1.ComponentType]map[string]int32{})
-	if state.Original[v1beta1.EngineComponent] != 4 || state.Original[v1beta1.DecoderComponent] != 2 {
-		t.Errorf("all-stale anchor must re-snapshot the current membership; got Original=%v", state.Original)
-	}
-	if _, ok := state.Original[v1beta1.RouterComponent]; ok {
-		t.Errorf("stale anchor entry must not survive the re-snapshot; got Original=%v", state.Original)
+	if _, ok := got[v1beta1.RouterComponent]; ok {
+		t.Errorf("a stale entry must not survive; got Original=%v", got)
 	}
 }
 
@@ -2603,8 +2530,8 @@ func TestBuildComponentObservation_CountersTrailingThePodsReadTheCounters(t *tes
 	}
 }
 
-// A copy of the service with no anchor snapshots one from the replicas the
-// pass sees, whatever anchor the live object carries.
+// A copy of the service with no anchor snapshots one from the desired counts
+// the pass sees, whatever anchor the live object carries.
 func TestBuildRatioState_CopyWithoutAnchorSnapshotsTodaysReplicas(t *testing.T) {
 	g := ResolvedGroup{
 		Name:       "0",
@@ -2615,12 +2542,12 @@ func TestBuildRatioState_CopyWithoutAnchorSnapshotsTodaysReplicas(t *testing.T) 
 	// The pass copy predates the flush that wrote the anchor.
 	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "isvc", Namespace: "default"}}
 	obs := GroupObservation{Group: g, Components: map[v1beta1.ComponentType]ComponentObservation{
-		v1beta1.EngineComponent:  {Component: v1beta1.EngineComponent, DesiredReplicas: 3},
-		v1beta1.DecoderComponent: {Component: v1beta1.DecoderComponent, DesiredReplicas: 1},
+		v1beta1.EngineComponent:  {Component: v1beta1.EngineComponent, DesiredReplicas: 3, SpecReplicas: 3},
+		v1beta1.DecoderComponent: {Component: v1beta1.DecoderComponent, DesiredReplicas: 1, SpecReplicas: 1},
 	}}
 	state := buildRatioState(isvc, g, obs, map[v1beta1.ComponentType]map[string]int32{})
 	if state.Original[v1beta1.EngineComponent] != 3 || state.Original[v1beta1.DecoderComponent] != 1 {
-		t.Fatalf("a copy without an anchor snapshots today's replica counts; got %v", state.Original)
+		t.Fatalf("a copy without an anchor snapshots today's desired counts; got %v", state.Original)
 	}
 }
 
@@ -2811,4 +2738,380 @@ func TestReconcile_EachPassWritesThePhaseItsOwnReadComputed(t *testing.T) {
 	pass("paused", v1beta1.CoordinationPhasePaused)
 	delete(isvc.Annotations, constants.PausedRolloutAnnotation)
 	pass("unpaused", v1beta1.CoordinationPhaseIdle)
+}
+
+// recordingServiceClient appends the name of every Service create to created,
+// in the order the pass issued it, and passes every call through.
+func recordingServiceClient(created *[]string, objs ...runtime.Object) client.Client {
+	scheme := runtime.NewScheme()
+	for _, add := range []func(*runtime.Scheme) error{corev1.AddToScheme, appsv1.AddToScheme, v1beta1.AddToScheme} {
+		if addErr := add(scheme); addErr != nil {
+			panic(addErr)
+		}
+	}
+	return fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objs...).WithInterceptorFuncs(interceptor.Funcs{
+		Create: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+			if svc, ok := obj.(*corev1.Service); ok {
+				*created = append(*created, svc.Name)
+			}
+			return cl.Create(ctx, obj, opts...)
+		},
+	}).Build()
+}
+
+// A pass that first sees a member on two revisions writes the two revisions'
+// Service pairs in ascending revision order, so every pass issues the same
+// create sequence and a create that fails always leaves the same revision
+// waiting for the next pass. The pass is repeated because a pass that picked
+// the order at random would still produce the sorted one about half the time.
+func TestReconcile_PerRevisionServicesAreWrittenInSortedRevisionOrder(t *testing.T) {
+	ctx := context.Background()
+	const passes = 32
+	want := strings.Join([]string{
+		PerRevisionServiceName("llama", v1beta1.EngineComponent, "aaaa"),
+		PerRevisionHeadlessServiceName("llama", v1beta1.EngineComponent, "aaaa"),
+		PerRevisionServiceName("llama", v1beta1.EngineComponent, "bbbb"),
+		PerRevisionHeadlessServiceName("llama", v1beta1.EngineComponent, "bbbb"),
+	}, " ")
+	orders := map[string]int{}
+	for i := 0; i < passes; i++ {
+		isvc := testOMENativeISVC()
+		isvc.Spec.Rollout = singleEngineGroup()
+		var created []string
+		c := recordingServiceClient(&created, rollingEngineIR(isvc),
+			buildPod(isvc, v1beta1.EngineComponent, "aaaa", 0),
+			buildPod(isvc, v1beta1.EngineComponent, "bbbb", 1))
+		if _, err := Reconcile(ctx, ReconcileInputs{
+			ISVC: isvc, Client: c, Reader: c, Now: time.Now(),
+			ComponentDeploymentModes: testOMENativeModes(v1beta1.EngineComponent),
+			ComponentRunnerPorts:     testComponentRunnerPorts(),
+		}); err != nil {
+			t.Fatalf("pass %d: %v", i, err)
+		}
+		orders[strings.Join(created, " ")]++
+	}
+	if len(orders) != 1 || orders[want] != passes {
+		t.Fatalf("every pass must create the per-revision Services in ascending revision order\nwant %d x %q\ngot  %v", passes, want, orders)
+	}
+}
+
+// SortedRevisionHashes returns the revision hashes of a per-revision pod-count
+// map in ascending order, and nothing for an empty map.
+func TestSortedRevisionHashes(t *testing.T) {
+	if got := SortedRevisionHashes(map[string]int32{"cccc": 1, "aaaa": 3, "bbbb": 0}); !reflect.DeepEqual(got, []string{"aaaa", "bbbb", "cccc"}) {
+		t.Fatalf("got %v want [aaaa bbbb cccc]", got)
+	}
+	if got := SortedRevisionHashes(nil); len(got) != 0 {
+		t.Fatalf("empty map: got %v want nothing", got)
+	}
+}
+
+// gangMemberPod builds one pod of a gang Instance: its runner, the ordinal
+// 0 of that runner, the Instance index, the serving gate True and PodReady
+// as serving says. The pod name carries the Instance and the runner's
+// place in it so two members never collide.
+func gangMemberPod(isvc *v1beta1.InferenceService, component v1beta1.ComponentType, revisionHash string, instance int, runner v1beta1.RunnerName, serving bool) *corev1.Pod {
+	place := 0
+	if runner == v1beta1.RunnerNameWorker {
+		place = 1
+	}
+	pod := buildRunnerPod(isvc, component, revisionHash, instance*10+place, runner, "0")
+	pod.Labels[query.LabelInstanceIdx] = strconv.Itoa(instance)
+	ready := corev1.ConditionTrue
+	if !serving {
+		ready = corev1.ConditionFalse
+	}
+	pod.Status.Conditions = []corev1.PodCondition{
+		{Type: corev1.PodReady, Status: ready},
+		{Type: podreadiness.ConditionType, Status: corev1.ConditionTrue},
+	}
+	return pod
+}
+
+// setPodReady flips one pod's PodReady condition in the client, the way the
+// node lifecycle controller or the kubelet does when a pod leaves or
+// re-enters rotation.
+func setPodReady(t *testing.T, c client.Client, name types.NamespacedName, ready bool) {
+	t.Helper()
+	pod := &corev1.Pod{}
+	if err := c.Get(context.Background(), name, pod); err != nil {
+		t.Fatalf("get pod %s: %v", name.Name, err)
+	}
+	status := corev1.ConditionFalse
+	if ready {
+		status = corev1.ConditionTrue
+	}
+	for i := range pod.Status.Conditions {
+		if pod.Status.Conditions[i].Type == corev1.PodReady {
+			pod.Status.Conditions[i].Status = status
+		}
+	}
+	if err := c.Status().Update(context.Background(), pod); err != nil {
+		t.Fatalf("update pod %s: %v", name.Name, err)
+	}
+}
+
+// expectTrafficSplit checks one Component's targets by revision hash and
+// percent: exactly the revisions in want, each at its share.
+func expectTrafficSplit(t *testing.T, step string, isvc *v1beta1.InferenceService, component v1beta1.ComponentType, want map[string]int32) {
+	t.Helper()
+	got := isvc.Status.Components[component].Traffic
+	if len(got) != len(want) {
+		t.Fatalf("%s: traffic = %+v, want shares on %v", step, got, want)
+	}
+	for _, target := range got {
+		hash := query.RevisionFromName(target.RevisionName).Hash()
+		percent, ok := want[hash]
+		if !ok {
+			t.Fatalf("%s: traffic names %q, want only %v: %+v", step, hash, want, got)
+		}
+		if target.Percent != percent {
+			t.Fatalf("%s: %s carries %d%%, want %d%%", step, hash, target.Percent, percent)
+		}
+	}
+}
+
+// TestObservePerRevisionPods_GangServesThroughItsLeader: a routing Service
+// publishes a gang's leader and never a worker, so an Instance serves
+// through its leader. A gang whose leader left readiness counts no serving
+// pod however its worker reads, a whole gang counts every member, and a
+// gang with a worker out counts the rest: the count the Instance rows
+// publish.
+func TestObservePerRevisionPods_GangServesThroughItsLeader(t *testing.T) {
+	isvc := testReconcilerISVC()
+	eng := v1beta1.EngineComponent
+	objs := []runtime.Object{
+		// Instance 0 on old: the leader is out, the worker still passes readiness.
+		gangMemberPod(isvc, eng, "old", 0, v1beta1.RunnerNameLeader, false),
+		gangMemberPod(isvc, eng, "old", 0, v1beta1.RunnerNameWorker, true),
+		// Instance 1 on new: the whole gang serves.
+		gangMemberPod(isvc, eng, "new", 1, v1beta1.RunnerNameLeader, true),
+		gangMemberPod(isvc, eng, "new", 1, v1beta1.RunnerNameWorker, true),
+		// Instance 2 on new: the worker is out, the leader serves.
+		gangMemberPod(isvc, eng, "new", 2, v1beta1.RunnerNameLeader, true),
+		gangMemberPod(isvc, eng, "new", 2, v1beta1.RunnerNameWorker, false),
+	}
+	total, ready, _, _, err := observePerRevisionPods(context.Background(), testClient(objs...), isvc, []v1beta1.ComponentType{eng}, true)
+	if err != nil {
+		t.Fatalf("observePerRevisionPods: %v", err)
+	}
+	if total[eng]["old"] != 2 || total[eng]["new"] != 4 {
+		t.Errorf("total = %v, want old 2 and new 4 (every pod counts)", total[eng])
+	}
+	if n, present := ready[eng]["old"]; present || n != 0 {
+		t.Errorf("ready[old] = %d (present %v), want no entry: a gang whose leader is out serves nothing", n, present)
+	}
+	if got := ready[eng]["new"]; got != 3 {
+		t.Errorf("ready[new] = %d, want 3: a whole gang of 2 and a gang serving through its leader alone", got)
+	}
+}
+
+// TestReconcile_TrafficFollowsTheServingGangs: two gang Instances on two
+// revisions share the traffic by their serving pods. While the old gang's
+// leader is out of rotation, its worker still Ready, the old revision has
+// no serving pod and the whole share rests on the new revision; the share
+// returns on the pass that sees the leader serve again. With no serving
+// pod on either revision there is nothing to move the share onto and the
+// split is left as it was.
+func TestReconcile_TrafficFollowsTheServingGangs(t *testing.T) {
+	isvc := testOMENativeISVC()
+	eng := v1beta1.EngineComponent
+	engineIR := &v1beta1.InferenceReplica{
+		ObjectMeta: metav1.ObjectMeta{Name: isvc.Name + "-engine", Namespace: isvc.Namespace},
+		Status:     v1beta1.InferenceReplicaStatus{UpdateRevision: isvc.Name + "-engine-new"},
+	}
+	oldLeader := gangMemberPod(isvc, eng, "old", 0, v1beta1.RunnerNameLeader, true)
+	newLeader := gangMemberPod(isvc, eng, "new", 1, v1beta1.RunnerNameLeader, true)
+	c := testClient(engineIR,
+		oldLeader, gangMemberPod(isvc, eng, "old", 0, v1beta1.RunnerNameWorker, true),
+		newLeader, gangMemberPod(isvc, eng, "new", 1, v1beta1.RunnerNameWorker, true))
+	reconcile := func(step string) {
+		t.Helper()
+		if _, err := Reconcile(context.Background(), ReconcileInputs{
+			ISVC: isvc, Client: c, Reader: c, Now: time.Now(), ComponentRunnerPorts: testComponentRunnerPorts(),
+			ComponentDeploymentModes: testOMENativeModes(eng),
+		}); err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+	}
+	oldLeaderKey := types.NamespacedName{Namespace: oldLeader.Namespace, Name: oldLeader.Name}
+	newLeaderKey := types.NamespacedName{Namespace: newLeader.Namespace, Name: newLeader.Name}
+
+	reconcile("both gangs serve")
+	expectTrafficSplit(t, "both gangs serve", isvc, eng, map[string]int32{"old": 50, "new": 50})
+
+	setPodReady(t, c, oldLeaderKey, false)
+	reconcile("the old gang's leader is out")
+	expectTrafficSplit(t, "the old gang's leader is out", isvc, eng, map[string]int32{"new": 100})
+
+	setPodReady(t, c, oldLeaderKey, true)
+	reconcile("the old gang's leader serves again")
+	expectTrafficSplit(t, "the old gang's leader serves again", isvc, eng, map[string]int32{"old": 50, "new": 50})
+
+	setPodReady(t, c, oldLeaderKey, false)
+	setPodReady(t, c, newLeaderKey, false)
+	reconcile("no leader serves")
+	expectTrafficSplit(t, "no leader serves", isvc, eng, map[string]int32{"old": 50, "new": 50})
+}
+
+// TestReconcile_TrafficStaysOnTheOnlyRevisionWhileItsGangIsDark: a
+// Component running one revision keeps its whole share on that revision
+// while its gang's leader is out; no other revision could carry it.
+func TestReconcile_TrafficStaysOnTheOnlyRevisionWhileItsGangIsDark(t *testing.T) {
+	isvc := testOMENativeISVC()
+	eng := v1beta1.EngineComponent
+	leader := gangMemberPod(isvc, eng, "only", 0, v1beta1.RunnerNameLeader, true)
+	c := testClient(leader, gangMemberPod(isvc, eng, "only", 0, v1beta1.RunnerNameWorker, true))
+	reconcile := func(step string) {
+		t.Helper()
+		if _, err := Reconcile(context.Background(), ReconcileInputs{
+			ISVC: isvc, Client: c, Reader: c, Now: time.Now(), ComponentRunnerPorts: testComponentRunnerPorts(),
+			ComponentDeploymentModes: testOMENativeModes(eng),
+		}); err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+	}
+	reconcile("the gang serves")
+	expectTrafficSplit(t, "the gang serves", isvc, eng, map[string]int32{"only": 100})
+
+	setPodReady(t, c, types.NamespacedName{Namespace: leader.Namespace, Name: leader.Name}, false)
+	reconcile("the leader is out")
+	expectTrafficSplit(t, "the leader is out", isvc, eng, map[string]int32{"only": 100})
+}
+
+// A refusal the pass meets before it evaluates the group leaves the group
+// entry exactly as the previous pass wrote it, whatever phase that was. A
+// replica that cannot be read and a per-revision Service write the
+// apiserver refuses fail the pass for a retry; a create refused because the
+// namespace is terminating ends it cleanly. Each case seeds the entry at
+// one phase and reads the entry back after the pass.
+func TestReconcile_ARefusalBeforeTheGroupLeavesItsEntryInEveryPhase(t *testing.T) {
+	then := metav1.NewTime(time.Now().Add(-time.Hour))
+	entry := func(phase v1beta1.CoordinationPhase) v1beta1.RolloutCoordinationGroupStatus {
+		return v1beta1.RolloutCoordinationGroupStatus{
+			Name: "0", Policy: v1beta1.CoordinationPolicyBlueGreen, Phase: phase,
+			CompositePhase: string(phase), LastTransitionTime: &then,
+		}
+	}
+	awaiting := v1beta1.RolloutCoordinationGroupStatus{
+		Name: "0", Policy: v1beta1.CoordinationPolicySequential, Phase: v1beta1.CoordinationPhaseIdle,
+		CompositePhase: v1beta1.CompositePhaseSequentialAwaiting, CurrentComponent: v1beta1.EngineComponent,
+		PreviousComponent: v1beta1.DecoderComponent, LastTransitionTime: &then,
+	}
+	phases := []struct {
+		name string
+		seed v1beta1.RolloutCoordinationGroupStatus
+	}{
+		{"idle", entry(v1beta1.CoordinationPhaseIdle)},
+		{"seq-awaiting", awaiting},
+		{"surging", entry(v1beta1.CoordinationPhaseSurging)},
+		{"waiting", entry(v1beta1.CoordinationPhaseWaiting)},
+		{"shifting", entry(v1beta1.CoordinationPhaseShifting)},
+		{"scaling-down", entry(v1beta1.CoordinationPhaseScalingDown)},
+		{"staged", entry(v1beta1.CoordinationPhaseStaged)},
+		{"failed", entry(v1beta1.CoordinationPhaseFailed)},
+		{"paused", entry(v1beta1.CoordinationPhasePaused)},
+	}
+	terminating := apierrors.NewForbidden(corev1.Resource("services"), "svc", errors.New("namespace is being terminated"))
+	terminating.ErrStatus.Details.Causes = append(terminating.ErrStatus.Details.Causes, metav1.StatusCause{Type: corev1.NamespaceTerminatingCause})
+	refusals := []struct {
+		name    string
+		client  func(objs ...runtime.Object) client.Client
+		wantErr bool
+	}{
+		{"ir-read-error", func(objs ...runtime.Object) client.Client { return &failingIRClient{Client: testClient(objs...)} }, true},
+		{"service-write-refused", func(objs ...runtime.Object) client.Client {
+			return refusingServiceClient(apierrors.NewInternalError(errors.New("etcdserver: request timed out")), objs...)
+		}, true},
+		{"namespace-terminating", func(objs ...runtime.Object) client.Client { return refusingServiceClient(terminating, objs...) }, false},
+	}
+	for _, phase := range phases {
+		for _, refusal := range refusals {
+			t.Run(phase.name+"-"+refusal.name, func(t *testing.T) {
+				isvc := testOMENativeISVC()
+				isvc.Spec.Rollout = singleEngineGroup()
+				isvc.Status.RolloutCoordination = &v1beta1.RolloutCoordinationStatus{Groups: []v1beta1.RolloutCoordinationGroupStatus{phase.seed}}
+				c := refusal.client(rollingEngineIR(isvc), buildPod(isvc, v1beta1.EngineComponent, "aaaa", 0))
+				result, err := Reconcile(context.Background(), ReconcileInputs{
+					ISVC: isvc, Client: c, Reader: c, Now: time.Now(), ComponentDeploymentModes: testOMENativeModes(v1beta1.EngineComponent),
+				})
+				if refusal.wantErr && err == nil {
+					t.Fatal("the refusal must fail the pass so it is retried")
+				}
+				if !refusal.wantErr && (err != nil || result == nil) {
+					t.Fatalf("a terminating namespace ends the pass cleanly; got result=%v err=%v", result, err)
+				}
+				groups := isvc.Status.RolloutCoordination.Groups
+				if len(groups) != 1 {
+					t.Fatalf("the one group entry must survive the pass; got %+v", groups)
+				}
+				got := groups[0]
+				if got.Phase != phase.seed.Phase || got.CompositePhase != phase.seed.CompositePhase ||
+					got.CurrentComponent != phase.seed.CurrentComponent || got.PreviousComponent != phase.seed.PreviousComponent ||
+					got.LastTransitionTime == nil || !got.LastTransitionTime.Time.Equal(then.Time) {
+					t.Fatalf("a pass that stopped before evaluating the group must leave its entry as written; got %+v want %+v", got, phase.seed)
+				}
+			})
+		}
+	}
+}
+
+// A group that leaves the spec is pruned from status on the next pass,
+// whatever phase its entry recorded; with no coordination-style group
+// left the whole block goes and RolloutCoordinationReady reads True. Each
+// case seeds the entry at one phase, switches the spec to a canary-only
+// group, and reads the status back.
+func TestReconcile_ARemovedGroupIsPrunedFromEveryPhase(t *testing.T) {
+	then := metav1.NewTime(time.Now().Add(-time.Hour))
+	entry := func(phase v1beta1.CoordinationPhase) v1beta1.RolloutCoordinationGroupStatus {
+		return v1beta1.RolloutCoordinationGroupStatus{
+			Name: "0", Policy: v1beta1.CoordinationPolicyBlueGreen, Phase: phase,
+			CompositePhase: string(phase), LastTransitionTime: &then,
+		}
+	}
+	awaiting := v1beta1.RolloutCoordinationGroupStatus{
+		Name: "0", Policy: v1beta1.CoordinationPolicySequential, Phase: v1beta1.CoordinationPhaseIdle,
+		CompositePhase: v1beta1.CompositePhaseSequentialAwaiting, CurrentComponent: v1beta1.EngineComponent,
+		PreviousComponent: v1beta1.DecoderComponent, LastTransitionTime: &then,
+	}
+	phases := []struct {
+		name string
+		seed v1beta1.RolloutCoordinationGroupStatus
+	}{
+		{"idle", entry(v1beta1.CoordinationPhaseIdle)},
+		{"seq-awaiting", awaiting},
+		{"surging", entry(v1beta1.CoordinationPhaseSurging)},
+		{"waiting", entry(v1beta1.CoordinationPhaseWaiting)},
+		{"shifting", entry(v1beta1.CoordinationPhaseShifting)},
+		{"scaling-down", entry(v1beta1.CoordinationPhaseScalingDown)},
+		{"staged", entry(v1beta1.CoordinationPhaseStaged)},
+		{"failed", entry(v1beta1.CoordinationPhaseFailed)},
+		{"paused", entry(v1beta1.CoordinationPhasePaused)},
+	}
+	for _, phase := range phases {
+		t.Run(phase.name, func(t *testing.T) {
+			isvc := testOMENativeISVC()
+			isvc.Status.RolloutCoordination = &v1beta1.RolloutCoordinationStatus{Groups: []v1beta1.RolloutCoordinationGroupStatus{phase.seed}}
+			isvc.Status.SetCondition(apis.ConditionType(v1beta1.RolloutCoordinationReady), &apis.Condition{
+				Type: apis.ConditionType(v1beta1.RolloutCoordinationReady), Status: corev1.ConditionFalse, Reason: "InProgress",
+			})
+			isvc.Spec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{{
+				Components: []v1beta1.ComponentType{v1beta1.EngineComponent},
+				Canary:     &v1beta1.GroupCanary{Steps: []v1beta1.RolloutGroupStep{{Capacity: intstr.FromString("100%"), Traffic: 100}}},
+			}}}
+			c := testClient(rollingEngineIR(isvc), buildPod(isvc, v1beta1.EngineComponent, "aaaa", 0))
+			if _, err := Reconcile(context.Background(), ReconcileInputs{
+				ISVC: isvc, Client: c, Reader: c, Now: time.Now(), ComponentDeploymentModes: testOMENativeModes(v1beta1.EngineComponent),
+			}); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if isvc.Status.RolloutCoordination != nil {
+				t.Fatalf("the removed group's entry must be pruned with the block; got %+v", isvc.Status.RolloutCoordination)
+			}
+			cond := isvc.Status.GetCondition(apis.ConditionType(v1beta1.RolloutCoordinationReady))
+			if cond == nil || cond.Status != corev1.ConditionTrue {
+				t.Fatalf("RolloutCoordinationReady must read True once no group is left; got %+v", cond)
+			}
+		})
+	}
 }

@@ -24,13 +24,25 @@ type HfArtifactEntry struct {
 	LocalPath string             `json:"localPath"`
 	// Children maps a model ConfigMap key to its child symlink path.
 	Children map[string]string `json:"children,omitempty"`
-	LockID   string            `json:"lockId,omitempty"`
+	// Updating without a LockID and with a LastCompletedLockID is interrupted
+	// work waiting for retry or cleanup.
+	LockID string `json:"lockId,omitempty"`
 	// ChildStatusesBeforeRepair survives failed repairs so a later completion
 	// restores only the statuses that repair temporarily replaced with Failed.
 	ChildStatusesBeforeRepair map[string]ModelStatus `json:"childStatusesBeforeRepair,omitempty"`
-	// LastCompletedLockID keeps terminal status updates safe to retry. MarkReady
-	// and MarkFailed clear LockID after the parent reaches a terminal state; if
-	// Kubernetes accepts that update but the response is lost, the same caller
-	// can retry and receive a no-op success instead of a stale-owner error.
+	// LastCompletedLockID makes lock release safe to retry after a lost response.
+	// Ready, Failed, and interrupted Updating clear LockID and remember its owner;
+	// a new acquisition clears this receipt and assigns a fresh LockID.
 	LastCompletedLockID string `json:"lastCompletedLockId,omitempty"`
+}
+
+func (entry HfArtifactEntry) interrupted() bool {
+	return entry.Status == HfArtifactStatusUpdating && entry.LockID == "" && entry.LastCompletedLockID != ""
+}
+
+// blocksNewOperation distinguishes owned work from a released, interrupted
+// attempt. An Updating record without either ownership or a release receipt
+// also stays blocked; missing ownership must not authorize file changes.
+func (entry HfArtifactEntry) blocksNewOperation() bool {
+	return entry.Status == HfArtifactStatusUpdating && !entry.interrupted()
 }

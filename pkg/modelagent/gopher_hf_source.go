@@ -68,6 +68,8 @@ func (source directHfSource) process(ctx context.Context, s *Gopher, task *Gophe
 			return false, fmt.Errorf("direct HF child path cannot be inside the shared artifact directory")
 		}
 	}
+	// Finish an already committed deletion before contacting the Hub. Download
+	// intents are compared with the new identity only after revision resolution.
 	if _, waiting, err := s.resumeHfArtifactChildDeletion(ctx, task, allowDownload); waiting || err != nil {
 		return waiting, err
 	}
@@ -112,6 +114,13 @@ func (source directHfSource) process(ctx context.Context, s *Gopher, task *Gophe
 				}
 				if referenced {
 					return true, s.requeueHfArtifactTask(task, newHfArtifactRetryResult(parent.Key, err))
+				}
+				pending, lookupErr := s.sharedHfArtifactHandler().repository.pendingDownload(ctx, key)
+				if lookupErr != nil && !apierrors.IsNotFound(lookupErr) {
+					return true, s.requeueHfArtifactTask(task, newHfArtifactRetryResult(key, lookupErr))
+				}
+				if pending != nil {
+					return true, s.requeueHfArtifactTask(task, newHfArtifactRetryResult(hfArtifactConfigMapKey(pending.Identity), err))
 				}
 			}
 			// Fresh ordinary downloads still use best-effort revision resolution.
@@ -248,6 +257,9 @@ func (source directHfSource) process(ctx context.Context, s *Gopher, task *Gophe
 // goes through the ordinary-download detach path.
 func (s *Gopher) detachChangedDirectHfReference(ctx context.Context, task *GopherTask, spec v1beta1.BaseModelSpec, input hfArtifactTaskInput, eligible, allowDownload bool) (bool, error) {
 	if eligible {
+		if _, waiting, err := s.reconcileHfArtifactCleanup(ctx, task, &input, allowDownload); waiting || err != nil {
+			return waiting, err
+		}
 		parent, referenced, err := s.sharedHfArtifactHandler().repository.GetParentForChild(ctx, input.ChildModelKey)
 		if ctx.Err() != nil {
 			return false, ctx.Err()

@@ -112,3 +112,23 @@ func TestPredictionRBACIsReadOnly(t *testing.T) {
 		}
 	}
 }
+
+// TestMaintenanceCordonRBACMatchesAndStaysNarrow keeps the opt-in cordon grant
+// identical across the chart and Kustomize paths, and limited to reading and
+// patching nodes: the cordon writes spec.unschedulable and nothing else.
+func TestMaintenanceCordonRBACMatchesAndStaysNarrow(t *testing.T) {
+	chart := grants(t, "../../../charts/ome-alfred/templates/maintenance-cordon-rbac.yaml", "ClusterRole")
+	kustomize := grants(t, "../../../config/alfred/maintenance-cordon/rbac.yaml", "ClusterRole")
+	want := map[string]bool{"/nodes:get": true, "/nodes:patch": true}
+	for name, got := range map[string]map[string]bool{"chart": chart, "kustomize": kustomize} {
+		if len(got) != len(want) {
+			t.Errorf("%s cordon grants = %v, want exactly %v", name, got, want)
+			continue
+		}
+		for key := range want {
+			if !got[key] {
+				t.Errorf("%s cordon grants = %v, want exactly %v", name, got, want)
+			}
+		}
+	}
+}

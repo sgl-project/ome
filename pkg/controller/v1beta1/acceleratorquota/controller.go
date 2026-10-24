@@ -124,6 +124,9 @@ type Reconciler struct {
 	Mode Mode
 }
 
+// Reconcile lists every AcceleratorQuota through the uncached reader and runs
+// one pass over the whole tree. Which node changed does not narrow the work:
+// one node's edit can move another node's result.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("acceleratorquota", req.Name)
 
@@ -131,188 +134,369 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if err := r.APIReader.List(ctx, &list); err != nil {
 		return ctrl.Result{}, fmt.Errorf("listing AcceleratorQuotas: %w", err)
 	}
+	pass := &quotaPass{reconciler: r, log: log, nodes: list.Items}
+	return pass.run(ctx)
+}
 
-	// A node being deleted is not part of the tree it is leaving. Excluding it
-	// keeps this pass from re-rendering the objects the finalizer is about to
-	// reap, which would read as a failed reap.
-	live, deleting := partitionByDeletion(list.Items)
+// quotaPass is one reconcile pass over the whole AcceleratorQuota tree: the
+// nodes the pass listed at its start and what its steps decide as they run.
+// The steps share the record; a step that ends the pass records the result
+// the controller returns.
+type quotaPass struct {
+	reconciler *Reconciler
+	log        logr.Logger
 
-	// A management plane reads only what an admin wrote here. Its own copies can
-	// come back to it — a hub registered against itself, or one cluster running
-	// both halves — and re-splitting an already-split number would compound it
-	// every pass. A member does the opposite: projections ARE its tree, so this
-	// filter must not run there.
-	if r.Project.Enabled() {
-		live = authoredHere(live)
+	// nodes is every AcceleratorQuota on the cluster as the pass listed it.
+	nodes []v1beta1.AcceleratorQuota
+	// live is the tree's members; deleting is every node on its way out,
+	// which only the release step touches.
+	live, deleting []v1beta1.AcceleratorQuota
+
+	built      *tree.Tree
+	violations tree.Violations
+	// frozen maps a node to the violation that freezes it, its own or the
+	// nearest ancestor's. A frozen node reports the violation and keeps the
+	// objects it last had.
+	frozen map[string]tree.Violation
+
+	// errs collects the failures that must not stop the pass before every
+	// node is written: claiming, releasing, materializing, projecting, the
+	// status writes and the fleet capacity sum. They end the pass together.
+	errs []error
+
+	// outcomes is what the backend did with each node; nil when the plane
+	// materializes nothing, which reads as no outcome for every node.
+	outcomes map[string]backend.NodeOutcome
+	// fleet is what each member reports about each node; nil on a plane
+	// that projects nothing.
+	fleet       fleetView
+	fleetRollup map[string]map[usage.Key]usage.Total
+	// reading is what the backend holds per node; empty when it could not
+	// be read this pass, which leaves the published figures standing.
+	reading usageReading
+
+	// retryFleetCapacity is set when the fleet capacity write hit a
+	// conflict; the pass then asks to run again at once.
+	retryFleetCapacity bool
+	// result is what the pass returns when a step ends it.
+	result ctrl.Result
+}
+
+// passStep is one step of a pass. It reports whether the pass goes on; a
+// step that ends the pass has recorded the result on the pass first.
+type passStep func(context.Context) (bool, error)
+
+// run takes the pass through its steps in order and stops at the first one
+// that ends it. The list is the whole order of a pass: the finalizers are
+// claimed before anything is written, the deleting nodes are released before
+// the tree is rendered, and every node's status is written before the
+// collected failures end the pass.
+func (p *quotaPass) run(ctx context.Context) (ctrl.Result, error) {
+	_, err := runPassSteps(ctx, []passStep{
+		p.splitLiveFromDeleting,
+		p.keepAuthoredNodes,
+		p.buildTree,
+		p.addCapacityViolations,
+		p.findFrozenNodes,
+		p.claimLiveNodes,
+		p.releaseDeletingNodes,
+		p.materializeTree,
+		p.projectTree,
+		p.rollFleetUsage,
+		p.readConsumption,
+		p.writeNodeStatuses,
+		p.sweepBudgetSeries,
+		p.collectFleetCapacity,
+		p.failOnCollectedErrors,
+		p.logViolations,
+		p.createReservedRoot,
+		p.deriveCapacity,
+		p.scheduleNextPass,
+	})
+	return p.result, err
+}
+
+// runPassSteps runs the steps in order and reports whether every one let
+// the pass go on. It stops at the first step that ends the pass or fails
+// and returns that step's error.
+func runPassSteps(ctx context.Context, steps []passStep) (bool, error) {
+	for _, step := range steps {
+		if next, err := step(ctx); !next || err != nil {
+			return false, err
+		}
 	}
+	return true, nil
+}
 
-	built, violations, err := tree.Build(live, r.Options)
+// end records the result a step ends the pass with and reports that the
+// pass does not go on. A step that fails without ending the pass leaves
+// the result empty.
+func (p *quotaPass) end(result ctrl.Result, err error) (bool, error) {
+	p.result = result
+	return false, err
+}
+
+// claimsNodes reports whether this plane writes something a delete must
+// take back: Kueue objects on a workload plane, projections on a management
+// plane. Only such a plane puts a finalizer on its nodes.
+func (p *quotaPass) claimsNodes() bool {
+	return p.reconciler.Materialize.Enabled() || p.reconciler.Project.Enabled()
+}
+
+// splitLiveFromDeleting sets every node being deleted aside. Such a node is
+// not part of the tree it is leaving: rendering it again would write the
+// objects its finalizer is about to take back, and the release would read
+// as failed.
+func (p *quotaPass) splitLiveFromDeleting(context.Context) (bool, error) {
+	p.live, p.deleting = partitionByDeletion(p.nodes)
+	return true, nil
+}
+
+// keepAuthoredNodes drops the management plane's own projections when they
+// come back to it: a hub registered against itself, or one cluster running
+// both halves. Splitting an already split share again would compound it on
+// every pass. A member keeps them, because its projections are its tree.
+func (p *quotaPass) keepAuthoredNodes(context.Context) (bool, error) {
+	if p.reconciler.Project.Enabled() {
+		p.live = authoredHere(p.live)
+	}
+	return true, nil
+}
+
+// buildTree assembles the live nodes into the tree and collects the
+// invariant violations. A failure here is a configuration error, not a
+// property of the nodes, so it ends the pass with an error and leaves every
+// status as it was.
+func (p *quotaPass) buildTree(context.Context) (bool, error) {
+	built, violations, err := tree.Build(p.live, p.reconciler.Options)
 	if err != nil {
-		// A configuration failure, not a property of the nodes. Surfacing it as
-		// an error requeues with backoff and logs, rather than silently leaving
-		// every node's status untouched as if there were nothing to do.
-		return ctrl.Result{}, fmt.Errorf("assembling the quota tree: %w", err)
+		return false, fmt.Errorf("assembling the quota tree: %w", err)
 	}
+	p.built, p.violations = built, violations
+	return true, nil
+}
 
-	// Capacity is cluster state, so the pure tree checks cannot see it. The
-	// verdict joins them here rather than in a path of its own, so a budget the
-	// fleet cannot afford freezes and reports exactly like any other violated
-	// invariant. The numbers come from the root's last observed capacity: this
-	// pass has not derived new ones yet, and a value one pass old is the right
-	// input for a check whose whole purpose is to ignore momentary dips.
-	if r.Capacity.Enabled() && built.Root != nil {
-		violations = append(violations,
-			capacityViolations(built.Nodes(), built.Root.Quota.Status.Capacity)...)
+// addCapacityViolations adds the budgets the cluster cannot afford to the
+// violations, so they freeze and report like any other violated invariant.
+// The numbers are the root's last observed capacity: a value one pass old
+// is the right input for a check that ignores momentary dips.
+func (p *quotaPass) addCapacityViolations(context.Context) (bool, error) {
+	if p.reconciler.Capacity.Enabled() && p.built.Root != nil {
+		p.violations = append(p.violations,
+			capacityViolations(p.built.Nodes(), p.built.Root.Quota.Status.Capacity)...)
 	}
+	return true, nil
+}
 
-	frozen := built.Frozen(violations)
-	var errs []error
+// findFrozenNodes maps every node to the violation that freezes it, its own
+// or the nearest ancestor's.
+func (p *quotaPass) findFrozenNodes(context.Context) (bool, error) {
+	p.frozen = p.built.Frozen(p.violations)
+	return true, nil
+}
 
-	// Claimed whenever this plane writes something a delete has to take back:
-	// Kueue objects here, or projections on members. Without the claim the CR
-	// vanishes on delete and whatever it wrote outlives it, unreferenced.
-	if r.Materialize.Enabled() || r.Project.Enabled() {
-		// Claim every live node before writing anything, so a delete that
-		// arrives mid-pass still finds a finalizer to hold it.
-		for i := range live {
-			if err := r.ensureFinalizer(ctx, &live[i]); err != nil {
-				errs = append(errs, fmt.Errorf("claiming node %s: %w", live[i].Name, err))
-			}
-		}
-		// Reap before applying. A departing node and a live one can name the
-		// same object transiently, and reaping second would delete what this
-		// pass just wrote.
-		keep := sets.New[string]()
-		for _, node := range built.Nodes() {
-			keep.Insert(node.Name())
-		}
-		for i := range deleting {
-			if err := r.finalize(ctx, &deleting[i], keep); err != nil {
-				errs = append(errs, fmt.Errorf("releasing node %s: %w", deleting[i].Name, err))
-			}
+// claimLiveNodes puts the finalizer on every live node before anything is
+// written, so a delete that arrives during the pass still finds it. A
+// failed claim is collected and the other nodes are still claimed.
+func (p *quotaPass) claimLiveNodes(ctx context.Context) (bool, error) {
+	if !p.claimsNodes() {
+		return true, nil
+	}
+	for i := range p.live {
+		if err := p.reconciler.ensureFinalizer(ctx, &p.live[i]); err != nil {
+			p.errs = append(p.errs, fmt.Errorf("claiming node %s: %w", p.live[i].Name, err))
 		}
 	}
+	return true, nil
+}
 
-	outcomes := map[string]backend.NodeOutcome{}
-	if r.Materialize.Enabled() && len(errs) == 0 {
-		outcomes, err = r.materialize(ctx, built, frozen)
-		if err != nil {
-			errs = append(errs, err)
+// releaseDeletingNodes runs the finalizer of every node being deleted, and
+// keeps every object a live node still names: a departing node and a live
+// one can name the same object for a moment. The release runs before the
+// tree is rendered, so it never deletes what this pass wrote.
+func (p *quotaPass) releaseDeletingNodes(ctx context.Context) (bool, error) {
+	if !p.claimsNodes() {
+		return true, nil
+	}
+	keep := sets.New[string]()
+	for _, node := range p.built.Nodes() {
+		keep.Insert(node.Name())
+	}
+	for i := range p.deleting {
+		if err := p.reconciler.finalize(ctx, &p.deleting[i], keep); err != nil {
+			p.errs = append(p.errs, fmt.Errorf("releasing node %s: %w", p.deleting[i].Name, err))
 		}
 	}
+	return true, nil
+}
 
-	var fleet fleetView
-	if r.Project.Enabled() {
-		var err error
-		fleet, err = r.project(ctx, built, frozen)
-		if err != nil {
-			// Per-cluster failures are already folded in here; this is the
-			// remainder. Collected rather than returned so the status writes
-			// below still happen — an operator needs the tree's verdict most
-			// when a member is refusing it.
-			errs = append(errs, fmt.Errorf("projecting the quota tree: %w", err))
-		}
+// materializeTree renders the tree into the backend on a workload plane. It
+// runs only when every claim and release went through, so no object is
+// written for a node without its finalizer.
+func (p *quotaPass) materializeTree(ctx context.Context) (bool, error) {
+	if !p.reconciler.Materialize.Enabled() || len(p.errs) > 0 {
+		return true, nil
 	}
-
-	// What the fleet is holding, summed up the tree. Only leaves carry figures
-	// -- a share is apportioned to a leaf and an ancestor travels budget-less --
-	// so without this a grouping tier and the root report nothing while the
-	// leaves beneath them run the whole fleet.
-	//
-	// The same roll the workload plane uses on its own queues, rather than a
-	// second one here: an ancestor's borrowed figure is recomputed rather than
-	// summed, because a loan between two siblings is internal to the subtree
-	// that contains them and adding the children's numbers would report the
-	// subtree borrowing from outside itself.
-	fleetRollup := usage.Roll(built, fleetLeafUsage(fleet))
-
-	// Observational, so a backend that cannot be read costs the fleet its usage
-	// figures for this pass and nothing else. Failing here would stop the
-	// conditions and tree positions below from being written too, which is the
-	// half an operator actually acts on.
-	reading, err := r.rollUsage(ctx, built)
+	outcomes, err := p.reconciler.materialize(ctx, p.built, p.frozen)
 	if err != nil {
-		log.V(1).Info("consumption not read this pass", "reason", err.Error())
+		p.errs = append(p.errs, err)
 	}
+	p.outcomes = outcomes
+	return true, nil
+}
 
-	inTree := make(map[string]struct{}, len(built.Nodes()))
-	for _, node := range built.Nodes() {
+// projectTree fans the tree out onto the members on a management plane. A
+// failure is collected, not returned: the per-cluster failures are already
+// in the fleet view, and the status writes that follow matter most when a
+// member refuses the tree.
+func (p *quotaPass) projectTree(ctx context.Context) (bool, error) {
+	if !p.reconciler.Project.Enabled() {
+		return true, nil
+	}
+	fleet, err := p.reconciler.project(ctx, p.built, p.frozen)
+	if err != nil {
+		p.errs = append(p.errs, fmt.Errorf("projecting the quota tree: %w", err))
+	}
+	p.fleet = fleet
+	return true, nil
+}
+
+// rollFleetUsage sums what the members hold up the tree. Only a leaf carries
+// figures, so without the roll a grouping tier and the root report nothing
+// while the leaves beneath them run the whole fleet. The roll is the one the
+// workload plane uses on its own queues: an ancestor's borrowed figure is
+// recomputed, not summed, because a loan between two siblings is internal
+// to the subtree that contains them.
+func (p *quotaPass) rollFleetUsage(context.Context) (bool, error) {
+	p.fleetRollup = usage.Roll(p.built, fleetLeafUsage(p.fleet))
+	return true, nil
+}
+
+// readConsumption reads what the backend holds for each node. A backend
+// that cannot be read costs this pass its usage figures and nothing else:
+// the conditions and tree positions are still written.
+func (p *quotaPass) readConsumption(ctx context.Context) (bool, error) {
+	reading, err := p.reconciler.rollUsage(ctx, p.built)
+	if err != nil {
+		p.log.V(1).Info("consumption not read this pass", "reason", err.Error())
+	}
+	p.reading = reading
+	return true, nil
+}
+
+// writeNodeStatuses writes every node's position and conditions. One node's
+// failed write is collected and the rest are still written, so the nodes
+// after a failure never keep a stale result.
+func (p *quotaPass) writeNodeStatuses(ctx context.Context) (bool, error) {
+	for _, node := range p.built.Nodes() {
+		name := node.Name()
+		if err := p.reconciler.reconcileStatus(ctx, node, p.frozen, p.outcomes[name], p.reading,
+			p.fleet[name], p.fleetRollup[name]); err != nil {
+			p.errs = append(p.errs, fmt.Errorf("writing status for node %s: %w", name, err))
+		}
+	}
+	return true, nil
+}
+
+// sweepBudgetSeries drops the budget metrics of every node that left the
+// tree without passing through its finalizer: force-stripped, or deleted
+// while this manager was down. The pass holds the authoritative node set.
+func (p *quotaPass) sweepBudgetSeries(context.Context) (bool, error) {
+	inTree := make(map[string]struct{}, len(p.built.Nodes()))
+	for _, node := range p.built.Nodes() {
 		inTree[node.Name()] = struct{}{}
-		if err := r.reconcileStatus(ctx, node, frozen, outcomes[node.Name()], reading,
-			fleet[node.Name()], fleetRollup[node.Name()]); err != nil {
-			errs = append(errs, fmt.Errorf("writing status for node %s: %w", node.Name(), err))
-		}
 	}
-	// The pass holds the authoritative node set, so a node that left the tree
-	// without going through its finalizer -- force-stripped, or deleted while
-	// this manager was down -- loses its series here rather than reporting a
-	// deleted tenant's accelerators forever.
 	sweepBudgets(inTree)
-	retryFleetCapacity := false
-	if r.Project.Enabled() && built.Root != nil {
-		if err := r.reconcileFleetCapacity(ctx, built.Root.Quota.UID); err != nil {
-			if apierrors.IsConflict(err) {
-				// Re-read the root and members instead of retrying an aggregate
-				// computed against a stale root version.
-				retryFleetCapacity = true
-			} else {
-				errs = append(errs, fmt.Errorf("collecting fleet capacity: %w", err))
-			}
-		}
-	}
-	if len(errs) > 0 {
-		// One node's failure must not skip the rest, so they are collected and
-		// the whole pass retried. Each carries the stage it came from: claiming,
-		// releasing and status writing touch different verbs on different
-		// resources, and one prefix over all three sends a reader chasing the
-		// wrong permission.
-		return ctrl.Result{}, fmt.Errorf("reconciling the quota tree: %w", errors.Join(errs...))
-	}
+	return true, nil
+}
 
-	if len(violations) > 0 {
-		log.V(1).Info("quota tree has violations", "count", len(violations), "nodes", violations.Nodes())
+// collectFleetCapacity sums the members' capacity onto the root on a
+// management plane. A conflict means the root moved under the pass, so the
+// pass runs again at once and re-reads the root and the members rather than
+// retry a sum against a stale root. Any other failure is collected.
+func (p *quotaPass) collectFleetCapacity(ctx context.Context) (bool, error) {
+	if !p.reconciler.Project.Enabled() || p.built.Root == nil {
+		return true, nil
 	}
+	err := p.reconciler.reconcileFleetCapacity(ctx, p.built.Root.Quota.UID)
+	switch {
+	case err == nil:
+	case apierrors.IsConflict(err):
+		p.retryFleetCapacity = true
+	default:
+		p.errs = append(p.errs, fmt.Errorf("collecting fleet capacity: %w", err))
+	}
+	return true, nil
+}
 
-	// Capacity describes the cluster as a whole, so it needs the node that means
-	// "the whole cluster". Create it rather than wait: a cluster reports what it
-	// has whether or not anyone has authored a budget yet.
-	if r.Capacity.Enabled() {
-		if built.Root == nil {
-			created, err := r.ensureRoot(ctx)
-			if err != nil {
-				if !webhookUnavailable(err) {
-					return ctrl.Result{}, err
-				}
-				// The startup pass makes the same create and already treats this
-				// as a wait; surfacing it here as well would answer a condition
-				// that clears on its own with a stack trace per attempt.
-				log.V(1).Info("waiting to create the reserved root",
-					"root", r.Options.RootName, "reason", err.Error())
-				return ctrl.Result{RequeueAfter: rootBootstrapRetry}, nil
-			}
-			if !created {
-				// The name is taken by a node that is not the tree root: it
-				// carries a parentRef, or sits in a cycle. Creating cannot fix
-				// that and nor can retrying, so without saying so capacity
-				// derivation would sit idle forever with no error, no event and
-				// no condition to explain it.
-				log.Info("capacity derivation is idle: the reserved root name is held by a node that is not the tree root",
-					"root", r.Options.RootName)
-			}
-			// Keep the resync. The create's own watch event normally brings us
-			// straight back, but in the idle case above there is no such event
-			// and dropping the interval would disable the only thing that would
-			// notice the tree being repaired.
-			return ctrl.Result{RequeueAfter: r.nextResync()}, nil
-		}
-		if err := r.reconcileCapacity(ctx, built.Root.Quota); err != nil {
-			return ctrl.Result{}, err
-		}
+// failOnCollectedErrors ends the pass with every collected failure, so the
+// whole pass is retried once every node has been tried. Each failure names
+// its stage: claiming, releasing and status writing touch different verbs
+// on different resources, and one prefix over all of them would send a
+// reader after the wrong permission.
+func (p *quotaPass) failOnCollectedErrors(context.Context) (bool, error) {
+	if len(p.errs) == 0 {
+		return true, nil
 	}
-	if retryFleetCapacity {
-		return ctrl.Result{Requeue: true}, nil
+	return false, fmt.Errorf("reconciling the quota tree: %w", errors.Join(p.errs...))
+}
+
+// logViolations logs how many violations the tree carries and on which nodes.
+func (p *quotaPass) logViolations(context.Context) (bool, error) {
+	if len(p.violations) > 0 {
+		p.log.V(1).Info("quota tree has violations", "count", len(p.violations), "nodes", p.violations.Nodes())
 	}
-	return ctrl.Result{RequeueAfter: r.nextResync()}, nil
+	return true, nil
+}
+
+// createReservedRoot creates the node that means "the whole cluster" when a
+// capacity-reporting cluster has none, and ends the pass: a cluster reports
+// what it has whether or not anyone has authored a budget. An unavailable
+// webhook is a wait, not an error; the startup pass makes the same create
+// and the condition clears on its own. A name held by a node that is not
+// the tree root cannot be fixed by creating or retrying, so the pass says
+// so and keeps the resync, the only thing that notices the tree repaired.
+func (p *quotaPass) createReservedRoot(ctx context.Context) (bool, error) {
+	if !p.reconciler.Capacity.Enabled() || p.built.Root != nil {
+		return true, nil
+	}
+	created, err := p.reconciler.ensureRoot(ctx)
+	if err != nil {
+		if !webhookUnavailable(err) {
+			return p.end(ctrl.Result{}, err)
+		}
+		p.log.V(1).Info("waiting to create the reserved root",
+			"root", p.reconciler.Options.RootName, "reason", err.Error())
+		return p.end(ctrl.Result{RequeueAfter: rootBootstrapRetry}, nil)
+	}
+	if !created {
+		p.log.Info("capacity derivation is idle: the reserved root name is held by a node that is not the tree root",
+			"root", p.reconciler.Options.RootName)
+	}
+	return p.end(ctrl.Result{RequeueAfter: p.reconciler.nextResync()}, nil)
+}
+
+// deriveCapacity samples this cluster's accelerator capacity onto the root
+// on a capacity-reporting cluster. A failed sample ends the pass with its
+// error.
+func (p *quotaPass) deriveCapacity(ctx context.Context) (bool, error) {
+	if !p.reconciler.Capacity.Enabled() || p.built.Root == nil {
+		return true, nil
+	}
+	if err := p.reconciler.reconcileCapacity(ctx, p.built.Root.Quota); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// scheduleNextPass ends the pass with its requeue: at once when the fleet
+// capacity write hit a conflict, else after the resync interval, where zero
+// leaves the pass event-driven.
+func (p *quotaPass) scheduleNextPass(context.Context) (bool, error) {
+	if p.retryFleetCapacity {
+		return p.end(ctrl.Result{Requeue: true}, nil)
+	}
+	return p.end(ctrl.Result{RequeueAfter: p.reconciler.nextResync()}, nil)
 }
 
 // reconcileStatus writes one node's observed position and condition. It patches
@@ -405,20 +589,10 @@ func setConditions(status *v1beta1.AcceleratorQuotaStatus, violation tree.Violat
 		degraded.Message = violation.Message
 	}
 
-	setCondition(status, ready)
-	setCondition(status, degraded)
+	apimeta.SetStatusCondition(&status.Conditions, ready)
+	apimeta.SetStatusCondition(&status.Conditions, degraded)
 }
 
-// setCondition is the one place conditions are written, so every condition this
-// controller owns gets the same treatment.
-func setCondition(status *v1beta1.AcceleratorQuotaStatus, condition metav1.Condition) {
-	apimeta.SetStatusCondition(&status.Conditions, condition)
-}
-
-// equalStatus compares the fields this controller owns. Condition timestamps are
-// excluded deliberately: SetStatusCondition only moves LastTransitionTime when
-// the status actually flips, so comparing the rest is what makes a no-op pass a
-// genuine no-op.
 // materializedSourceGeneration echoes the generation the management plane
 // stamped on a projection, but only once this pass actually materialized it.
 //
@@ -621,6 +795,10 @@ func equalClusters(a, b []v1beta1.AcceleratorQuotaClusterStatus) bool {
 	return true
 }
 
+// equalStatus compares the fields this controller owns. Condition timestamps are
+// excluded deliberately: SetStatusCondition only moves LastTransitionTime when
+// the status actually flips, so comparing the rest is what makes a no-op pass a
+// genuine no-op.
 func equalStatus(a, b v1beta1.AcceleratorQuotaStatus) bool {
 	if a.ObservedGeneration != b.ObservedGeneration || a.Parent != b.Parent {
 		return false

@@ -27,7 +27,6 @@ import (
 	"fmt"
 	"math"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -52,7 +51,6 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination"
-	omenativecore "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/core"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/irstatus"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/obsmetrics"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/v1beta1convert"
@@ -215,6 +213,9 @@ type revisionHashEntry struct {
 	scopeUID               types.UID
 	hash                   string
 	raw                    []byte
+	// twin is the same templates rendered without their worker count, the
+	// name a revision minted without a width carries; zero without a width.
+	twin revision.WidthFreeTwin
 }
 
 type scaleDownSeriesIdentity struct {
@@ -224,48 +225,22 @@ type scaleDownSeriesIdentity struct {
 	component string
 }
 
-// Reconcile loads the InferenceReplica, projects (Spec, Status) onto a
-// workload.ReconcileInput, computes the target ControllerRevision,
-// delegates lifecycle dispatch to workload.Reconcile, and
-// aggregates the per-Component counters onto IR.Status.
-//
-// Loop:
-//
-//  1. Get IR. NotFound → no-op (background owner-ref GC handles
-//     children).
-//  2. DeletionTimestamp set → finalizer-driven teardown (teardown.go):
-//     dispatch the scale-down batch pipeline against every observed
-//     Instance until component Pods and owned PodGroups are absent, then
-//     lift the teardown finalizer. Without the finalizer, cleanup is plain
-//     BACKGROUND kube-GC via the children's owner references (nothing sets
-//     a foreground propagation policy).
-//  3. Resolve parent ISVC so user-facing events stay on the ISVC
-//     stream. Parent fetch failure is NON-fatal — fall back to the
-//     IR itself as the event target.
-//  4. Build the workload.ReconcileInput + Deps + ComponentPlan.
-//  5. Ensure the target ControllerRevision for the rendered template.
-//     On a same-name-different-Data collision, bump CollisionCount and
-//     retry the EnsureControllerRevision call with the new salt.
-//  6. Defer the status aggregator so it runs even when the workload
-//     dispatcher returns early.
-//  7. Call workload.Reconcile.
-//
-// Returns the workload dispatcher's (ctrl.Result, error), with the status
-// aggregator's next availability wake folded into RequeueAfter.
-func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
+// Reconcile reads the InferenceReplica once, rewrites a stored row shape
+// other than the configured one, sends a deleted replica to its teardown,
+// puts the teardown finalizer on a new one, and then runs one replicaPass
+// over the decoded object. A replica that is gone has nothing to reconcile:
+// the pods and ControllerRevisions it owned are garbage collected through
+// their owner references, and its per-object caches are dropped.
+func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("inferencereplica", req.NamespacedName)
 
-	// The entry read decodes the stored per-Instance representation into the
-	// dense logical shape; a payload that cannot be decoded stops the
-	// reconcile here, before any lifecycle effect.
+	// The entry read decodes the stored per-Instance representation into
+	// the plain list; a payload that cannot be decoded stops the pass here,
+	// before any lifecycle effect.
 	ir := &v1beta1.InferenceReplica{}
 	source, readErr := irstatus.GetDecoded(ctx, r.cachedReader(), req.NamespacedName, ir)
 	if readErr != nil {
 		if apierrors.IsNotFound(readErr) {
-			// IR deleted between enqueue and reconcile. Owner-ref
-			// cascade GC handles the children (pods, ControllerRevisions).
-			// Drop the memoized revision hash so the cache doesn't retain
-			// entries for IRs that no longer exist.
 			r.forgetRevisionHash(req.NamespacedName)
 			r.deleteRememberedScaleDownSeries(req.NamespacedName)
 			return ctrl.Result{}, nil
@@ -275,18 +250,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 	}
 	r.rememberScaleDownSeries(ir)
 
-	// Transition gate: an object stored in a representation other than the
-	// configured target is re-selected before any pass, including teardown,
-	// mutates it. An object stored in the target representation takes the
-	// fast path with no extra serialization.
+	// An object stored in a representation other than the configured target
+	// is rewritten before any pass, the teardown included, mutates it. An
+	// object already in the target representation costs no extra
+	// serialization.
 	if handled, result, err := r.reconcileStoredRepresentation(ctx, log, ir, source); handled {
 		return result, err
 	}
 
-	// Bind structured logging context for the remainder of this
-	// reconcile so every downstream callback inherits the same
-	// (component, parent, generation) bindings without needing to
-	// re-stamp them per-line.
+	// Every log line of the pass, and every callback that takes its logger
+	// from ctx, carries the component, the parent and the generation.
 	log = log.WithValues(
 		"component", ir.Spec.Component,
 		"parent", ir.ParentName(),
@@ -298,41 +271,32 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 		"replicas", ir.Status.Replicas,
 		"readyReplicas", ir.Status.ReadyReplicas)
 
+	// A replica being deleted is reconciled as a desired count of zero, so
+	// its pods drain and escalate through the scale-down pipeline before the
+	// finalizer comes off; whatever remains is garbage collected through the
+	// children's owner references.
 	if ir.DeletionTimestamp != nil {
-		// Finalizer-driven teardown: reconcile the deletion as "desired
-		// instances = zero" so pods drain and escalate through the same
-		// scale-down batch pipeline; any remainder after the
-		// finalizer lifts is BACKGROUND kube-GC via the children's owner
-		// references (nothing sets a foreground propagation policy).
 		return r.reconcileTeardown(ctx, log, ir)
 	}
-
 	if err := validatePlacementReplicaLimit(ir); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Ensure the teardown finalizer before any other work so a later
-	// delete routes through the reconciled teardown path. The IR
-	// validating webhook admits finalizer-only updates, so this write
-	// clears admission even without the controller-write annotation.
+	// The teardown finalizer goes on before any other work, so a later
+	// delete runs through the teardown. The validating webhook admits a
+	// finalizer-only update without the controller-write annotation.
 	if !controllerutil.ContainsFinalizer(ir, TeardownFinalizer) {
 		controllerutil.AddFinalizer(ir, TeardownFinalizer)
 		if err := r.Update(ctx, ir); err != nil {
 			if apierrors.IsNotFound(err) {
-				// Deleted between Get and Update; nothing to protect.
 				return ctrl.Result{}, nil
 			}
 			if apierrors.IsConflict(err) {
-				// Lost a write race; requeue and re-add on the fresh object.
 				return ctrl.Result{Requeue: true}, nil
 			}
-			// Deletion race: a stale cache showed no DeletionTimestamp but
-			// the apiserver copy is already Terminating, so the add is
-			// rejected ("no new finalizers can be added if the object is
-			// being deleted"). Re-read live rather than matching the error
-			// shape: Terminating means this is the self-healing race, not a
-			// real failure — requeue onto the teardown path without
-			// surfacing an error (and its backoff noise).
+			// An add the apiserver refuses because the object is already
+			// Terminating is the cache lagging a delete: the pass requeues
+			// onto the teardown without an error or its backoff.
 			fresh := &v1beta1.InferenceReplica{}
 			switch gerr := r.APIReader.Get(ctx, req.NamespacedName, fresh); {
 			case gerr == nil && fresh.DeletionTimestamp != nil:
@@ -343,482 +307,768 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 			}
 			return ctrl.Result{}, err
 		}
-		// The update response carries the stored status, so the in-memory
-		// object holds the raw per-Instance representation again; decode it
-		// so the rest of the pass keeps observing logical rows.
+		// The update response carries the stored row shape; the pass keeps
+		// reading the plain list.
 		if _, err := r.InstanceStatusDecoder.Decode(ir); err != nil {
 			return ctrl.Result{}, r.instanceStatusDecodeError(ir, err)
 		}
 	}
 
-	// Snapshot revision pointers + failure-state BEFORE workload.Reconcile
-	// so the deferred status-write can log on real transitions
-	// (CurrentRevision promotion, first Phase=Failed escalation).
-	priorCurrentRevision := ir.Status.CurrentRevision
-	priorWithdrawnRevision := withdrawnRevisionFor(&ir.Status)
+	// What the status said before the pass wrote anything, so a promotion,
+	// a cleared current revision and a first Failed Instance are each
+	// logged once, when they happen.
 	priorAnyFailed := hasFailedInstance(ir.Status.InstanceStatuses)
-
-	// Resolve the parent ISVC for the event stream. Best-effort: an
-	// IR can outlive its parent for a brief window during foreground
-	// GC; surface NotFound / Forbidden as "no parent" rather than
-	// failing the reconcile.
-	parent := r.resolveParent(ctx, ir)
-
-	// Resolve the operator lifecycle tunables ONCE per reconcile. A zero
-	// field (absent/invalid config) fails safe by disabling that window
-	// or bound: the stuck-pod fast path leaves the row to the
-	// InstanceReadyTimeout backstop, an unplaceable pod only parks the
-	// clock instead of being failed on a window nobody configured, and a
-	// pass with work left rides the rate-limited backoff.
-	settings := r.resolveLifecycleSettings(log)
-
-	// Operator release mailbox for Held RetryBlocks. Consumed before the
-	// workload input is built so this pass's ObservedState already
-	// excludes a just-released block.
-	if requeue, rerr := r.consumeReleaseHeldRequest(ctx, log, ir, parent, settings.RetryBlockHistoryLimit); rerr != nil {
-		return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: consume release-held request: %w", rerr)
-	} else if requeue {
-		return ctrl.Result{Requeue: true}, nil
+	pass := &replicaPass{
+		reconciler:           r,
+		ir:                   ir,
+		log:                  log,
+		priorCurrentRevision: ir.Status.CurrentRevision,
+		priorClearedRevision: withdrawnRevisionFor(&ir.Status),
 	}
-
-	// Operator rebuild mailbox for Failed Instances. Consumed before the
-	// workload input is built so this pass's ObservedState already
-	// reflects a just-cleared Operation and the Create pass can rebuild.
-	if requeue, rerr := r.consumeResetInstancesRequest(ctx, log, ir, parent); rerr != nil {
-		return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: consume reset-instances request: %w", rerr)
-	} else if requeue {
-		return ctrl.Result{Requeue: true}, nil
-	}
-
-	// Resolve the same-target update retry policy ONCE per reconcile from
-	// the operator lifecycle config. nil (absent/invalid config) fails
-	// safe: the workload layer Holds on the first same-target failure.
-	retryPolicy := r.resolveUpdateRetryPolicy(log)
-
-	// Resolve the auto-migrate relocation budget from the operator lifecycle
-	// config. Zero (absent/invalid config) fails safe: the deadline
-	// disposition's relocation branch is disabled and non-workload-caused
-	// expiries dispose terminal.
-	autoMigrateBudget := r.resolveAutoMigrateBudget(log)
-
-	// Resolve the stuck-Terminating force-delete policy from the operator
-	// lifecycle config. nil (absent/invalid config) fails safe: the
-	// escalation is disabled and wedged teardowns are left alone.
-	forceDeletePolicy := r.resolveForceDeletePolicy(log)
-
-	// Resolve the operator-configured coordination group defaults (e.g. the
-	// ratio tolerance fill) so the update gate resolves groups exactly like
-	// the ISVC-side coordination reconciler.
-	coordDefaults := r.resolveCoordinationGroupDefaults(log)
-
-	// The pod templates: the stored runners, or, for a replica that names a
-	// model or a runtime, the runners rendered from them for this pass only.
-	// The stored spec never gains runners. A template source that cannot be
-	// rendered is published on the Ready condition and the pass ends here;
-	// the runtime and model watches re-trigger the replica when it changes.
-	runners := ir.Spec.Runners
-	if rendered, rerr := r.renderFromRefs(ctx, ir); rerr != nil {
-		var blocked *renderBlocked
-		if errors.As(rerr, &blocked) {
-			return r.reportRenderBlocked(ctx, ir, blocked)
-		}
-		return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: render from refs (ir=%s/%s): %w", ir.Namespace, ir.Name, rerr)
-	} else if rendered != nil {
-		runners = rendered
-	}
-
-	input := r.buildReconcileInput(ctx, ir, runners, parent, retryPolicy, forceDeletePolicy, settings, autoMigrateBudget, coordDefaults)
-	input.ScaleUpPodBatchSize = r.ScaleUpPodBatchSize
-	input.ScaleDownPodBatchSize = r.ScaleDownPodBatchSize
-	input.ScaleDownRequeueInterval = r.ScaleDownRequeueInterval
-	input.RepairBatchSize = r.RepairBatchSize
-
-	// Capture the update pass's rollout-hold verdict (if any) for the
-	// deferred status write below. execHoldObserved distinguishes "the
-	// Update pass ran and found nothing to hold" (clear) from "the Update
-	// pass never ran this reconcile" (the status writer falls back to the
-	// persisted RetryBlock/Held state instead).
-	var (
-		execHoldObserved bool
-		execHold         *workloadtypes.RolloutHold
-	)
-	input.RecordRolloutHold = func(hold *workloadtypes.RolloutHold) {
-		execHoldObserved = true
-		execHold = hold
-	}
-
-	// Relocation-directive memory: prune AutoRecover ledger records for
-	// instances observed Ready (the success-prune mirror of the
-	// RetryBlock prune), then project the per-instance node-exclusion
-	// lists the renderer materializes as NotIn overlays. Fail-open on
-	// ledger errors — a missing overlay only risks one rebuild landing
-	// back on the suspect node for a pass.
-	input.ObservedState.ExcludedNodesByInstance = r.reconcileRelocationDirectives(ctx, log, ir, parent, autoMigrateBudget)
-
-	// Migration-entry bookkeeping, then the mailbox. syncMigrationEntries
-	// first: it imports pre-upgrade in-flight ledger Started rows into
-	// status.migrations (so they resume through the entry path) and
-	// prunes aged-out terminal entries. Then the mailbox consume:
-	// validated annotations become ir.Status.Migrations entries (+ ledger
-	// Started row), invalid ones become terminal Failed ledger rows;
-	// either way the annotation is deleted so the mailbox is empty at
-	// rest. The Deadline stamps the same per-Component effective
-	// InstanceReadyTimeout the per-op writers read from ComponentPlan;
-	// the mode is the same effective MigrationMode the dispatcher reads
-	// from ComponentPlan (Never rejects at accept instead of parking).
-	instanceReadyTimeout := workload.ResolveInstanceReadyTimeout(
-		input.DesiredSpec.Lifecycle.InstanceReadyTimeout, settings.InstanceReadyTimeout)
-	migrationTimeout := instanceReadyTimeout
-	migrationMode := workload.MigrationModeOrDefault(input.DesiredSpec.Lifecycle.MigrationPolicy)
-	// The horizon the status-record trim ages against. Zero
-	// (unconfigured) ages out nothing.
-	var recordWindow time.Duration
-	if settings.MigrationAudit != nil {
-		recordWindow = settings.MigrationAudit.Window
-	}
-	if serr := r.syncMigrationEntries(ctx, log, ir, parent, migrationTimeout, recordWindow); serr != nil {
-		return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: sync migration entries: %w", serr)
-	}
-	if requeue, merr := r.consumeMigrationRequests(ctx, log, ir, parent, migrationMode, migrationTimeout); merr != nil {
-		return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: consume migration requests: %w", merr)
-	} else if requeue {
-		return ctrl.Result{Requeue: true}, nil
-	}
-	// Refresh the observed migration mirror: buildReconcileInput snapshot
-	// predates the import/accept writes above, and the dispatcher selects
-	// work from this slice — without the refresh a just-accepted request
-	// would wait a full requeue before dispatch.
-	input.ObservedState.Migrations = migrationsFromIR(ir)
-
-	// Park every in-flight deadline before revision creation, rollback payload
-	// reads, or plan construction can fail. The deferred aggregate path below
-	// remains authoritative for normal gated-pod bookkeeping and for rearming
-	// parked deadlines after unpause; this early edge only makes the pause
-	// circuit breaker resilient to failures that occur before that defer exists.
-	if input.DesiredSpec.Paused {
-		// A paused pass only parks deadlines; the timeout is used solely when
-		// rearming during the normal aggregate path after unpause.
-		if derr := r.reconcileHeldDeadlines(ctx, ir, nil, true, 0); derr != nil {
-			return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: park paused operation deadlines: %w", derr)
-		}
-	}
-
-	// Spec target ControllerRevision (from the rendered desired). Computed up
-	// front and reported as UpdateRevision so a new spec target stays VISIBLE to
-	// the ISVC even during a rollback — when the actual roll targets the stable
-	// revision instead (below), this keeps the canary's re-arm-on-new-revision
-	// working. PodSpec nil (webhook-rejected today, but defensive) → no revision.
-	var specTarget *appsv1.ControllerRevision
-	if input.DesiredSpec.PodSpec != nil {
-		t, terr := r.ensureRevisionWithCollisionRetry(ctx, ir, input)
-		if terr != nil {
-			return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: ensure revision (ir=%s/%s): %w",
-				ir.Namespace, ir.Name, terr)
-		}
-		specTarget = t
-	}
-
-	// Rollback: when spec.pacing.rollbackToRevision is set, roll every
-	// Instance back to that (stable) ControllerRevision by rendering
-	// the desired template from the revision's stored payload and using the
-	// revision as the ROLL target — while UpdateRevision keeps reporting the spec
-	// target (above). The forward-roll machinery then drains the canary pods onto
-	// stable. CR gone (GC'd) → fall through to the normal desired spec. The
-	// revision must be one this replica controls.
-	rollTarget := specTarget
-	var rollbackPayload *revision.DataPayload
-	var rollbackRevision *appsv1.ControllerRevision
-	cr, rerr := r.rollbackRevision(ctx, ir, workloadtypes.EventTarget(input))
-	if rerr != nil {
-		return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: %w", rerr)
-	}
-	if cr != nil {
-		payload, perr := revision.PayloadFromControllerRevision(cr)
-		if perr != nil {
-			return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: rollback revision payload (ir=%s/%s): %w", ir.Namespace, ir.Name, perr)
-		}
-		if payload != nil && payload.PodSpec != nil {
-			if perr := r.applyRollbackPayload(ctx, ir, &input.DesiredSpec, payload, cr); perr != nil {
-				return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: apply rollback revision %s: %w", cr.Name, perr)
-			}
-			rollTarget = cr
-			rollbackPayload = payload
-			rollbackRevision = cr
-		}
-	}
-	// The coordination gates orient by the roll target, so they are wired
-	// only now that it is resolved.
-	r.wireCoordinationGates(ctx, &input, ir, parent, coordDefaults, rollTarget)
-
-	plan, perr := workload.BuildPlan(v1beta1convert.ComponentTypeToWorkload(ir.Spec.Component), input.DesiredSpec, input.ObservedState)
-	if perr != nil {
-		return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: build plan (ir=%s/%s): %w",
-			ir.Namespace, ir.Name, perr)
-	}
-	// Gang admission bound for this Component's PodGroups. Nil
-	// (unconfigured) leaves the derived timeout unclamped.
-	plan.GangScheduleTimeout = settings.GangScheduleTimeout
-	// Readiness backstop for this Component's operations: BuildPlan carries
-	// only the per-resource value, so the operator-configured fallback is
-	// overlaid here. Zero (neither set) opens operations with no deadline.
-	plan.InstanceReadyTimeout = instanceReadyTimeout
-	if !scaleDownPodObservationRequired(input, plan) {
-		obsmetrics.SetScaleDownActivePods(ir.Namespace, ir.NamePrefix(), string(ir.Spec.Component), 0)
-		obsmetrics.SetScaleDownDeferredInstances(ir.Namespace, ir.NamePrefix(), string(ir.Spec.Component), 0)
-	}
-	// Install status aggregation before PodGroup reconciliation. Besides
-	// counters, the aggregator parks InstanceReadyTimeout deadlines while the
-	// workload is paused. A live-read or PodGroup error must not bypass that
-	// circuit-breaker bookkeeping.
-	skipDeferredEffects := false
-	defer func() {
-		if skipDeferredEffects {
-			return
-		}
-		// CurrentRevision rollup: component-level revision pair against
-		// the SPEC target (paired with the aggregator's UpdateRevision stamp;
-		// coordination reads their skew as RolloutInFlight, and canary
-		// rollback resolves stable revisions assuming CurrentRevision names
-		// the last fully-rolled-forward revision). Runs before the aggregator
-		// so the Ready condition below observes the rolled-up value. Conflict
-		// tolerance matches the aggregator: requeue, don't error.
-		if specTarget != nil {
-			if perr := buildPromoteCurrentRevision(r.statusWriter(), r.liveReader(), ir)(ctx, specTarget.Name); perr != nil {
-				if errors.Is(perr, workloadtypes.ErrStatusMutationPrecondition) {
-					result, err = ctrl.Result{Requeue: true}, nil
-					return
-				}
-				if err == nil {
-					if apierrors.IsConflict(perr) {
-						result, err = ctrl.Result{Requeue: true}, nil
-						return
-					}
-					result = ctrl.Result{}
-					err = fmt.Errorf("InferenceReplica reconciler: promote current revision: %w", perr)
-					return
-				}
-				log.V(1).Error(perr, "CurrentRevision promotion also failed; primary error preserved")
-			}
-		}
-		nextAvailableIn, serr := r.aggregateAndWriteStatus(ctx, ir, plan, specTarget, execHoldObserved, execHold)
-		if errors.Is(serr, workloadtypes.ErrStatusMutationPrecondition) {
-			result, err = ctrl.Result{Requeue: true}, nil
-			return
-		}
-		if serr != nil && err != nil {
-			log.V(1).Error(serr, "Status write also failed; primary error preserved")
-		}
-		// The retention sweep runs regardless of a status-write failure:
-		// it is best-effort against the last committed status and re-runs
-		// next pass, so a failed write must not skip it (symmetric with
-		// the non-nil-primary-error path).
-		r.sweepRevisions(ctx, ir)
-		switch {
-		case priorWithdrawnRevision != "" && ir.Status.CurrentRevision == priorWithdrawnRevision:
-			log.Info("Rollout closed; CurrentRevision restored once every Instance was back on the revision it was withdrawn from",
-				"currentRevision", ir.Status.CurrentRevision)
-		case priorCurrentRevision != ir.Status.CurrentRevision && ir.Status.CurrentRevision != "":
-			log.Info("Rollout complete; CurrentRevision promoted",
-				"previousCurrentRevision", priorCurrentRevision,
-				"currentRevision", ir.Status.CurrentRevision)
-		case priorCurrentRevision != "" && ir.Status.CurrentRevision == "":
-			log.Info("Rollout reopened; CurrentRevision withdrawn while an Instance still runs, or is still pinned to, another revision",
-				"previousCurrentRevision", priorCurrentRevision,
-				"updateRevision", ir.Status.UpdateRevision)
-		}
-		if !priorAnyFailed && hasFailedInstance(ir.Status.InstanceStatuses) {
-			log.Info("Instance escalation observed; at least one Instance reached Phase=Failed")
-		}
-		if serr != nil && err == nil {
-			if apierrors.IsConflict(serr) {
-				result, err = ctrl.Result{Requeue: true}, nil
-				return
-			}
-			result = ctrl.Result{}
-			err = fmt.Errorf("InferenceReplica reconciler: write status: %w", serr)
-			return
-		}
-		if err == nil {
-			// A pod crossing its minReadySeconds window raises the Available
-			// counters with no watch event; wake for the earliest one.
-			result = foldRequeueAfter(result, nextAvailableIn)
-		}
-	}()
-
-	if rollbackPayload != nil {
-		log.Info("Rollback: rolling Instances back to revision", "revision", rollbackRevision.Name)
-	}
-	if scaleDownPodObservationRequired(input, plan) {
-		pods, lerr := query.LiveListPodsForComponent(ctx, r.APIReader, ir.Namespace, ir.NamePrefix(),
-			v1beta1convert.ComponentTypeToWorkload(ir.Spec.Component))
-		if lerr != nil {
-			return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: observe scale-down pods (component=%s): %w", ir.Spec.Component, lerr)
-		}
-		owned := podsControlledBy(pods, ir.UID)
-		if invalid := invalidInstanceIndexPodCount(owned); invalid > 0 {
-			skipDeferredEffects = true
-			return ctrl.Result{}, fmt.Errorf(
-				"InferenceReplica reconciler: authoritative scale-down snapshot contains %d UID-owned component pod(s) without a valid %s label; refusing scale-down effects",
-				invalid, query.LabelInstanceIdx)
-		}
-		input.AuthoritativePods = &workloadtypes.ComponentPodSnapshot{
-			OwnerUID:   ir.UID,
-			Pods:       owned,
-			ByInstance: query.BucketPodsByInstanceIdx(owned),
-		}
-	}
-
-	// Past every fail-closed guard, so a pass that refuses to act writes
-	// nothing at all: report whether this Component has a readiness window.
-	r.reportInstanceReadyTimeout(ctx, log, ir, input, plan.InstanceReadyTimeout)
-
-	// The spec target is recorded in status before any pod renders it. A
-	// pass that ends between creating a pod and the deferred publication
-	// then leaves pods of the new revision beside a status that already
-	// names it, never beside one still reporting the previous revision as
-	// current and done. The record moves the pair as one pair, so a
-	// rollback onto the current revision reads open from this write on.
-	if specTarget != nil && ir.Status.UpdateRevision != specTarget.Name {
-		if rerr := buildRecordUpdateRevision(r.statusWriter(), r.liveReader(), ir)(ctx, specTarget.Name); rerr != nil {
-			if errors.Is(rerr, workloadtypes.ErrStatusOwnerGone) {
-				return ctrl.Result{}, nil
-			}
-			if errors.Is(rerr, workloadtypes.ErrStatusMutationPrecondition) || apierrors.IsConflict(rerr) {
-				return ctrl.Result{Requeue: true}, nil
-			}
-			return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: record update revision (ir=%s/%s): %w",
-				ir.Namespace, ir.Name, rerr)
-		}
-		input.ObservedState.UpdateRevision = ir.Status.UpdateRevision
-	}
-
-	// Peer revision pairing for every pod rendered this pass: resolve each
-	// serving peer's roll-target revision and create that revision's
-	// per-revision Services before any pod that names them exists. While a
-	// peer's projection or status lags this Component's parent generation
-	// the pairing is unknowable, so the pass renders nothing (status is
-	// still written by the deferred aggregator) and retries.
-	var peerRevisionFor coordination.PeerRevisionFunc
-	if coordination.PeerEnvDeclared(parent) {
-		peers, hold, perr := r.resolvePeerRevisions(ctx, ir, parent, rollTarget)
-		if perr != nil {
-			return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: resolve peer revisions (component=%s): %w", ir.Spec.Component, perr)
-		}
-		if hold != "" {
-			log.V(1).Info("Holding dispatch until peer revisions are resolvable", "reason", hold)
-			return ctrl.Result{Requeue: true}, nil
-		}
-		if serr := r.ensurePeerRevisionServices(ctx, parent, peers); serr != nil {
-			return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: ensure peer per-revision services (component=%s): %w", ir.Spec.Component, serr)
-		}
-		peerRevisionFor = peers.hashFor
-	}
-
-	deps := workloadtypes.Deps{
-		Client:       r.Client,
-		APIReader:    r.APIReader,
-		Recorder:     r.Recorder,
-		Expectations: r.Expectations,
-		Clock:        r.Clock,
-		// Wire peer-env injection.
-		// ISVCRenderHook overlays OME_<PEER>_ENDPOINT / _REVISION_ENDPOINT
-		// onto each rendered pod so PD components (engine <-> decoder) can
-		// address each other by stable DNS and by the per-revision Service of
-		// the peer revision they pair with. It returns nil when the parent
-		// ISVC has no rollout groups, so single-component / non-rollout
-		// boxes are unaffected. parent is nil for a standalone replica and
-		// while the parent ISVC is unresolved (foreground-GC window) — the
-		// hook handles nil by returning nil.
-		RenderHook: omenativecore.ISVCRenderHook(parent, peerRevisionFor),
-		// Ensure a gang surge's PodGroup inline, just before its pods —
-		// closes the window where the surge index hasn't yet landed in the
-		// plan the top-level EnsurePodGroups keys off (a gang scheduler
-		// would otherwise reject the surge pods with "PodGroup not found").
-	}
-	var podGroupInventory *workloadgang.PodGroupInventory
-	if input.DesiredSpec.GangSchedulingAvailable {
-		observePodGroups, observeErr := r.requiresAuthoritativePodGroupInventory(ctx, input, plan)
-		if observeErr != nil {
-			return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: check pod group inventory requirement (component=%s): %w", ir.Spec.Component, observeErr)
-		}
-		if observePodGroups {
-			podGroupInventory, err = workloadgang.ObservePodGroups(ctx, deps.Reader(), input.OwnerObject)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: observe pod groups (component=%s): %w", ir.Spec.Component, err)
-			}
-			blocked, cleanupErr := r.reconcileStaleSinglePodGroups(ctx, ir, &input, plan, podGroupInventory)
-			if cleanupErr != nil {
-				return ctrl.Result{}, cleanupErr
-			}
-			if blocked {
-				return scaleDownRequeueResult(r.ScaleDownRequeueInterval), nil
-			}
-		}
-		input.FinalizeInstanceResources = workloadgang.BuildFinalizeInstanceResources(
-			deps.Client, deps.Reader(), podGroupInventory, input.OwnerObject, input.Key.OwnerName, plan.Component)
-	}
-	podGroupState := workloadgang.PodGroupReconcileState{
-		Inventory:     podGroupInventory,
-		TerminalOwned: TerminalFinalizationOwned(input.ObservedState),
-	}
-	deps.EnsureGangPodGroup = workloadgang.EnsureSurgePodGroupWithState(deps, podGroupState)
-
-	// PodGroups must exist BEFORE the first pod of any multi-pod Instance is
-	// created, or the gang scheduler rejects the pods with "PodGroup not
-	// found" and they stay Pending forever. No-op for single-pod Components
-	// and when the PodGroup CRD is absent — EnsurePodGroups gates on
-	// DesiredSpec.GangSchedulingAvailable, stamps GangSchedulingUnavailable,
-	// and returns. Runs before the revision/dispatch so the gang is announced
-	// ahead of pod creation.
-	// A name this owner cannot write is classified onto the Instance that
-	// wanted it rather than returned here, so one unusable PodGroup never
-	// stalls the whole Component.
-	effectiveTopology, gerr := workloadgang.EnsurePodGroupsWithState(ctx, deps, input, plan, podGroupState)
-	if gerr != nil {
-		return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: ensure pod groups (component=%s): %w", ir.Spec.Component, gerr)
-	}
-	plan.InstanceTopologyKeys = effectiveTopology
-
-	slices, sliceErr := r.provisionSlices(ctx, ir, &deps, &input)
-	if sliceErr != nil {
-		return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: provision TPU slices (component=%s): %w", ir.Spec.Component, sliceErr)
-	}
-	result, err = workload.Reconcile(ctx, deps, input, plan, rollTarget)
-	if err == nil {
-		if lostErr := r.recoverLostSlices(ctx, ir, input, slices); lostErr != nil {
-			result = ctrl.Result{}
-			err = fmt.Errorf("InferenceReplica reconciler: recover lost TPU slices (component=%s): %w", ir.Spec.Component, lostErr)
-		} else if sweepErr := slices.sweep(ctx, input, plan); sweepErr != nil {
-			result = ctrl.Result{}
-			err = fmt.Errorf("InferenceReplica reconciler: sweep TPU slices (component=%s): %w", ir.Spec.Component, sweepErr)
-		}
-	}
-
-	// Reconcile the per-Component headless Service. The Service gives every
-	// pod a stable FQDN for peer discovery during gang init (multi-node) and
-	// for any downstream proxy that wants per-pod addresses. Idempotent +
-	// drift-correcting; safe to call every reconcile.
-	//
-	// Called AFTER workload.Reconcile so the Service exists by the time pods
-	// flip Ready and downstream consumers start resolving them. Earlier
-	// placement would risk creating a Service before the pods exist —
-	// harmless but produces a brief "no endpoints" window.
-	//
-	// Service errors don't clobber a real workload.Reconcile error; only
-	// surface them when the dispatcher succeeded. Same pattern the deferred
-	// status-write uses above; log the suppressed error at V(1) so the
-	// double-failure case is grep-able.
-	if serr := workloadservice.ReconcileHeadlessService(ctx, r.Client, buildHeadlessServiceSpec(ir)); serr != nil {
-		if err == nil {
-			// Error-driven requeue: clear any non-zero dispatcher result
-			// (controller-runtime ignores the result when err != nil).
-			result = ctrl.Result{}
-			err = fmt.Errorf("InferenceReplica reconciler: reconcile headless service: %w", serr)
-		} else {
-			log.V(1).Error(serr, "Headless Service reconcile also failed; primary error preserved")
-		}
+	result, err := pass.run(ctx)
+	if pass.published && !priorAnyFailed && hasFailedInstance(ir.Status.InstanceStatuses) {
+		log.Info("Instance escalation observed; at least one Instance reached Phase=Failed")
 	}
 	return result, err
+}
+
+// replicaPass is one reconcile pass over one InferenceReplica: what the pass
+// read at its start and what its steps decide as they run. The steps share
+// the record; a step that ends the pass records the result the controller
+// returns.
+type replicaPass struct {
+	reconciler *Reconciler
+	ir         *v1beta1.InferenceReplica
+	log        logr.Logger
+
+	// result is what the pass returns when a step ends it. err is the error
+	// the engine step records; the steps after it keep an earlier error over
+	// their own, so a slice or Service failure never hides the engine's.
+	result ctrl.Result
+	err    error
+
+	// The revision pair as the status read it before the pass:
+	// priorClearedRevision names the revision the current revision was
+	// cleared from, empty when it was not cleared. The publication logs a
+	// restored, promoted or cleared current revision against them.
+	priorCurrentRevision string
+	priorClearedRevision string
+	// published is set once the publication has written the status, or
+	// tried to, and logged the revision transitions. A pass that ended
+	// before the publication, or whose publication stopped on a stale read,
+	// leaves it false.
+	published bool
+
+	// parent is the InferenceService the events go to; nil for a standalone
+	// replica and while the parent is gone.
+	parent *v1beta1.InferenceService
+	// The operator's lifecycle settings and policies for this pass. An
+	// absent or invalid value turns its window or bound off; nothing in the
+	// code supplies a default.
+	settings          lifecycleSettings
+	retryPolicy       *workloadtypes.RetryPolicy
+	autoMigrateBudget int32
+	forceDeletePolicy *workloadtypes.ForceDeletePolicy
+	coordDefaults     coordination.GroupDefaults
+	// runners is the pod template set of this pass: the stored runners, or
+	// the ones rendered from the model and runtime references.
+	runners []v1beta1.Runner
+
+	// input is what the engine reads; the steps fill its observed state in.
+	input workloadtypes.ReconcileInput
+	// holdObserved tells an update pass that ran and found nothing to hold
+	// from one that never ran this pass; for the second the status writer
+	// falls back to the stored retry record.
+	holdObserved bool
+	hold         *workloadtypes.RolloutHold
+	// instanceReadyTimeout is the readiness window of this Component's
+	// operations: the spec's own, else the operator's. Zero opens operations
+	// with no deadline.
+	instanceReadyTimeout time.Duration
+
+	// specTarget is the ControllerRevision of the rendered spec, always
+	// reported as updateRevision. rollTarget is the revision the Instances
+	// roll toward: the spec target, or rollbackRevision when the spec names
+	// a revision this replica controls to roll back to.
+	specTarget       *appsv1.ControllerRevision
+	rollTarget       *appsv1.ControllerRevision
+	rollbackRevision *appsv1.ControllerRevision
+	plan             workloadtypes.ComponentPlan
+	// publishOnReturn is set once the pass may write status: from then on
+	// every return, early or not, publishes the status.
+	publishOnReturn bool
+
+	peerRevisionFor   coordination.PeerRevisionFunc
+	deps              workloadtypes.Deps
+	podGroupInventory *workloadgang.PodGroupInventory
+	slices            *slicePass
+}
+
+// passStep is one step of a pass. It reports whether the pass goes on; a
+// step that ends the pass has recorded the result on the pass first.
+type passStep func(context.Context) (bool, error)
+
+// run takes the pass through its steps in order and stops at the first one
+// that ends it. The list is the whole order of a pass. Once
+// installStatusPublication has run, every return publishes the status,
+// which may replace the result.
+func (p *replicaPass) run(ctx context.Context) (result ctrl.Result, err error) {
+	defer func() {
+		if p.publishOnReturn {
+			result, err = p.publishStatus(ctx, result, err)
+		}
+	}()
+	_, err = runPassSteps(ctx, []passStep{
+		p.resolveParent,
+		p.loadLifecycleSettings,
+		p.releaseHeldRetryRecord,
+		p.resetFailedInstances,
+		p.resolveOperatorPolicies,
+		p.renderPodTemplates,
+		p.buildEngineInput,
+		p.readNodeExclusions,
+		p.readCordonedInstances,
+		p.resolveInstanceReadyTimeout,
+		p.syncMigrationRecords,
+		p.acceptMigrationRequests,
+		p.holdDeadlinesWhilePaused,
+		p.ensureSpecRevision,
+		p.resolveRollbackTarget,
+		p.wireCoordinationGates,
+		p.readRevisionWidths,
+		p.buildPlan,
+		p.clearIdleScaleDownGauges,
+		p.installStatusPublication,
+		p.logRollbackTarget,
+		p.snapshotLivePodsForScaleDown,
+		p.reportReadyTimeout,
+		p.recordUpdateRevision,
+		p.resolvePeerRevisions,
+		p.buildEngineDeps,
+		p.observePodGroups,
+		p.ensurePodGroups,
+		p.provisionSlices,
+		p.runEngine,
+		p.tendSlices,
+		p.reconcileHeadlessService,
+	})
+	return p.result, err
+}
+
+// runPassSteps runs the steps in order and reports whether every one let
+// the pass go on. It stops at the first step that ends the pass or fails
+// and returns that step's error.
+func runPassSteps(ctx context.Context, steps []passStep) (bool, error) {
+	for _, step := range steps {
+		if next, err := step(ctx); !next || err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+// end records the result a step ends the pass with and reports that the
+// pass does not go on. A step that fails without ending the pass leaves
+// the result empty.
+func (p *replicaPass) end(result ctrl.Result, err error) (bool, error) {
+	p.result = result
+	return false, err
+}
+
+// resolveParent reads the parent InferenceService, which the events go to.
+// A replica can outlive its parent for a short time during a foreground
+// deletion, so a parent that is not found or not readable is no parent, not
+// a failed pass.
+func (p *replicaPass) resolveParent(ctx context.Context) (bool, error) {
+	p.parent = p.reconciler.resolveParent(ctx, p.ir)
+	return true, nil
+}
+
+// loadLifecycleSettings reads the operator's lifecycle settings once for
+// the pass. A zero field turns its window or bound off: a pod that stays
+// unready is left to the readiness deadline, a pod that cannot be placed
+// has its clock stopped instead of being failed, and a pass with work left
+// requeues on the rate-limited backoff.
+func (p *replicaPass) loadLifecycleSettings(context.Context) (bool, error) {
+	p.settings = p.reconciler.resolveLifecycleSettings(p.log)
+	return true, nil
+}
+
+// releaseHeldRetryRecord answers the operator's request to release a Held
+// retry record, before the engine input is built, so this pass's observed
+// state already lacks the released record. A request that was answered
+// requeues.
+func (p *replicaPass) releaseHeldRetryRecord(ctx context.Context) (bool, error) {
+	requeue, err := p.reconciler.consumeReleaseHeldRequest(ctx, p.log, p.ir, p.parent, p.settings.RetryBlockHistoryLimit)
+	if err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: consume release-held request: %w", err)
+	}
+	if requeue {
+		return p.end(ctrl.Result{Requeue: true}, nil)
+	}
+	return true, nil
+}
+
+// resetFailedInstances answers the operator's request to rebuild the Failed
+// Instances, before the engine input is built, so this pass's observed
+// state already shows the cleared operations and the create pass can
+// rebuild. A request that was answered requeues.
+func (p *replicaPass) resetFailedInstances(ctx context.Context) (bool, error) {
+	requeue, err := p.reconciler.consumeResetInstancesRequest(ctx, p.log, p.ir, p.parent)
+	if err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: consume reset-instances request: %w", err)
+	}
+	if requeue {
+		return p.end(ctrl.Result{Requeue: true}, nil)
+	}
+	return true, nil
+}
+
+// resolveOperatorPolicies reads the rest of the operator's policies for the
+// pass: the same-target update retry policy (nil holds on the first
+// failure), the relocation budget of a failed Instance (zero turns the
+// relocation branch off), the force-delete policy for pods that stay
+// Terminating (nil leaves them alone), and the coordination group defaults
+// the update gate resolves groups with, as the service controller does.
+func (p *replicaPass) resolveOperatorPolicies(context.Context) (bool, error) {
+	p.retryPolicy = p.reconciler.resolveUpdateRetryPolicy(p.log)
+	p.autoMigrateBudget = p.reconciler.resolveAutoMigrateBudget(p.log)
+	p.forceDeletePolicy = p.reconciler.resolveForceDeletePolicy(p.log)
+	p.coordDefaults = p.reconciler.resolveCoordinationGroupDefaults(p.log)
+	return true, nil
+}
+
+// renderPodTemplates takes the pod templates of the pass: the stored
+// runners, or, for a replica that names a model or a runtime, the runners
+// rendered from them for this pass only; the stored spec never gains
+// runners. A template source that cannot be rendered is published on the
+// Ready condition and ends the pass; the runtime and model watches bring
+// the replica back when the source changes.
+func (p *replicaPass) renderPodTemplates(ctx context.Context) (bool, error) {
+	p.runners = p.ir.Spec.Runners
+	rendered, err := p.reconciler.renderFromRefs(ctx, p.ir)
+	if err != nil {
+		var blocked *renderBlocked
+		if errors.As(err, &blocked) {
+			return p.end(p.reconciler.reportRenderBlocked(ctx, p.ir, blocked))
+		}
+		return false, fmt.Errorf("InferenceReplica reconciler: render from refs (ir=%s/%s): %w", p.ir.Namespace, p.ir.Name, err)
+	}
+	if rendered != nil {
+		p.runners = rendered
+	}
+	return true, nil
+}
+
+// buildEngineInput projects the replica onto the engine's input, with the
+// pod batch sizes of the manager and the recorder of the update pass's
+// hold. The recorder tells an update pass that ran and found nothing to
+// hold from one that never ran, which the status writer reads differently.
+func (p *replicaPass) buildEngineInput(ctx context.Context) (bool, error) {
+	p.input = p.reconciler.buildReconcileInput(ctx, p.ir, p.runners, p.parent, p.retryPolicy, p.forceDeletePolicy, p.settings, p.autoMigrateBudget, p.coordDefaults)
+	p.input.ScaleUpPodBatchSize = p.reconciler.ScaleUpPodBatchSize
+	p.input.ScaleDownPodBatchSize = p.reconciler.ScaleDownPodBatchSize
+	p.input.ScaleDownRequeueInterval = p.reconciler.ScaleDownRequeueInterval
+	p.input.RepairBatchSize = p.reconciler.RepairBatchSize
+	p.input.RecordRolloutHold = func(hold *workloadtypes.RolloutHold) {
+		p.holdObserved = true
+		p.hold = hold
+	}
+	return true, nil
+}
+
+// readNodeExclusions removes the relocation records of Instances observed
+// Ready and projects the per-Instance node exclusions the renderer turns
+// into NotIn terms. An unreadable record set drops the exclusions for this
+// pass only: one rebuild may then land on the suspect node again.
+func (p *replicaPass) readNodeExclusions(ctx context.Context) (bool, error) {
+	p.input.ObservedState.ExcludedNodesByInstance = p.reconciler.reconcileRelocationDirectives(ctx, p.log, p.ir, p.parent, p.autoMigrateBudget)
+	return true, nil
+}
+
+// readCordonedInstances finds the Instances with a pod on a cordoned node,
+// which a scale-down removes before any other. An unreadable cordon drops
+// the preference for this pass only.
+func (p *replicaPass) readCordonedInstances(ctx context.Context) (bool, error) {
+	p.input.ObservedState.CordonedInstances = p.reconciler.cordonedInstances(ctx, p.log, p.ir, p.input)
+	return true, nil
+}
+
+// resolveInstanceReadyTimeout settles the readiness window of this
+// Component's operations: the Component's own lifecycle value, else the
+// operator's. Every deadline the pass writes reads it, migration requests
+// included, so they all expire by one rule.
+func (p *replicaPass) resolveInstanceReadyTimeout(context.Context) (bool, error) {
+	p.instanceReadyTimeout = workload.ResolveInstanceReadyTimeout(
+		p.input.DesiredSpec.Lifecycle.InstanceReadyTimeout, p.settings.InstanceReadyTimeout)
+	return true, nil
+}
+
+// syncMigrationRecords brings status.migrations up to date before any
+// request is accepted: in-flight records of the migration table that status
+// does not carry yet are imported, so they resume through the status path,
+// and terminal records older than the audit window are removed. With no
+// window configured nothing ages out.
+func (p *replicaPass) syncMigrationRecords(ctx context.Context) (bool, error) {
+	var recordWindow time.Duration
+	if p.settings.MigrationAudit != nil {
+		recordWindow = p.settings.MigrationAudit.Window
+	}
+	if err := p.reconciler.syncMigrationEntries(ctx, p.log, p.ir, p.parent, p.instanceReadyTimeout, recordWindow); err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: sync migration entries: %w", err)
+	}
+	return true, nil
+}
+
+// acceptMigrationRequests turns the parent's migration request annotations
+// into status.migrations entries: a valid request becomes an entry with a
+// Started row in the migration table, an invalid one a terminal Failed row,
+// and the annotation is removed either way. The mode is the effective one
+// the dispatcher reads (Never refuses at acceptance). An accepted request
+// requeues; otherwise the engine input's copy of the records is refreshed,
+// because the input was built before the import above.
+func (p *replicaPass) acceptMigrationRequests(ctx context.Context) (bool, error) {
+	mode := workload.MigrationModeOrDefault(p.input.DesiredSpec.Lifecycle.MigrationPolicy)
+	requeue, err := p.reconciler.consumeMigrationRequests(ctx, p.log, p.ir, p.parent, mode, p.instanceReadyTimeout)
+	if err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: consume migration requests: %w", err)
+	}
+	if requeue {
+		return p.end(ctrl.Result{Requeue: true}, nil)
+	}
+	p.input.ObservedState.Migrations = migrationsFromIR(p.ir)
+	return true, nil
+}
+
+// holdDeadlinesWhilePaused stops every in-flight operation deadline of a
+// paused replica now, before revision creation, the rollback read or the
+// plan can fail, so a failure cannot leave a clock running. The publication
+// at the end of the pass does the usual deadline bookkeeping and restarts
+// the clocks after an unpause.
+func (p *replicaPass) holdDeadlinesWhilePaused(ctx context.Context) (bool, error) {
+	if !p.input.DesiredSpec.Paused {
+		return true, nil
+	}
+	if err := p.reconciler.reconcileHeldDeadlines(ctx, p.ir, nil, true, 0); err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: park paused operation deadlines: %w", err)
+	}
+	return true, nil
+}
+
+// ensureSpecRevision ensures the ControllerRevision of the rendered spec,
+// the spec target. It is reported as updateRevision even during a rollback,
+// when the Instances roll toward another revision, so a new spec stays
+// visible to the service and its canary. A same-name revision with other
+// data raises the collision count and retries. A spec with no pod template
+// has no revision.
+func (p *replicaPass) ensureSpecRevision(ctx context.Context) (bool, error) {
+	if p.input.DesiredSpec.PodSpec == nil {
+		return true, nil
+	}
+	target, err := p.reconciler.ensureRevisionWithCollisionRetry(ctx, p.ir, p.input)
+	if err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: ensure revision (ir=%s/%s): %w",
+			p.ir.Namespace, p.ir.Name, err)
+	}
+	p.specTarget = target
+	return true, nil
+}
+
+// resolveRollbackTarget makes the revision spec.pacing.rollbackToRevision
+// names the roll target when this replica controls it: the desired template
+// is rendered from the revision's stored payload and the forward roll drains
+// the Instances onto it, while updateRevision keeps naming the spec target.
+// A revision that is gone, or carries no pod template, leaves the spec
+// target as the roll target.
+func (p *replicaPass) resolveRollbackTarget(ctx context.Context) (bool, error) {
+	p.rollTarget = p.specTarget
+	cr, err := p.reconciler.rollbackRevision(ctx, p.ir, workloadtypes.EventTarget(p.input))
+	if err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: %w", err)
+	}
+	if cr == nil {
+		return true, nil
+	}
+	payload, err := revision.PayloadFromControllerRevision(cr)
+	if err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: rollback revision payload (ir=%s/%s): %w", p.ir.Namespace, p.ir.Name, err)
+	}
+	if payload == nil || payload.PodSpec == nil {
+		return true, nil
+	}
+	if err := p.reconciler.applyRollbackPayload(ctx, p.ir, &p.input.DesiredSpec, payload, cr); err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: apply rollback revision %s: %w", cr.Name, err)
+	}
+	p.rollTarget = cr
+	p.rollbackRevision = cr
+	return true, nil
+}
+
+// wireCoordinationGates installs the coordination gates on the input. The
+// gates orient by the roll target, so they are wired only now that it is
+// resolved.
+func (p *replicaPass) wireCoordinationGates(ctx context.Context) (bool, error) {
+	p.reconciler.wireCoordinationGates(ctx, &p.input, p.ir, p.parent, p.coordDefaults, p.rollTarget)
+	return true, nil
+}
+
+// readRevisionWidths reads the worker width recorded by every revision the
+// rows reference and by the roll target. Each Instance renders the width its
+// own revision recorded, so the plan needs them all.
+func (p *replicaPass) readRevisionWidths(ctx context.Context) (bool, error) {
+	rollTargetName := ""
+	if p.rollTarget != nil {
+		rollTargetName = p.rollTarget.Name
+	}
+	widths, err := revision.WorkerSizesByRevision(ctx, p.reconciler.Client, p.ir.Namespace,
+		revision.ReferencedRevisionNames(p.input.ObservedState.InstanceStatuses, rollTargetName))
+	if err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: read revision widths (ir=%s/%s): %w",
+			p.ir.Namespace, p.ir.Name, err)
+	}
+	p.input.ObservedState.WorkerSizeByRevision = widths
+	return true, nil
+}
+
+// buildPlan builds the plan of the pass from the desired spec and the
+// observed rows, and overlays the two operator windows the plan does not
+// carry: the gang admission bound (nil leaves the derived PodGroup timeout
+// unclamped) and the readiness window (zero opens operations with no
+// deadline).
+func (p *replicaPass) buildPlan(context.Context) (bool, error) {
+	plan, err := workload.BuildPlan(v1beta1convert.ComponentTypeToWorkload(p.ir.Spec.Component), p.input.DesiredSpec, p.input.ObservedState)
+	if err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: build plan (ir=%s/%s): %w",
+			p.ir.Namespace, p.ir.Name, err)
+	}
+	plan.GangScheduleTimeout = p.settings.GangScheduleTimeout
+	plan.InstanceReadyTimeout = p.instanceReadyTimeout
+	p.plan = plan
+	return true, nil
+}
+
+// clearIdleScaleDownGauges sets the scale-down gauges of a Component with
+// no delete in flight to zero, so a finished wave does not read as open.
+func (p *replicaPass) clearIdleScaleDownGauges(context.Context) (bool, error) {
+	if scaleDownPodObservationRequired(p.input, p.plan) {
+		return true, nil
+	}
+	obsmetrics.SetScaleDownActivePods(p.ir.Namespace, p.ir.NamePrefix(), string(p.ir.Spec.Component), 0)
+	obsmetrics.SetScaleDownDeferredInstances(p.ir.Namespace, p.ir.NamePrefix(), string(p.ir.Spec.Component), 0)
+	return true, nil
+}
+
+// installStatusPublication turns the status publication on: from here
+// every return of the pass, early or not, promotes or clears the current
+// revision, writes the counters, the conditions and the hold, and sweeps
+// old revisions. The publication also stops the readiness deadlines of a
+// paused replica, so a failed live read or PodGroup step must not skip it.
+func (p *replicaPass) installStatusPublication(context.Context) (bool, error) {
+	p.publishOnReturn = true
+	return true, nil
+}
+
+// logRollbackTarget logs the revision the Instances roll back to.
+func (p *replicaPass) logRollbackTarget(context.Context) (bool, error) {
+	if p.rollbackRevision != nil {
+		p.log.Info("Rollback: rolling Instances back to revision", "revision", p.rollbackRevision.Name)
+	}
+	return true, nil
+}
+
+// snapshotLivePodsForScaleDown lists the Component's pods live when a
+// scale-down or a delete is in flight, so the delete decides on the
+// apiserver's picture, not the cache's. A pod this replica owns without a
+// valid instance label makes the picture unusable: the pass ends with an
+// error and publishes nothing, so no effect of this pass reaches status.
+func (p *replicaPass) snapshotLivePodsForScaleDown(ctx context.Context) (bool, error) {
+	if !scaleDownPodObservationRequired(p.input, p.plan) {
+		return true, nil
+	}
+	pods, err := query.LiveListPodsForComponent(ctx, p.reconciler.APIReader, p.ir.Namespace, p.ir.NamePrefix(),
+		v1beta1convert.ComponentTypeToWorkload(p.ir.Spec.Component))
+	if err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: observe scale-down pods (component=%s): %w", p.ir.Spec.Component, err)
+	}
+	owned := podsControlledBy(pods, p.ir.UID)
+	if invalid := invalidInstanceIndexPodCount(owned); invalid > 0 {
+		p.publishOnReturn = false
+		return false, fmt.Errorf(
+			"InferenceReplica reconciler: authoritative scale-down snapshot contains %d UID-owned component pod(s) without a valid %s label; refusing scale-down effects",
+			invalid, query.LabelInstanceIdx)
+	}
+	p.input.AuthoritativePods = &workloadtypes.ComponentPodSnapshot{
+		OwnerUID:   p.ir.UID,
+		Pods:       owned,
+		ByInstance: query.BucketPodsByInstanceIdx(owned),
+	}
+	return true, nil
+}
+
+// reportReadyTimeout reports whether this Component has a readiness window,
+// past every guard that refuses to act, so a pass that refuses writes
+// nothing at all.
+func (p *replicaPass) reportReadyTimeout(ctx context.Context) (bool, error) {
+	p.reconciler.reportInstanceReadyTimeout(ctx, p.log, p.ir, p.input, p.plan.InstanceReadyTimeout)
+	return true, nil
+}
+
+// recordUpdateRevision writes the spec target as updateRevision before any
+// pod renders it. A pass that ends between creating a pod and the
+// publication then leaves pods of the new revision beside a status that
+// already names it, never beside one still reporting the previous revision
+// as current and done. The record moves the pair as one pair, so a rollback
+// onto the current revision reads open from this write on.
+func (p *replicaPass) recordUpdateRevision(ctx context.Context) (bool, error) {
+	if p.specTarget == nil || p.ir.Status.UpdateRevision == p.specTarget.Name {
+		return true, nil
+	}
+	if err := buildRecordUpdateRevision(p.reconciler.statusWriter(), p.reconciler.liveReader(), p.reconciler.Client, p.ir)(ctx, p.specTarget.Name); err != nil {
+		if errors.Is(err, workloadtypes.ErrStatusOwnerGone) {
+			return p.end(ctrl.Result{}, nil)
+		}
+		if errors.Is(err, workloadtypes.ErrStatusMutationPrecondition) || apierrors.IsConflict(err) {
+			return p.end(ctrl.Result{Requeue: true}, nil)
+		}
+		return false, fmt.Errorf("InferenceReplica reconciler: record update revision (ir=%s/%s): %w",
+			p.ir.Namespace, p.ir.Name, err)
+	}
+	p.input.ObservedState.UpdateRevision = p.ir.Status.UpdateRevision
+	return true, nil
+}
+
+// resolvePeerRevisions resolves, for every pod rendered this pass, the roll
+// target revision of each serving peer and creates that revision's
+// per-revision Services before any pod that names them exists. While a
+// peer's projection or status lags this Component's parent generation the
+// pairing is unknowable, so the pass renders nothing, publishes its status
+// and retries.
+func (p *replicaPass) resolvePeerRevisions(ctx context.Context) (bool, error) {
+	if !coordination.PeerEnvDeclared(p.parent) {
+		return true, nil
+	}
+	peers, hold, err := p.reconciler.resolvePeerRevisions(ctx, p.ir, p.parent, p.rollTarget)
+	if err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: resolve peer revisions (component=%s): %w", p.ir.Spec.Component, err)
+	}
+	if hold != "" {
+		p.log.V(1).Info("Holding dispatch until peer revisions are resolvable", "reason", hold)
+		return p.end(ctrl.Result{Requeue: true}, nil)
+	}
+	if err := p.reconciler.ensurePeerRevisionServices(ctx, p.parent, peers); err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: ensure peer per-revision services (component=%s): %w", p.ir.Spec.Component, err)
+	}
+	p.peerRevisionFor = peers.hashFor
+	return true, nil
+}
+
+// buildEngineDeps gathers what the engine calls out to: the clients, the
+// recorder, the expectations cache, the clock and the render hook. The hook
+// overlays each peer's endpoint and per-revision endpoint onto every
+// rendered pod, so the prefill and decode sides address each other by
+// stable DNS and by the revision they pair with; it renders nothing when the
+// parent has no rollout groups or is nil.
+func (p *replicaPass) buildEngineDeps(context.Context) (bool, error) {
+	p.deps = workloadtypes.Deps{
+		Client:       p.reconciler.Client,
+		APIReader:    p.reconciler.APIReader,
+		Recorder:     p.reconciler.Recorder,
+		Expectations: p.reconciler.Expectations,
+		Clock:        p.reconciler.Clock,
+		RenderHook:   ISVCRenderHook(p.parent, p.peerRevisionFor),
+	}
+	return true, nil
+}
+
+// observePodGroups reads the PodGroups this owner controls when a gang
+// decision needs the apiserver's picture, removes the PodGroups left by
+// Instances that became single-pod, and installs the per-Instance resource
+// finalization that removes an Instance's PodGroup with it. A removal still
+// in flight requeues on the scale-down cadence.
+func (p *replicaPass) observePodGroups(ctx context.Context) (bool, error) {
+	if !p.input.DesiredSpec.GangSchedulingAvailable {
+		return true, nil
+	}
+	observe, err := p.reconciler.requiresAuthoritativePodGroupInventory(ctx, p.input, p.plan)
+	if err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: check pod group inventory requirement (component=%s): %w", p.ir.Spec.Component, err)
+	}
+	if observe {
+		p.podGroupInventory, err = workloadgang.ObservePodGroups(ctx, p.deps.Reader(), p.input.OwnerObject)
+		if err != nil {
+			return false, fmt.Errorf("InferenceReplica reconciler: observe pod groups (component=%s): %w", p.ir.Spec.Component, err)
+		}
+		blocked, cleanupErr := p.reconciler.reconcileStaleSinglePodGroups(ctx, p.ir, &p.input, p.plan, p.podGroupInventory)
+		if cleanupErr != nil {
+			return false, cleanupErr
+		}
+		if blocked {
+			return p.end(scaleDownRequeueResult(p.reconciler.ScaleDownRequeueInterval), nil)
+		}
+	}
+	p.input.FinalizeInstanceResources = workloadgang.BuildFinalizeInstanceResources(
+		p.deps.Client, p.deps.Reader(), p.podGroupInventory, p.input.OwnerObject, p.input.Key.OwnerName, p.plan.Component)
+	return true, nil
+}
+
+// ensurePodGroups creates the PodGroups before the first pod of any
+// multi-pod Instance, or the gang scheduler rejects the pods and they stay
+// Pending. It is a no-op for single-pod Components and when the PodGroup CRD
+// is absent, when the engine writes GangSchedulingUnavailable instead. A
+// gang surge's PodGroup is created inline, just before its pods, through the
+// dependency installed here. A PodGroup name this owner cannot write is
+// charged to the Instance that wanted it, so one unusable PodGroup never
+// stops the whole Component.
+func (p *replicaPass) ensurePodGroups(ctx context.Context) (bool, error) {
+	state := workloadgang.PodGroupReconcileState{
+		Inventory:     p.podGroupInventory,
+		TerminalOwned: TerminalFinalizationOwned(p.input.ObservedState),
+	}
+	p.deps.EnsureGangPodGroup = workloadgang.EnsureSurgePodGroupWithState(p.deps, state)
+	effectiveTopology, err := workloadgang.EnsurePodGroupsWithState(ctx, p.deps, p.input, p.plan, state)
+	if err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: ensure pod groups (component=%s): %w", p.ir.Spec.Component, err)
+	}
+	p.plan.InstanceTopologyKeys = effectiveTopology
+	return true, nil
+}
+
+// provisionSlices provisions the TPU slices the Instances of this pass
+// need, when the manager was configured to provision them.
+func (p *replicaPass) provisionSlices(ctx context.Context) (bool, error) {
+	slices, err := p.reconciler.provisionSlices(ctx, p.ir, &p.deps, &p.input)
+	if err != nil {
+		return false, fmt.Errorf("InferenceReplica reconciler: provision TPU slices (component=%s): %w", p.ir.Spec.Component, err)
+	}
+	p.slices = slices
+	return true, nil
+}
+
+// runEngine runs the engine once over the input and the plan toward the
+// roll target, and records what it returned.
+func (p *replicaPass) runEngine(ctx context.Context) (bool, error) {
+	p.result, p.err = workload.Reconcile(ctx, p.deps, p.input, p.plan, p.rollTarget)
+	return true, nil
+}
+
+// tendSlices recovers the TPU slices of Instances whose slice was lost and
+// sweeps the slices no Instance needs, after an engine pass that returned no
+// error. A slice failure replaces the engine's result with its own error.
+func (p *replicaPass) tendSlices(ctx context.Context) (bool, error) {
+	if p.err != nil {
+		return true, nil
+	}
+	if err := p.reconciler.recoverLostSlices(ctx, p.ir, p.input, p.slices); err != nil {
+		p.result = ctrl.Result{}
+		p.err = fmt.Errorf("InferenceReplica reconciler: recover lost TPU slices (component=%s): %w", p.ir.Spec.Component, err)
+		return true, nil
+	}
+	if err := p.slices.sweep(ctx, p.input, p.plan); err != nil {
+		p.result = ctrl.Result{}
+		p.err = fmt.Errorf("InferenceReplica reconciler: sweep TPU slices (component=%s): %w", p.ir.Spec.Component, err)
+	}
+	return true, nil
+}
+
+// reconcileHeadlessService keeps the per-Component headless Service, which
+// gives every pod a stable name for peer discovery during gang start and for
+// any proxy that wants per-pod addresses, and ends the pass with the
+// engine's result. It runs after the engine so the Service exists by the
+// time pods become Ready. A Service failure is reported only when the engine
+// succeeded; otherwise it is logged and the engine's error stands.
+func (p *replicaPass) reconcileHeadlessService(ctx context.Context) (bool, error) {
+	if serr := workloadservice.ReconcileHeadlessService(ctx, p.reconciler.Client, buildHeadlessServiceSpec(p.ir)); serr != nil {
+		if p.err == nil {
+			p.result = ctrl.Result{}
+			p.err = fmt.Errorf("InferenceReplica reconciler: reconcile headless service: %w", serr)
+		} else {
+			p.log.V(1).Error(serr, "Headless Service reconcile also failed; primary error preserved")
+		}
+	}
+	return p.end(p.result, p.err)
+}
+
+// publishStatus is the end of every pass past installStatusPublication, run
+// on every return with the result the pass holds. It promotes the current
+// revision when every Instance is on the spec target, writes the counters,
+// the conditions and the hold, sweeps old revisions and logs the revision
+// transitions. A stale read behind a write requeues in place of the result;
+// a write failure is reported only when the pass had no error of its own,
+// so a status failure never hides an engine failure. A pass with no error
+// comes back for the earliest pod that crosses its minReadySeconds window,
+// which raises the Available counters with no watch event.
+func (p *replicaPass) publishStatus(ctx context.Context, result ctrl.Result, err error) (ctrl.Result, error) {
+	if ended, promoteResult, promoteErr := p.promoteCurrentRevision(ctx, err); ended {
+		return promoteResult, promoteErr
+	}
+	nextAvailableIn, serr := p.reconciler.aggregateAndWriteStatus(ctx, p.ir, p.plan, p.specTarget, p.holdObserved, p.hold)
+	if errors.Is(serr, workloadtypes.ErrStatusMutationPrecondition) {
+		return ctrl.Result{Requeue: true}, nil
+	}
+	if serr != nil && err != nil {
+		p.log.V(1).Error(serr, "Status write also failed; primary error preserved")
+	}
+	// The retention sweep runs on a failed write too: it works from the
+	// last committed status and runs again next pass.
+	p.reconciler.sweepRevisions(ctx, p.ir)
+	p.logRevisionTransitions()
+	p.published = true
+	if serr != nil && err == nil {
+		if apierrors.IsConflict(serr) {
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: write status: %w", serr)
+	}
+	if err == nil {
+		result = foldRequeueAfter(result, nextAvailableIn)
+	}
+	return result, err
+}
+
+// promoteCurrentRevision writes currentRevision against the spec target
+// before the status write, so the Ready condition reads the promoted value.
+// It ends the publication, in place of the pass's result, on a stale read
+// (requeue) and, when the pass had no error of its own, on a conflict
+// (requeue) or another failure (the error); behind a pass error the failure
+// is logged and the pass error stands.
+func (p *replicaPass) promoteCurrentRevision(ctx context.Context, passErr error) (bool, ctrl.Result, error) {
+	if p.specTarget == nil {
+		return false, ctrl.Result{}, nil
+	}
+	perr := buildPromoteCurrentRevision(p.reconciler.statusWriter(), p.reconciler.liveReader(), p.reconciler.Client, p.ir)(ctx, p.specTarget.Name)
+	if perr == nil {
+		return false, ctrl.Result{}, nil
+	}
+	if errors.Is(perr, workloadtypes.ErrStatusMutationPrecondition) {
+		return true, ctrl.Result{Requeue: true}, nil
+	}
+	if passErr == nil {
+		if apierrors.IsConflict(perr) {
+			return true, ctrl.Result{Requeue: true}, nil
+		}
+		return true, ctrl.Result{}, fmt.Errorf("InferenceReplica reconciler: promote current revision: %w", perr)
+	}
+	p.log.V(1).Error(perr, "CurrentRevision promotion also failed; primary error preserved")
+	return false, ctrl.Result{}, nil
+}
+
+// logRevisionTransitions logs a current revision restored, promoted or
+// cleared, by comparing the revision pair the publication left with the pair
+// the pass read.
+func (p *replicaPass) logRevisionTransitions() {
+	switch {
+	case p.priorClearedRevision != "" && p.ir.Status.CurrentRevision == p.priorClearedRevision:
+		p.log.Info("Rollout closed; CurrentRevision restored once every Instance was back on the revision it was withdrawn from",
+			"currentRevision", p.ir.Status.CurrentRevision)
+	case p.priorCurrentRevision != p.ir.Status.CurrentRevision && p.ir.Status.CurrentRevision != "":
+		p.log.Info("Rollout complete; CurrentRevision promoted",
+			"previousCurrentRevision", p.priorCurrentRevision,
+			"currentRevision", p.ir.Status.CurrentRevision)
+	case p.priorCurrentRevision != "" && p.ir.Status.CurrentRevision == "":
+		p.log.Info("Rollout reopened; CurrentRevision withdrawn while an Instance still runs, or is still pinned to, another revision",
+			"previousCurrentRevision", p.priorCurrentRevision,
+			"updateRevision", p.ir.Status.UpdateRevision)
+	}
 }
 
 // resolveUpdateRetryPolicy loads lifecycle.updateRetry from the operator
@@ -1299,25 +1549,34 @@ func (r *Reconciler) resolveForceDeletePolicy(log logr.Logger) *workloadtypes.Fo
 }
 
 // resolveCoordinationGroupDefaults loads the operator-configured group
-// resolution fill-ins (coordination.defaultRatioTolerancePercent) from the
-// operator ConfigMap. Absent or unloadable config resolves to the zero
-// value — a group that omits maintainRatio.tolerance then rolls with no
-// drift bound — with one V(1) log; there is never a silent in-code
-// fallback tolerance.
+// resolution fill-ins from the operator ConfigMap: the ratio tolerance
+// default (coordination.defaultRatioTolerancePercent) and the pacing rules
+// of a prefill/decode group (lifecycle.prefillDecodeRoll). Absent or
+// unloadable config resolves to the zero value — a group that omits
+// maintainRatio.tolerance then rolls with no drift bound, and the two
+// sides of a prefill/decode group roll on their own budgets — with one
+// V(1) log; there is never a silent in-code fallback.
 func (r *Reconciler) resolveCoordinationGroupDefaults(log logr.Logger) coordination.GroupDefaults {
 	if r.Clientset == nil {
 		log.V(1).Info("coordination group defaults unresolved: no clientset wired; unfilled knobs use their unconfigured behavior")
 		return coordination.GroupDefaults{}
 	}
+	defaults := coordination.GroupDefaults{}
 	cfg, err := controllerconfig.NewCoordinationConfigCached(r.ConfigCache, r.Clientset)
-	if err != nil {
+	switch {
+	case err != nil:
 		log.V(1).Info("coordination group defaults unresolved: coordination config load failed; unfilled knobs use their unconfigured behavior", "error", err.Error())
-		return coordination.GroupDefaults{}
+	case cfg != nil:
+		defaults.RatioTolerancePercent = cfg.DefaultRatioTolerancePercent
 	}
-	if cfg == nil {
-		return coordination.GroupDefaults{}
+	if lifecycle, err := r.loadLifecycleConfig(log, "prefill/decode roll rules"); err == nil && lifecycle != nil {
+		keepRatio, firstSide, rerr := lifecycle.ToPrefillDecodeRoll()
+		if rerr != nil {
+			log.V(1).Info("prefill/decode roll firstSide invalid; both sides start their batch together this pass", "error", rerr.Error())
+		}
+		defaults.PrefillDecode = coordination.PrefillDecodeRules{KeepRatio: keepRatio, FirstSide: v1beta1.ComponentType(firstSide)}
 	}
-	return coordination.GroupDefaults{RatioTolerancePercent: cfg.DefaultRatioTolerancePercent}
+	return defaults
 }
 
 // resolveTeardownDeadline loads lifecycle.teardown.deadline from the
@@ -1607,6 +1866,11 @@ func (r *Reconciler) applyRollbackPayload(ctx context.Context, ir *v1beta1.Infer
 	desired.PodSpec = payload.PodSpec
 	desired.WorkerPodSpec = payload.WorkerPodSpec
 	desired.PodTemplateObjectMeta = payload.PodMeta
+	// The width is revision-owned too: a stored revision's gang renders at
+	// the worker count it recorded.
+	if payload.WorkerSize != nil {
+		desired.Runners = workloadtypes.RunnersWithWorkerSize(desired.Runners, *payload.WorkerSize)
+	}
 	// The pairing protocol is revision-owned: pods rendered from a stored
 	// revision must carry that revision's protocol, not the current spec's,
 	// or a repaired old-cohort pod would be mislabeled into the new cohort.
@@ -1756,9 +2020,21 @@ func (r *Reconciler) ensureRevisionWithCollisionRetry(ctx context.Context, ir *v
 		return nil, err
 	}
 
-	hash, raw, err := r.revisionHash(ir, input, ir.Status.CollisionCount, scopeUID)
+	hash, raw, twin, err := r.revisionHashAndTwin(ir, input, ir.Status.CollisionCount, scopeUID)
 	if err != nil {
 		return nil, err
+	}
+	// A multi-pod revision that records no width stays the target while its
+	// gangs run the desired width, so a deploy rolls no gang whose template
+	// did not change.
+	adopted, err := revision.AdoptRevisionWithoutWidth(ctx, r.Client, r.APIReader, ir, revKey, hash,
+		twin, workloadtypes.WorkerSizeOf(input.DesiredSpec.Runners), ir.Status.UpdateRevision,
+		r.observedWorkerWidth(ctx, ir, input.ObservedState.InstanceStatuses))
+	if err != nil {
+		return nil, fmt.Errorf("adopt revision minted without a width: %w", err)
+	}
+	if adopted != nil {
+		return adopted, nil
 	}
 	target, collision, err := revision.EnsureControllerRevisionFromHash(
 		ctx, r.Client, r.APIReader,
@@ -1798,10 +2074,17 @@ func (r *Reconciler) ensureRevisionWithCollisionRetry(ctx context.Context, ir *v
 	return target, nil
 }
 
-// revisionHash memoizes the canonical revision payload. Generation covers spec-derived inputs;
-// the excluded annotation list, collision count, and scope UID cover the remaining hash inputs.
-// Cached raw bytes are immutable and only read by revision creation.
+// revisionHash is the memoized canonical revision payload; see revisionHashAndTwin.
 func (r *Reconciler) revisionHash(ir *v1beta1.InferenceReplica, input workloadtypes.ReconcileInput, collisionCount *int32, scopeUID types.UID) (string, []byte, error) {
+	hash, raw, _, err := r.revisionHashAndTwin(ir, input, collisionCount, scopeUID)
+	return hash, raw, err
+}
+
+// revisionHashAndTwin memoizes the canonical revision payload and its width-free twin.
+// Generation covers spec-derived inputs; the excluded annotation list, collision count, and
+// scope UID cover the remaining hash inputs. Cached raw bytes are immutable and only read by
+// revision creation.
+func (r *Reconciler) revisionHashAndTwin(ir *v1beta1.InferenceReplica, input workloadtypes.ReconcileInput, collisionCount *int32, scopeUID types.UID) (string, []byte, revision.WidthFreeTwin, error) {
 	cc := utils.DerefInt32(collisionCount)
 	cacheKey := client.ObjectKeyFromObject(ir)
 	excludedAnnotationKeys := ir.Annotations[constants.RevisionExcludedAnnotationKeysAnnotationKey]
@@ -1817,20 +2100,17 @@ func (r *Reconciler) revisionHash(ir *v1beta1.InferenceReplica, input workloadty
 		entry.excludedAnnotationKeys == excludedAnnotationKeys &&
 		entry.collisionCount == cc &&
 		entry.scopeUID == scopeUID {
-		return entry.hash, entry.raw, nil
+		return entry.hash, entry.raw, entry.twin, nil
 	}
 
-	// Hash a copy without the inherited object annotations while retaining them on rendered pods.
-	meta := stripExcludedAnnotations(input.DesiredSpec.PodTemplateObjectMeta, hashExcludedAnnotationKeys(ir))
-	hash, raw, err := revision.HashWithWorkerTopologyAndPairing(
-		input.DesiredSpec.PodSpec, input.DesiredSpec.WorkerPodSpec,
-		meta,
-		input.DesiredSpec.TopologyKey,
-		input.DesiredSpec.PairingProtocol,
-		collisionCount, scopeUID,
-	)
+	tmpl := r.revisionTemplate(ir, input)
+	hash, raw, err := revision.HashTemplate(tmpl, collisionCount, scopeUID)
 	if err != nil {
-		return "", nil, err
+		return "", nil, revision.WidthFreeTwin{}, err
+	}
+	twin, _, err := revision.WidthFreeTwinOf(tmpl, collisionCount, scopeUID)
+	if err != nil {
+		return "", nil, revision.WidthFreeTwin{}, err
 	}
 	if r.revisionHashCache == nil {
 		r.revisionHashCache = make(map[types.NamespacedName]revisionHashEntry)
@@ -1843,8 +2123,39 @@ func (r *Reconciler) revisionHash(ir *v1beta1.InferenceReplica, input workloadty
 		scopeUID:               scopeUID,
 		hash:                   hash,
 		raw:                    raw,
+		twin:                   twin,
 	}
-	return hash, raw, nil
+	return hash, raw, twin, nil
+}
+
+// revisionTemplate is what the replica's revision hashes: the rendered
+// templates, the template metadata without the inherited object annotations
+// (which rendered pods keep), the topology key, the pairing protocol and the
+// worker count.
+func (r *Reconciler) revisionTemplate(ir *v1beta1.InferenceReplica, input workloadtypes.ReconcileInput) revision.Template {
+	desired := input.DesiredSpec
+	return v1beta1convert.RevisionTemplateOf(v1beta1convert.PodTemplates{
+		Primary:    desired.PodSpec,
+		Meta:       desired.PodTemplateObjectMeta,
+		Worker:     desired.WorkerPodSpec,
+		WorkerSize: workloadtypes.WorkerSizeOf(desired.Runners),
+	}, desired.TopologyKey, desired.PairingProtocol, hashExcludedAnnotationKeys(ir))
+}
+
+// observedWorkerWidth reads the worker count the replica's gangs run on a
+// revision, from the cached pods, and only while a row is Ready on it; a
+// list that fails observes nothing, which keeps the target where it is.
+func (r *Reconciler) observedWorkerWidth(ctx context.Context, ir *v1beta1.InferenceReplica, rows []workloadtypes.InstanceStatus) func(string) (int32, bool) {
+	return func(revisionName string) (int32, bool) {
+		if !revision.HasReadyRowOn(rows, revisionName) {
+			return 0, false
+		}
+		pods, err := query.ListOMENativePodsByName(ctx, r.Client, ir.Namespace, ir.NamePrefix(), v1beta1convert.ComponentTypeToWorkload(ir.Spec.Component), false)
+		if err != nil {
+			return 0, false
+		}
+		return revision.ObservedWorkerWidth(rows, pods, revisionName)
+	}
 }
 
 // hashExcludedAnnotationKeys returns the pod-template annotation keys omitted
@@ -1854,7 +2165,7 @@ func (r *Reconciler) revisionHash(ir *v1beta1.InferenceReplica, input workloadty
 // into the template the way an InferenceService's are. The refs set is
 // derived in memory; nothing is stamped on the replica.
 func hashExcludedAnnotationKeys(ir *v1beta1.InferenceReplica) map[string]struct{} {
-	excluded := parseExcludedAnnotationKeys(ir)
+	excluded := v1beta1convert.ExcludedAnnotationKeys(ir)
 	if !rendersFromRefs(ir) || len(ir.Annotations) == 0 {
 		return excluded
 	}
@@ -1865,42 +2176,6 @@ func hashExcludedAnnotationKeys(ir *v1beta1.InferenceReplica) map[string]struct{
 		excluded[k] = struct{}{}
 	}
 	return excluded
-}
-
-// parseExcludedAnnotationKeys returns inherited ISVC annotation keys omitted from revision hashing.
-func parseExcludedAnnotationKeys(ir *v1beta1.InferenceReplica) map[string]struct{} {
-	raw := ir.Annotations[constants.RevisionExcludedAnnotationKeysAnnotationKey]
-	if raw == "" {
-		return nil
-	}
-	parts := strings.Split(raw, ",")
-	out := make(map[string]struct{}, len(parts))
-	for _, p := range parts {
-		if p != "" {
-			out[p] = struct{}{}
-		}
-	}
-	return out
-}
-
-// stripExcludedAnnotations returns metadata without excluded keys and never mutates the input.
-func stripExcludedAnnotations(meta *metav1.ObjectMeta, excluded map[string]struct{}) *metav1.ObjectMeta {
-	if meta == nil || len(excluded) == 0 || len(meta.Annotations) == 0 {
-		return meta
-	}
-	filtered := make(map[string]string, len(meta.Annotations))
-	for k, v := range meta.Annotations {
-		if _, drop := excluded[k]; drop {
-			continue
-		}
-		filtered[k] = v
-	}
-	if len(filtered) == len(meta.Annotations) {
-		return meta // nothing dropped
-	}
-	out := *meta
-	out.Annotations = filtered
-	return &out
 }
 
 // forgetRevisionHash evicts the memoized revision hash for a deleted IR so

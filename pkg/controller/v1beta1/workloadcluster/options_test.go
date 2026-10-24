@@ -2,7 +2,10 @@ package workloadcluster
 
 import (
 	"context"
+	"encoding/pem"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -17,9 +20,12 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/rest"
 	toolscache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 // errProbe is a sentinel returned by failing test probes.
@@ -68,7 +74,7 @@ func TestClientTuning_Apply(t *testing.T) {
 // TestManager_SetClientTuning_RoundTrips confirms the setter stores the tuning
 // that buildRemoteClient later reads.
 func TestManager_SetClientTuning_RoundTrips(t *testing.T) {
-	m := NewManager(scheme(t))
+	m := NewManager(fakeclient.Scheme(t))
 	m.SetClientTuning(ClientTuning{QPS: 50, Burst: 100, PerCallTimeout: 7 * time.Second})
 	m.mu.RLock()
 	got := m.tuning
@@ -96,7 +102,7 @@ func TestCacheOptions_EnabledOnlyWhenKindsPresent(t *testing.T) {
 // default builder returns a never-caching client (no cache handler support) and
 // a no-op cancel.
 func TestBuildRemoteClient_NeverCachingWhenNoKinds(t *testing.T) {
-	m := NewManager(scheme(t))
+	m := NewManager(fakeclient.Scheme(t))
 	cl, cancel, err := m.buildRemoteClient(context.Background(), []byte(validKubeconfigRealCA), m.scheme)
 	require.NoError(t, err)
 	require.NotNil(t, cancel)
@@ -106,33 +112,30 @@ func TestBuildRemoteClient_NeverCachingWhenNoKinds(t *testing.T) {
 	assert.Error(t, err, "never-caching client must reject cache handlers")
 }
 
-// TestBuildRemoteClient_SelectivelyCachingWhenKinds: with CacheOptions naming a
-// cached kind, the builder constructs a selectively-caching client and returns a
-// real (non-nil) cancel that tears the background cache down. cache.New does not
-// dial the apiserver, so this is hermetic; cancel() stops the (idle) informers.
-func TestBuildRemoteClient_SelectivelyCachingWhenKinds(t *testing.T) {
-	m := NewManager(scheme(t))
-	sel := labels.SelectorFromSet(labels.Set{"ome.io/placement-origin": "x"})
-	m.SetCacheOptions(CacheOptions{CachedKinds: sets.New(isvcGK()), DefaultSelector: sel})
-
-	ctx, baseCancel := context.WithCancel(context.Background())
-	defer baseCancel()
-	cl, cancel, err := m.buildRemoteClient(ctx, []byte(validKubeconfigRealCA), m.scheme)
+// A cached connection is unusable until its member API can initialize informers.
+func TestBuildRemoteClient_CacheRequiresReachableMember(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "member unavailable", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(server.Close)
+	m := NewManager(fakeclient.Scheme(t))
+	m.SetCacheOptions(CacheOptions{CachedKinds: sets.New(isvcGK())})
+	config, err := clientcmd.Load([]byte(validKubeconfigRealCA))
 	require.NoError(t, err)
-	require.NotNil(t, cl)
-	require.NotNil(t, cancel)
-	cancel() // tears the cache down; must not panic
-
-	// A selectively-caching client accepts a handler for a cached kind (it errors
-	// only for non-cached kinds); proving it is NOT the never-caching wrapper.
-	_, err = cl.AddCacheEventHandler(context.Background(), &corev1.Pod{}, nil)
-	assert.Error(t, err, "Pod is not a cached kind, so a handler for it must error")
+	config.Clusters["c"].Server = server.URL
+	config.Clusters["c"].CertificateAuthorityData = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
+	raw, err := clientcmd.Write(*config)
+	require.NoError(t, err)
+	cl, cancel, err := m.buildRemoteClient(t.Context(), raw, m.scheme)
+	require.ErrorContains(t, err, "registering informer")
+	require.Nil(t, cl)
+	require.Nil(t, cancel)
 }
 
 // TestBuildRemoteClient_CacheRejectsPods: configuring Pod as a cached kind is
 // refused by the underlying NewSelectivelyCachingClient guard.
 func TestBuildRemoteClient_CacheRejectsPods(t *testing.T) {
-	m := NewManager(scheme(t))
+	m := NewManager(fakeclient.Scheme(t))
 	m.SetCacheOptions(CacheOptions{CachedKinds: sets.New(corev1.SchemeGroupVersion.WithKind("Pod").GroupKind())})
 	_, _, err := m.buildRemoteClient(context.Background(), []byte(validKubeconfigRealCA), m.scheme)
 	require.Error(t, err, "the builder must surface the cache's Pod-ban")
@@ -141,7 +144,7 @@ func TestBuildRemoteClient_CacheRejectsPods(t *testing.T) {
 // TestManager_SetCacheOptions_RoundTrips confirms the setter stores the cache
 // options buildRemoteClient later reads (selector + kinds).
 func TestManager_SetCacheOptions_RoundTrips(t *testing.T) {
-	m := NewManager(scheme(t))
+	m := NewManager(fakeclient.Scheme(t))
 	sel := labels.SelectorFromSet(labels.Set{"ome.io/placement-origin": "x"})
 	m.SetCacheOptions(CacheOptions{CachedKinds: sets.New(isvcGK()), DefaultSelector: sel})
 	m.mu.RLock()
@@ -184,47 +187,26 @@ func TestEstablishWaitTime_Schedule(t *testing.T) {
 
 // --- establishWatch ---------------------------------------------------------
 
-// blockingWatchClient embeds a fake WithWatch but its Watch blocks until the
-// passed context is cancelled, so establishWatch's timeout path fires
-// deterministically.
-type blockingWatchClient struct {
-	client.WithWatch
-}
-
-func (b *blockingWatchClient) Watch(ctx context.Context, _ client.ObjectList, _ ...client.ListOption) (watch.Interface, error) {
+// watchBlocksUntilCanceled is a Watch hook that returns only when the passed
+// context ends, so establishWatch's timeout path fires deterministically.
+func watchBlocksUntilCanceled(ctx context.Context, _ client.WithWatch, _ client.ObjectList, _ ...client.ListOption) (watch.Interface, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
 
-// immediateWatchClient returns an empty watch right away (success path).
-type immediateWatchClient struct {
-	client.WithWatch
-}
-
-func (i *immediateWatchClient) Watch(_ context.Context, _ client.ObjectList, _ ...client.ListOption) (watch.Interface, error) {
-	return watch.NewEmptyWatch(), nil
-}
-
-// stubbornWatchClient simulates a broken client that ignores context
-// cancellation. establishWatch must still return at its timeout.
-type stubbornWatchClient struct {
-	client.WithWatch
-	release <-chan struct{}
-}
-
-func (s *stubbornWatchClient) Watch(context.Context, client.ObjectList, ...client.ListOption) (watch.Interface, error) {
-	<-s.release
-	return nil, errors.New("released")
-}
-
 func TestEstablishWatch_TimesOut(t *testing.T) {
-	c := &blockingWatchClient{WithWatch: fake.NewClientBuilder().Build()}
+	c := fakeclient.New(t, fakeclient.WithInterceptors(interceptor.Funcs{Watch: watchBlocksUntilCanceled}))
 	_, err := establishWatch(context.Background(), c, &corev1.PodList{}, 20*time.Millisecond)
 	require.ErrorIs(t, err, errWatchEstablishTimeout)
 }
 
 func TestEstablishWatch_Succeeds(t *testing.T) {
-	c := &immediateWatchClient{WithWatch: fake.NewClientBuilder().Build()}
+	// An empty watch right away is the success path.
+	c := fakeclient.New(t, fakeclient.WithInterceptors(interceptor.Funcs{
+		Watch: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) (watch.Interface, error) {
+			return watch.NewEmptyWatch(), nil
+		},
+	}))
 	w, err := establishWatch(context.Background(), c, &corev1.PodList{}, time.Second)
 	require.NoError(t, err)
 	require.NotNil(t, w)
@@ -233,7 +215,14 @@ func TestEstablishWatch_Succeeds(t *testing.T) {
 
 func TestEstablishWatch_TimeoutDoesNotWaitForClientCancellation(t *testing.T) {
 	release := make(chan struct{})
-	c := &stubbornWatchClient{WithWatch: fake.NewClientBuilder().Build(), release: release}
+	// A broken client ignores context cancellation; establishWatch must still
+	// return at its timeout.
+	c := fakeclient.New(t, fakeclient.WithInterceptors(interceptor.Funcs{
+		Watch: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) (watch.Interface, error) {
+			<-release
+			return nil, errors.New("released")
+		},
+	}))
 	started := time.Now()
 	_, err := establishWatch(context.Background(), c, &corev1.PodList{}, 20*time.Millisecond)
 	require.ErrorIs(t, err, errWatchEstablishTimeout)
@@ -244,7 +233,7 @@ func TestEstablishWatch_TimeoutDoesNotWaitForClientCancellation(t *testing.T) {
 // TestManager_EstablishWatch_NotConnected: a cluster with no client returns
 // (nil,false,nil) rather than erroring.
 func TestManager_EstablishWatch_NotConnected(t *testing.T) {
-	m := NewManager(scheme(t))
+	m := NewManager(fakeclient.Scheme(t))
 	w, generation, connected, err := m.EstablishWatch(context.Background(), "nope", &corev1.PodList{}, 1)
 	require.NoError(t, err)
 	assert.False(t, connected)
@@ -255,7 +244,7 @@ func TestManager_EstablishWatch_NotConnected(t *testing.T) {
 // TestManager_EstablishWatch_TimesOut wires a connected blocking client and a
 // tiny establish timeout so the establish half of the backoff fires.
 func TestManager_EstablishWatch_TimesOut(t *testing.T) {
-	m := NewManager(scheme(t))
+	m := NewManager(fakeclient.Scheme(t))
 	m.SetReconnectBackoff(reconnectBackoff{
 		establishInitial: 20 * time.Millisecond,
 		establishMax:     20 * time.Millisecond,
@@ -263,7 +252,7 @@ func TestManager_EstablishWatch_TimesOut(t *testing.T) {
 		retryMax:         DefaultReconnectRetryMax,
 	})
 	m.newClient = func(_ context.Context, _ []byte, _ *runtime.Scheme) (SelectivelyCachingClient, context.CancelFunc, error) {
-		return &blockingCachingClient{blockingWatchClient: &blockingWatchClient{WithWatch: fake.NewClientBuilder().Build()}}, func() {}, nil
+		return &blockingCachingClient{WithWatch: fakeclient.New(t, fakeclient.WithInterceptors(interceptor.Funcs{Watch: watchBlocksUntilCanceled}))}, func() {}, nil
 	}
 	require.NoError(t, m.Connect(context.Background(), "c1", []byte("kc")))
 
@@ -273,10 +262,10 @@ func TestManager_EstablishWatch_TimesOut(t *testing.T) {
 	assert.NotZero(t, generation)
 }
 
-// blockingCachingClient adapts blockingWatchClient to SelectivelyCachingClient
+// blockingCachingClient adapts a client whose Watch blocks to SelectivelyCachingClient
 // (its Watch blocks; AddCacheEventHandler is unused by these tests).
 type blockingCachingClient struct {
-	*blockingWatchClient
+	client.WithWatch
 }
 
 func (b *blockingCachingClient) AddCacheEventHandler(context.Context, client.Object, toolscache.ResourceEventHandler) (toolscache.ResourceEventHandlerRegistration, error) {
@@ -334,10 +323,10 @@ func TestResolveConfig_NegativeGraceDisables(t *testing.T) {
 // no live connection to hold) requeue with the growing retry backoff rather than
 // the steady health interval.
 func TestReconcile_RetryBackoffSpacesRequeue(t *testing.T) {
-	s := scheme(t)
+	s := fakeclient.Scheme(t)
 	wc := wcWithSecret("c1")
 	secret := kcSecret(validKubeconfig)
-	r, _ := newReconciler(s, func(context.Context, []byte) error { return errProbe }, wc, secret)
+	r, _ := newReconciler(t, s, func(context.Context, []byte) error { return errProbe }, wc, secret)
 	// Resolve a tiny, deterministic retry backoff so the schedule is checkable.
 	cfg := r.resolveConfig(WithReconnectBackoff(ReconnectBackoffConfig{
 		RetryInitial: time.Second,

@@ -151,12 +151,83 @@ type WorkloadObservedState struct {
 	// NotIn overlay. Nil / missing index = no exclusion (zero change for
 	// normal instances).
 	ExcludedNodesByInstance map[int32][]NodeExclusion
+
+	// CordonedInstances is the set of Instance indices with a live pod on
+	// a cordoned node (spec.unschedulable), projected per reconcile by the
+	// adapter from cached pods and nodes. A scale-down removes these
+	// Instances before any other, and its wave admits them first. Nil
+	// means no Instance is known to sit on a cordoned node.
+	CordonedInstances map[int32]struct{}
+	// WorkerSizeByRevision is the worker pods per Instance each revision the
+	// rows reference was minted at, projected per reconcile by the adapter
+	// from the ControllerRevisions. A revision absent here records no width
+	// and renders the desired one.
+	WorkerSizeByRevision map[string]int32
+
+	// rowIndex is where each row sits in InstanceStatuses, built by IndexRows
+	// at the start of a pass and shared by every copy of the state made after
+	// it. nil until then, and a lookup without one scans the slice.
+	rowIndex *rowIndex
+}
+
+// rowIndex is the position of each Instance's row in one row slice, so a
+// lookup by Instance index costs the same on 4,000 rows as on 4. It is
+// built for one slice and never edited afterwards: a state whose slice was
+// replaced builds a new one, and a copy of the state still holding this
+// one reads the slice it was built for.
+type rowIndex struct {
+	rows     []InstanceStatus
+	position map[int32]int
+}
+
+// indexRows records the first row of each Instance index.
+func indexRows(rows []InstanceStatus) *rowIndex {
+	position := make(map[int32]int, len(rows))
+	for i := range rows {
+		if _, seen := position[rows[i].Index]; !seen {
+			position[rows[i].Index] = i
+		}
+	}
+	return &rowIndex{rows: rows, position: position}
+}
+
+// covers reports whether the index was built from rows: the same backing
+// array read at the same length. The engine reads rows in place and never
+// moves them, so an index that covers the slice is current.
+func (x *rowIndex) covers(rows []InstanceStatus) bool {
+	if x == nil || len(x.rows) != len(rows) {
+		return false
+	}
+	return len(rows) == 0 || &x.rows[0] == &rows[0]
+}
+
+// IndexRows indexes the rows once for this state and for every copy of it
+// made afterwards, so a pass that calls it on entry reads rows through one
+// index all the way down. A state that already indexed this slice keeps
+// its index. Only this method builds one: a lookup never does, so a copy
+// made before the index existed scans its slice as it always has.
+func (o *WorkloadObservedState) IndexRows() {
+	if !o.rowIndex.covers(o.InstanceStatuses) {
+		o.rowIndex = indexRows(o.InstanceStatuses)
+	}
 }
 
 // Instance returns the observed row at idx, or nil when the observation
 // carries none. The pointer aliases the observation and is read-only: a
 // write goes through MutateInstance, which re-reads the row it lands on.
+// With an index that covers the slice the lookup is one map read; without
+// one, or when the row at the recorded position does not carry idx, the
+// slice is scanned.
 func (o WorkloadObservedState) Instance(idx int32) *InstanceStatus {
+	if o.rowIndex.covers(o.InstanceStatuses) {
+		position, found := o.rowIndex.position[idx]
+		if !found {
+			return nil
+		}
+		if o.InstanceStatuses[position].Index == idx {
+			return &o.InstanceStatuses[position]
+		}
+	}
 	for i := range o.InstanceStatuses {
 		if o.InstanceStatuses[i].Index == idx {
 			return &o.InstanceStatuses[i]
@@ -242,4 +313,27 @@ type Runner struct {
 	Name string
 	// Size is the per-Instance pod count for this Runner.
 	Size int32
+}
+
+// WorkerSizeOf returns the worker Runner's pod count, or 0 when the layout
+// has no worker Runner (a single-pod Component).
+func WorkerSizeOf(runners []Runner) int32 {
+	for _, r := range runners {
+		if r.Name == RunnerWorker {
+			return r.Size
+		}
+	}
+	return 0
+}
+
+// RunnersWithWorkerSize returns a copy of runners with the worker Runner at
+// size; a layout without a worker Runner is returned unchanged.
+func RunnersWithWorkerSize(runners []Runner, size int32) []Runner {
+	out := append([]Runner(nil), runners...)
+	for i := range out {
+		if out[i].Name == RunnerWorker {
+			out[i].Size = size
+		}
+	}
+	return out
 }

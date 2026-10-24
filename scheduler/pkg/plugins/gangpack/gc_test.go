@@ -34,33 +34,33 @@ func (f fakeGangPodLister) gangPods(namespace, name string) ([]*v1.Pod, error) {
 	return out, nil
 }
 
-// TestGCPinsReleasesDeadGangs: gcPins releases pins for gangs with no live pods
-// and keeps those that still have some.
-func TestGCPinsReleasesDeadGangs(t *testing.T) {
-	pins := placement.New()
-	pins.Set("ns/live", "a")
-	pins.Set("ns/dead", "b")
-	g := &GangPack{pins: pins, podLister: fakeGangPodLister{keys: map[string]bool{"ns/live": true}}}
+// TestGC_GangWithNoLivePods_ReleasesItsAssignment: gcAssignments releases the
+// assignments of gangs with no live pods and keeps those that still have some.
+func TestGC_GangWithNoLivePods_ReleasesItsAssignment(t *testing.T) {
+	assignments := placement.New()
+	assignments.Set("ns/live", "a")
+	assignments.Set("ns/dead", "b")
+	g := &GangPack{assignments: assignments, podLister: fakeGangPodLister{keys: map[string]bool{"ns/live": true}}}
 
-	g.gcPins()
+	g.gcAssignments()
 
-	if _, ok := pins.Get("ns/dead"); ok {
-		t.Fatal("pin for a gang with no live pods should be GC'd")
+	if _, ok := assignments.Get("ns/dead"); ok {
+		t.Fatal("assignment for a gang with no live pods should be GC'd")
 	}
-	if _, ok := pins.Get("ns/live"); !ok {
-		t.Fatal("pin for a gang that still has pods must be kept")
+	if _, ok := assignments.Get("ns/live"); !ok {
+		t.Fatal("assignment for a gang that still has pods must be kept")
 	}
 }
 
-// TestGCReconcilePreservesUnplacedGang: a gang pinned to an empty domain with zero
+// TestGC_LiveGangWithNoMemberPlaced_KeepsFullReservation: a gang assigned to an empty domain with zero
 // members placed is still legitimately forming — its full reservation is what
 // stops a second gang racing into the same domain. Reconcile sets remaining to
 // minMember-placed = minMember, i.e. it leaves the reservation intact. This is the
 // deliberate boundary: reconcile reclaims only the reservation NOT backed by real
 // remaining need; a still-forming gang keeps its whole claim.
-func TestGCReconcilePreservesUnplacedGang(t *testing.T) {
-	pins := placement.New()
-	if d, ok := pins.Choose("team/pf", topology.FreeByDomain{"a": 3}, 3); !ok || d != "a" {
+func TestGC_LiveGangWithNoMemberPlaced_KeepsFullReservation(t *testing.T) {
+	assignments := placement.New()
+	if d, ok := assignments.Choose("team/pf", topology.FreeByDomain{"a": 3}, 3); !ok || d != "a" {
 		t.Fatalf("precondition Choose = %q,%v want a,true", d, ok)
 	}
 
@@ -71,17 +71,17 @@ func TestGCReconcilePreservesUnplacedGang(t *testing.T) {
 		nodeInfo(gpuNode("a3", "a", "4")),
 	}
 	g := &GangPack{
-		pins:      pins,
-		handle:    &fakeHandle{snapshot: snapshot},
-		pgReader:  fakeReader{"team/pf": {min: 3, topo: testKey}},
-		podLister: fakeGangPodLister{keys: map[string]bool{"team/pf": true}}, // still live
+		assignments: assignments,
+		handle:      &fakeHandle{snapshot: snapshot},
+		pgReader:    fakeReader{"team/pf": {min: 3, topo: testKey}},
+		podLister:   fakeGangPodLister{keys: map[string]bool{"team/pf": true}}, // still live
 	}
 
-	g.gcPins()
+	g.gcAssignments()
 
 	// A justifies its full reservation (0 placed of 3), so a second gang must not be
 	// able to take A's domain — A may yet form there.
-	if _, ok := pins.Choose("team/other", topology.FreeByDomain{"a": 3}, 3); ok {
+	if _, ok := assignments.Choose("team/other", topology.FreeByDomain{"a": 3}, 3); ok {
 		t.Fatal("with zero members placed, A's reservation is legitimate and must be preserved")
 	}
 }
@@ -89,58 +89,58 @@ func TestGCReconcilePreservesUnplacedGang(t *testing.T) {
 // TestGCDoesNotReadOrRewriteLiveReservations: lifecycle callbacks own
 // reservation accounting. GC only reaps dead gang keys and must not consult the
 // framework snapshot from its background goroutine.
-func TestGCDoesNotRewriteLiveReservations(t *testing.T) {
-	pins := placement.New()
-	// Gang A pinned "a" reserving 3, but only its actual placement matters now.
-	pins.Choose("team/pf", topology.FreeByDomain{"a": 5}, 3)
+func TestGC_LiveGangWithClaims_LeavesReservationsUntouched(t *testing.T) {
+	assignments := placement.New()
+	// Gang A took "a" reserving 3, but only its actual placement matters now.
+	assignments.Choose("team/pf", topology.FreeByDomain{"a": 5}, 3)
 
 	g := &GangPack{
-		pins:      pins,
-		podLister: fakeGangPodLister{keys: map[string]bool{"team/pf": true}},
+		assignments: assignments,
+		podLister:   fakeGangPodLister{keys: map[string]bool{"team/pf": true}},
 	}
 
-	g.gcPins()
+	g.gcAssignments()
 
 	// GC preserves all three claims; Reserve is the only path that converts them
 	// into assumed-pod occupancy.
-	if _, ok := pins.Choose("team/other", topology.FreeByDomain{"a": 3}, 2); ok {
+	if _, ok := assignments.Choose("team/other", topology.FreeByDomain{"a": 3}, 2); ok {
 		t.Fatal("other gang must remain blocked while A has one outstanding member")
 	}
-	reservations := pins.Reservations()
+	reservations := assignments.Reservations()
 	if len(reservations) != 1 || reservations[0].Remaining != 3 {
 		t.Fatalf("reservations = %+v, want three untouched claims", reservations)
 	}
 }
 
-// TestGCReconcileNoopWithoutReader / snapshot: the reconcile is inert when its
+// TestGC_NoPodGroupReader_KeepsAssignmentWithoutPanic / snapshot: the reconcile is inert when its
 // inputs are missing, so a plugin without a wired reader never panics.
-func TestGCReconcileNoopWithoutReader(t *testing.T) {
-	pins := placement.New()
-	pins.Choose("team/pf", topology.FreeByDomain{"a": 3}, 3)
-	g := &GangPack{pins: pins, podLister: fakeGangPodLister{keys: map[string]bool{"team/pf": true}}}
-	g.gcPins() // pgReader nil -> reconcile no-op, no panic
-	if _, ok := pins.Get("team/pf"); !ok {
-		t.Fatal("pin must survive a no-op reconcile")
+func TestGC_NoPodGroupReader_KeepsAssignmentWithoutPanic(t *testing.T) {
+	assignments := placement.New()
+	assignments.Choose("team/pf", topology.FreeByDomain{"a": 3}, 3)
+	g := &GangPack{assignments: assignments, podLister: fakeGangPodLister{keys: map[string]bool{"team/pf": true}}}
+	g.gcAssignments() // pgReader nil -> reconcile no-op, no panic
+	if _, ok := assignments.Get("team/pf"); !ok {
+		t.Fatal("assignment must survive a no-op reconcile")
 	}
 }
 
-// TestGCPinsSkipsOnListerError: a transient lister error must NOT release
+// TestGC_ListerError_ReleasesNothing: a transient lister error must NOT release
 // anything (a partial view could reap live gangs) — the next tick retries.
-func TestGCPinsSkipsOnListerError(t *testing.T) {
-	pins := placement.New()
-	pins.Set("ns/x", "a")
-	g := &GangPack{pins: pins, podLister: fakeGangPodLister{err: errors.New("cache not synced")}}
+func TestGC_ListerError_ReleasesNothing(t *testing.T) {
+	assignments := placement.New()
+	assignments.Set("ns/x", "a")
+	g := &GangPack{assignments: assignments, podLister: fakeGangPodLister{err: errors.New("cache not synced")}}
 
-	g.gcPins()
+	g.gcAssignments()
 
-	if _, ok := pins.Get("ns/x"); !ok {
-		t.Fatal("must not release pins on a lister error")
+	if _, ok := assignments.Get("ns/x"); !ok {
+		t.Fatal("must not release assignments on a lister error")
 	}
 }
 
-// TestLiveGangKeys: the informer lister maps pods to gang keys, deduping members
+// TestLiveGangKeys_MixedPods_DedupesMembersAndSkipsUnlabelled: the informer lister maps pods to gang keys, deduping members
 // and ignoring pods with no pod-group label.
-func TestLiveGangKeys(t *testing.T) {
+func TestLiveGangKeys_MixedPods_DedupesMembersAndSkipsUnlabelled(t *testing.T) {
 	l := &informerPodLister{
 		list: func() ([]*v1.Pod, error) {
 			return []*v1.Pod{
@@ -160,7 +160,7 @@ func TestLiveGangKeys(t *testing.T) {
 	}
 }
 
-func TestLiveGangKeysExcludesTerminalAndDeletingPods(t *testing.T) {
+func TestLiveGangKeys_TerminalOrDeletingPods_LeavesThemOut(t *testing.T) {
 	deleting := gangPod("team", "deleting")
 	now := metav1.Now()
 	deleting.DeletionTimestamp = &now
@@ -180,26 +180,26 @@ func TestLiveGangKeysExcludesTerminalAndDeletingPods(t *testing.T) {
 	}
 }
 
-func TestGCPinsReleasesRecreatedPodGroupOwner(t *testing.T) {
-	pins := placement.New()
-	if _, _, ok := pins.ChooseForOwnerInTopologyOnNodes("team/pf", "old-uid", testKey,
+func TestGC_PodGroupRecreatedWithNewUID_ReleasesOldAssignment(t *testing.T) {
+	assignments := placement.New()
+	if _, _, ok := assignments.ChooseForOwnerInTopologyOnNodes("team/pf", "old-uid", testKey,
 		topology.FreeByDomain{"a": 1}, map[string][]string{"a": {"a1"}}, 1); !ok {
 		t.Fatal("failed to establish old owner")
 	}
 	g := &GangPack{
-		pins:      pins,
-		podLister: fakeGangPodLister{keys: map[string]bool{"team/pf": true}},
-		pgReader:  fakeReader{"team/pf": {min: 1, topo: testKey, uid: "new-uid"}},
+		assignments: assignments,
+		podLister:   fakeGangPodLister{keys: map[string]bool{"team/pf": true}},
+		pgReader:    fakeReader{"team/pf": {min: 1, topo: testKey, uid: "new-uid"}},
 	}
-	g.gcPins()
-	if _, ok := pins.Get("team/pf"); ok {
-		t.Fatal("same-name pin from old PodGroup UID survived GC")
+	g.gcAssignments()
+	if _, ok := assignments.Get("team/pf"); ok {
+		t.Fatal("same-name assignment from old PodGroup UID survived GC")
 	}
 }
 
-func TestGCPinsRejectsWaitersForTerminalGang(t *testing.T) {
-	pins := placement.New()
-	_, token, ok := pins.ChooseForOwnerInTopologyOnNodes("team/pf", "pg-uid", testKey,
+func TestGC_GangWithNoPodsHasPermitWaiter_RejectsTheWaiter(t *testing.T) {
+	assignments := placement.New()
+	_, token, ok := assignments.ChooseForOwnerInTopologyOnNodes("team/pf", "pg-uid", testKey,
 		topology.FreeByDomain{"a": 1}, map[string][]string{"a": {"a1"}}, 1)
 	if !ok {
 		t.Fatal("failed to establish commitment")
@@ -208,12 +208,12 @@ func TestGCPinsRejectsWaitersForTerminalGang(t *testing.T) {
 	pod.Name = "waiter"
 	waiter := &fakeWaitingPod{pod: pod}
 	g := &GangPack{
-		pins: pins, handle: &fakeHandle{waiting: []framework.WaitingPod{waiter}},
+		assignments: assignments, handle: &fakeHandle{waiting: []framework.WaitingPod{waiter}},
 		podLister: fakeGangPodLister{keys: map[string]bool{}},
 	}
 	g.rememberAttempt(pod, token)
-	g.gcPins()
+	g.gcAssignments()
 	if !waiter.rejected {
-		t.Fatal("GC released terminal gang pin without rejecting its Permit waiter")
+		t.Fatal("GC released terminal gang assignment without rejecting its Permit waiter")
 	}
 }

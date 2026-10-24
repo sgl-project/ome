@@ -183,3 +183,49 @@ func TestResolvePinnedRuntime_LiveError_Propagates(t *testing.T) {
 		t.Fatal("resolvePinnedRuntime swallowed a non-NotFound live-resolution error")
 	}
 }
+
+// TestResolvePinnedRuntime_LiveDrifted_StopsThePass reads what a runtime
+// edit does under a recorded runtime revision: the live spec's hash
+// differs from the recorded one and no sync token acknowledges it, so the resolver raises
+// RuntimeDrifted and tells the pass to reconcile no child. Nothing is minted
+// and no pod carries the edited template; the pass does not run either.
+func TestResolvePinnedRuntime_LiveDrifted_StopsThePass(t *testing.T) {
+	const runtimeName = "vllm-rt"
+	const revName = "csr-vllm-rt-abc123"
+
+	recordedSpec := &v1beta1.ServingRuntimeSpec{}
+	liveSpec := &v1beta1.ServingRuntimeSpec{Disabled: boolPtr(true)}
+	rev := pinnedRevisionObj(t, revName, runtimeName, recordedSpec)
+	isvc := pinnedISVC(runtimeName)
+	isvc.Status.PinnedRevisionName = revName
+
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add appsv1 to scheme: %v", err)
+	}
+	if err := v1beta1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add v1beta1 to scheme: %v", err)
+	}
+	r := &InferenceServiceReconciler{
+		Client:          ctrlclientfake.NewClientBuilder().WithScheme(scheme).WithObjects(rev, isvc).WithStatusSubresource(isvc).Build(),
+		RuntimeSelector: &stubRuntimeSelector{spec: liveSpec},
+	}
+
+	pin, err := r.resolvePinnedRuntime(context.Background(), isvc)
+	if err != nil {
+		t.Fatalf("resolvePinnedRuntime returned error %v, want the drift reported as a condition", err)
+	}
+	if !pin.skipChildren {
+		t.Fatal("skipChildren = false; a drifted runtime revision stops the pass before its children (not decided yet; this test records the current behaviour and is updated when it changes)")
+	}
+	if pin.spec != nil {
+		t.Errorf("pin.spec = %+v, want none while the pass stops", pin.spec)
+	}
+	cond := findCondition(isvc, constants.RuntimeDriftedConditionType)
+	if cond == nil {
+		t.Fatal("RuntimeDrifted condition not set")
+	}
+	if cond.Status != v1.ConditionTrue || cond.Reason != "RevisionMismatch" {
+		t.Errorf("RuntimeDrifted = %s/%s, want True/RevisionMismatch", cond.Status, cond.Reason)
+	}
+}

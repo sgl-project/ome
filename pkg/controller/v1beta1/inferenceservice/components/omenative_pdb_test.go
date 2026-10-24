@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -207,7 +208,7 @@ func TestReconcileOMENativePDBAbsentPolicyPreservesForeignObject(t *testing.T) {
 		Kind:       "Deployment",
 		Name:       "foreign-controller",
 		UID:        types.UID("foreign-controller-uid"),
-		Controller: boolPointer(true),
+		Controller: ptr.To(true),
 	}}
 	cl := ctrlclientfake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
 
@@ -475,8 +476,4 @@ func setOMENativePDBTestComponent(isvc *v1beta1.InferenceService, component v1be
 	case v1beta1.RouterComponent:
 		isvc.Spec.Router = &v1beta1.RouterSpec{ComponentExtensionSpec: ext}
 	}
-}
-
-func boolPointer(value bool) *bool {
-	return &value
 }

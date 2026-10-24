@@ -55,6 +55,34 @@ type GroupDefaults struct {
 	// omitted tolerance resolves to nil and the ratio guard enforces no
 	// drift bound.
 	RatioTolerancePercent *int32
+
+	// PrefillDecode carries the operator's pacing rules for a group that
+	// lists both the engine and the decoder (the lifecycle block of the
+	// operator's ConfigMap). The zero value keeps each side on its own
+	// budget, with no ratio rule between them.
+	PrefillDecode PrefillDecodeRules
+}
+
+// PrefillDecodeRules are the pacing rules of a group that lists both the
+// engine (prefill) and the decoder; each is off unless the operator turns
+// it on.
+type PrefillDecodeRules struct {
+	// KeepRatio makes the batch step the ratio rule of such a group on
+	// every update path and sizes its batches to the group's tolerance.
+	KeepRatio bool
+	// FirstSide names the pairing side that moves first inside every
+	// batch; the other side's moves of the batch wait until the named
+	// side's new Instances serve. Empty lets both sides start together.
+	FirstSide v1beta1.ComponentType
+}
+
+// namedFirstSide is the pairing side FirstSide names, empty when it names
+// neither the engine nor the decoder.
+func (r PrefillDecodeRules) namedFirstSide() v1beta1.ComponentType {
+	if r.FirstSide == v1beta1.EngineComponent || r.FirstSide == v1beta1.DecoderComponent {
+		return r.FirstSide
+	}
+	return ""
 }
 
 // ResolveGroups turns spec.rollout into a slice of ResolvedGroups in declaration

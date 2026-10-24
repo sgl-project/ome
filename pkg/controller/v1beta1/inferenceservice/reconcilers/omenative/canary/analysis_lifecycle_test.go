@@ -370,7 +370,7 @@ func TestConsumeSample_ReplacesStatusSurface(t *testing.T) {
 		{Name: "err", Value: "0.5", Threshold: "0.05", Operator: v1beta1.ComparisonLTE},
 		{Name: "lat", Value: "90", Threshold: "100", Operator: v1beta1.ComparisonLTE, Passed: true},
 	}}
-	if got := consumeSample(in, cs, step, a, res1, producedAt1); got != decHold {
+	if got := consumeSample(in, cs, step, a, []memberSample{{component: in.Component, result: res1}}, producedAt1); got != decHold {
 		t.Fatalf("first breach with limit 3 = %v, want hold", got)
 	}
 	if len(cs.MetricResults) != 2 {
@@ -387,7 +387,7 @@ func TestConsumeSample_ReplacesStatusSurface(t *testing.T) {
 	res2 := analysis.Result{Outcome: analysis.Pass, Metrics: []analysis.MetricResult{
 		{Name: "err", Value: "0.01", Threshold: "0.05", Operator: v1beta1.ComparisonLTE, Passed: true},
 	}}
-	if got := consumeSample(in, cs, step, a, res2, producedAt2); got != decAdvance {
+	if got := consumeSample(in, cs, step, a, []memberSample{{component: in.Component, result: res2}}, producedAt2); got != decAdvance {
 		t.Fatalf("pass on an unpaused step = %v, want advance", got)
 	}
 	if len(cs.MetricResults) != 1 || cs.MetricResults[0].Name != "err" || !cs.MetricResults[0].Passed {

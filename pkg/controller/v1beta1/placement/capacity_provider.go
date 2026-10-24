@@ -155,7 +155,7 @@ func (r *Reconciler) resolveCapacityOn(ctx context.Context, cl client.Client, so
 }
 
 // checkCapacityApplication resolves against the exact transport used to write.
-// A connection replacement or dependency edit cannot apply an older rendering.
+// The member also checks the accepted demand against its actual rendering.
 func (r *Reconciler) checkCapacityApplication(ctx context.Context, cl client.Client, source, desired *v1beta1.InferenceService, assignment *v1beta1.CandidateAllocationStatus) error {
 	if assignment.Capacity == nil {
 		return nil

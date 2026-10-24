@@ -13,6 +13,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/revision"
+	fixture "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	workload "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -90,7 +91,7 @@ func TestStoredTemplate_RendersTheRevisionItNames(t *testing.T) {
 		PodMeta:         &metav1.ObjectMeta{Labels: map[string]string{"tier": "v1", "cohort": "stable"}, Annotations: map[string]string{"note": "v1"}},
 		PairingProtocol: ptr.To("proto-v1"),
 	})
-	c := legacyNewFakeClient(t, stored)
+	c := fixture.FakeClient(t, stored)
 
 	got, found, err := storedTemplate(context.Background(), c, input, templateTestTarget(t), stored.Name)
 	if err != nil || !found {
@@ -126,7 +127,7 @@ func TestStoredTemplate_RevisionWithoutMetadataRendersNoneOfTheTargets(t *testin
 	stored := storedPayloadRevision(t, "llama-70b-engine-0000v1", revision.DataPayload{
 		PodSpec: &corev1.PodSpec{Containers: []corev1.Container{{Name: "main", Image: "registry.example.com/runtime:v1"}}},
 	})
-	c := legacyNewFakeClient(t, stored)
+	c := fixture.FakeClient(t, stored)
 
 	got, found, err := storedTemplate(context.Background(), c, input, templateTestTarget(t), stored.Name)
 	if err != nil || !found {
@@ -150,7 +151,7 @@ func TestStoredTemplate_WithoutATargetEveryUnrecordedKeyFollowsTheTemplate(t *te
 		PodSpec: &corev1.PodSpec{Containers: []corev1.Container{{Name: "main", Image: "registry.example.com/runtime:v1"}}},
 		PodMeta: &metav1.ObjectMeta{Labels: map[string]string{"tier": "v1"}, Annotations: map[string]string{"note": "v1"}},
 	})
-	c := legacyNewFakeClient(t, stored)
+	c := fixture.FakeClient(t, stored)
 	targets := map[string]*appsv1.ControllerRevision{
 		"no target":               nil,
 		"target without metadata": storedPayloadRevision(t, "llama-70b-engine-0000bare", revision.DataPayload{PodSpec: input.DesiredSpec.PodSpec}),
@@ -177,7 +178,7 @@ func TestPinnedTemplate_ReadsOnlyWhenThePinIsNotTheTarget(t *testing.T) {
 	stored := storedPayloadRevision(t, "llama-70b-engine-0000v1", revision.DataPayload{
 		PodSpec: &corev1.PodSpec{Containers: []corev1.Container{{Name: "main", Image: "registry.example.com/runtime:v1"}}},
 	})
-	c := legacyNewFakeClient(t, stored)
+	c := fixture.FakeClient(t, stored)
 
 	onTarget, found, err := pinnedTemplate(context.Background(), c, input, plan, target, target.Name)
 	if err != nil || !found || onTarget.podSpec != input.DesiredSpec.PodSpec || onTarget.revision.Name() != target.Name {
@@ -198,7 +199,7 @@ func TestPinnedTemplate_ReadsOnlyWhenThePinIsNotTheTarget(t *testing.T) {
 func TestStoredTemplate_GoneOrEmptyRevisionIsNotTheCurrentTemplate(t *testing.T) {
 	input := templateTestInput()
 	empty := storedPayloadRevision(t, "llama-70b-engine-0000empty", revision.DataPayload{})
-	c := legacyNewFakeClient(t, empty)
+	c := fixture.FakeClient(t, empty)
 
 	if got, found, err := storedTemplate(context.Background(), c, input, nil, "llama-70b-engine-0000gone"); err != nil || found || got.podSpec != nil {
 		t.Fatalf("gone revision: found=%v err=%v template=%+v, want not found and no template", found, err, got)

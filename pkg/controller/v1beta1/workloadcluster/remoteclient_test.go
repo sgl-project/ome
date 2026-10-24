@@ -2,6 +2,7 @@ package workloadcluster
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -10,14 +11,14 @@ import (
 	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestDirectClientBypassesInformerReads(t *testing.T) {
@@ -41,7 +42,7 @@ func TestDirectClientBypassesInformerReads(t *testing.T) {
 		}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			direct := &recordingClient{}
+			direct, directReads := recordingClient(t, fakeclient.New(t))
 			cached := &recordingReader{}
 			got, ok := DirectClient(tt.wrap(direct, cached))
 			if diff := cmp.Diff(tt.want, ok); diff != "" {
@@ -59,27 +60,32 @@ func TestDirectClientBypassesInformerReads(t *testing.T) {
 			if err := got.List(t.Context(), &corev1.PodList{}); err != nil {
 				t.Fatal(err)
 			}
-			if diff := cmp.Diff([4]int{1, 1, 0, 0}, [4]int{direct.getCalls, direct.listCalls, cached.getCalls, cached.listCalls}); diff != "" {
+			if diff := cmp.Diff([4]int{1, 1, 0, 0}, [4]int{directReads.gets.Count(), directReads.lists.Count(), cached.getCalls, cached.listCalls}); diff != "" {
 				t.Errorf("direct and cached read counts (-want +got):\n%s", diff)
 			}
 		})
 	}
 }
 
-type recordingClient struct {
-	client.WithWatch
-	getCalls  int
-	listCalls int
+// readCalls counts the Gets and Lists one half of a split client served.
+type readCalls struct {
+	gets, lists *fakeclient.Calls
 }
 
-func (c *recordingClient) Get(context.Context, client.ObjectKey, client.Object, ...client.GetOption) error {
-	c.getCalls++
-	return nil
-}
-
-func (c *recordingClient) List(context.Context, client.ObjectList, ...client.ListOption) error {
-	c.listCalls++
-	return nil
+// recordingClient layers read counters over base and answers every Get and
+// List with success and no object: these tests only ask which half served a
+// read. Watch and the writes still reach base.
+func recordingClient(t *testing.T, base client.WithWatch) (client.WithWatch, readCalls) {
+	t.Helper()
+	calls := readCalls{gets: fakeclient.CountingVerb(fakeclient.Get), lists: fakeclient.CountingVerb(fakeclient.List)}
+	return fakeclient.Wrap(t, base, calls.gets, calls.lists, fakeclient.WithInterceptors(interceptor.Funcs{
+		Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+			return nil
+		},
+		List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
+			return nil
+		},
+	})), calls
 }
 
 type recordingReader struct {
@@ -123,7 +129,7 @@ func (r *blockingReader) List(ctx context.Context, _ client.ObjectList, _ ...cli
 }
 
 func TestNeverCachingClient_NoCacheHandler(t *testing.T) {
-	fc := fake.NewClientBuilder().Build()
+	fc := fakeclient.New(t)
 	c := NewNeverCachingClient(fc)
 	if _, err := c.AddCacheEventHandler(context.Background(), &corev1.Pod{}, nil); err == nil {
 		t.Errorf("AddCacheEventHandler on NeverCachingClient: got nil error, want error")
@@ -139,7 +145,7 @@ func TestNewSelectivelyCachingClient_RejectsPodKind(t *testing.T) {
 	_, err := NewSelectivelyCachingClient(
 		context.Background(),
 		(*rest.Config)(nil),
-		fake.NewClientBuilder().Build(),
+		fakeclient.New(t),
 		nil,
 		sets.New(podGK),
 		nil,
@@ -152,7 +158,7 @@ func TestNewSelectivelyCachingClient_RejectsPodKind(t *testing.T) {
 }
 
 func TestSelectivelyCachingClient_MetadataOnlyReadsBypassCache(t *testing.T) {
-	direct := &recordingClient{WithWatch: fake.NewClientBuilder().Build()}
+	direct, directReads := recordingClient(t, fakeclient.New(t))
 	cached := &recordingReader{}
 	metadataGK := schema.GroupKind{Group: "ome.io", Kind: "InferenceService"}
 	var synced atomic.Bool
@@ -176,30 +182,21 @@ func TestSelectivelyCachingClient_MetadataOnlyReadsBypassCache(t *testing.T) {
 		t.Fatalf("List PartialObjectMetadataList: %v", err)
 	}
 
-	if direct.getCalls != 1 || direct.listCalls != 1 {
-		t.Fatalf("direct metadata reads: got Get=%d List=%d, want Get=1 List=1", direct.getCalls, direct.listCalls)
+	if directReads.gets.Count() != 1 || directReads.lists.Count() != 1 {
+		t.Fatalf("direct metadata reads: got Get=%d List=%d, want Get=1 List=1", directReads.gets.Count(), directReads.lists.Count())
 	}
 	if cached.getCalls != 0 || cached.listCalls != 0 {
 		t.Fatalf("cached metadata reads: got Get=%d List=%d, want Get=0 List=0", cached.getCalls, cached.listCalls)
 	}
 }
 
-func omeScheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
-	s := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(s); err != nil {
-		t.Fatalf("register ome scheme: %v", err)
-	}
-	return s
-}
-
 // newCachedTestClient builds a selectivelyCachingClient over recording halves,
 // caching isvcGK() — the kind the remote cache holds in production
 // (cmd/manager) and in the integration suites alike — and reporting the cache
 // as already synced.
-func newCachedTestClient(t *testing.T, cacheCtx context.Context) (*selectivelyCachingClient, *recordingClient, *recordingReader) {
+func newCachedTestClient(t *testing.T, cacheCtx context.Context) (*selectivelyCachingClient, readCalls, *recordingReader) {
 	t.Helper()
-	direct := &recordingClient{WithWatch: fake.NewClientBuilder().Build()}
+	direct, directReads := recordingClient(t, fakeclient.New(t))
 	cached := &recordingReader{}
 	var synced atomic.Bool
 	synced.Store(true)
@@ -207,41 +204,32 @@ func newCachedTestClient(t *testing.T, cacheCtx context.Context) (*selectivelyCa
 		WithWatch:    direct,
 		cachedReader: cached,
 		cacheCtx:     cacheCtx,
-		scheme:       omeScheme(t),
+		scheme:       fakeclient.Scheme(t),
 		cachedKinds:  sets.New(isvcGK()),
 		synced:       &synced,
-	}, direct, cached
+	}, directReads, cached
 }
 
-// A cached read against a torn-down cache must go direct. Routing it to the
-// cached reader is what wedges a reconcile: controller-runtime lazily creates
-// the informer, declines to start it because the cache is stopped, still
-// reports it as started, and then blocks in WaitForCacheSync on the CALLER's
-// context — which for a reconcile is the manager's, i.e. forever.
-func TestSelectivelyCachingClient_StoppedCacheReadsGoDirect(t *testing.T) {
-	cacheCtx, stopCache := context.WithCancel(context.Background())
-	c, direct, cached := newCachedTestClient(t, cacheCtx)
+// A stopped cache must not return stale state or start a network read.
+func TestSelectivelyCachingClient_StoppedCacheIsUnavailable(t *testing.T) {
+	cacheCtx, stopCache := context.WithCancel(t.Context())
+	c, directReads, cached := newCachedTestClient(t, cacheCtx)
 	stopCache()
-
-	if err := c.Get(context.Background(), client.ObjectKey{Name: "example"}, &v1beta1.InferenceService{}); err != nil {
+	if err := c.Get(t.Context(), client.ObjectKey{Name: "example"}, &v1beta1.InferenceService{}); !errors.Is(err, ErrMemberCacheUnavailable) {
 		t.Fatalf("Get on stopped cache: %v", err)
 	}
-	if err := c.List(context.Background(), &v1beta1.InferenceServiceList{}); err != nil {
+	if err := c.List(t.Context(), &v1beta1.InferenceServiceList{}); !errors.Is(err, ErrMemberCacheUnavailable) {
 		t.Fatalf("List on stopped cache: %v", err)
 	}
-
-	if direct.getCalls != 1 || direct.listCalls != 1 {
-		t.Fatalf("direct reads after cache stop: got Get=%d List=%d, want Get=1 List=1", direct.getCalls, direct.listCalls)
-	}
-	if cached.getCalls != 0 || cached.listCalls != 0 {
-		t.Fatalf("cached reads after cache stop: got Get=%d List=%d, want Get=0 List=0", cached.getCalls, cached.listCalls)
+	if directReads.gets.Count()+directReads.lists.Count()+cached.getCalls+cached.listCalls != 0 {
+		t.Fatal("unavailable cache must not read from either client")
 	}
 }
 
 // While the cache is live the cached reader still serves the read — the
 // teardown guard must not quietly turn every cached read into a direct one.
 func TestSelectivelyCachingClient_LiveCacheReadsUseCache(t *testing.T) {
-	c, direct, cached := newCachedTestClient(t, context.Background())
+	c, directReads, cached := newCachedTestClient(t, context.Background())
 
 	if err := c.Get(context.Background(), client.ObjectKey{Name: "example"}, &v1beta1.InferenceService{}); err != nil {
 		t.Fatalf("Get on live cache: %v", err)
@@ -253,17 +241,15 @@ func TestSelectivelyCachingClient_LiveCacheReadsUseCache(t *testing.T) {
 	if cached.getCalls != 1 || cached.listCalls != 1 {
 		t.Fatalf("cached reads on live cache: got Get=%d List=%d, want Get=1 List=1", cached.getCalls, cached.listCalls)
 	}
-	if direct.getCalls != 0 || direct.listCalls != 0 {
-		t.Fatalf("direct reads on live cache: got Get=%d List=%d, want Get=0 List=0", direct.getCalls, direct.listCalls)
+	if directReads.gets.Count() != 0 || directReads.lists.Count() != 0 {
+		t.Fatalf("direct reads on live cache: got Get=%d List=%d, want Get=0 List=0", directReads.gets.Count(), directReads.lists.Count())
 	}
 }
 
-// A cached read already in flight when the cache is torn down must be released
-// and served directly, not left parked. This is the narrow window that the
-// servesFromCache pre-check alone cannot cover.
+// Teardown releases in-flight reads without falling back to network requests.
 func TestSelectivelyCachingClient_CacheTeardownReleasesInFlightRead(t *testing.T) {
 	cacheCtx, stopCache := context.WithCancel(context.Background())
-	direct := &recordingClient{WithWatch: fake.NewClientBuilder().Build()}
+	direct, directReads := recordingClient(t, fakeclient.New(t))
 	blocking := &blockingReader{entered: make(chan struct{})}
 	var synced atomic.Bool
 	synced.Store(true)
@@ -271,7 +257,7 @@ func TestSelectivelyCachingClient_CacheTeardownReleasesInFlightRead(t *testing.T
 		WithWatch:    direct,
 		cachedReader: blocking,
 		cacheCtx:     cacheCtx,
-		scheme:       omeScheme(t),
+		scheme:       fakeclient.Scheme(t),
 		cachedKinds:  sets.New(isvcGK()),
 		synced:       &synced,
 	}
@@ -286,14 +272,14 @@ func TestSelectivelyCachingClient_CacheTeardownReleasesInFlightRead(t *testing.T
 
 	select {
 	case err := <-done:
-		if err != nil {
+		if !errors.Is(err, ErrMemberCacheUnavailable) {
 			t.Fatalf("in-flight read after cache teardown: %v", err)
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("in-flight cached read did not return after the cache was torn down")
 	}
-	if direct.getCalls != 1 {
-		t.Fatalf("direct Get after teardown: got %d, want 1", direct.getCalls)
+	if directReads.gets.Count() != 0 {
+		t.Fatalf("direct Get after teardown: got %d, want 0", directReads.gets.Count())
 	}
 }
 

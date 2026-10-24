@@ -112,6 +112,13 @@ func (identity Identity) Matches(status types.InstanceStatus) bool {
 	return identity.operation.hasSurgeIndex && *status.Operation.SurgeIndex == identity.operation.surgeIndex
 }
 
+// holds reports whether the fresh rows still carry, at this identity's
+// index, the row it was read from.
+func (identity Identity) holds(rows types.InstanceMutationSnapshot) bool {
+	current, found := rows.Instances[identity.index]
+	return found && identity.Matches(current)
+}
+
 // WithStep is this identity with the operation's step replaced — the
 // shape a step transition expects to find after its own write.
 func (identity Identity) WithStep(step string) Identity {

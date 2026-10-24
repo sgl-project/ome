@@ -30,6 +30,13 @@ const (
 	TrafficMapPublisherFinalizer = "ome.io/trafficmap-publisher"
 )
 
+// RoutingOptedOut reports whether the source sets spec.routing.enabled to
+// false. Placement, the routing controller and the endpoint publisher all use
+// it, so placement never waits for a TrafficMap that routing will not write.
+func RoutingOptedOut(isvc *v1beta1.InferenceService) bool {
+	return isvc != nil && isvc.Spec.Routing != nil && isvc.Spec.Routing.Enabled != nil && !*isvc.Spec.Routing.Enabled
+}
+
 // TrafficMapHasController reports whether any owner reference claims controller
 // ownership. It deliberately scans every reference so a malformed second
 // controller cannot be hidden behind an otherwise exact first reference.

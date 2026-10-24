@@ -1,6 +1,10 @@
 package main
 
 import (
+	"errors"
+	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,8 +15,10 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/irstatus"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/placement"
 	placementendpoint "sigs.k8s.io/ome/pkg/controller/v1beta1/placement/endpoint"
 	placementrouting "sigs.k8s.io/ome/pkg/controller/v1beta1/placement/routing"
@@ -47,11 +53,11 @@ func mcWiringFromJSON(t *testing.T, mcJSON string) mcWiring {
 	return resolveMCWiring(mc)
 }
 
-// TestResolveMCWiringFullConfig asserts every ConfigMap field lands on the right
+// TestResolveMCWiring_FullBlock_EveryFieldLandsOnItsWiringField asserts every ConfigMap field lands on the right
 // wiring field — the mapping that would otherwise only exist (untested) in the
 // cmd/manager wiring block, where a cross-wire would silently mis-tune the
 // control plane.
-func TestResolveMCWiringFullConfig(t *testing.T) {
+func TestResolveMCWiring_FullBlock_EveryFieldLandsOnItsWiringField(t *testing.T) {
 	w := mcWiringFromJSON(t, `{
 		"workloadCluster": {
 			"clientQPS": 50, "clientBurst": 100, "perCallTimeout": "15s", "cacheEnabled": true,
@@ -62,6 +68,8 @@ func TestResolveMCWiringFullConfig(t *testing.T) {
 		"placement": {
 			"requeueInterval": "45s", "gcInterval": "10m", "maxConcurrentReconciles": 8,
 			"fanoutTimeout": "20s", "winnerLostGrace": "2m", "statusBatchPeriod": "500ms",
+			"observationGrace": "3m",
+			"memberReadRetry": {"maxAttempts": 3, "initialBackoff": "200ms", "maxBackoff": "1s"},
 			"statusSafetyRequeue": "7m", "dispatcherMode": "Incremental", "dispatcherStepSize": 4,
 			"dispatcherRoundTimeout": "30s"
 		},
@@ -91,6 +99,7 @@ func TestResolveMCWiringFullConfig(t *testing.T) {
 				"allFailedPolicy": "Drain"
 			},
 			"capacity": {
+				"mode": "Reported",
 				"path": "/capacity", "method": "GET", "format": "Report",
 				"samples": 20, "quorum": 3,
 				"period": "5s", "timeout": "2s", "maxAge": "30s"
@@ -123,6 +132,8 @@ func TestResolveMCWiringFullConfig(t *testing.T) {
 	assert.Equal(t, 8, w.maxConcurrent)
 	assert.Equal(t, 20*time.Second, w.placeTimeout)
 	assert.Equal(t, 2*time.Minute, w.winnerLostGrace)
+	assert.Equal(t, 3*time.Minute, w.observationGrace)
+	assert.Equal(t, placement.MemberReadRetry{MaxAttempts: 3, InitialBackoff: 200 * time.Millisecond, MaxBackoff: time.Second}, w.memberReadRetry)
 	assert.Equal(t, 500*time.Millisecond, w.statusBatchPeriod)
 	assert.Equal(t, 7*time.Minute, w.statusSafetyRequeue) // cache on => configured backstop
 	assert.Equal(t, placement.DispatcherMode("Incremental"), w.dispatcherMode)
@@ -148,6 +159,7 @@ func TestResolveMCWiringFullConfig(t *testing.T) {
 	assert.Equal(t, time.Second, w.routing.Observer.MinPeriod)
 	assert.Equal(t, 100, w.routing.Observer.MaxSamples)
 	assert.Equal(t, placementrouting.AllFailedPolicyDrain, w.routing.Probe.AllFailedPolicy)
+	assert.Equal(t, v1beta1.RoutingCapacityModeReported, w.routing.Capacity.Mode)
 	assert.Equal(t, "/capacity", w.routing.Capacity.Path)
 	assert.Equal(t, "GET", w.routing.Capacity.Method)
 	assert.Equal(t, placementrouting.FormatReport, w.routing.Capacity.Format)
@@ -162,11 +174,11 @@ func TestResolveMCWiringFullConfig(t *testing.T) {
 	require.NoError(t, w.routing.Validate())
 }
 
-// TestResolveMCWiringSafetyRequeueDependsOnCache pins the one non-trivial bit of
+// TestResolveMCWiring_StatusSafetyRequeue_ConfiguredWithCacheElsePollCadence pins the one non-trivial bit of
 // logic in the mapping: the status-convergence backstop is the configured
 // statusSafetyRequeue when the cache/funnel is on (events drive freshness), but
 // folds to the poll cadence (requeueInterval) when it's off (no event source).
-func TestResolveMCWiringSafetyRequeueDependsOnCache(t *testing.T) {
+func TestResolveMCWiring_StatusSafetyRequeue_ConfiguredWithCacheElsePollCadence(t *testing.T) {
 	off := mcWiringFromJSON(t, `{"placement": {"requeueInterval": "30s", "statusSafetyRequeue": "10m"}}`)
 	assert.False(t, off.cacheEnabled)
 	assert.Equal(t, 30*time.Second, off.statusSafetyRequeue, "cache off => backstop is the poll cadence")
@@ -179,10 +191,10 @@ func TestResolveMCWiringSafetyRequeueDependsOnCache(t *testing.T) {
 	assert.Equal(t, 10*time.Minute, on.statusSafetyRequeue, "cache on => backstop is the configured statusSafetyRequeue")
 }
 
-// TestResolveMCWiringAbsentBlockIsZero confirms an omitted "multicluster" block
+// TestResolveMCWiring_AbsentBlock_AllZeroWiring confirms an omitted "multicluster" block
 // yields an all-zero wiring, so every consuming option applies its own
 // in-package default (no magic literals in cmd/manager).
-func TestResolveMCWiringAbsentBlockIsZero(t *testing.T) {
+func TestResolveMCWiring_AbsentBlock_AllZeroWiring(t *testing.T) {
 	w := mcWiringFromJSON(t, "")
 
 	assert.Equal(t, float32(0), w.clientTuning.QPS)
@@ -196,16 +208,18 @@ func TestResolveMCWiringAbsentBlockIsZero(t *testing.T) {
 	assert.Equal(t, time.Duration(0), w.gcInterval)
 	assert.Equal(t, time.Duration(0), w.statusSafetyRequeue)
 	assert.Equal(t, 0, w.maxConcurrent)
+	assert.Equal(t, time.Duration(0), w.observationGrace)
+	assert.Equal(t, placement.MemberReadRetry{}, w.memberReadRetry)
 	assert.Equal(t, 0, w.funnelBufferSize)
 	assert.Equal(t, placement.DispatcherMode(""), w.dispatcherMode)
 	assert.Equal(t, placementendpoint.Config{}, w.endpoint)
 	assert.Equal(t, placementrouting.Config{}, w.routing)
 }
 
-// TestResolveMCWiringMissingConfigMapErrors confirms the loader (and thus
+// TestNewMultiClusterConfig_MissingConfigMap_LoadErrors confirms the loader (and thus
 // cmd/manager startup) fails fast when the ConfigMap is absent, rather than
 // silently running with an empty config.
-func TestResolveMCWiringMissingConfigMapErrors(t *testing.T) {
+func TestNewMultiClusterConfig_MissingConfigMap_LoadErrors(t *testing.T) {
 	_, err := controllerconfig.NewMultiClusterConfig(fake.NewSimpleClientset())
 	assert.Error(t, err)
 }
@@ -213,7 +227,7 @@ func TestResolveMCWiringMissingConfigMapErrors(t *testing.T) {
 // The operator-configured LocalQueue must reach the placement reconciler; if it
 // stops being mapped, deriveds carry no queue label and Kueue never admits them
 // on a fleet that gates admission on a LocalQueue.
-func TestResolveMCWiringCarriesLocalQueue(t *testing.T) {
+func TestResolveMCWiring_LocalQueue_ReachesTheWiringAbsentStaysEmpty(t *testing.T) {
 	w := mcWiringFromJSON(t, `{"placement":{"localQueue":"gpu-queue"}}`)
 	assert.Equal(t, "gpu-queue", w.localQueue)
 
@@ -224,7 +238,7 @@ func TestResolveMCWiringCarriesLocalQueue(t *testing.T) {
 // The dispatcher falls back to AllAtOnce for anything it does not recognize, so
 // a mis-cased mode would silently select a different fan-out breadth than the
 // operator asked for. Startup must reject it instead.
-func TestValidateDispatcherMode(t *testing.T) {
+func TestValidateDispatcherMode_KnownOrEmpty_AcceptedMisCasedRejected(t *testing.T) {
 	for _, ok := range []placement.DispatcherMode{"", placement.DispatcherModeAllAtOnce, placement.DispatcherModeIncremental} {
 		assert.NoError(t, validateDispatcherMode(ok), "mode %q must be accepted", ok)
 	}
@@ -235,7 +249,7 @@ func TestValidateDispatcherMode(t *testing.T) {
 	}
 }
 
-func TestResolveTrafficMapPublisherMode(t *testing.T) {
+func TestResolveTrafficMapPublisherMode_NameAndEnabled_ActiveOrLegacyFlags(t *testing.T) {
 	tests := []struct {
 		name     string
 		routing  placementrouting.Config
@@ -306,7 +320,7 @@ func TestResolveTrafficMapPublisherMode(t *testing.T) {
 	}
 }
 
-func TestGatewayTrafficMapResyncInterval(t *testing.T) {
+func TestGatewayTrafficMapResyncInterval_SlicesOnOrOff_EarlierActiveCadenceWins(t *testing.T) {
 	tests := []struct {
 		name            string
 		publisherResync time.Duration
@@ -359,7 +373,7 @@ func TestGatewayTrafficMapResyncInterval(t *testing.T) {
 	}
 }
 
-func TestNewGatewayTrafficMapPublisher(t *testing.T) {
+func TestNewGatewayTrafficMapPublisher_GlobalOptions_RejectedOtherwiseBuilt(t *testing.T) {
 	kubeClient := fakeclient.NewClientBuilder().Build()
 	apiReader := fakeclient.NewClientBuilder().Build()
 	endpointConfig := placementendpoint.Config{
@@ -398,7 +412,7 @@ func TestNewGatewayTrafficMapPublisher(t *testing.T) {
 	assert.Contains(t, err.Error(), "does not accept global options")
 }
 
-func TestNewTrafficMapPublisherReconciler(t *testing.T) {
+func TestNewTrafficMapPublisherReconciler_ActiveOrNot_RequeueOnlyWhileActive(t *testing.T) {
 	kubeClient := fakeclient.NewClientBuilder().Build()
 	apiReader := fakeclient.NewClientBuilder().Build()
 	publisher := &managerTestTrafficMapPublisher{}
@@ -423,4 +437,99 @@ func TestNewTrafficMapPublisherReconciler(t *testing.T) {
 	assert.Zero(t, inactive.RequeueAfter)
 	assert.False(t, inactive.Active)
 	assert.True(t, inactive.LeaderElectionEnabled)
+}
+
+func TestRunMultiClusterSteps_StopsAtTheFirstStepThatFails(t *testing.T) {
+	var ran []string
+	step := func(name string, err error) multiClusterStep {
+		return func() error {
+			ran = append(ran, name)
+			return err
+		}
+	}
+	run := func(steps ...multiClusterStep) (string, error) {
+		ran = nil
+		err := runMultiClusterSteps(steps)
+		return strings.Join(ran, ","), err
+	}
+
+	order, err := run(step("first", nil), step("second", nil))
+	require.NoError(t, err, "every step passed")
+	assert.Equal(t, "first,second", order)
+
+	failure := errors.New("create WorkloadCluster controller: refused")
+	order, err = run(step("first", nil), step("fails", failure), step("never", nil))
+	assert.Same(t, failure, err, "the first failure is returned as is")
+	assert.Equal(t, "first,fails", order, "the steps after the failure do not run")
+
+	order, err = run()
+	require.NoError(t, err)
+	assert.Empty(t, order)
+}
+
+// stepNames reads the method name of every step, so a test can state the
+// order of the wiring without running it.
+func stepNames(steps []multiClusterStep) []string {
+	names := make([]string, 0, len(steps))
+	for _, step := range steps {
+		full := runtime.FuncForPC(reflect.ValueOf(step).Pointer()).Name()
+		name := full[strings.LastIndex(full, ".")+1:]
+		names = append(names, strings.TrimSuffix(name, "-fm"))
+	}
+	return names
+}
+
+// Every manager that enables multi-cluster reads the configuration and runs
+// the WorkloadCluster transport, in that order. The control plane then adds
+// the placement controller and its GC, the TrafficMap and endpoint
+// publishers and the routing controller, after the transport they read
+// member clusters through.
+func TestMultiClusterSteps_TheControlPlaneAddsItsControllersAfterTheTransport(t *testing.T) {
+	transport := []string{
+		"loadConfiguration",
+		"validateResolvedWiring",
+		"addClusterManager",
+		"setupWorkloadClusterController",
+	}
+	controlPlane := []string{
+		"selectTrafficMapPublisher",
+		"setupPlacementController",
+		"addPlacementGC",
+		"setupTrafficMapPublisherController",
+		"setupPlacementEndpointController",
+		"buildRoutingObservers",
+		"setupPlacementRoutingController",
+	}
+
+	member := &multiClusterSetup{isControlPlane: false}
+	assert.Equal(t, transport, stepNames(member.steps()))
+
+	plane := &multiClusterSetup{isControlPlane: true}
+	assert.Equal(t, append(append([]string{}, transport...), controlPlane...), stepNames(plane.steps()))
+}
+
+// A missing or malformed multicluster block stops the set-up before any step
+// touches the manager: the manager here is nil, so a step that reached it
+// would panic.
+func TestSetupMultiCluster_AMalformedBlockStopsItBeforeTheManagerIsTouched(t *testing.T) {
+	configMap := func(mcJSON string) *corev1.ConfigMap {
+		return &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: constants.InferenceServiceConfigMapName, Namespace: constants.OMENamespace},
+			Data:       map[string]string{controllerconfig.MultiClusterConfigName: mcJSON},
+		}
+	}
+	for _, role := range []bool{false, true} {
+		err := setupMultiCluster(nil, fake.NewSimpleClientset(), Options{}, role, irstatus.Decoder{})
+		require.ErrorContains(t, err, "load multi-cluster configuration", "no ConfigMap, control plane %v", role)
+
+		err = setupMultiCluster(nil, fake.NewSimpleClientset(configMap(`{"placement":{"requeueInterval":"soon"}}`)), Options{}, role, irstatus.Decoder{})
+		require.ErrorContains(t, err, "invalid multi-cluster configuration", "a malformed duration, control plane %v", role)
+
+		err = setupMultiCluster(nil, fake.NewSimpleClientset(configMap(`{"placement":{"dispatcherMode":"incremental"}}`)), Options{}, role, irstatus.Decoder{})
+		require.ErrorContains(t, err, "dispatcherMode", "a mis-cased dispatcher mode, control plane %v", role)
+
+		err = setupMultiCluster(nil, fake.NewSimpleClientset(configMap(`{"routing":{"publisher":{"resyncInterval":"-1s"}}}`)), Options{}, role, irstatus.Decoder{})
+		require.ErrorContains(t, err, "invalid multi-cluster configuration: ", "a negative publisher resync, control plane %v", role)
+		assert.ErrorContains(t, err, "resyncInterval")
+	}
 }

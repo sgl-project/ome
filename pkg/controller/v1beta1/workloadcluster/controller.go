@@ -109,6 +109,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if apierrors.IsNotFound(err) {
 			if r.Manager != nil {
 				r.Manager.Disconnect(req.Name)
+				r.Manager.MarkConnectionDecided(req.Name, "")
 			}
 			r.clearFailure(req.Name)
 			r.clearRetry(req.Name)
@@ -130,6 +131,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	status, reason, msg, raw := r.assess(ctx, wc)
+	if r.Manager != nil {
+		// Every path below settles whether this registration is connected, so a
+		// missing connection after this pass is a decision, not a pending one.
+		defer r.Manager.MarkConnectionDecided(wc.Name, wc.UID)
+	}
 
 	// Reconnect/backoff: a transient probe failure must not immediately tear
 	// down a live, working connection. If the only thing that failed is the

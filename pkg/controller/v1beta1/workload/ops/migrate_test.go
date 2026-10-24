@@ -2317,11 +2317,11 @@ func TestMigrate_SourceFailedAtItsRunningRevision_WaitsNamingTheParkedRepair(t *
 		want       []string
 	}{
 		{
-			name:   "repair parked under a ladder still in backoff",
+			name:   "repair parked beside the revision's record in backoff, which holds no repair of an Instance that served it",
 			repair: true,
 			block:  &workload.RetryBlock{State: workload.RetryBlockBackoff, AttemptsStarted: 1, Reason: "CrashLoopBackOff", NextRetryAt: &nextRetry},
 			policy: ladder,
-			want:   []string{"its rebuild waits on the revision's retry block Backoff after 1 failed attempt(s): CrashLoopBackOff"},
+			want:   []string{"until the retry ladder"},
 		},
 		{
 			name:   "repair parked with no ladder configured",
@@ -5110,5 +5110,34 @@ func TestMigrate_FailedSurgeRowDrivesNothing(t *testing.T) {
 	}
 	if rec := f.record(t, uuid); rec.Phase != workload.MigrationPhaseSurgePending {
 		t.Errorf("the record keeps its phase until its deadline; got %s", rec.Phase)
+	}
+}
+
+func TestRunMigrationPhases_StopsAtTheFirstPhaseThatEndsThePass(t *testing.T) {
+	var ran []string
+	phase := func(name string, stop bool, err error) migrationPhase {
+		return func(context.Context) (bool, error) {
+			ran = append(ran, name)
+			return stop, err
+		}
+	}
+	run := func(phases ...migrationPhase) (bool, string, error) {
+		ran = nil
+		stopped, err := runMigrationPhases(context.Background(), phases)
+		return stopped, strings.Join(ran, ","), err
+	}
+
+	stopped, order, err := run(phase("first", false, nil), phase("second", false, nil))
+	if err != nil || stopped || order != "first,second" {
+		t.Fatalf("every phase went on: stopped=%v err=%v ran=%q, want stopped=false err=nil ran=first,second", stopped, err, order)
+	}
+	stopped, order, err = run(phase("first", false, nil), phase("stops", true, nil), phase("never", false, nil))
+	if err != nil || !stopped || order != "first,stops" {
+		t.Fatalf("a phase ended the pass: stopped=%v err=%v ran=%q, want stopped=true err=nil ran=first,stops", stopped, err, order)
+	}
+	listFailed := errors.New("list source pods")
+	stopped, order, err = run(phase("fails", false, listFailed), phase("never", false, nil))
+	if !errors.Is(err, listFailed) || !stopped || order != "fails" {
+		t.Fatalf("a phase failed: stopped=%v err=%v ran=%q, want stopped=true the phase's error ran=fails", stopped, err, order)
 	}
 }

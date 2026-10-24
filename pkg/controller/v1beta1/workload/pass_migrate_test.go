@@ -3,6 +3,7 @@ package workload_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/escalation"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/revision"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
@@ -39,7 +41,7 @@ func TestReconcile_SkipsMigrateWhenModeNever(t *testing.T) {
 	plan := minimalPlan()
 	plan.MigrationMode = types.MigrationModeNever
 
-	_, err := workload.Reconcile(context.Background(), deps, in, plan, nil)
+	_, err := workload.Reconcile(context.Background(), deps, in, plan, desiredRevisionForTest(t, c, in))
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -84,7 +86,7 @@ func TestReconcile_MigrationWorkSelection(t *testing.T) {
 	}
 	plan := minimalPlan()
 	plan.MigrationMode = types.MigrationModeAuto
-	if _, err := workload.Reconcile(context.Background(), types.Deps{Client: c}, in, plan, nil); err != nil {
+	if _, err := workload.Reconcile(context.Background(), types.Deps{Client: c}, in, plan, desiredRevisionForTest(t, c, in)); err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	if migrationMutated {
@@ -375,5 +377,132 @@ func TestReconcile_ParkedDrainAlonePacesThePass(t *testing.T) {
 	}
 	if got := f.record(t, "u-parked"); got.Phase != types.MigrationPhaseDraining {
 		t.Fatalf("the parked record keeps its Draining phase; got %+v", got)
+	}
+}
+
+// A pause does not spend a move's window. Three single-pod Instances serve
+// version 1 under a thirty-minute ready timeout. The operator asks the third
+// off its node, the move surges a replacement whose readiness probe never
+// passes, and ten seconds later the operator pauses the Component. The
+// pause clears the record's deadline with the deadlines of the move's two
+// rows. Thirty-one minutes under the pause pass. The first pass after the
+// pause clears keeps the move open: its record reads SurgePending with a
+// full window measured from that pass. The move closes Failed only when
+// that window runs out, with the source back at Ready. The deadline step
+// the InferenceReplica reconciler runs around every pass runs here too.
+func TestReconcile_MovePausedPastItsWindowKeepsTheMoveAndRunsAFreshWindow(t *testing.T) {
+	const move = "move-off-node"
+	const moved = int32(2)
+	const window = 30 * time.Minute
+	h := newRecoveryHarness(t, false)
+	h.atomicStatus = true
+	h.routed = true
+	h.replicas = 3
+	h.lifecycle = types.Lifecycle{InstanceReadyTimeout: &metav1.Duration{Duration: window}}
+	h.useNodes("node-a", "node-b", "node-c", "node-d")
+	h.migrationAudit = &types.MigrationAuditPolicy{MaxInFlight: 1, MaxPerWindow: 10, Window: time.Hour}
+	h.setTarget(h.revV1, goodImage)
+	if !h.run(40, func() bool { return h.settledOn(h.revV1, 3) }) {
+		h.dumpState("initial create")
+		t.Fatalf("the Component never settled on v1")
+	}
+
+	// The adapter's deadline step: under the pause every row is held and
+	// the move records follow; a released clock starts again from now.
+	holdDeadlines := func(paused bool) {
+		t.Helper()
+		in := h.buildInput()
+		rows := h.irStatuses()
+		held := map[int32]bool{}
+		if paused {
+			for _, row := range rows {
+				held[row.Index] = true
+			}
+		}
+		if err := escalation.ReconcileGatedDeadlines(h.ctx, in, rows, held, window); err != nil {
+			t.Fatalf("ReconcileGatedDeadlines: %v", err)
+		}
+		if err := escalation.ReconcilePausedMigrationDeadlines(h.ctx, in, paused, window); err != nil {
+			t.Fatalf("ReconcilePausedMigrationDeadlines: %v", err)
+		}
+	}
+	// passLikeTheAdapter runs one reconcile the way the InferenceReplica
+	// reconciler does: the clocks are held before a paused pass and settled
+	// after every pass. The test moves the clock itself between passes.
+	passLikeTheAdapter := func() {
+		t.Helper()
+		if h.desired.Paused {
+			holdDeadlines(true)
+		}
+		if _, err := h.pass(); err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+		holdDeadlines(h.desired.Paused)
+	}
+
+	// The move is admitted and surges its replacement, which never passes
+	// its readiness probe.
+	h.requestMove(move, moved)
+	h.migration(move).Deadline = metav1.NewTime(h.clk.Now().Add(window))
+	passLikeTheAdapter()
+	rec := h.migration(move)
+	if rec.Phase != types.MigrationPhaseSurgePending || rec.SurgeInstance == nil {
+		h.dumpState("after the move request")
+		t.Fatalf("the move must be admitted at once; got %+v", *rec)
+	}
+	replacement := h.podsOf(*rec.SurgeInstance)
+	if len(replacement) == 0 {
+		h.dumpState("after the move request")
+		t.Fatalf("the move created no replacement pod at index %d", *rec.SurgeInstance)
+	}
+	for _, pod := range replacement {
+		h.readinessFails[pod.UID] = true
+	}
+
+	// Ten seconds later the operator pauses the Component: the record's
+	// clock is cleared with the pair's.
+	h.clk.Step(10 * time.Second)
+	h.desired.Paused = true
+	passLikeTheAdapter()
+	if rec = h.migration(move); rec.Phase != types.MigrationPhaseSurgePending || !rec.Deadline.IsZero() {
+		t.Fatalf("under the pause the record must stand SurgePending with no deadline; got %+v", *rec)
+	}
+
+	// Thirty-one minutes pass under the pause: the move stands.
+	h.clk.Step(window + time.Minute)
+	passLikeTheAdapter()
+	if rec = h.migration(move); rec.Phase.Terminal() || !rec.Deadline.IsZero() {
+		t.Fatalf("a paused pass changed the record; got %+v", *rec)
+	}
+
+	// The pause clears. The first pass keeps the move and gives it a full
+	// window measured from this pass; the source is still being moved.
+	h.desired.Paused = false
+	cleared := h.clk.Now()
+	passLikeTheAdapter()
+	rec = h.migration(move)
+	if rec.Phase.Terminal() {
+		t.Fatalf("the move was closed in the pass the pause cleared: %s", rec.Message)
+	}
+	if rec.Phase != types.MigrationPhaseSurgePending {
+		t.Fatalf("the move must still read SurgePending after the pause; got %+v", *rec)
+	}
+	if want := cleared.Add(window); !rec.Deadline.Time.Equal(want) {
+		t.Fatalf("the move's deadline = %s, want %s: a full window from the pass the pause clears", rec.Deadline.Time, want)
+	}
+	if source := h.instance(moved); source == nil || source.Phase != types.InstancePhaseMigrating {
+		t.Fatalf("the source must still be Migrating after the pause; got %+v", source)
+	}
+
+	// That window runs out with the replacement still not Ready: the expiry
+	// closes the move and restores the source.
+	h.clk.Step(window + time.Minute)
+	passLikeTheAdapter()
+	rec = h.migration(move)
+	if rec.Phase != types.MigrationPhaseFailed || !strings.Contains(rec.Message, "deadline exceeded in phase SurgePending") {
+		t.Fatalf("the move must close on the window measured from the unpause; got %+v", *rec)
+	}
+	if source := h.instance(moved); source == nil || source.Phase != types.InstancePhaseReady {
+		t.Fatalf("the source must be restored to Ready when the move closes; got %+v", source)
 	}
 }

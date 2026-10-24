@@ -339,6 +339,7 @@ func podForInstance(isvc *v1beta1.InferenceService, instanceIdx int32, ready, se
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      query.PodName(isvc.Name, workload.ComponentEngine, instanceIdx, "default", 0),
 			Namespace: isvc.Namespace,
+			UID:       types.UID(fmt.Sprintf("%s-engine-%d-uid", isvc.Name, instanceIdx)),
 			Labels:    labels,
 		},
 		Spec: corev1.PodSpec{
@@ -385,7 +386,7 @@ func TestCreate_UnconfiguredCadenceUsesBackoff(t *testing.T) {
 	input.Requeue = workload.RequeueIntervals{}
 	plan := buildPlanSinglePodEngine(2)
 
-	result, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, nil)
+	result, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -402,7 +403,7 @@ func TestCreate_UnconfiguredCadenceUsesBackoff(t *testing.T) {
 	explicit.Requeue = workload.RequeueIntervals{}
 	explicit.PromoteWindow = &workload.PromoteWindow{}
 	explicit.PromoteWindow.Observe(90 * time.Second)
-	result, err = ops.Create(context.Background(), workload.Deps{Client: c}, explicit, plan, nil)
+	result, err = ops.Create(context.Background(), workload.Deps{Client: c}, explicit, plan, fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create with a pending promote window: %v", err)
 	}
@@ -421,7 +422,7 @@ func TestCreate_EmptyClusterCreatesPodsAndRequeues(t *testing.T) {
 	input := buildTestInput(isvc, c, workload.ComponentEngine)
 	plan := buildPlanSinglePodEngine(2)
 
-	result, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, nil)
+	result, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -488,7 +489,7 @@ func TestCreate_AllPodsExistButNotReady_HoldsCreating(t *testing.T) {
 	input := buildTestInput(isvc, c, workload.ComponentEngine)
 	plan := buildPlanSinglePodEngine(1)
 
-	result, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, nil)
+	result, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -535,7 +536,7 @@ func TestCreate_AllPodsReady_FlipsServingAndMarksReady(t *testing.T) {
 	}
 
 	makeNewPodReady(t, c, isvc.Namespace, pod.Name, 1)
-	result, err = ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, nil)
+	result, err = ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create after PodReady: %v", err)
 	}
@@ -566,7 +567,7 @@ func TestCreate_PartialPods_CreatesOnlyMissing(t *testing.T) {
 	input := buildTestInput(isvc, c, workload.ComponentEngine)
 	plan := buildPlanSinglePodEngine(2)
 
-	_, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, nil)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -763,13 +764,13 @@ func TestCreate_IdempotentOnAlreadyExists(t *testing.T) {
 	plan := buildPlanSinglePodEngine(1)
 
 	// First call creates the pod.
-	if _, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, nil); err != nil {
+	if _, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, fixtureRevision(t, isvc)); err != nil {
 		t.Fatalf("first Create: %v", err)
 	}
 	// Reset expectations so the second call attempts to re-create.
 	workload.DefaultExpectations.Forget("prod", "llama-70b", workload.ComponentEngine, 0)
 	// Second call should not error even though the pod already exists.
-	if _, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, nil); err != nil {
+	if _, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, fixtureRevision(t, isvc)); err != nil {
 		t.Fatalf("second Create: %v", err)
 	}
 }
@@ -870,26 +871,37 @@ func TestCreate_PromoteSkipsRunningRevisionForOffTargetPods(t *testing.T) {
 	}
 }
 
-// Inverse: when target is nil (scale-down-only reconciles), Create
-// promotes without writing RunningRevision.
-func TestCreate_PromoteWithNilTargetSkipsRunningRevision(t *testing.T) {
-	resetExpectations(t)
-	isvc := minimalISVC("llama-70b", "prod", 1)
-	pod := promotablePodForInstance(isvc, 0)
-	c := newFakeClient(t, isvc, pod)
-	input := buildTestInput(isvc, c, workload.ComponentEngine)
-	plan := buildPlanSinglePodEngine(1)
-
-	if _, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, nil); err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	s := findInstanceStatusOnIR(c, isvc, workload.ComponentEngine, 0)
-	if s == nil || s.Phase != v1beta1.OMENativeInstanceReady {
-		t.Fatalf("expected Phase=Ready; got %+v", s)
-	}
-	if s.RunningRevision != "" {
-		t.Errorf("RunningRevision: got %q want empty (nil target)", s.RunningRevision)
+// A missing rollout target permits promotion at a known running version,
+// but pod health alone cannot establish a version the row does not name.
+func TestCreate_PromoteWithNilTargetRequiresAKnownRevision(t *testing.T) {
+	for _, known := range []bool{false, true} {
+		t.Run(fmt.Sprintf("known=%t", known), func(t *testing.T) {
+			resetExpectations(t)
+			isvc := minimalISVC("example-model", "namespace-a", 1)
+			row := v1beta1.OMENativeInstanceStatus{Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceCreating,
+				Operation: &v1beta1.InstanceOperation{ID: "create-0", Type: v1beta1.InstanceOperationCreate}}
+			if known {
+				row.RunningRevision = fixtureRevision(t, isvc).Name
+			}
+			pod := promotablePodForInstance(isvc, 0)
+			c := newFakeClient(t, isvc, instanceIR(isvc, workload.ComponentEngine, row), pod)
+			input := buildTestInput(isvc, c, workload.ComponentEngine)
+			_, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, buildPlanSinglePodEngine(1), nil)
+			if errors.Is(err, query.ErrRevisionUnknown) != !known || (known && err != nil) {
+				t.Fatalf("Create error = %v, want unknown revision=%t", err, !known)
+			}
+			s := findInstanceStatusOnIR(c, isvc, workload.ComponentEngine, 0)
+			if s == nil || s.RunningRevision != row.RunningRevision {
+				t.Fatalf("running revision changed: %+v", s)
+			}
+			if known {
+				if s.Phase != v1beta1.OMENativeInstanceReady || s.Operation != nil {
+					t.Fatalf("known revision did not finish its attempt: %+v", s)
+				}
+			} else if !reflect.DeepEqual(*s, row) {
+				t.Fatalf("unverified promotion changed its attempt: %+v", s)
+			}
+		})
 	}
 }
 
@@ -1003,7 +1015,7 @@ func TestCreate_NonRecreatePolicy_SelfHealsMissingPod(t *testing.T) {
 	input := buildTestInput(isvc, c, workload.ComponentEngine)
 	plan := buildPlanGangEngine(workload.RestartPolicyNone)
 
-	if _, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, nil); err != nil {
+	if _, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, fixtureRevision(t, isvc)); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	pods := &corev1.PodList{}
@@ -1027,7 +1039,7 @@ func TestCreate_RecreateInstance_StillMaterializesFreshInstance(t *testing.T) {
 	input := buildTestInput(isvc, c, workload.ComponentEngine)
 	plan := buildPlanGangEngine(workload.RestartPolicyRecreateInstance)
 
-	if _, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, nil); err != nil {
+	if _, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, fixtureRevision(t, isvc)); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	pods := &corev1.PodList{}
@@ -1378,7 +1390,7 @@ func TestCreate_PromotionWaitsOutTheWindowAndRequeuesAtItsRemainder(t *testing.T
 		// The dispatcher owns one sink per pass; wire one so the remainder
 		// this pass deposits reaches its own requeue.
 		input.PromoteWindow = &workload.PromoteWindow{}
-		result, err := ops.Create(context.Background(), workload.Deps{Client: c, Clock: clk}, input, plan, nil)
+		result, err := ops.Create(context.Background(), workload.Deps{Client: c, Clock: clk}, input, plan, fixtureRevision(t, isvc))
 		if err != nil {
 			t.Fatalf("Create: %v", err)
 		}
@@ -1474,6 +1486,18 @@ func (r *batchMutationRecorder) apply(_ context.Context, mutations []workload.In
 		mutation.onCommit(mutation.previous, mutation.current)
 	}
 	return nil
+}
+
+// These batch fixtures have no retry blocks. Their combined status writer
+// accepts a named version only when the retry-block update changes nothing.
+func enableVersionedBatchWrites(input *workload.ReconcileInput) {
+	input.ApplyInstanceMutationsWithRetryBlock = func(ctx context.Context, mutations []workload.InstanceMutation, rev string, mutate func(*workload.RetryBlock) workload.RetryBlockDisposition) error {
+		block := workload.RetryBlock{TargetRevision: rev}
+		if mutate != nil && mutate(&block) != workload.RetryBlockUnchanged {
+			return fmt.Errorf("batch fixture cannot persist a retry block for %s", rev)
+		}
+		return input.ApplyInstanceMutations(ctx, mutations)
+	}
 }
 
 type podCreateObserver struct {
@@ -1599,7 +1623,8 @@ func TestCreate_BatchedFreshStartsHonorConfiguredCapAndCommitBeforePods(t *testi
 		return nil
 	}}
 
-	result, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(5), nil)
+	enableVersionedBatchWrites(&input)
+	result, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(5), fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -1639,7 +1664,8 @@ func TestCreate_BatchedTwoThousandReplicaScaleUpSelectsOneConfiguredWave(t *test
 	input.ApplyInstanceMutations = recorder.apply
 	input.MutateInstance = unexpectedPerInstanceMutation
 
-	result, err := ops.Create(context.Background(), workload.Deps{Client: base}, input, buildPlanSinglePodEngine(replicas), nil)
+	enableVersionedBatchWrites(&input)
+	result, err := ops.Create(context.Background(), workload.Deps{Client: base}, input, buildPlanSinglePodEngine(replicas), fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -1676,7 +1702,8 @@ func TestCreate_BatchedNilPodBudgetIsUnbounded(t *testing.T) {
 	input.ApplyInstanceMutations = recorder.apply
 	input.MutateInstance = unexpectedPerInstanceMutation
 
-	_, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, buildPlanSinglePodEngine(5), nil)
+	enableVersionedBatchWrites(&input)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, buildPlanSinglePodEngine(5), fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -1720,7 +1747,8 @@ func TestCreate_BatchedPodBudgetExactFit(t *testing.T) {
 		return nil
 	}}
 
-	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, plan, nil)
+	enableVersionedBatchWrites(&input)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, plan, fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -2040,7 +2068,7 @@ func TestCreate_BatchedActionsPreservePlanOrder(t *testing.T) {
 		return nil
 	}}
 
-	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(3), nil)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(3), fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -2064,7 +2092,7 @@ func TestCreate_BatchedCreatingFailurePreservesNoOpPrefix(t *testing.T) {
 		Index:       0,
 		Incarnation: 1,
 		Phase:       v1beta1.OMENativeInstanceCreating,
-		Operation:   &v1beta1.InstanceOperation{Type: v1beta1.InstanceOperationCreate},
+		Operation:   &v1beta1.InstanceOperation{Type: v1beta1.InstanceOperationCreate, TargetRevision: fixtureRevision(t, isvc).Name},
 	})
 	base := newFakeClient(t, isvc, ir)
 	input := buildTestInput(isvc, base, workload.ComponentEngine)
@@ -2089,7 +2117,7 @@ func TestCreate_BatchedCreatingFailurePreservesNoOpPrefix(t *testing.T) {
 		return nil
 	}}
 
-	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(2), nil)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(2), fixtureRevision(t, isvc))
 	if !errors.Is(err, statusErr) {
 		t.Fatalf("Create error: got %v, want Creating status failure", err)
 	}
@@ -2105,7 +2133,7 @@ func TestCreate_BatchedReadyFailurePreservesNoOpPrefix(t *testing.T) {
 	resetExpectations(t)
 	isvc := minimalISVC("batch-ready-noop-prefix", "prod", 2)
 	ir := instanceIR(isvc, workload.ComponentEngine,
-		v1beta1.OMENativeInstanceStatus{Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceReady},
+		v1beta1.OMENativeInstanceStatus{Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceReady, RunningRevision: fixtureRevision(t, isvc).Name},
 		v1beta1.OMENativeInstanceStatus{
 			Index:       1,
 			Incarnation: 1,
@@ -2129,7 +2157,7 @@ func TestCreate_BatchedReadyFailurePreservesNoOpPrefix(t *testing.T) {
 	}
 	input.MutateInstance = unexpectedPerInstanceMutation
 
-	_, err := ops.Create(context.Background(), workload.Deps{Client: base}, input, buildPlanSinglePodEngine(2), nil)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: base}, input, buildPlanSinglePodEngine(2), fixtureRevision(t, isvc))
 	if !errors.Is(err, statusErr) {
 		t.Fatalf("Create error: got %v, want Ready status failure", err)
 	}
@@ -2180,7 +2208,8 @@ func TestCreate_BatchedPodCreateFailureStopsAndRollsBackUnattemptedInstances(t *
 		return nil
 	}}
 
-	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(3), nil)
+	enableVersionedBatchWrites(&input)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(3), fixtureRevision(t, isvc))
 	if !errors.Is(err, createErr) {
 		t.Fatalf("Create error: got %v, want Pod-create failure", err)
 	}
@@ -2257,7 +2286,8 @@ func TestCreate_BatchedPodCreateFailureRestoresPriorUnattemptedStatus(t *testing
 		return createErr
 	}}
 
-	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(2), nil)
+	enableVersionedBatchWrites(&input)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(2), fixtureRevision(t, isvc))
 	if !errors.Is(err, createErr) {
 		t.Fatalf("Create error: got %v, want Pod-create failure", err)
 	}
@@ -2299,7 +2329,8 @@ func TestCreate_BatchedRollbackPreservesConcurrentStatusChange(t *testing.T) {
 		return nil
 	}}
 
-	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(3), nil)
+	enableVersionedBatchWrites(&input)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(3), fixtureRevision(t, isvc))
 	if !errors.Is(err, createErr) {
 		t.Fatalf("Create error: got %v, want Pod-create failure", err)
 	}
@@ -2344,7 +2375,8 @@ func TestCreate_BatchedCancellationStopsFurtherPodCreates(t *testing.T) {
 		return nil
 	}}
 
-	_, err := ops.Create(ctx, workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(3), nil)
+	enableVersionedBatchWrites(&input)
+	_, err := ops.Create(ctx, workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(3), fixtureRevision(t, isvc))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Create error: got %v, want context cancellation", err)
 	}
@@ -2393,7 +2425,8 @@ func TestCreate_BatchedGlobalAPIFailureStopsFurtherPodCreates(t *testing.T) {
 		return nil
 	}}
 
-	result, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(3), nil)
+	enableVersionedBatchWrites(&input)
+	result, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(3), fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create error: got %v, want nil — a throttled apiserver is paced, not failed", err)
 	}
@@ -2443,7 +2476,8 @@ func TestCreate_BatchedTransportFailureStopsFurtherPodCreates(t *testing.T) {
 		return nil
 	}}
 
-	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(3), nil)
+	enableVersionedBatchWrites(&input)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(3), fixtureRevision(t, isvc))
 	if !errors.Is(err, transportErr) {
 		t.Fatalf("Create error: got %v, want transport failure", err)
 	}
@@ -2489,7 +2523,7 @@ func TestCreate_BatchedResumedCreatingConsumesMissingPodBudget(t *testing.T) {
 		created = append(created, int32(idx64))
 		return nil
 	}}
-	result, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(3), nil)
+	result, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, buildPlanSinglePodEngine(3), fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -2543,7 +2577,7 @@ func TestCreate_BatchedPartiallyMaterializedGangChargesOnlyMissingPods(t *testin
 		createdByInstance[int32(idx64)]++
 		return nil
 	}}
-	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, plan, nil)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, plan, fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -2605,7 +2639,8 @@ func TestCreate_BatchedPodBudgetKeepsGangAtomicAndClosesStablePrefix(t *testing.
 		return nil
 	}}
 
-	result, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, plan, nil)
+	enableVersionedBatchWrites(&input)
+	result, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, plan, fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -2653,7 +2688,7 @@ func TestCreate_BatchedPodBudgetAllowsOneOversizedGang(t *testing.T) {
 		return nil
 	}}
 
-	result, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, plan, nil)
+	result, err := ops.Create(context.Background(), workload.Deps{Client: observedClient}, input, plan, fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -2695,7 +2730,7 @@ func TestCreate_BatchedWavesAdvancePastOversizedGangAndConverge(t *testing.T) {
 	observedPods := map[string]struct{}{}
 	for pass, wantPods := range []int{1, 4, 5} {
 		syncObserved()
-		result, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, nil)
+		result, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, fixtureRevision(t, isvc))
 		if err != nil {
 			t.Fatalf("Create pass %d: %v", pass+1, err)
 		}
@@ -2741,7 +2776,7 @@ func TestCreate_BatchedWavesAdvancePastOversizedGangAndConverge(t *testing.T) {
 		}
 		syncObserved()
 		var err error
-		result, err = ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, nil)
+		result, err = ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, fixtureRevision(t, isvc))
 		if err != nil {
 			t.Fatalf("Ready pass %d: %v", pass+1, err)
 		}
@@ -2908,7 +2943,7 @@ func TestCreate_BatchedReadyPromotionsUseOneMutationBatch(t *testing.T) {
 		return recorder.apply(ctx, mutations)
 	}
 
-	result, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, buildPlanSinglePodEngine(3), nil)
+	result, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, buildPlanSinglePodEngine(3), fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -2997,7 +3032,7 @@ func TestCreate_BatchedServingMarkFailureStopsAtFailedInstance(t *testing.T) {
 	failedPodName := query.PodName(isvc.Name, workload.ComponentEngine, 1, "default", 0)
 	c := &failingPodStatusClient{Client: base, podName: failedPodName, err: markErr}
 
-	_, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, buildPlanSinglePodEngine(3), nil)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, buildPlanSinglePodEngine(3), fixtureRevision(t, isvc))
 	if !errors.Is(err, markErr) {
 		t.Fatalf("Create error: got %v, want serving-mark failure", err)
 	}
@@ -3046,7 +3081,7 @@ func TestCreate_BatchedReadyPersistenceFailureRestoresFailFastServingPrefix(t *t
 		return recorder.apply(ctx, mutations)
 	}
 
-	_, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, buildPlanSinglePodEngine(3), nil)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, buildPlanSinglePodEngine(3), fixtureRevision(t, isvc))
 	if !errors.Is(err, readyErr) {
 		t.Fatalf("Create error: got %v, want Ready persistence failure", err)
 	}
@@ -3180,7 +3215,7 @@ func TestCreate_BatchedServingRollbackUndoesGateWritesWhenReadyBatchFails(t *tes
 	plan := buildPlanSinglePodEngine(2)
 	plan.Instances[1].Runners = []workload.RunnerPlan{{Name: "default", Size: 2}}
 
-	_, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, nil)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, plan, fixtureRevision(t, isvc))
 	if !errors.Is(err, readyErr) {
 		t.Fatalf("Create error: got %v, want the Ready batch failure", err)
 	}
@@ -4184,7 +4219,7 @@ func TestRestart_UnknownPhasePodForceDeletedOnProvenNodeDeath(t *testing.T) {
 		NodeUnreachableThreshold: 5 * time.Minute,
 	}
 	plan := buildPlanSinglePodEngineForRestart(c, isvc)
-	if _, err := ops.Restart(context.Background(), deps, input, plan, plan.Instances[0], nil, "pod lost"); err != nil {
+	if _, err := ops.Restart(context.Background(), deps, input, plan, plan.Instances[0], fixtureRevision(t, isvc), "pod lost"); err != nil {
 		t.Fatalf("Restart: %v", err)
 	}
 	if podExists(c, quiet) {
@@ -4197,7 +4232,7 @@ func TestRestart_UnknownPhasePodForceDeletedOnProvenNodeDeath(t *testing.T) {
 	workload.DefaultExpectations.Forget("prod", "llama-70b", workload.ComponentEngine, 0)
 	input = buildTestInput(isvc, c, workload.ComponentEngine)
 	plan = buildPlanSinglePodEngineForRestart(c, isvc)
-	if _, err := ops.Restart(context.Background(), deps, input, plan, plan.Instances[0], nil, "pod lost"); err != nil {
+	if _, err := ops.Restart(context.Background(), deps, input, plan, plan.Instances[0], fixtureRevision(t, isvc), "pod lost"); err != nil {
 		t.Fatalf("Restart pass 2: %v", err)
 	}
 	got := listPods(t, c, "prod")
@@ -4229,6 +4264,65 @@ func TestRestart_UnknownPhasePodOnLiveNodeIsNeverDeleted(t *testing.T) {
 	}
 	if !podExists(c, quiet) {
 		t.Fatalf("pod %s must survive: a Ready node vetoes every node-death branch", quiet.Name)
+	}
+}
+
+// TestRestart_SilentOldPodIsFreedBySweepNotDrained: an old pod of the set
+// Phase A drains whose kubelet has stopped reporting it is never deleted
+// gracefully, since no kubelet is there to honor a grace and the name
+// would stay held for the pod's whole grace. With a force-delete policy
+// configured and its node unreachable past the threshold, the sweep frees
+// the name with grace zero and the rebuild lands on a later pass; on a
+// node still posting Ready the pod is left where it is and the drain
+// waits for the kubelet.
+func TestRestart_SilentOldPodIsFreedBySweepNotDrained(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		node  *corev1.Node
+		freed bool
+	}{
+		{name: "node unreachable past the threshold", node: unknownNodeUnreachable("node-a", time.Hour), freed: true},
+		{name: "node posting Ready", node: unknownNodeReady("node-a")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetExpectations(t)
+			isvc, ir := isvcReadyAtIncarnation("llama-70b", "prod", 1)
+			restartingAtIncarnation(ir)
+			old := unknownPhasePod(podAtIncarnation(isvc, 0, 1, false, false), "node-a")
+			c := newFakeClient(t, isvc, ir, old, tc.node)
+			rec := record.NewFakeRecorder(16)
+			deps := workload.Deps{Client: c, Recorder: rec}
+
+			input := buildTestInput(isvc, c, workload.ComponentEngine)
+			input.ForceDelete = &workload.ForceDeletePolicy{
+				OverdueSlack:             2 * time.Minute,
+				NodeUnreachableThreshold: 5 * time.Minute,
+			}
+			plan := buildPlanSinglePodEngineForRestart(c, isvc)
+			done, err := ops.Restart(context.Background(), deps, input, plan, plan.Instances[0], fixtureRevision(t, isvc), "pod lost")
+			if err != nil {
+				t.Fatalf("Restart: %v", err)
+			}
+			if done {
+				t.Fatalf("Restart must not complete while the old pod's name is held or being freed")
+			}
+			forceDeleted := countRejectionEvents(drainEvents(rec), workload.EventReasonPodForceDeleted)
+			if tc.freed {
+				if podExists(c, old) {
+					t.Fatalf("old pod %s must be force-deleted once its node is provably gone", old.Name)
+				}
+				if forceDeleted != 1 {
+					t.Fatalf("PodForceDeleted events: got %d want 1", forceDeleted)
+				}
+				return
+			}
+			if !podExists(c, old) {
+				t.Fatalf("old pod %s must not be deleted while its node posts Ready", old.Name)
+			}
+			if forceDeleted != 0 {
+				t.Fatalf("PodForceDeleted events: got %d want 0", forceDeleted)
+			}
+		})
 	}
 }
 
@@ -4641,7 +4735,7 @@ func TestCreate_TerminatingReadyPodIsNotPromoted(t *testing.T) {
 	}
 	plan := buildPlanSinglePodEngine(1)
 
-	result, err := ops.Create(ctx, workload.Deps{Client: c}, buildTestInput(isvc, c, workload.ComponentEngine), plan, nil)
+	result, err := ops.Create(ctx, workload.Deps{Client: c}, buildTestInput(isvc, c, workload.ComponentEngine), plan, fixtureRevision(t, isvc))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -4666,7 +4760,7 @@ func TestCreate_TerminatingReadyPodIsNotPromoted(t *testing.T) {
 	if err := c.Update(ctx, live); err != nil {
 		t.Fatalf("release pod: %v", err)
 	}
-	if _, err := ops.Create(ctx, workload.Deps{Client: c}, buildTestInput(isvc, c, workload.ComponentEngine), plan, nil); err != nil {
+	if _, err := ops.Create(ctx, workload.Deps{Client: c}, buildTestInput(isvc, c, workload.ComponentEngine), plan, fixtureRevision(t, isvc)); err != nil {
 		t.Fatalf("Create after the pod is gone: %v", err)
 	}
 	if err := c.List(ctx, pods, client.InNamespace("prod")); err != nil {
@@ -4783,5 +4877,60 @@ func TestCreate_GatePatchRejected_DisposesRowOnce(t *testing.T) {
 				t.Fatalf("row on the pass after: got %+v want still Failed", rows)
 			}
 		})
+	}
+}
+
+func TestCreate_UnknownRevisionDoesNotMaterializePods(t *testing.T) {
+	resetExpectations(t)
+	isvc := minimalISVC("example-model", "namespace-a", 1)
+	c := newFakeClient(t, isvc)
+	input := buildTestInput(isvc, c, workload.ComponentEngine)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, buildPlanSinglePodEngine(1), nil)
+	if err == nil {
+		t.Fatal("pod creation without a named revision must fail")
+	}
+	pods := &corev1.PodList{}
+	if err := c.List(context.Background(), pods, client.InNamespace(isvc.Namespace)); err != nil {
+		t.Fatal(err)
+	}
+	if len(pods.Items) != 0 {
+		t.Fatalf("unknown revision created %d pods", len(pods.Items))
+	}
+}
+
+func TestCreate_UnlabeledPodsPreserveTheAttempt(t *testing.T) {
+	resetExpectations(t)
+	isvc := minimalISVC("example-model", "namespace-a", 1)
+	target := fixtureRevision(t, isvc)
+	before := v1beta1.OMENativeInstanceStatus{
+		Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceCreating,
+		Operation: &v1beta1.InstanceOperation{ID: "create-0", Type: v1beta1.InstanceOperationCreate, TargetRevision: target.Name},
+	}
+	pod := promotablePodForInstance(isvc, 0)
+	delete(pod.Labels, query.LabelRevisionHash)
+	c := newFakeClient(t, isvc, instanceIR(isvc, workload.ComponentEngine, before), pod)
+	input := buildTestInput(isvc, c, workload.ComponentEngine)
+	_, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, buildPlanSinglePodEngine(1), target)
+	if err == nil {
+		t.Fatal("unlabeled pods cannot complete a Create operation")
+	}
+	row := findInstanceStatusOnIR(c, isvc, workload.ComponentEngine, 0)
+	if row == nil || !reflect.DeepEqual(*row, before) {
+		t.Fatalf("unverified promotion changed its attempt: %+v", row)
+	}
+	if !podExists(c, pod) {
+		t.Fatal("an identity check must not remove the serving pod")
+	}
+}
+
+func TestCreate_EmptyPlanNeedsNoRevision(t *testing.T) {
+	resetExpectations(t)
+	isvc := minimalISVC("example-model", "namespace-a", 0)
+	c := newFakeClient(t, isvc)
+	input := buildTestInput(isvc, c, workload.ComponentEngine)
+	input.DesiredSpec.Replicas = 0
+	input.DesiredSpec.PodSpec = nil
+	if _, err := ops.Create(context.Background(), workload.Deps{Client: c}, input, workload.ComponentPlan{Component: workload.ComponentEngine}, nil); err != nil {
+		t.Fatalf("a pass with no pods to create needs no revision: %v", err)
 	}
 }

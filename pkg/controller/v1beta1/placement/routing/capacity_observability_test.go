@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-func TestCapacityFallbackCondition(t *testing.T) {
+func TestCapacityFallbackCondition_EachPollingState_SetsStatusAndReason(t *testing.T) {
 	tests := []struct {
 		name    string
 		enabled bool
@@ -64,9 +64,9 @@ func TestCapacityFallbackCondition(t *testing.T) {
 	}
 }
 
-func TestCapacityFallbackMetricTracksCurrentStateAndCleansUp(t *testing.T) {
-	capacityFallbackHomes.Reset()
-	t.Cleanup(capacityFallbackHomes.Reset)
+func TestCapacityFallbackMetric_ReportsRecoverOrMapGoes_TracksAndRemovesSeries(t *testing.T) {
+	capacityFallbackClusters.Reset()
+	t.Cleanup(capacityFallbackClusters.Reset)
 
 	spec := v1beta1.TrafficMapSpec{Entries: []v1beta1.TrafficMapEntry{
 		{Cluster: "a", Capacity: &v1beta1.TrafficMapCapacity{FallbackReason: "unreachable"}},
@@ -79,21 +79,21 @@ func TestCapacityFallbackMetricTracksCurrentStateAndCleansUp(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, registered, "the controller-runtime metrics endpoint must expose the gauge")
 	assert.Equal(t, float64(1), testutil.ToFloat64(
-		capacityFallbackHomes.WithLabelValues("ns", "map-a"),
+		capacityFallbackClusters.WithLabelValues("ns", "map-a"),
 	))
 
 	spec.Entries[0].Capacity.FallbackReason = ""
 	recordCapacityFallbackMetric("ns", "map-a", true, spec)
 	assert.Equal(t, float64(0), testutil.ToFloat64(
-		capacityFallbackHomes.WithLabelValues("ns", "map-a"),
+		capacityFallbackClusters.WithLabelValues("ns", "map-a"),
 	))
 
 	recordCapacityFallbackMetric("ns", "map-b", true, spec)
 	deleteCapacityFallbackMetric("ns", "map-a")
-	assert.Equal(t, 1, testutil.CollectAndCount(capacityFallbackHomes),
+	assert.Equal(t, 1, testutil.CollectAndCount(capacityFallbackClusters),
 		"deleting one TrafficMap must preserve other live series")
 
 	recordCapacityFallbackMetric("ns", "map-b", false, spec)
-	assert.Equal(t, 0, testutil.CollectAndCount(capacityFallbackHomes),
+	assert.Equal(t, 0, testutil.CollectAndCount(capacityFallbackClusters),
 		"disabling endpoint capacity must remove its series")
 }

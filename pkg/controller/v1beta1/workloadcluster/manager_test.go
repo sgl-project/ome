@@ -46,6 +46,28 @@ func TestManager_ReconnectOnlyOnConfigChange(t *testing.T) {
 	assert.Equal(t, "B", got.(*stubClient).id)
 }
 
+func TestManager_ReplacesStoppedCacheWithUnchangedCredentials(t *testing.T) {
+	m := NewManager(runtime.NewScheme())
+	var builds int
+	var stop context.CancelFunc
+	m.newClient = func(ctx context.Context, _ []byte, _ *runtime.Scheme) (SelectivelyCachingClient, context.CancelFunc, error) {
+		builds++
+		cacheCtx, cancel := context.WithCancel(ctx)
+		stop = cancel
+		return &selectivelyCachingClient{cacheCtx: cacheCtx}, cancel, nil
+	}
+	require.NoError(t, m.Connect(t.Context(), "member-a", []byte("credentials")))
+	old, ok := m.ClientFor("member-a")
+	require.True(t, ok)
+	stop()
+	require.NoError(t, m.Connect(t.Context(), "member-a", []byte("credentials")))
+	t.Cleanup(stop)
+	current, ok := m.ClientFor("member-a")
+	require.True(t, ok)
+	require.NotSame(t, old, current)
+	require.Equal(t, 2, builds)
+}
+
 func TestManager_Disconnect(t *testing.T) {
 	m, canceled := newTestManager()
 	require.NoError(t, m.Connect(context.Background(), "c1", []byte("A")))
@@ -126,4 +148,20 @@ func TestManager_Connected(t *testing.T) {
 	m.Disconnect("a")
 	names = m.Connected()
 	assert.Equal(t, []string{"b"}, names)
+}
+
+func TestManager_ConnectionPending(t *testing.T) {
+	m, _ := newTestManager()
+	assert.True(t, m.ConnectionPending("c1", ""), "nothing is decided before the controller reaches the cluster")
+	assert.True(t, m.ConnectionPending("c1", "uid-1"))
+
+	m.MarkConnectionDecided("c1", "uid-1")
+	assert.False(t, m.ConnectionPending("c1", ""))
+	assert.False(t, m.ConnectionPending("c1", "uid-1"))
+	assert.True(t, m.ConnectionPending("c1", "uid-2"), "a recreated registration waits for its own decision")
+	assert.True(t, m.ConnectionPending("c2", ""), "each cluster is decided on its own")
+
+	m.MarkConnectionDecided("c1", "")
+	assert.False(t, m.ConnectionPending("c1", ""), "a removed registration is decided")
+	assert.True(t, m.ConnectionPending("c1", "uid-1"))
 }

@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/status"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
@@ -268,10 +269,36 @@ type ComponentCounters struct {
 // Only durable identity and revision fields participate from the stored rows.
 //
 // The one lifecycle field the publication writes is the phase of a settled
-// Ready row the observation finds no pods for: it publishes Pending, the
-// phase the truth pass moves such a row to, so the phase never contradicts
-// the zero pod count published beside it (status.DemotableReady). The
-// running revision stays on the row for the pass that rebuilds it.
+// row, read against the pods of its own pass so the phase never
+// contradicts the counters published beside it.
+//
+// A settled Ready row (status.DemotableReady) the observation finds no
+// pod left that could back (status.PodSetBacksRow: none, or only pods in
+// a terminal phase) publishes Pending, the phase the truth pass moves such
+// a row to; the running revision stays on the row for the pass that
+// rebuilds it. One whose pods are present but serve nothing publishes Restarting: no
+// live pod of the set is ContainersReady with the serving gate, the bar
+// the promote path read when the row entered Ready, so the set is down and
+// the kubelet or the restart policy is bringing it back. The row's revision
+// and ReadySince stay, the engine keeps reading the row as Ready
+// (v1beta1convert.InstanceStatusToWorkload), and the row publishes Ready
+// again on its own once the set serves. A pod serving on its containers
+// before the kubelet folds the gate into PodReady serves.
+//
+// A Failed row that still runs a revision and records an attempt at
+// another publishes Ready while the pods on the revision it runs serve at
+// the desired count: the replacement failed, the Instance did not. That
+// holds for a settled row whose attempt is spent
+// (types.FailedOffRunningRevision) and for a row that still keeps the
+// surge attempt it failed at (types.FailedKeepingSurgeOffRunningRevision),
+// the shape a gang surge's source has until its replacement gang is
+// retired, so the row reads the same at every moment of the attempt. The
+// failure stays on the row, its record, the attempt, the revision it was
+// for and the ReadySince anchor, the retry ladder and the budgets read the
+// row as the engine does, Failed (v1beta1convert.InstanceStatusToWorkload),
+// and the row publishes Failed again once the pods it runs stop serving.
+// Pods on any other revision, a replacement crash-looping or serving
+// between two crashes, are not read.
 func (o *ComponentObservation) TakeInlineV1Publication(desiredByIdx map[int32]int32, targetRevName string) ([]types.InstanceStatus, ComponentCounters, error) {
 	var counters ComponentCounters
 	target := query.RevisionFromName(targetRevName)
@@ -298,10 +325,55 @@ func (o *ComponentObservation) TakeInlineV1Publication(desiredByIdx map[int32]in
 		return nil, ComponentCounters{}, err
 	}
 	for i := range statuses {
-		if statuses[i].PodCount == 0 && status.DemotableReady(&statuses[i]) {
-			statuses[i].Phase = types.InstancePhasePending
+		row := &statuses[i]
+		pods := o.pods.PodsForInstance(row.Index)
+		desired := status.DesiredFor(desiredByIdx, row.Index, row.PodCount)
+		switch {
+		case status.DemotableReady(row):
+			switch {
+			case !status.PodSetBacksRow(pods):
+				row.Phase = types.InstancePhasePending
+			case !query.PodSetFullyServing(podsOnReportingNodes(pods), desired):
+				row.Phase = types.InstancePhaseRestarting
+			}
+		case types.FailedOffRunningRevision(row), types.FailedKeepingSurgeOffRunningRevision(row):
+			if query.PodSetFullyServing(podsOnReportingNodes(podsOnRevision(pods, row.RunningRevision)), desired) {
+				row.Phase = types.InstancePhaseReady
+			}
 		}
 	}
 	counters.Replicas = int32(len(statuses))
 	return statuses, counters, nil
+}
+
+// podsOnReportingNodes leaves out the pods whose Ready condition the node
+// lifecycle controller revoked (podreadiness.ReadyRevokedByNode): their
+// kubelet stopped reporting, so the container statuses and the serving
+// gate they still carry are stale and no Service publishes them. The set
+// they leave is short of the desired count, so the row publishes not
+// serving the moment the revocation lands, as its serving count already
+// reads, instead of Ready until a rebuild replaces the set.
+func podsOnReportingNodes(pods []*corev1.Pod) []*corev1.Pod {
+	out := pods[:0:0]
+	for _, pod := range pods {
+		if podreadiness.ReadyRevokedByNode(pod) {
+			continue
+		}
+		out = append(out, pod)
+	}
+	return out
+}
+
+// podsOnRevision keeps the pods whose revision label names rev: the pods
+// a row's running revision speaks for, with a replacement on another
+// revision left out. A pod with no revision label is on no revision.
+func podsOnRevision(pods []*corev1.Pod, rev string) []*corev1.Pod {
+	want := query.RevisionFromName(rev)
+	var out []*corev1.Pod
+	for _, pod := range pods {
+		if query.RevisionFromPod(pod).Same(want) {
+			out = append(out, pod)
+		}
+	}
+	return out
 }

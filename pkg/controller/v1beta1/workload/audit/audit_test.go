@@ -317,7 +317,7 @@ func TestAuditLedger_TrimDropsOldestTerminalButKeepsStarted(t *testing.T) {
 	l := &Ledger{}
 	// Seed an in-flight entry first — must survive trim.
 	l.UpsertEntry(Entry{RequestUUID: "in-flight-pinned", Phase: PhaseStarted})
-	for i := 0; i < MaxTerminalEntries+50; i++ {
+	for i := 0; i < maxTerminalEntries+50; i++ {
 		l.UpsertEntry(Entry{
 			RequestUUID: fmt.Sprintf("done-%04d", i),
 			Phase:       PhaseCompleted,
@@ -335,8 +335,8 @@ func TestAuditLedger_TrimDropsOldestTerminalButKeepsStarted(t *testing.T) {
 			}
 		}
 	}
-	if terminalCount != MaxTerminalEntries {
-		t.Errorf("terminal entries: got %d want %d", terminalCount, MaxTerminalEntries)
+	if terminalCount != maxTerminalEntries {
+		t.Errorf("terminal entries: got %d want %d", terminalCount, maxTerminalEntries)
 	}
 	if !startedSurvived {
 		t.Errorf("Started entry must survive trim; ledger=%v", l.Entries)
@@ -614,7 +614,7 @@ func TestInFlightEntry_ReturnsCopyNotAlias(t *testing.T) {
 
 	// Compaction must not re-point a held result at a different row.
 	held := l.InFlightEntry("u1")
-	for i := 0; i < MaxTerminalEntries+10; i++ {
+	for i := 0; i < maxTerminalEntries+10; i++ {
 		l.UpsertEntry(Entry{RequestUUID: fmt.Sprintf("t-%04d", i), Phase: PhaseCompleted})
 	}
 	if held.RequestUUID != "u1" || held.Phase != PhaseStarted {

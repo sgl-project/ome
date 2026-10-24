@@ -80,7 +80,7 @@ func placementSatisfactionConditions(source *v1beta1.InferenceService) []policyC
 }
 
 // mergeCandidateObservations keeps allocation authority when refreshing member
-// observations. An omitted planned home remains present with unknown observation.
+// observations. An omitted planned member remains present with unknown observation.
 func mergeCandidateObservations(stored, observed []v1beta1.CandidatePlacement) []v1beta1.CandidatePlacement {
 	planned := map[string]v1beta1.CandidatePlacement{}
 	for _, candidate := range stored {

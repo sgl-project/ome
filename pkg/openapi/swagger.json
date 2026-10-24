@@ -1727,6 +1727,10 @@
           "description": "PromotedThrough is the ome.io/rollout-promote value the most recent step advance applied. It is stamped in the same status write as the advance — the durable record of the promotion, since metadata (the annotation) and status cannot be written atomically. While set, a lingering annotation with this value is inert (already applied; removal is retried best-effort). While the rollout is in progress it clears once the annotation is observed removed, re-arming manual promotion for later steps.",
           "type": "string"
         },
+        "rollbackRequested": {
+          "description": "RollbackRequested records that this unit's rollback was applied from an ome.io/rollout-rollback request. The request stays on the InferenceService through the hold and is this unit's while set: no other unit's canary acts on it. It clears when the request is observed removed, and with the hold when the unit starts its next canary.",
+          "type": "boolean"
+        },
         "rolledBackRevisionHash": {
           "description": "RolledBackRevisionHash is set when a rollback (ome.io/rollout-rollback) abandons a canary: it records the primary Component's rejected revision hash. While set, the group is held on its stable revisions and the rejected target set is NOT retried — even after the annotation is cleared. The rollout re-arms only when a different target set appears.",
           "type": "string"
@@ -1762,6 +1766,18 @@
         "clusterUID": {
           "type": "string",
           "default": ""
+        },
+        "componentMatches": {
+          "description": "ComponentMatches records the Split weight of the other components when the affinity terms set weights: the decoder's, and the router's when routers are divided. Weight holds the primary component's. The accepted plan keeps them so that member floors never follow unaccepted label changes.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.ComponentAffinityMatch"
+          },
+          "x-kubernetes-list-map-keys": [
+            "component"
+          ],
+          "x-kubernetes-list-type": "map"
         },
         "currentHome": {
           "description": "CurrentHome retains the full policy authorized at a home through draining.",
@@ -1869,6 +1885,33 @@
         }
       }
     },
+    "v1beta1.CandidateComponentFloor": {
+      "description": "CandidateComponentFloor records one component's floor on a Split home.",
+      "type": "object",
+      "required": [
+        "component",
+        "current",
+        "desired"
+      ],
+      "properties": {
+        "component": {
+          "type": "string",
+          "default": ""
+        },
+        "current": {
+          "description": "Current is the floor on the home's member copy; zero without a copy.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "desired": {
+          "description": "Desired is the floor at the accepted plan's desired shares.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        }
+      }
+    },
     "v1beta1.CandidatePlacement": {
       "description": "CandidatePlacement is the per-cluster state of a fan-out candidate.",
       "type": "object",
@@ -1898,9 +1941,25 @@
           "type": "string",
           "default": ""
         },
+        "componentFloors": {
+          "description": "ComponentFloors records, on a Split home, each scaled component's floor: the one on the home's member copy now, and the one the accepted plan gives it. A current floor above the desired one is held there until its replacements on other homes are ready.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.CandidateComponentFloor"
+          },
+          "x-kubernetes-list-map-keys": [
+            "component"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
         "endpoint": {
           "description": "Endpoint is this candidate's own externally-addressable URL, mirrored from its derived InferenceService's status.url once admitted AND addressable. In Single mode only the winner carries one and the top-level PlacementStatus.Endpoint is authoritative; in All/Split mode every serving home carries its own, and this list is the source of truth an external LB/DNS consumes to route across homes. Empty until the home is addressable.",
           "$ref": "#/definitions/knative.URL"
+        },
+        "observationFailingSince": {
+          "description": "ObservationFailingSince is when the control plane's reads of this home started failing. It is unset while reads succeed. While the configured observation grace lasts from this time, the home keeps the ready count from its last successful read.",
+          "$ref": "#/definitions/v1.Time"
         },
         "observationKnown": {
           "description": "ObservationKnown distinguishes a current observation from retained evidence.",
@@ -1998,7 +2057,7 @@
       }
     },
     "v1beta1.ClusterAffinityTerm": {
-      "description": "ClusterAffinityTerm selects WorkloadClusters by ANDing its requirements. Multiple terms form a union; a weight assigns replica shares to each match.",
+      "description": "ClusterAffinityTerm selects WorkloadClusters by ANDing its requirements. Multiple terms form a union; weights assign replica shares to each match.",
       "type": "object",
       "properties": {
         "matchExpressions": {
@@ -2020,7 +2079,37 @@
           "x-kubernetes-list-type": "atomic"
         },
         "weight": {
-          "description": "Weight is permitted only for static Split. If any term has an explicit weight, matching term weights add and omitted weights contribute one. Omission must be preserved to distinguish unweighted overlapping terms. Weights are replica ratios, so they have no upper bound.",
+          "description": "Deprecated: Weight is weights.default, and is permitted only for static Split. It is the only weight a manager without weights support reads, so a rollback to such a manager keeps the engine shares set here.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "weights": {
+          "description": "Weights sets each component's replica weight on the clusters this term matches, and is permitted only for static Split. If any term gives a component a weight, the weights of matching terms add and a term that gives none contributes one. Weights are ratios, so they have no upper bound.",
+          "$ref": "#/definitions/v1beta1.ClusterAffinityWeights"
+        }
+      }
+    },
+    "v1beta1.ClusterAffinityWeights": {
+      "description": "ClusterAffinityWeights holds one term's weight per component. The engine takes engine, then default. The decoder takes decoder, then default, then the engine's weight. Routers are divided across clusters only when a term sets router; a term without it then contributes the engine's weight.",
+      "type": "object",
+      "properties": {
+        "decoder": {
+          "description": "Decoder is the decoder's weight.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "default": {
+          "description": "Default is the weight of every component this term does not name.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "engine": {
+          "description": "Engine is the engine's weight.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "router": {
+          "description": "Router is the router's weight. Setting it on any term divides router.minReplicas across the clusters; otherwise every cluster runs the full router policy.",
           "type": "integer",
           "format": "int32"
         }
@@ -2185,6 +2274,24 @@
         }
       }
     },
+    "v1beta1.ComponentAffinityMatch": {
+      "description": "ComponentAffinityMatch records the weight the affinity terms give one component on a cluster.",
+      "type": "object",
+      "required": [
+        "component"
+      ],
+      "properties": {
+        "component": {
+          "type": "string",
+          "default": ""
+        },
+        "weight": {
+          "description": "Weight is the component's effective static weight, when applicable.",
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
     "v1beta1.ComponentAutoscaler": {
       "description": "ComponentAutoscaler configures the autoscaler for a single Component (engine / decoder / router). Takes priority over the legacy ome.io/autoscalerClass annotation for this Component, and is the only way to configure per-Component autoscaling on an InferenceService. Alpha. The API may change without notice.",
       "type": "object",
@@ -2216,7 +2323,7 @@
           "type": "string"
         },
         "conditions": {
-          "description": "Conditions mirrors the HPA's or ScaledObject's conditions verbatim (HPA: ScalingActive / AbleToScale / ScalingLimited; ScaledObject: Ready / Active / Fallback / Paused). Empty when ManagedBy != \"ome\" — operator-owned scalers are surfaced via scaleTargetRef instead.",
+          "description": "Conditions mirrors the HPA's or ScaledObject's conditions verbatim (HPA: ScalingActive / AbleToScale / ScalingLimited; ScaledObject: Ready / Active / Fallback / Paused). OME adds its own conditions next to them: AutoscalerSwitched when the Component moves between an OME HPA and a KEDA ScaledObject, and AutoscalerResolved when it carries an autoscalerPolicyRef. The scaler conditions are empty when ManagedBy != \"ome\" — operator-owned scalers are surfaced via scaleTargetRef instead.",
           "type": "array",
           "items": {
             "default": {},
@@ -2296,7 +2403,7 @@
           "$ref": "#/definitions/v1beta1.LifecycleSpec"
         },
         "maxReplicas": {
-          "description": "Maximum number of replicas for autoscaling.",
+          "description": "Maximum number of replicas for autoscaling. A proportional-scaling follower that leaves it unset has no ceiling of its own.",
           "type": "integer",
           "format": "int32"
         },
@@ -2637,7 +2744,7 @@
           "$ref": "#/definitions/v1beta1.LifecycleSpec"
         },
         "maxReplicas": {
-          "description": "Maximum number of replicas for autoscaling.",
+          "description": "Maximum number of replicas for autoscaling. A proportional-scaling follower that leaves it unset has no ceiling of its own.",
           "type": "integer",
           "format": "int32"
         },
@@ -3116,7 +3223,7 @@
           "$ref": "#/definitions/v1beta1.LifecycleSpec"
         },
         "maxReplicas": {
-          "description": "Maximum number of replicas for autoscaling.",
+          "description": "Maximum number of replicas for autoscaling. A proportional-scaling follower that leaves it unset has no ceiling of its own.",
           "type": "integer",
           "format": "int32"
         },
@@ -3480,6 +3587,39 @@
         },
         "version": {
           "type": "string"
+        }
+      }
+    },
+    "v1beta1.FollowerScalingStatus": {
+      "description": "FollowerScalingStatus compares a target with the committed desired count.",
+      "type": "object",
+      "required": [
+        "component",
+        "ratio",
+        "target"
+      ],
+      "properties": {
+        "clamped": {
+          "description": "Clamped is true when the follower's minReplicas or a declared maxReplicas moved the target; the Ready condition names the bound.",
+          "type": "boolean"
+        },
+        "component": {
+          "type": "string",
+          "default": ""
+        },
+        "current": {
+          "description": "Current is the follower's desired count after this pass.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "ratio": {
+          "$ref": "#/definitions/resource.Quantity"
+        },
+        "target": {
+          "description": "Target is the anchor's desired count times the ratio, rounded up, after the follower's own bounds.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
         }
       }
     },
@@ -3849,6 +3989,10 @@
           "type": "integer",
           "format": "int64"
         },
+        "observedTemplateHash": {
+          "description": "ObservedTemplateHash is the pod-template hash (the ome.io/template-hash annotation the projector stamps beside the spec's templates) that updateRevision was last computed from. It names the roll target this status describes: a spec whose stamp differs asks for a revision the status has not recorded yet, while a spec change outside the templates leaves both unchanged.",
+          "type": "string"
+        },
         "placementObservedGeneration": {
           "description": "PlacementObservedGeneration identifies the generation reconciled with placement rollout and replica-growth guards. The control plane requires this acknowledgement before sharing surge allowance with the member.",
           "type": "integer",
@@ -4147,6 +4291,10 @@
         "rolloutCoordination": {
           "description": "RolloutCoordination reports per-group cross-Component coordination state for the InferenceService. Populated only when spec.rollout declares blueGreen/rollingUpdate groups (canary groups report under status.canary instead).",
           "$ref": "#/definitions/v1beta1.RolloutCoordinationStatus"
+        },
+        "scalingPolicy": {
+          "description": "ScalingPolicy reports the applied cross-component desired-count policy.",
+          "$ref": "#/definitions/v1beta1.ScalingPolicyStatus"
         },
         "traffic": {
           "description": "Traffic reflects the resolved backend traffic policy and the emitted policy resource. Populated only when traffic intent is declared via spec.traffic or any ome.io/* traffic annotation; otherwise nil so older clients see nothing.",
@@ -5067,7 +5215,7 @@
       "type": "object",
       "properties": {
         "tolerance": {
-          "description": "Tolerance is the maximum percentage drift from the starting ratio. A roll step that would exceed it is paused until the pools rebalance. An explicit 0 means zero drift. When omitted, the operator-configured default (the coordination block of the operator's ConfigMap) applies; if the operator configures no default either, the group rolls with no drift bound.",
+          "description": "Tolerance is the maximum percentage drift from the starting ratio. A roll step that would exceed it is paused until the pools rebalance. An explicit 0 means zero drift. When omitted, the operator-configured default (the coordination block of the operator's ConfigMap) applies; if the operator configures no default either, the group rolls with no drift bound. A value of 100 opts out of the bound. Admission rejects a drain-first member (RecreatePod, or an in-place strategy on multi-node gangs) whose single drain would empty its side or move the serving ratio more than twice the tolerance from the start, since such a member could never take its first step. A group whose members all roll drain-first is paced by the batch step instead: each member's drains are counted in batches of its maxUnavailable, and no member opens its next batch until every member's previous batch serves. The ratio band is not consulted for such a group, so admission admits it. With the operator's prefillDecodeRoll.keepRatio rule on, the batch step paces every group that lists both the engine and the decoder, on every update path, and sizes each batch so that the share of each side already moving to the new version stays within this tolerance of the other side's share; a batch that cannot fit shrinks, and at least one Instance moves per batch, so a tight tolerance slows the roll and never stops it.",
           "type": "integer",
           "format": "int32"
         }
@@ -5216,7 +5364,7 @@
           "$ref": "#/definitions/v1.Time"
         },
         "deadline": {
-          "description": "Deadline is when a non-terminal entry expires. Manual: accept time plus InstanceReadyTimeout.",
+          "description": "Deadline is when a non-terminal entry expires. Manual: accept time plus InstanceReadyTimeout. Cleared while the Component is paused and started again, a full InstanceReadyTimeout from the pass the pause clears.",
           "$ref": "#/definitions/v1.Time"
         },
         "fromNode": {
@@ -6041,7 +6189,7 @@
       ],
       "properties": {
         "clusterAffinity": {
-          "description": "ClusterAffinity ORs terms whose requirements are ANDed. Requires the ClusterAffinity policy; omission then matches every registration. An explicit empty or null list is invalid.",
+          "description": "ClusterAffinity ORs terms whose requirements are ANDed. The engine's clusters are every component's clusters; in Split, each term's weights set the components' shares. Omission matches every registration. An explicit empty or null list is invalid.",
           "type": "array",
           "items": {
             "default": {},
@@ -6060,7 +6208,7 @@
           "default": ""
         },
         "policy": {
-          "description": "Policy selects ClusterAffinity matching and persisted allocation plans.",
+          "description": "Policy selects affinity matching and persisted allocation plans.",
           "type": "string",
           "default": ""
         },
@@ -6474,7 +6622,7 @@
           "default": ""
         },
         "ratios": {
-          "description": "Ratios maps each follower Component to its replica ratio relative to the anchor. A ratio of 1.0 means parity; 0.25 means one follower per four anchor replicas (rounded up). Components not listed scale independently.",
+          "description": "Ratios maps each follower Component to its replica ratio relative to the anchor. A ratio of 1.0 means parity; 0.25 means one follower per four anchor replicas (rounded up). Components not listed scale independently. A follower's minReplicas is a floor on the count it is given. Its maxReplicas, when set, is a ceiling; a follower that sets none has no ceiling of its own, and the anchor's bounds cap its count. The status reports a follower as clamped when either bound moved its target.",
           "type": "object",
           "additionalProperties": {
             "$ref": "#/definitions/resource.Quantity"
@@ -6759,7 +6907,7 @@
           }
         },
         "original": {
-          "description": "Original is the snapshot of desired replica counts per Component at rollout start. The keys are ComponentType strings.",
+          "description": "Original is the reference the ratio rule measures against: each Component's desired replica count as its spec asks for it now. It follows the spec, so a resize mid-roll or while idle moves it to the new counts. The keys are ComponentType strings.",
           "type": "object",
           "additionalProperties": {
             "type": "integer",
@@ -6827,7 +6975,7 @@
           "x-kubernetes-list-type": "atomic"
         },
         "maintainRatio": {
-          "description": "MaintainRatio guards the cross-Component replica ratio while this group rolls. Meaningful only on multi-Component blueGreen/rollingUpdate groups (e.g. a PD engine+decoder pair); ignored on single-Component groups and rejected by admission on canary groups (the canary engine does not enforce it).",
+          "description": "MaintainRatio bounds how far the two sides of a multi-Component blueGreen/rollingUpdate group (e.g. a PD engine+decoder pair) may drift apart while the group rolls. A group that lists both the engine and the decoder is held to the operator's default tolerance even when it omits this field; set a tolerance of 100 to roll with no bound. Rejected by admission on single-Component groups (there is no second side) and on canary groups (the canary engine does not enforce it).",
           "$ref": "#/definitions/v1beta1.MaintainRatio"
         },
         "order": {
@@ -7294,6 +7442,27 @@
         }
       }
     },
+    "v1beta1.RouterCapacityEndpoint": {
+      "description": "RouterCapacityEndpoint names the router path that reports serving capacity and the router Service port that answers it.",
+      "type": "object",
+      "required": [
+        "path",
+        "port"
+      ],
+      "properties": {
+        "path": {
+          "description": "Path is the exact request path, for example /capacity. It must equal spec.routing.capacity.path, which the control plane polls. \"/\" is rejected because it would send every request to Port.",
+          "type": "string",
+          "default": ""
+        },
+        "port": {
+          "description": "Port is the router Service port that answers Path. OME adds the route only while the router Service exposes this port, so a wrong port leaves the capacity endpoint unreachable rather than the service unroutable.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        }
+      }
+    },
     "v1beta1.RouterSpec": {
       "description": "RouterSpec defines the configuration for the Router component, which handles request routing",
       "type": "object",
@@ -7326,6 +7495,10 @@
         "autoscalerPolicyRef": {
           "description": "AutoscalerPolicyRef names a same-namespace AutoscalerPolicy whose template renders this Component's autoscaler. An inline Autoscaler block above always outranks the ref; the two may coexist, which is the documented preview/rollback mechanism. Alpha. The API may change without notice.",
           "$ref": "#/definitions/v1beta1.AutoscalerPolicyRef"
+        },
+        "capacityEndpoint": {
+          "description": "CapacityEndpoint exposes one router path on the service's gateway hostname from a router port other than the serving port. Set it when spec.routing.capacity polls the router, and the router answers that path on another port, for example its metrics port. Each serving cluster's top-level HTTPRoute then sends exactly this path to Port; every other path still reaches the serving port. Set it on the InferenceService; serving runtimes reject it.",
+          "$ref": "#/definitions/v1beta1.RouterCapacityEndpoint"
         },
         "config": {
           "description": "Additional configuration parameters for the runner. This can include framework-specific settings.",
@@ -7454,7 +7627,7 @@
           "$ref": "#/definitions/v1beta1.LifecycleSpec"
         },
         "maxReplicas": {
-          "description": "Maximum number of replicas for autoscaling.",
+          "description": "Maximum number of replicas for autoscaling. A proportional-scaling follower that leaves it unset has no ceiling of its own.",
           "type": "integer",
           "format": "int32"
         },
@@ -7656,11 +7829,15 @@
           "type": "string"
         },
         "maxAge": {
-          "description": "MaxAge is the maximum accepted age of a capacity report.",
+          "description": "MaxAge is the maximum accepted age of a capacity report. Choose it above quorum * period: otherwise the oldest reading can expire before the next poll lands, and the home briefly falls back to its replica count. In Reported mode each further period keeps a home on its reports through one more failed poll.",
           "$ref": "#/definitions/v1.Duration"
         },
         "method": {
           "description": "Method is the HTTP method used by the capacity request.",
+          "type": "string"
+        },
+        "mode": {
+          "description": "Mode selects a replica ceiling or an authoritative reported weight. Unset preserves Ceiling. In Reported mode a home's accepted report is its capacity in replicas, neither capped by its replica count nor scaled by its capacity factor. A home without one keeps its replica-based weight.",
           "type": "string"
         },
         "options": {
@@ -7680,7 +7857,7 @@
           "$ref": "#/definitions/v1.Duration"
         },
         "quorum": {
-          "description": "Quorum is the number of readings required to corroborate a lower capacity.",
+          "description": "Quorum is the number of readings required before a report applies. In Ceiling mode they corroborate a lower capacity; in Reported mode the lower median of the window applies.",
           "type": "integer",
           "format": "int32"
         },
@@ -8055,6 +8232,47 @@
         "proportional": {
           "description": "Proportional configuration; required when Mode == \"Proportional\".",
           "$ref": "#/definitions/v1beta1.ProportionalPolicy"
+        }
+      }
+    },
+    "v1beta1.ScalingPolicyStatus": {
+      "description": "ScalingPolicyStatus records the coordinator's last decision.",
+      "type": "object",
+      "properties": {
+        "anchor": {
+          "type": "string"
+        },
+        "anchorDesired": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-map-keys": [
+            "type"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "followers": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.FollowerScalingStatus"
+          },
+          "x-kubernetes-list-map-keys": [
+            "component"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
         }
       }
     },
@@ -8679,30 +8897,34 @@
       "type": "object",
       "properties": {
         "allocated": {
-          "description": "Allocated is the effective allocation ceiling for this home: the control-plane-admitted count, optionally lowered by a capacity report. Ready independently caps it when computing Weight.",
+          "description": "Allocated is the admitted replica count. In Ceiling mode a report can lower it, and Ready independently caps it when computing Weight. It is diagnostic when ReportedWeight is set, including when it is zero.",
           "type": "integer",
           "format": "int32"
         },
         "factor": {
-          "description": "Factor is the per-replica relative serving capacity of this home's accelerator (baseline \"1\", higher = faster), so heterogeneous hardware is weighted by capacity rather than raw replica count: weight is proportional to min(allocated, ready) * factor. Defaults to \"1\" (homogeneous) when unset — the multiplicative identity, i.e. no scaling. It is operator-supplied config, never derived from raw hardware FLOPS.",
+          "description": "Factor is the per-replica serving capacity of this home's accelerator (baseline \"1\", higher = faster), so heterogeneous hardware is weighted by capacity rather than raw replica count: weight is proportional to min(allocated, ready) * factor. Defaults to \"1\" (homogeneous) when unset — the multiplicative identity, i.e. no scaling. It is unset when ReportedWeight is, because the report already includes the hardware. It is operator-supplied config, never derived from raw hardware FLOPS.",
           "$ref": "#/definitions/resource.Quantity"
         },
         "fallbackReason": {
-          "description": "FallbackReason explains why a configured endpoint capacity source did not produce an applied ceiling and the control-plane allocation was retained. Empty means capacity polling is disabled or its latest result was usable.",
+          "description": "FallbackReason explains why a configured endpoint capacity source did not produce a current observation. The entry keeps its replica-based weight; in Reported mode it first uses a fresh cached report. Empty means the latest result was usable or polling is disabled.",
           "type": "string"
         },
         "ready": {
-          "description": "Ready is the home's live ready-replica count. It caps Allocated when computing Weight; zero health-gates the entry to weight 0.",
+          "description": "Ready is the live ready-replica count. It caps Weight unless ReportedWeight is set.",
           "type": "integer",
           "format": "int32"
         },
         "reported": {
-          "description": "Reported is the home's own servable-capacity figure, recorded whenever the endpoint source answered — including when it was at or above the plan and therefore did not lower Allocated. Keeping it visible in that case is what makes the ceiling auditable: Allocated alone cannot show that a report was received and found non-binding.",
+          "description": "Reported is the home's servable count in Ceiling mode, recorded whenever the endpoint source answered — including when it was at or above the plan and therefore did not lower Allocated. Keeping it visible in that case is what makes the ceiling auditable: Allocated alone cannot show that a report was received and found non-binding.",
           "type": "integer",
           "format": "int32"
         },
+        "reportedWeight": {
+          "description": "ReportedWeight is the accepted endpoint capacity in Reported mode, in replicas, and replaces the replica-based weight. Nil means no fresh quorum, so the entry weighs its replica count; zero means the reporter cannot serve traffic.",
+          "$ref": "#/definitions/resource.Quantity"
+        },
         "source": {
-          "description": "Source names which input produced Allocated. FallbackReason separately distinguishes an intentionally control-plane-only allocation from a configured endpoint source that could not supply a usable ceiling.",
+          "description": "Source names the capacity authority: Endpoint when a report lowered Allocated in Ceiling mode or ReportedWeight is set in Reported mode, and ControlPlane otherwise.",
           "type": "string"
         }
       }
@@ -8715,7 +8937,7 @@
       ],
       "properties": {
         "capacity": {
-          "description": "Capacity is the provenance of Weight: weight is proportional to min(allocated, ready) * factor, then gated by the active probe.",
+          "description": "Capacity records the inputs to Weight under spec.capacityMode.",
           "$ref": "#/definitions/v1beta1.TrafficMapCapacity"
         },
         "cluster": {
@@ -8939,6 +9161,10 @@
         "service"
       ],
       "properties": {
+        "capacityMode": {
+          "description": "CapacityMode identifies the capacity authority, even for an empty table. In Reported mode a table in which any entry carries a reported weight is published at once, and an earlier positive plan never replaces it. A table without one follows the same retained-positive rules as Ceiling. Unset means Ceiling.",
+          "type": "string"
+        },
         "entries": {
           "description": "Entries is the routing table: one entry per serving home, each with its endpoint, final apply-verbatim weight, and the capacity/health provenance of that weight. Consumers apply the weights directly — no gating, fallback, or normalization is left for them to redo.",
           "type": "array",

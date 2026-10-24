@@ -49,6 +49,7 @@ import (
 	v1beta1acceleratorclasscontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/acceleratorclass"
 	autoscalerpolicycontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/autoscalerpolicy"
 	v1beta1basemodelcontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel"
+	v1beta1benchmarkjobcontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/benchmark"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	v1beta1inferencereplicacontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/inferencereplica"
 	v1beta1isvccontroller "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice"
@@ -67,6 +68,7 @@ import (
 	"sigs.k8s.io/ome/pkg/version"
 	autoscalerpolicywebhook "sigs.k8s.io/ome/pkg/webhook/admission/autoscalerpolicy"
 	basemodelwebhook "sigs.k8s.io/ome/pkg/webhook/admission/basemodel"
+	"sigs.k8s.io/ome/pkg/webhook/admission/benchmark"
 	inferencereplicawebhook "sigs.k8s.io/ome/pkg/webhook/admission/inferencereplica"
 	"sigs.k8s.io/ome/pkg/webhook/admission/isvc"
 	"sigs.k8s.io/ome/pkg/webhook/admission/pod"
@@ -89,7 +91,6 @@ const (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
-	tlsOpts  []func(*tls.Config)
 )
 
 // registerOptionalScheme attempts to register a scheme if its CRD is available
@@ -159,6 +160,9 @@ type Options struct {
 	enableWebhook           bool
 	probeAddr               string
 	leaderElectionNamespace string
+	// pprofAddr serves net/http/pprof for profiling a live manager. Empty
+	// disables it; the chart supplies the address.
+	pprofAddr string
 	// Timing of the leader election loop. Supplied by the chart, because the
 	// margin a leader needs depends on the apiserver latency of the cluster.
 	leaderElectionTiming        leaderelection.Timing
@@ -242,6 +246,8 @@ func GetOptions() Options {
 	opts.leaderElectionTiming.BindFlags(flag.CommandLine)
 	flag.BoolVar(&opts.enableWebhook, "webhook", opts.enableWebhook, "Enable the webhook server.")
 	flag.StringVar(&opts.probeAddr, "health-probe-addr", opts.probeAddr, "The address the probe endpoint binds to.")
+	flag.StringVar(&opts.pprofAddr, "pprof-bind-address", opts.pprofAddr, "The address the pprof endpoint binds to, "+
+		"for example 127.0.0.1:6060 to reach it only through kubectl port-forward. Empty or 0 disables it.")
 	flag.IntVar(&opts.runtimeRevisionRetention, "runtime-revision-retention", opts.runtimeRevisionRetention,
 		"Max OME-owned ControllerRevisions to keep per source runtime (older ones GC after the grace period if unreferenced).")
 	flag.DurationVar(&opts.runtimeRevisionGracePeriod, "runtime-revision-grace-period", opts.runtimeRevisionGracePeriod,
@@ -313,164 +319,343 @@ func applyKubeAPIRateLimits(cfg *rest.Config, qps float64, burst int) {
 	}
 }
 
+// main parses the flags, sets the logger and runs start-up. A step that
+// stops start-up has logged why; the process then exits with code 1.
 func main() {
 	options := GetOptions()
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&options.zapOpts)))
 
 	setupLog.Info("Initializing", "gitVersion", version.GitVersion, "gitCommit", version.GitCommit)
 
-	if err := options.leaderElectionTiming.Validate(); err != nil {
-		setupLog.Error(err, "Invalid leader election timing")
+	if !(&startup{options: options}).run() {
 		os.Exit(1)
 	}
+}
 
-	// Get a config to talk to the apiserver
+// startup is one start of the manager: the flags, what start-up read from
+// the cluster and the operator configuration, and what it has built so far.
+// The steps share the record; a step that stops start-up has logged why.
+type startup struct {
+	options Options
+
+	cfg       *rest.Config
+	clientSet kubernetes.Interface
+	// tlsOptions apply to the metrics and webhook servers.
+	tlsOptions []func(*tls.Config)
+	mgr        manager.Manager
+
+	// omenativeStatusConfig says how InferenceReplica status is stored and how
+	// many Instances a reader decodes; instanceStatusDecoder is the one decoder
+	// every reader in the process shares.
+	omenativeStatusConfig *controllerconfig.OMENativeStatusConfig
+	instanceStatusDecoder irstatus.Decoder
+	// eventRecorderSettings is the per-object event budget every recorder in
+	// the process shares; eventBroadcaster records for the InferenceService and
+	// InferenceReplica controllers.
+	eventRecorderSettings controllerconfig.EventRecorderSettings
+	eventBroadcaster      record.EventBroadcaster
+
+	deployConfig   *controllerconfig.DeployConfig
+	podBatchSizes  controllerconfig.PodBatchSizes
+	ingressConfig  *controllerconfig.IngressConfig
+	omeAgentConfig *controllerconfig.OmeAgentConfig
+	// tpuSliceConfig is nil when nothing in this process provisions or checks
+	// TPU slices.
+	tpuSliceConfig *controllerconfig.TPUSliceProvisioningConfig
+
+	trafficTranslator traffic.Translator
+	trafficReconciler *traffic.Reconciler
+	runtimeSelector   runtimeselector.Selector
+
+	// isControlPlane is the --multicluster-role control-plane role: the
+	// placement controller owns InferenceServices and clones them onto the
+	// workload clusters, so no local InferenceService-to-pods controller runs.
+	isControlPlane bool
+	// autoscalerPolicyFound and rolloutPolicyFound say whether the chart
+	// installed each policy CRD; the probe is the one source of truth for
+	// whether the feature exists on this cluster.
+	autoscalerPolicyFound bool
+	rolloutPolicyFound    bool
+	// rolloutMaxPlanBytes caps an inline plan or policy body; 0 is uncapped.
+	rolloutMaxPlanBytes int
+	// defaultRatioTolerancePercent is the tolerance a group that omits its own
+	// rolls with; nil when the operator configured none.
+	defaultRatioTolerancePercent *int32
+}
+
+// startupStep is one step of start-up. It reports whether start-up goes on;
+// a step that stops it has logged why.
+type startupStep func() bool
+
+// run takes start-up through its steps in order and stops at the first one
+// that does not go on. The list is the whole order of start-up: what is read
+// and checked, what is built, which controllers and webhooks register, then
+// the manager runs until it is told to stop.
+func (s *startup) run() bool {
+	return runStartupSteps([]startupStep{
+		s.validateLeaderElectionTiming,
+		s.configureAPIClient,
+		s.createClientset,
+		s.configureInstanceStatusDecoding,
+		s.disableHTTP2UnlessEnabled,
+		s.createManager,
+		s.registerPodIndex,
+		s.loadDeployConfig,
+		s.loadLifecycleScaleConfig,
+		s.loadIngressConfig,
+		s.loadOmeAgentConfig,
+		s.registerOptionalSchemes,
+		s.selectTrafficTranslator,
+		s.resolveMultiClusterRole,
+		s.probePolicyCRDs,
+		s.loadRolloutPlanCap,
+		s.loadRatioToleranceDefault,
+		s.loadTPUSliceConfig,
+		s.startEventBroadcaster,
+		s.setupInferenceServiceController,
+		s.addControllerIdentityCheck,
+		s.setupPolicyStatusControllers,
+		s.setupBaseModelControllers,
+		s.setupBenchmarkJobController,
+		s.setupServingRuntimeControllers,
+		s.buildRuntimeSelector,
+		s.setupInferenceReplicaController,
+		s.setupMultiClusterControllers,
+		s.setupAcceleratorClassController,
+		s.registerPodAndRuntimeWebhooks,
+		s.registerBenchmarkJobWebhook,
+		s.registerModelWebhooks,
+		s.registerInferenceReplicaWebhook,
+		s.registerPolicyWebhooks,
+		s.registerInferenceServiceWebhook,
+		s.addHealthChecks,
+		s.startManager,
+	})
+}
+
+// runStartupSteps runs the steps in order and reports whether every one let
+// start-up go on. It stops at the first step that does not.
+func runStartupSteps(steps []startupStep) bool {
+	for _, step := range steps {
+		if !step() {
+			return false
+		}
+	}
+	return true
+}
+
+// stop logs why start-up stops and reports that it does not go on. The log
+// line names the step that called it.
+func stop(err error, msg string, keysAndValues ...any) bool {
+	setupLog.WithCallDepth(1).Error(err, msg, keysAndValues...)
+	return false
+}
+
+// newRecordingBroadcaster builds a broadcaster on the shared event budget
+// that records to the cluster.
+func (s *startup) newRecordingBroadcaster() record.EventBroadcaster {
+	broadcaster := newEventBroadcaster(s.eventRecorderSettings)
+	broadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: s.clientSet.CoreV1().Events("")})
+	return broadcaster
+}
+
+// controllerRecorder is a recorder on broadcaster for one controller; every
+// recorder in the manager reports as the same source component.
+func (s *startup) controllerRecorder(broadcaster record.EventBroadcaster) record.EventRecorder {
+	return broadcaster.NewRecorder(s.mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"})
+}
+
+// admissionDecoder decodes admission requests against the manager's scheme.
+func (s *startup) admissionDecoder() admission.Decoder {
+	return admission.NewDecoder(s.mgr.GetScheme())
+}
+
+// validateLeaderElectionTiming refuses a lease, renew and retry timing under
+// which a leader cannot keep its lease.
+func (s *startup) validateLeaderElectionTiming() bool {
+	if err := s.options.leaderElectionTiming.Validate(); err != nil {
+		return stop(err, "Invalid leader election timing")
+	}
+	return true
+}
+
+// configureAPIClient builds the REST config for the local apiserver with the
+// configured rate limits. The limits go on before the clientset, the
+// discovery probes and the manager copy the config.
+func (s *startup) configureAPIClient() bool {
 	setupLog.Info("Configuring API client connection")
-	cfg := ctrl.GetConfigOrDie()
-	applyKubeAPIRateLimits(cfg, options.kubeAPIQPS, options.kubeAPIBurst)
-	setupLog.Info("Configured API client rate limits", "qps", cfg.QPS, "burst", cfg.Burst)
+	s.cfg = ctrl.GetConfigOrDie()
+	applyKubeAPIRateLimits(s.cfg, s.options.kubeAPIQPS, s.options.kubeAPIBurst)
+	setupLog.Info("Configured API client rate limits", "qps", s.cfg.QPS, "burst", s.cfg.Burst)
+	return true
+}
 
-	// Setup clientset to directly talk to the api server
+// createClientset builds the clientset that reads the operator configuration
+// and records events.
+func (s *startup) createClientset() bool {
 	setupLog.Info("Creating Kubernetes client set")
-	clientSet, err := kubernetes.NewForConfig(cfg)
+	clientSet, err := kubernetes.NewForConfig(s.cfg)
 	if err != nil {
-		setupLog.Error(err, "Failed to create Kubernetes client set")
-		os.Exit(1)
+		return stop(err, "Failed to create Kubernetes client set")
 	}
+	s.clientSet = clientSet
+	return true
+}
 
-	// The InferenceReplica status representation policy is loaded exactly
-	// once, before the manager exists: every IR reader decodes under the
-	// same bound for the process lifetime, and a manager whose cluster
-	// cannot store or validate the ColumnarV2 union must not start.
-	omenativeStatusConfig, err := controllerconfig.NewOMENativeStatusConfig(clientSet)
+// configureInstanceStatusDecoding reads how InferenceReplica status is
+// stored, refuses a cluster whose InferenceReplica CRD cannot store or
+// validate the columnar form, and builds the one decoder every reader
+// shares. The bound is read once, before the manager exists, so every reader
+// decodes under the same bound for the life of the process.
+func (s *startup) configureInstanceStatusDecoding() bool {
+	config, err := controllerconfig.NewOMENativeStatusConfig(s.clientSet)
 	if err != nil {
-		setupLog.Error(err, "Failed to initialize OMENative status configuration")
-		os.Exit(1)
+		return stop(err, "Failed to initialize OMENative status configuration")
 	}
-	if err := schemapreflight.Verify(clientSet.Discovery().OpenAPIV3()); err != nil {
-		setupLog.Error(err, "InferenceReplica status schema preflight failed")
-		os.Exit(1)
+	if err := schemapreflight.Verify(s.clientSet.Discovery().OpenAPIV3()); err != nil {
+		return stop(err, "InferenceReplica status schema preflight failed")
 	}
-	instanceStatusDecoder := irstatus.NewDecoder(omenativeStatusConfig.DecodeBound())
+	s.omenativeStatusConfig = config
+	s.instanceStatusDecoder = irstatus.NewDecoder(config.DecodeBound())
 	setupLog.Info("Configured InferenceReplica status representation",
-		"instanceStatusEncoding", omenativeStatusConfig.InstanceStatusEncoding,
-		"maxDecodedInstances", omenativeStatusConfig.DecodeBound())
+		"instanceStatusEncoding", config.InstanceStatusEncoding,
+		"maxDecodedInstances", config.DecodeBound())
+	return true
+}
 
-	if !options.enableHTTP2 {
-		// if the enable-http2 flag is false (the default), http/2 should be disabled
-		// due to its vulnerabilities. More specifically, disabling http/2 will
-		// prevent from being vulnerable to the HTTP/2 Stream Cancellation and
-		// Rapid Reset CVEs. For more information see:
-		// - https://github.com/advisories/GHSA-qppj-fm5r-hxr3
-		// - https://github.com/advisories/GHSA-4374-p667-p6c8
-		tlsOpts = append(tlsOpts, func(c *tls.Config) {
-			setupLog.Info("disabling http/2")
-			c.NextProtos = []string{"http/1.1"}
-		})
+// disableHTTP2UnlessEnabled serves the metrics and webhook endpoints over
+// HTTP/1.1 unless --enable-http2 is set, so the servers are not open to the
+// HTTP/2 stream cancellation and rapid reset attacks.
+func (s *startup) disableHTTP2UnlessEnabled() bool {
+	if s.options.enableHTTP2 {
+		return true
 	}
+	s.tlsOptions = append(s.tlsOptions, func(c *tls.Config) {
+		setupLog.Info("disabling http/2")
+		c.NextProtos = []string{"http/1.1"}
+	})
+	return true
+}
 
-	// Create a new Cmd to provide shared dependencies and start components
+// createManager builds the controller manager. Its cache holds only the pods
+// that carry the ome.io/inferenceservice label key, its leader lock is
+// LeaderLockName, and the recorders it hands out share the per-object event
+// budget, which is read here so every recorder built later shares it too.
+func (s *startup) createManager() bool {
 	setupLog.Info("Initializing controller manager",
-		"metricsAddr", options.metricsAddr,
-		"webhookPort", options.webhookPort,
-		"leaderElection", options.enableLeaderElection)
-
-	// Scope the manager cache to OME-owned pods. With no Cache option,
-	// controller-runtime LIST+WATCHes every Pod cluster-wide and holds them
-	// in memory before any reconcile runs (gated by WaitForCacheSync) — on a
-	// 130k-pod cluster the Pod informer alone is multi-GB and OOMKills the
-	// manager regardless of how many InferenceServices exist. Every OME pod
-	// (RawDeployment, MultiNode, OMENative/IR, PD engine/decoder/router)
-	// carries the ome.io/inferenceservice label key, and every cached pod
-	// read filters within that set, so scoping by key-existence hides nothing
-	// the controllers read. Pods are the only cluster-scale type; the
-	// remaining informers are bounded by the DefaultTransform below.
+		"metricsAddr", s.options.metricsAddr,
+		"pprofAddr", s.options.pprofAddr,
+		"webhookPort", s.options.webhookPort,
+		"leaderElection", s.options.enableLeaderElection)
 	omePodReq, err := labels.NewRequirement(constants.InferenceServicePodLabelKey, selection.Exists, nil)
 	if err != nil {
-		setupLog.Error(err, "Failed to build OME pod cache selector")
-		os.Exit(1)
+		return stop(err, "Failed to build OME pod cache selector")
 	}
-	omePodSelector := labels.NewSelector().Add(*omePodReq)
-
-	// The per-object event budget is read once, before the manager exists,
-	// so every recorder in the process shares it: the controllers' own
-	// broadcasters below and the one controller-runtime hands out.
-	eventRecorderSettings, err := controllerconfig.LoadEventRecorderSettings(clientSet)
+	if s.eventRecorderSettings, err = controllerconfig.LoadEventRecorderSettings(s.clientSet); err != nil {
+		return stop(err, "Failed to initialize event recorder configuration")
+	}
+	mgr, err := manager.New(s.cfg, s.managerOptions(labels.NewSelector().Add(*omePodReq)))
 	if err != nil {
-		setupLog.Error(err, "Failed to initialize event recorder configuration")
-		os.Exit(1)
+		return stop(err, "Failed to initialize controller manager")
 	}
+	s.mgr = mgr
+	return true
+}
 
-	mgrOpts := manager.Options{
+// managerOptions is the manager's configuration. Pods are the one
+// cluster-scale type, and an unscoped informer holds every pod in the cluster
+// before any reconcile runs, so the pod cache holds only OME-owned pods; every
+// pod OME creates carries the label key, so the scope hides nothing the
+// controllers read. managedFields are stripped from every cached object; OME
+// never reads them.
+func (s *startup) managerOptions(omePodSelector labels.Selector) manager.Options {
+	opts := manager.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
-			// Strip managedFields from every cached object (Pods, Nodes,
-			// EndpointSlices, ConfigMaps, ...): typically a large fraction of
-			// each object's serialized size and never read by OME. The
-			// built-in transform handles non-metav1 objects safely, and a
-			// ByObject entry with only Label set inherits this default.
 			DefaultTransform: cache.TransformStripManagedFields(),
 			ByObject: map[client.Object]cache.ByObject{
 				&v1.Pod{}: {Label: omePodSelector},
 			},
 		},
 		Metrics: metricsserver.Options{
-			BindAddress:   options.metricsAddr,
-			TLSOpts:       tlsOpts,
-			SecureServing: options.secureMetrics,
+			BindAddress:   s.options.metricsAddr,
+			TLSOpts:       s.tlsOptions,
+			SecureServing: s.options.secureMetrics,
 		},
 		WebhookServer: webhook.NewServer(webhook.Options{
-			Port:    options.webhookPort,
-			TLSOpts: tlsOpts,
+			Port:    s.options.webhookPort,
+			TLSOpts: s.tlsOptions,
 		}),
-		LeaderElection:          options.enableLeaderElection,
+		LeaderElection:          s.options.enableLeaderElection,
 		LeaderElectionID:        LeaderLockName,
-		LeaderElectionNamespace: options.leaderElectionNamespace,
-		HealthProbeBindAddress:  options.probeAddr,
-		// Recorders handed out by the manager share the configured budget.
-		EventBroadcaster: newEventBroadcaster(eventRecorderSettings), //nolint:staticcheck // the manager-owned recorders must share the configured per-object event budget
+		LeaderElectionNamespace: s.options.leaderElectionNamespace,
+		HealthProbeBindAddress:  s.options.probeAddr,
+		PprofBindAddress:        s.options.pprofAddr,
+		EventBroadcaster:        newEventBroadcaster(s.eventRecorderSettings), //nolint:staticcheck // the manager-owned recorders must share the configured per-object event budget
 	}
-	options.leaderElectionTiming.Apply(&mgrOpts)
+	s.options.leaderElectionTiming.Apply(&opts)
+	return opts
+}
 
-	mgr, err := manager.New(cfg, mgrOpts)
-	if err != nil {
-		setupLog.Error(err, "Failed to initialize controller manager")
-		os.Exit(1)
+// registerPodIndex adds the field index through which an Instance's pods are
+// found in the cache without a scan of every cached pod.
+func (s *startup) registerPodIndex() bool {
+	if err := query.RegisterOMENativePodIndex(context.Background(), s.mgr.GetFieldIndexer()); err != nil {
+		return stop(err, "Failed to register OMENative pod field index")
 	}
+	return true
+}
 
-	// Register the OMENative pod field index so per-Instance pod lookups
-	// resolve through the cache index instead of scanning every cached
-	// pod — see query.ListOMENativePodsByName.
-	if err := query.RegisterOMENativePodIndex(context.Background(), mgr.GetFieldIndexer()); err != nil {
-		setupLog.Error(err, "Failed to register OMENative pod field index")
-		os.Exit(1)
+// loadDeployConfig validates the deploy block at start-up. The
+// InferenceService controller re-reads the block on every pass; the admission
+// webhook keeps this copy's replica default, so a change to it lands on the
+// next restart.
+func (s *startup) loadDeployConfig() bool {
+	config, err := controllerconfig.NewDeployConfig(s.clientSet)
+	if err != nil {
+		return stop(err, "Failed to initialize deployment configuration")
 	}
+	s.deployConfig = config
+	return true
+}
 
-	// NewDeployConfig is called here only for its startup-time
-	// validation side effect — the ISVC reconciler re-fetches the
-	// config on every reconcile via its Clientset, so the parsed
-	// value is intentionally discarded.
-	if _, err := controllerconfig.NewDeployConfig(clientSet); err != nil {
-		setupLog.Error(err, "Failed to initialize deployment configuration")
-		os.Exit(1)
-	}
-	podBatchSizes, err := loadPodBatchSizes(clientSet)
+// loadLifecycleScaleConfig reads the pod batch sizes the InferenceReplica
+// controller scales and repairs with.
+func (s *startup) loadLifecycleScaleConfig() bool {
+	sizes, err := loadPodBatchSizes(s.clientSet)
 	if err != nil {
-		setupLog.Error(err, "Failed to initialize lifecycle scale configuration")
-		os.Exit(1)
+		return stop(err, "Failed to initialize lifecycle scale configuration")
 	}
-	ingressConfig, err := controllerconfig.NewIngressConfig(clientSet)
-	if err != nil {
-		setupLog.Error(err, "Failed to initialize ingress configuration")
-		os.Exit(1)
-	}
-	omeAgentConfig, err := controllerconfig.NewOmeAgentConfig(clientSet)
-	if err != nil {
-		setupLog.Error(err, "Failed to initialize ome-agent configuration")
-		os.Exit(1)
-	}
+	s.podBatchSizes = sizes
+	return true
+}
 
-	// Register optional schemes based on CRD availability
+// loadIngressConfig reads the ingress block, which decides whether the
+// Gateway API types register.
+func (s *startup) loadIngressConfig() bool {
+	config, err := controllerconfig.NewIngressConfig(s.clientSet)
+	if err != nil {
+		return stop(err, "Failed to initialize ingress configuration")
+	}
+	s.ingressConfig = config
+	return true
+}
+
+// loadOmeAgentConfig reads the ome-agent block the model controllers run
+// their download pods with.
+func (s *startup) loadOmeAgentConfig() bool {
+	config, err := controllerconfig.NewOmeAgentConfig(s.clientSet)
+	if err != nil {
+		return stop(err, "Failed to initialize ome-agent configuration")
+	}
+	s.omeAgentConfig = config
+	return true
+}
+
+// registerOptionalSchemes adds the API types of the optional dependencies
+// whose CRDs are installed, and the Gateway API types when the ingress
+// configuration enables them.
+func (s *startup) registerOptionalSchemes() bool {
 	setupLog.Info("Registering optional CRD schemes")
 	optionalSchemes := []struct {
 		groupVersion schema.GroupVersion
@@ -482,416 +667,554 @@ func main() {
 		{volcanobatch.SchemeGroupVersion, constants.VolcanoJobKind, volcanobatch.AddToScheme},
 		{monitoringv1.SchemeGroupVersion, constants.PodMonitorKind, monitoringv1.AddToScheme},
 	}
-
-	for _, s := range optionalSchemes {
-		if err := registerOptionalScheme(cfg, mgr.GetScheme(), s.groupVersion, s.kind, s.addToScheme); err != nil {
-			setupLog.Error(err, "Failed to register optional scheme",
-				"groupVersion", s.groupVersion.String(),
-				"kind", s.kind)
-			os.Exit(1)
+	for _, optional := range optionalSchemes {
+		if err := registerOptionalScheme(s.cfg, s.mgr.GetScheme(), optional.groupVersion, optional.kind, optional.addToScheme); err != nil {
+			return stop(err, "Failed to register optional scheme",
+				"groupVersion", optional.groupVersion.String(),
+				"kind", optional.kind)
 		}
 	}
-
-	if ingressConfig.EnableGatewayAPI {
+	if s.ingressConfig.EnableGatewayAPI {
 		setupLog.Info("Registering Gateway API scheme")
-		utilruntime.Must(gatewayapiv1.Install(mgr.GetScheme()))
+		utilruntime.Must(gatewayapiv1.Install(s.mgr.GetScheme()))
 	}
+	return true
+}
 
-	// Select the active traffic translator based on
-	// installed backend-policy CRDs (Envoy Gateway BackendTrafficPolicy,
-	// Istio DestinationRule, else Noop). The selection is process-
-	// level — the translator stays stable for the controller's
-	// lifetime — so we build it once at startup.
+// selectTrafficTranslator picks the traffic translator from the installed
+// backend-policy CRDs (Envoy Gateway BackendTrafficPolicy, Istio
+// DestinationRule, else none), once for the life of the process, and builds
+// the traffic reconciler on it.
+func (s *startup) selectTrafficTranslator() bool {
 	setupLog.Info("Selecting traffic translator")
-	trafficTranslator, err := trafficfactory.New(cfg)
+	translator, err := trafficfactory.New(s.cfg)
 	if err != nil {
-		setupLog.Error(err, "Failed to select traffic translator")
-		os.Exit(1)
+		return stop(err, "Failed to select traffic translator")
 	}
-	setupLog.Info("Selected traffic translator", "translator", trafficTranslator.Name())
-	trafficReconciler := traffic.NewReconciler(mgr.GetClient(), mgr.GetScheme(), trafficTranslator)
+	setupLog.Info("Selected traffic translator", "translator", translator.Name())
+	s.trafficTranslator = translator
+	s.trafficReconciler = traffic.NewReconciler(s.mgr.GetClient(), s.mgr.GetScheme(), translator)
+	return true
+}
 
-	// Setup Event Broadcaster
+// resolveMultiClusterRole reads --multicluster-role: control-plane, or empty
+// for a single-cluster or workload-cluster manager. Any other value stops
+// start-up.
+func (s *startup) resolveMultiClusterRole() bool {
+	// The broadcaster this line announces is built once the role, the policy
+	// probes and the start-up blocks below are known; the line keeps its
+	// place in the start-up log.
 	setupLog.Info("Configuring event broadcaster")
-	// Multi-cluster role resolution. On the control plane the placement (fan-out)
-	// controller owns InferenceServices — it clones them onto workload clusters
-	// — so the local ISVC->pods reconcilers must NOT run here.
-	isControlPlane := options.multiClusterRole == multiClusterRoleControlPlane
-	if options.multiClusterRole != "" && !isControlPlane {
-		setupLog.Error(fmt.Errorf("invalid --multicluster-role %q (want %q or empty)", options.multiClusterRole, multiClusterRoleControlPlane), "bad flag")
-		os.Exit(1)
+	s.isControlPlane = s.options.multiClusterRole == multiClusterRoleControlPlane
+	if s.options.multiClusterRole != "" && !s.isControlPlane {
+		return stop(fmt.Errorf("invalid --multicluster-role %q (want %q or empty)", s.options.multiClusterRole, multiClusterRoleControlPlane), "bad flag")
 	}
+	return true
+}
 
-	// AutoscalerPolicy is chart-gated together with its controller and
-	// webhook: the CRD probe is the single source of truth for whether the
-	// feature exists on this cluster.
-	autoscalerPolicyFound, err := utils.IsCrdAvailable(cfg, v1beta1.SchemeGroupVersion.String(), constants.AutoscalerPolicyKind)
+// probePolicyCRDs asks the apiserver whether the chart installed the
+// AutoscalerPolicy and RolloutPolicy CRDs. Each probe is the one source of
+// truth for its feature: the status controller, the reference check and the
+// webhook of a policy kind all follow it. Recording a rollout's plan is not
+// gated on the RolloutPolicy probe.
+func (s *startup) probePolicyCRDs() bool {
+	var err error
+	if s.autoscalerPolicyFound, err = utils.IsCrdAvailable(s.cfg, v1beta1.SchemeGroupVersion.String(), constants.AutoscalerPolicyKind); err != nil {
+		return stop(err, "Failed to probe for the AutoscalerPolicy CRD")
+	}
+	if s.rolloutPolicyFound, err = utils.IsCrdAvailable(s.cfg, v1beta1.SchemeGroupVersion.String(), constants.RolloutPolicyKind); err != nil {
+		return stop(err, "Failed to probe for the RolloutPolicy CRD")
+	}
+	return true
+}
+
+// loadRolloutPlanCap reads the size cap of an inline plan or policy body
+// once; a change lands on the next restart. Absent or unreadable config
+// leaves the cap at 0, uncapped, never an in-code number.
+func (s *startup) loadRolloutPlanCap() bool {
+	config, err := controllerconfig.NewRolloutConfig(s.clientSet)
 	if err != nil {
-		setupLog.Error(err, "Failed to probe for the AutoscalerPolicy CRD")
-		os.Exit(1)
+		setupLog.Error(err, "Failed to load the rollout operator config; proceeding with no plan-size cap")
+		return true
 	}
+	s.rolloutMaxPlanBytes = config.MaxPinnedPlanBytes
+	return true
+}
 
-	// RolloutPolicy is chart-gated the same way. Run pinning itself is not
-	// gated — only ref resolution, the webhook, and the status controller
-	// ride this probe.
-	rolloutPolicyFound, err := utils.IsCrdAvailable(cfg, v1beta1.SchemeGroupVersion.String(), constants.RolloutPolicyKind)
+// loadRatioToleranceDefault reads, once, the ratio tolerance a group that
+// omits its own rolls with, for the admission drain-feasibility rule. Absent
+// or unreadable config leaves it nil: such a group rolls with no drift bound
+// and admission does not check it.
+func (s *startup) loadRatioToleranceDefault() bool {
+	config, err := controllerconfig.NewCoordinationConfig(s.clientSet)
 	if err != nil {
-		setupLog.Error(err, "Failed to probe for the RolloutPolicy CRD")
-		os.Exit(1)
+		setupLog.Error(err, "Failed to load the coordination operator config; admission checks only explicit ratio tolerances")
+		return true
 	}
+	s.defaultRatioTolerancePercent = config.DefaultRatioTolerancePercent
+	return true
+}
 
-	// The inline-plan/policy-body size cap is operator config read once at
-	// startup; a cap change lands on the next manager restart. Absent config
-	// degrades to 0 (uncapped), never an in-code literal.
-	rolloutMaxPlanBytes := 0
-	if rolloutStartupConfig, cfgErr := controllerconfig.NewRolloutConfig(clientSet); cfgErr != nil {
-		setupLog.Error(cfgErr, "Failed to load the rollout operator config; proceeding with no plan-size cap")
-	} else {
-		rolloutMaxPlanBytes = rolloutStartupConfig.MaxPinnedPlanBytes
+// loadTPUSliceConfig reads the TPU slice provisioning block when something in
+// this process uses it: the InferenceReplica controller provisions slices
+// from it and the InferenceReplica webhook checks slice demand against it.
+// The control plane runs neither.
+func (s *startup) loadTPUSliceConfig() bool {
+	if s.isControlPlane || !(s.options.enableInferenceReplicaCtrl || s.options.enableWebhook) {
+		return true
 	}
-
-	// TPU slice provisioning config is read once at startup and shared by
-	// the InferenceReplica controller, which provisions slices from it, and
-	// the InferenceReplica webhook, which checks slice demand against it.
-	var tpuSliceConfig *controllerconfig.TPUSliceProvisioningConfig
-	if !isControlPlane && (options.enableInferenceReplicaCtrl || options.enableWebhook) {
-		if tpuSliceConfig, err = controllerconfig.NewTPUSliceProvisioningConfig(clientSet); err != nil {
-			setupLog.Error(err, "Failed to initialize TPU slice provisioning configuration")
-			os.Exit(1)
-		}
+	config, err := controllerconfig.NewTPUSliceProvisioningConfig(s.clientSet)
+	if err != nil {
+		return stop(err, "Failed to initialize TPU slice provisioning configuration")
 	}
+	s.tpuSliceConfig = config
+	return true
+}
 
-	eventBroadcaster := newEventBroadcaster(eventRecorderSettings)
-	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
-	if isControlPlane {
+// startEventBroadcaster builds the broadcaster the InferenceService and
+// InferenceReplica controllers record through and starts it recording to the
+// cluster.
+func (s *startup) startEventBroadcaster() bool {
+	s.eventBroadcaster = s.newRecordingBroadcaster()
+	return true
+}
+
+// setupInferenceServiceController registers the InferenceService controller.
+// The control plane does not run it: there the placement controller owns
+// InferenceServices and clones them onto the workload clusters.
+func (s *startup) setupInferenceServiceController() bool {
+	if s.isControlPlane {
 		setupLog.Info("control-plane role: local InferenceService reconciler disabled; placement controller owns ISVCs")
-	} else {
-		setupLog.Info("Setting up InferenceService controller")
-		// Logged because the consequence is invisible in the objects: a
-		// Component requesting none of these is projected with no queue-name
-		// label, so nothing downstream records that it was released.
-		quotaAcceleratorResources := splitAndTrim(options.quotaAcceleratorResources)
-		if len(quotaAcceleratorResources) > 0 {
-			setupLog.Info("Quota backend governs workloads requesting these resources",
-				"quotaAcceleratorResources", quotaAcceleratorResources)
-		}
-		if err = (&v1beta1isvccontroller.InferenceServiceReconciler{
-			Client:                    mgr.GetClient(),
-			Clientset:                 clientSet,
-			Log:                       ctrl.Log.WithName("InferenceService"),
-			Scheme:                    mgr.GetScheme(),
-			Recorder:                  eventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
-			InstanceStatusDecoder:     instanceStatusDecoder,
-			TrafficReconciler:         trafficReconciler,
-			MaxConcurrentReconciles:   options.isvcMaxConcurrentReconciles,
-			ConfigCacheTTL:            options.configCacheTTL,
-			QuotaAcceleratorResources: quotaAcceleratorResources,
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "Failed to create InferenceService controller")
-			os.Exit(1)
-		}
+		return true
+	}
+	setupLog.Info("Setting up InferenceService controller")
+	// Logged because the consequence is invisible in the objects: a Component
+	// requesting none of these resources is projected with no queue-name
+	// label, so nothing downstream records that it was released.
+	quotaAcceleratorResources := splitAndTrim(s.options.quotaAcceleratorResources)
+	if len(quotaAcceleratorResources) > 0 {
+		setupLog.Info("Quota backend governs workloads requesting these resources",
+			"quotaAcceleratorResources", quotaAcceleratorResources)
+	}
+	err := (&v1beta1isvccontroller.InferenceServiceReconciler{
+		Client:                    s.mgr.GetClient(),
+		Clientset:                 s.clientSet,
+		Log:                       ctrl.Log.WithName("InferenceService"),
+		Scheme:                    s.mgr.GetScheme(),
+		Recorder:                  s.controllerRecorder(s.eventBroadcaster),
+		InstanceStatusDecoder:     s.instanceStatusDecoder,
+		TrafficReconciler:         s.trafficReconciler,
+		MaxConcurrentReconciles:   s.options.isvcMaxConcurrentReconciles,
+		ConfigCacheTTL:            s.options.configCacheTTL,
+		QuotaAcceleratorResources: quotaAcceleratorResources,
+	}).SetupWithManager(s.mgr)
+	if err != nil {
+		return stop(err, "Failed to create InferenceService controller")
+	}
+	return true
+}
 
-		// With a controllerIdentity configured, the InferenceReplica webhook
-		// admits projections only from that identity. The check runs as a
-		// runnable, after the manager starts and on the leader that projects,
-		// and reports a mismatch, or an identity it could not verify, without
-		// blocking startup.
-		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-			mode, err := controllerconfig.CheckControllerIdentity(ctx, clientSet)
-			switch {
-			case err != nil && mode == "":
-				setupLog.Error(err, "InferenceReplica admission: could not load the controller identity")
-			case errors.Is(err, controllerconfig.ErrControllerIdentityUnverified):
-				setupLog.Error(err, "InferenceReplica admission: could not verify this manager's identity", "mode", mode)
-			case err != nil:
-				setupLog.Error(err, "InferenceReplica admission: this manager is not the configured controller identity; its InferenceReplica projections will be denied until inferenceReplica.controllerIdentity names it", "mode", mode)
-			default:
-				setupLog.Info("InferenceReplica admission mode", "mode", mode)
-			}
-			return nil
-		})); err != nil {
-			setupLog.Error(err, "Failed to register the InferenceReplica controller identity check")
-			os.Exit(1)
-		}
+// addControllerIdentityCheck adds the runnable that, once the manager runs
+// and on the leader that projects, reports whether this manager is the
+// controller identity the InferenceReplica webhook admits projections from.
+// A mismatch, or an identity it cannot verify, is reported and does not stop
+// start-up. The control plane projects nothing locally and skips it.
+func (s *startup) addControllerIdentityCheck() bool {
+	if s.isControlPlane {
+		return true
+	}
+	if err := s.mgr.Add(manager.RunnableFunc(s.reportControllerIdentity)); err != nil {
+		return stop(err, "Failed to register the InferenceReplica controller identity check")
+	}
+	return true
+}
 
-		if autoscalerPolicyFound {
-			setupLog.Info("Setting up AutoscalerPolicy status controller")
-			if err := autoscalerpolicycontroller.SetupWithManager(mgr, clientSet, controllerconfig.NewConfigCache(options.configCacheTTL)); err != nil {
-				setupLog.Error(err, "Failed to create AutoscalerPolicy status controller")
-				os.Exit(1)
-			}
-		}
+// reportControllerIdentity logs the InferenceReplica admission mode and
+// whether this manager is the configured controller identity.
+func (s *startup) reportControllerIdentity(ctx context.Context) error {
+	mode, err := controllerconfig.CheckControllerIdentity(ctx, s.clientSet)
+	switch {
+	case err != nil && mode == "":
+		setupLog.Error(err, "InferenceReplica admission: could not load the controller identity")
+	case errors.Is(err, controllerconfig.ErrControllerIdentityUnverified):
+		setupLog.Error(err, "InferenceReplica admission: could not verify this manager's identity", "mode", mode)
+	case err != nil:
+		setupLog.Error(err, "InferenceReplica admission: this manager is not the configured controller identity; its InferenceReplica projections will be denied until inferenceReplica.controllerIdentity names it", "mode", mode)
+	default:
+		setupLog.Info("InferenceReplica admission mode", "mode", mode)
+	}
+	return nil
+}
 
-		if rolloutPolicyFound {
-			setupLog.Info("Setting up RolloutPolicy status controller")
-			if err := rolloutpolicycontroller.SetupWithManager(mgr, clientSet, controllerconfig.NewConfigCache(options.configCacheTTL)); err != nil {
-				setupLog.Error(err, "Failed to create RolloutPolicy status controller")
-				os.Exit(1)
-			}
+// setupPolicyStatusControllers registers the AutoscalerPolicy and
+// RolloutPolicy status controllers, each only when its CRD is installed. The
+// control plane runs neither.
+func (s *startup) setupPolicyStatusControllers() bool {
+	if s.isControlPlane {
+		return true
+	}
+	if s.autoscalerPolicyFound {
+		setupLog.Info("Setting up AutoscalerPolicy status controller")
+		if err := autoscalerpolicycontroller.SetupWithManager(s.mgr, s.clientSet, controllerconfig.NewConfigCache(s.options.configCacheTTL)); err != nil {
+			return stop(err, "Failed to create AutoscalerPolicy status controller")
 		}
 	}
+	if s.rolloutPolicyFound {
+		setupLog.Info("Setting up RolloutPolicy status controller")
+		if err := rolloutpolicycontroller.SetupWithManager(s.mgr, s.clientSet, controllerconfig.NewConfigCache(s.options.configCacheTTL)); err != nil {
+			return stop(err, "Failed to create RolloutPolicy status controller")
+		}
+	}
+	return true
+}
 
-	// The control plane owns no workloads, models, or runtimes —
-	// those live on the workload clusters. Running the model/runtime lifecycle
-	// controllers here would reconcile against an empty local catalog (no-op
-	// at best, churn at worst), so gate them off under the control-plane role.
-	if isControlPlane {
+// setupBaseModelControllers registers the BaseModel and ClusterBaseModel
+// controllers. The control plane owns no models or runtimes, those live on
+// the workload clusters, so it runs none of the four catalog controllers:
+// these two, ServingRuntime inheritance and runtime-revision GC.
+func (s *startup) setupBaseModelControllers() bool {
+	if s.isControlPlane {
 		setupLog.Info("control-plane role: BaseModel/ClusterBaseModel/ServingRuntime/RuntimeRevisionGC controllers disabled")
-	} else {
-		setupLog.Info("Setting up BaseModel controller")
-		if err = (&v1beta1basemodelcontroller.BaseModelReconciler{
-			Client:         mgr.GetClient(),
-			Log:            ctrl.Log.WithName("BaseModel"),
-			Scheme:         mgr.GetScheme(),
-			OmeAgentConfig: omeAgentConfig,
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "Failed to create BaseModel controller")
-			os.Exit(1)
-		}
-
-		setupLog.Info("Setting up ClusterBaseModel controller")
-		if err = (&v1beta1basemodelcontroller.ClusterBaseModelReconciler{
-			Client:         mgr.GetClient(),
-			Log:            ctrl.Log.WithName("ClusterBaseModel"),
-			Scheme:         mgr.GetScheme(),
-			OmeAgentConfig: omeAgentConfig,
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "Failed to create ClusterBaseModel controller")
-			os.Exit(1)
-		}
-
-		// Single inheritance reconciler that handles both CSR and
-		// SR via one source per GVK. Reconcile branches on req.Namespace.
-		servingRuntimeEventBroadcaster := newEventBroadcaster(eventRecorderSettings)
-		servingRuntimeEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
-		setupLog.Info("Setting up ServingRuntime inheritance controller")
-		if err = (&v1beta1servingruntimecontroller.InheritanceReconciler{
-			Client:   mgr.GetClient(),
-			Log:      ctrl.Log.WithName("ServingRuntimeInheritance"),
-			Scheme:   mgr.GetScheme(),
-			Recorder: servingRuntimeEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "Failed to create ServingRuntime inheritance controller")
-			os.Exit(1)
-		}
-
-		setupLog.Info("Setting up runtime-revision GC controller",
-			"retention", options.runtimeRevisionRetention,
-			"gracePeriod", options.runtimeRevisionGracePeriod)
-		if err = (&v1beta1runtimerevisioncontroller.GCReconciler{
-			Client:              mgr.GetClient(),
-			Log:                 ctrl.Log.WithName("RuntimeRevisionGC"),
-			Scheme:              mgr.GetScheme(),
-			OMENamespace:        constants.OMENamespace,
-			RetentionPerRuntime: options.runtimeRevisionRetention,
-			GracePeriod:         options.runtimeRevisionGracePeriod,
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "Failed to create runtime-revision GC controller")
-			os.Exit(1)
-		}
+		return true
 	}
+	setupLog.Info("Setting up BaseModel controller")
+	if err := (&v1beta1basemodelcontroller.BaseModelReconciler{
+		Client:         s.mgr.GetClient(),
+		Log:            ctrl.Log.WithName("BaseModel"),
+		Scheme:         s.mgr.GetScheme(),
+		OmeAgentConfig: s.omeAgentConfig,
+	}).SetupWithManager(s.mgr); err != nil {
+		return stop(err, "Failed to create BaseModel controller")
+	}
+	setupLog.Info("Setting up ClusterBaseModel controller")
+	if err := (&v1beta1basemodelcontroller.ClusterBaseModelReconciler{
+		Client:         s.mgr.GetClient(),
+		Log:            ctrl.Log.WithName("ClusterBaseModel"),
+		Scheme:         s.mgr.GetScheme(),
+		OmeAgentConfig: s.omeAgentConfig,
+	}).SetupWithManager(s.mgr); err != nil {
+		return stop(err, "Failed to create ClusterBaseModel controller")
+	}
+	return true
+}
 
-	// The runtime selector the InferenceReplica controller renders replicas
-	// with from their model and runtime references, shared with the
-	// InferenceService validator. It carries the cluster's model cache
-	// provider so a sharded model selects a runtime that supports it.
-	runtimeSelectorConfig := runtimeselector.NewConfig(mgr.GetClient())
-	runtimeSelector := runtimeselector.NewWithConfig(runtimeSelectorConfig)
+// setupBenchmarkJobController registers the BenchmarkJob controller. The
+// control plane owns no workloads and does not run it.
+func (s *startup) setupBenchmarkJobController() bool {
+	if s.isControlPlane {
+		setupLog.Info("control-plane role: BenchmarkJob controller disabled")
+		return true
+	}
+	setupLog.Info("Setting up BenchmarkJob controller")
+	if err := (&v1beta1benchmarkjobcontroller.BenchmarkJobReconciler{
+		Client:    s.mgr.GetClient(),
+		Clientset: s.clientSet,
+		Log:       ctrl.Log.WithName("BenchmarkJob"),
+		Scheme:    s.mgr.GetScheme(),
+		Recorder:  s.controllerRecorder(s.newRecordingBroadcaster()),
+	}).SetupWithManager(s.mgr); err != nil {
+		return stop(err, "Failed to create BenchmarkJob controller")
+	}
+	return true
+}
 
-	if options.enableInferenceReplicaCtrl && !isControlPlane {
-		setupLog.Info("Setting up InferenceReplica controller")
-		if err = (&v1beta1inferencereplicacontroller.Reconciler{
-			Client:                   mgr.GetClient(),
-			Clientset:                clientSet,
-			Log:                      ctrl.Log.WithName("InferenceReplica"),
-			APIReader:                mgr.GetAPIReader(),
-			RuntimeSelector:          runtimeSelector,
-			InstanceStatusDecoder:    instanceStatusDecoder,
-			InstanceStatusTarget:     omenativeStatusConfig.InstanceStatusEncoding,
-			Recorder:                 eventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
-			MaxConcurrentReconciles:  options.irMaxConcurrentReconciles,
-			ConfigCacheTTL:           options.configCacheTTL,
-			ScaleUpPodBatchSize:      podBatchSizes.ScaleUp,
-			ScaleDownPodBatchSize:    podBatchSizes.ScaleDown,
-			ScaleDownRequeueInterval: podBatchSizes.ScaleDownRequeueInterval,
-			RepairBatchSize:          podBatchSizes.Repair,
-			TPUSliceProvisioning:     tpuSliceConfig,
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "Failed to create InferenceReplica controller")
-			os.Exit(1)
-		}
-	} else if isControlPlane {
+// setupServingRuntimeControllers registers the ServingRuntime inheritance
+// controller, one reconciler for ServingRuntime and ClusterServingRuntime
+// with one source per kind, and the runtime-revision GC controller. The
+// control plane has no local runtime catalog and runs neither.
+func (s *startup) setupServingRuntimeControllers() bool {
+	if s.isControlPlane {
+		return true
+	}
+	setupLog.Info("Setting up ServingRuntime inheritance controller")
+	if err := (&v1beta1servingruntimecontroller.InheritanceReconciler{
+		Client:   s.mgr.GetClient(),
+		Log:      ctrl.Log.WithName("ServingRuntimeInheritance"),
+		Scheme:   s.mgr.GetScheme(),
+		Recorder: s.controllerRecorder(s.newRecordingBroadcaster()),
+	}).SetupWithManager(s.mgr); err != nil {
+		return stop(err, "Failed to create ServingRuntime inheritance controller")
+	}
+	setupLog.Info("Setting up runtime-revision GC controller",
+		"retention", s.options.runtimeRevisionRetention,
+		"gracePeriod", s.options.runtimeRevisionGracePeriod)
+	if err := (&v1beta1runtimerevisioncontroller.GCReconciler{
+		Client:              s.mgr.GetClient(),
+		Log:                 ctrl.Log.WithName("RuntimeRevisionGC"),
+		Scheme:              s.mgr.GetScheme(),
+		OMENamespace:        constants.OMENamespace,
+		RetentionPerRuntime: s.options.runtimeRevisionRetention,
+		GracePeriod:         s.options.runtimeRevisionGracePeriod,
+	}).SetupWithManager(s.mgr); err != nil {
+		return stop(err, "Failed to create runtime-revision GC controller")
+	}
+	return true
+}
+
+// buildRuntimeSelector builds the runtime selector the InferenceReplica
+// controller renders replicas with and the InferenceService validator selects
+// with. It carries the cluster's model cache provider, so a sharded model
+// selects a runtime that supports it.
+func (s *startup) buildRuntimeSelector() bool {
+	config := runtimeselector.NewConfig(s.mgr.GetClient())
+	s.runtimeSelector = runtimeselector.NewWithConfig(config)
+	return true
+}
+
+// setupInferenceReplicaController registers the InferenceReplica controller
+// unless --enable-inferencereplica-controller=false turned it off. The
+// control plane does not run it.
+func (s *startup) setupInferenceReplicaController() bool {
+	switch {
+	case s.isControlPlane:
 		setupLog.Info("control-plane role: InferenceReplica controller disabled")
-	} else {
+		return true
+	case !s.options.enableInferenceReplicaCtrl:
 		setupLog.Info("InferenceReplica controller disabled via --enable-inferencereplica-controller=false")
+		return true
 	}
-
-	// Multi-cluster: the WorkloadCluster registry/transport runs when multi-cluster
-	// is enabled OR this is the control plane (which requires it). The control plane
-	// additionally runs the placement (fan-out) controller, its GC, and the endpoint
-	// publisher — see setupMultiCluster.
-	if options.enableMultiCluster || isControlPlane {
-		if err = setupMultiCluster(mgr, clientSet, options, isControlPlane, instanceStatusDecoder); err != nil {
-			setupLog.Error(err, "Failed to set up multi-cluster")
-			os.Exit(1)
-		}
+	setupLog.Info("Setting up InferenceReplica controller")
+	err := (&v1beta1inferencereplicacontroller.Reconciler{
+		Client:                   s.mgr.GetClient(),
+		Clientset:                s.clientSet,
+		Log:                      ctrl.Log.WithName("InferenceReplica"),
+		APIReader:                s.mgr.GetAPIReader(),
+		RuntimeSelector:          s.runtimeSelector,
+		InstanceStatusDecoder:    s.instanceStatusDecoder,
+		InstanceStatusTarget:     s.omenativeStatusConfig.InstanceStatusEncoding,
+		Recorder:                 s.controllerRecorder(s.eventBroadcaster),
+		MaxConcurrentReconciles:  s.options.irMaxConcurrentReconciles,
+		ConfigCacheTTL:           s.options.configCacheTTL,
+		ScaleUpPodBatchSize:      s.podBatchSizes.ScaleUp,
+		ScaleDownPodBatchSize:    s.podBatchSizes.ScaleDown,
+		ScaleDownRequeueInterval: s.podBatchSizes.ScaleDownRequeueInterval,
+		RepairBatchSize:          s.podBatchSizes.Repair,
+		TPUSliceProvisioning:     s.tpuSliceConfig,
+	}).SetupWithManager(s.mgr)
+	if err != nil {
+		return stop(err, "Failed to create InferenceReplica controller")
 	}
+	return true
+}
 
-	// AcceleratorClass discovery stamps status from the local cluster's Node
-	// inventory — meaningless on the control plane (which owns no workload
-	// nodes) and its Node watch would add a cluster-wide Node informer there,
-	// so it follows the same role gating as the other catalog controllers.
-	if isControlPlane {
+// setupMultiClusterControllers wires the WorkloadCluster registry when
+// multi-cluster is enabled or this is the control plane, which needs it, and
+// on the control plane also placement, its GC and the endpoint publishers.
+func (s *startup) setupMultiClusterControllers() bool {
+	if !s.options.enableMultiCluster && !s.isControlPlane {
+		return true
+	}
+	if err := setupMultiCluster(s.mgr, s.clientSet, s.options, s.isControlPlane, s.instanceStatusDecoder); err != nil {
+		return stop(err, "Failed to set up multi-cluster")
+	}
+	return true
+}
+
+// setupAcceleratorClassController registers the AcceleratorClass controller,
+// which reads the local Node inventory. The control plane owns no workload
+// nodes, and a Node watch there would add a cluster-wide informer for
+// nothing, so it does not run it.
+func (s *startup) setupAcceleratorClassController() bool {
+	if s.isControlPlane {
 		setupLog.Info("control-plane role: AcceleratorClass controller disabled")
-	} else {
-		acceleratorClassEventBroadcaster := newEventBroadcaster(eventRecorderSettings)
-		setupLog.Info("Setting up AcceleratorClass controller")
-		acceleratorClassEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
-		if err = (&v1beta1acceleratorclasscontroller.AcceleratorClassReconciler{
-			Client:   mgr.GetClient(),
-			Log:      ctrl.Log.WithName("AcceleratorClass"),
-			Scheme:   mgr.GetScheme(),
-			Recorder: acceleratorClassEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "Failed to create AcceleratorClass controller")
-			os.Exit(1)
+		return true
+	}
+	setupLog.Info("Setting up AcceleratorClass controller")
+	if err := (&v1beta1acceleratorclasscontroller.AcceleratorClassReconciler{
+		Client:   s.mgr.GetClient(),
+		Log:      ctrl.Log.WithName("AcceleratorClass"),
+		Scheme:   s.mgr.GetScheme(),
+		Recorder: s.controllerRecorder(s.newRecordingBroadcaster()),
+	}).SetupWithManager(s.mgr); err != nil {
+		return stop(err, "Failed to create AcceleratorClass controller")
+	}
+	return true
+}
+
+// registerPodAndRuntimeWebhooks registers, when the webhook runs, the pod
+// mutator, the ServingRuntime and ClusterServingRuntime validators, the two
+// runtime-preset mutators and the ControllerRevision immutability validator.
+func (s *startup) registerPodAndRuntimeWebhooks() bool {
+	if !s.options.enableWebhook {
+		return true
+	}
+	setupLog.Info("Configuring webhook server", "port", s.options.webhookPort)
+	hookServer, decoder := s.mgr.GetWebhookServer(), s.admissionDecoder()
+
+	setupLog.Info("Registering InferenceService webhook to the webhook server")
+	hookServer.Register("/mutate-pods", &webhook.Admission{
+		Handler: &pod.Mutator{Client: s.mgr.GetClient(), Clientset: s.clientSet, Decoder: decoder},
+	})
+	setupLog.Info("Registering cluster serving runtime validator webhook to the webhook server")
+	hookServer.Register("/validate-ome-io-v1beta1-clusterservingruntime", &webhook.Admission{
+		Handler: &servingruntime.ClusterServingRuntimeValidator{Client: s.mgr.GetAPIReader(), Decoder: decoder},
+	})
+	setupLog.Info("Registering serving runtime validator webhook to the webhook server")
+	hookServer.Register("/validate-ome-io-v1beta1-servingruntime", &webhook.Admission{
+		Handler: &servingruntime.ServingRuntimeValidator{Client: s.mgr.GetAPIReader(), Decoder: decoder},
+	})
+	setupLog.Info("Registering serving runtime engine-preset mutator webhooks to the webhook server")
+	hookServer.Register("/mutate-ome-io-v1beta1-servingruntime-preset", &webhook.Admission{
+		Handler: &runtimepreset.ServingRuntimeMutator{Decoder: decoder},
+	})
+	hookServer.Register("/mutate-ome-io-v1beta1-clusterservingruntime-preset", &webhook.Admission{
+		Handler: &runtimepreset.ClusterServingRuntimeMutator{Decoder: decoder},
+	})
+	setupLog.Info("Registering ControllerRevision immutability validator webhook to the webhook server")
+	hookServer.Register("/validate-apps-v1-controllerrevision", &webhook.Admission{
+		Handler: &runtimerevisionwebhook.ImmutabilityValidator{Decoder: decoder},
+	})
+	return true
+}
+
+// registerBenchmarkJobWebhook registers, when the webhook runs, the
+// BenchmarkJob validator.
+func (s *startup) registerBenchmarkJobWebhook() bool {
+	if !s.options.enableWebhook {
+		return true
+	}
+	hookServer, decoder := s.mgr.GetWebhookServer(), s.admissionDecoder()
+	setupLog.Info("Registering benchmark job validator webhook to the webhook server")
+	hookServer.Register("/validate-ome-io-v1beta1-benchmarkjob", &webhook.Admission{
+		Handler: &benchmark.BenchmarkJobValidator{Client: s.mgr.GetClient(), Decoder: decoder},
+	})
+	return true
+}
+
+// registerModelWebhooks registers, when the webhook runs, the BaseModel and
+// ClusterBaseModel validators.
+func (s *startup) registerModelWebhooks() bool {
+	if !s.options.enableWebhook {
+		return true
+	}
+	hookServer, decoder := s.mgr.GetWebhookServer(), s.admissionDecoder()
+	setupLog.Info("Registering BaseModel validator webhook to the webhook server")
+	hookServer.Register("/validate-ome-io-v1beta1-basemodel", &webhook.Admission{
+		Handler: &basemodelwebhook.BaseModelValidator{Decoder: decoder},
+	})
+	setupLog.Info("Registering ClusterBaseModel validator webhook to the webhook server")
+	hookServer.Register("/validate-ome-io-v1beta1-clusterbasemodel", &webhook.Admission{
+		Handler: &basemodelwebhook.ClusterBaseModelValidator{Decoder: decoder},
+	})
+	return true
+}
+
+// registerInferenceReplicaWebhook registers, when the webhook runs, the
+// InferenceReplica validator. It checks slice demand only when slices are
+// provisioned: the block is configured and the Slice CRD is installed.
+func (s *startup) registerInferenceReplicaWebhook() bool {
+	if !s.options.enableWebhook {
+		return true
+	}
+	setupLog.Info("Registering InferenceReplica validator webhook to the webhook server")
+	validator := &inferencereplicawebhook.Validator{
+		Decoder:     s.admissionDecoder(),
+		Reader:      s.mgr.GetAPIReader(),
+		Clientset:   s.clientSet,
+		ConfigCache: controllerconfig.NewConfigCache(s.options.configCacheTTL),
+	}
+	if s.tpuSliceConfig != nil {
+		sliceFound, err := utils.IsCrdAvailable(s.cfg, gke.GroupVersion.String(), gke.Kind)
+		if err != nil {
+			return stop(err, "Failed to probe for the Slice CRD")
+		}
+		if sliceFound {
+			validator.TPUSliceProvisioning, validator.Nodes = s.tpuSliceConfig, s.mgr.GetAPIReader()
 		}
 	}
+	s.mgr.GetWebhookServer().Register("/validate-ome-io-v1beta1-inferencereplica", &webhook.Admission{Handler: validator})
+	return true
+}
 
-	if options.enableWebhook {
-		setupLog.Info("Configuring webhook server", "port", options.webhookPort)
-		hookServer := mgr.GetWebhookServer()
-
-		setupLog.Info("Registering InferenceService webhook to the webhook server")
-		hookServer.Register("/mutate-pods", &webhook.Admission{
-			Handler: &pod.Mutator{Client: mgr.GetClient(), Clientset: clientSet, Decoder: admission.NewDecoder(mgr.GetScheme())},
-		})
-
-		setupLog.Info("Registering cluster serving runtime validator webhook to the webhook server")
-		hookServer.Register("/validate-ome-io-v1beta1-clusterservingruntime", &webhook.Admission{
-			Handler: &servingruntime.ClusterServingRuntimeValidator{Client: mgr.GetAPIReader(), Decoder: admission.NewDecoder(mgr.GetScheme())},
-		})
-
-		setupLog.Info("Registering serving runtime validator webhook to the webhook server")
-		hookServer.Register("/validate-ome-io-v1beta1-servingruntime", &webhook.Admission{
-			Handler: &servingruntime.ServingRuntimeValidator{Client: mgr.GetAPIReader(), Decoder: admission.NewDecoder(mgr.GetScheme())},
-		})
-
-		setupLog.Info("Registering serving runtime engine-preset mutator webhooks to the webhook server")
-		hookServer.Register("/mutate-ome-io-v1beta1-servingruntime-preset", &webhook.Admission{
-			Handler: &runtimepreset.ServingRuntimeMutator{Decoder: admission.NewDecoder(mgr.GetScheme())},
-		})
-		hookServer.Register("/mutate-ome-io-v1beta1-clusterservingruntime-preset", &webhook.Admission{
-			Handler: &runtimepreset.ClusterServingRuntimeMutator{Decoder: admission.NewDecoder(mgr.GetScheme())},
-		})
-
-		setupLog.Info("Registering ControllerRevision immutability validator webhook to the webhook server")
-		hookServer.Register("/validate-apps-v1-controllerrevision", &webhook.Admission{
-			Handler: &runtimerevisionwebhook.ImmutabilityValidator{Decoder: admission.NewDecoder(mgr.GetScheme())},
-		})
-
-		setupLog.Info("Registering BaseModel validator webhook to the webhook server")
-		hookServer.Register("/validate-ome-io-v1beta1-basemodel", &webhook.Admission{
-			Handler: &basemodelwebhook.BaseModelValidator{Decoder: admission.NewDecoder(mgr.GetScheme())},
-		})
-
-		setupLog.Info("Registering ClusterBaseModel validator webhook to the webhook server")
-		hookServer.Register("/validate-ome-io-v1beta1-clusterbasemodel", &webhook.Admission{
-			Handler: &basemodelwebhook.ClusterBaseModelValidator{Decoder: admission.NewDecoder(mgr.GetScheme())},
-		})
-
-		setupLog.Info("Registering InferenceReplica validator webhook to the webhook server")
-		irValidator := &inferencereplicawebhook.Validator{
-			Decoder:     admission.NewDecoder(mgr.GetScheme()),
-			Reader:      mgr.GetAPIReader(),
-			Clientset:   clientSet,
-			ConfigCache: controllerconfig.NewConfigCache(options.configCacheTTL),
-		}
-		// Slice demand is checked only when slices are provisioned:
-		// configured, with the Slice CRD installed at startup.
-		if tpuSliceConfig != nil {
-			var sliceFound bool
-			if sliceFound, err = utils.IsCrdAvailable(cfg, gke.GroupVersion.String(), gke.Kind); err != nil {
-				setupLog.Error(err, "Failed to probe for the Slice CRD")
-				os.Exit(1)
-			}
-			if sliceFound {
-				irValidator.TPUSliceProvisioning, irValidator.Nodes = tpuSliceConfig, mgr.GetAPIReader()
-			}
-		}
-		hookServer.Register("/validate-ome-io-v1beta1-inferencereplica", &webhook.Admission{Handler: irValidator})
-
-		// The AutoscalerPolicy ValidatingWebhookConfiguration is chart-gated
-		// alongside the CRD; registering the handler unconditionally is
-		// inert until that configuration exists.
-		setupLog.Info("Registering AutoscalerPolicy validator webhook to the webhook server")
-		hookServer.Register("/validate-ome-io-v1beta1-autoscalerpolicy", &webhook.Admission{
-			Handler: &autoscalerpolicywebhook.Validator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
-		})
-
-		// RolloutPolicy follows the same chart-gated pattern: the handler is
-		// inert until the chart installs its ValidatingWebhookConfiguration.
-		setupLog.Info("Registering RolloutPolicy validator webhook to the webhook server")
-		hookServer.Register("/validate-ome-io-v1beta1-rolloutpolicy", &webhook.Admission{
-			Handler: &rolloutpolicywebhook.Validator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme()), MaxPlanBytes: rolloutMaxPlanBytes},
-		})
-
-		// The InferenceService validator runtime-selects against the LOCAL
-		// cluster's runtime/model catalog. On the control plane that catalog
-		// is empty (runtimes/models live on the workload clusters), so running
-		// this webhook here would reject every user-authored ISVC. The
-		// placement controller derives and fans the ISVC out to workload
-		// clusters, where their own webhook validates it against the real
-		// catalog. Skip the ISVC webhook on the control plane.
-		if isControlPlane {
-			setupLog.Info("control-plane role: InferenceService validator webhook disabled (runtime selection runs on workload clusters)")
-		} else {
-			if err = ctrl.NewWebhookManagedBy(mgr, &v1beta1.InferenceService{}).
-				WithValidator(&isvc.InferenceServiceValidator{
-					Client:          mgr.GetClient(),
-					Reader:          mgr.GetAPIReader(),
-					RuntimeSelector: runtimeSelector,
-					// Rejects any spec.<component>.autoscalerPolicyRef when
-					// the AutoscalerPolicy CRD is absent, so a ref can never
-					// silently no-op on a non-feature cluster.
-					AutoscalerPolicyEnabled: autoscalerPolicyFound,
-					// Same contract for rollout policy refs, plus the shared
-					// inline-plan size cap (pinned plans live in status, so
-					// both authoring paths are bounded by one knob).
-					RolloutPolicyEnabled: rolloutPolicyFound,
-					RolloutMaxPlanBytes:  rolloutMaxPlanBytes,
-					// Reject ome.io/btp.* (Envoy Gateway) when the active
-					// translator is Istio or Noop, and vice versa, at
-					// admission. Sourced from the same translator the
-					// reconciler uses so the two stay in sync.
-					KnownPassthroughPrefixes: trafficTranslator.SupportedPassthroughPrefixes(),
-					// Same sourcing for typed spec.traffic fields: the
-					// capability set gates the reserved Metadata endpoint
-					// override and multi-header hashing at admission.
-					SupportedTrafficFields: sets.List(trafficTranslator.SupportedTrafficFields()),
-				}).
-				Complete(); err != nil {
-				setupLog.Error(err, "Failed to create InferenceService webhook", "webhook", "v1beta1")
-				os.Exit(1)
-			}
-		}
+// registerPolicyWebhooks registers, when the webhook runs, the
+// AutoscalerPolicy and RolloutPolicy validators. Each handler is inert until
+// the chart installs its ValidatingWebhookConfiguration beside the CRD.
+func (s *startup) registerPolicyWebhooks() bool {
+	if !s.options.enableWebhook {
+		return true
 	}
+	hookServer, decoder := s.mgr.GetWebhookServer(), s.admissionDecoder()
+	setupLog.Info("Registering AutoscalerPolicy validator webhook to the webhook server")
+	hookServer.Register("/validate-ome-io-v1beta1-autoscalerpolicy", &webhook.Admission{
+		Handler: &autoscalerpolicywebhook.Validator{Client: s.mgr.GetClient(), Decoder: decoder},
+	})
+	setupLog.Info("Registering RolloutPolicy validator webhook to the webhook server")
+	hookServer.Register("/validate-ome-io-v1beta1-rolloutpolicy", &webhook.Admission{
+		Handler: &rolloutpolicywebhook.Validator{Client: s.mgr.GetClient(), Decoder: decoder, MaxPlanBytes: s.rolloutMaxPlanBytes},
+	})
+	return true
+}
 
-	probeChecker := managerProbeChecker(options.enableWebhook, mgr.GetWebhookServer)
-	if err := mgr.AddHealthzCheck("healthz", probeChecker); err != nil {
-		setupLog.Error(err, "Unable to set up health check")
-		os.Exit(1)
+// registerInferenceServiceWebhook registers, when the webhook runs, the
+// InferenceService validator. It selects runtimes against the local catalog,
+// which is empty on the control plane, where it would refuse every service;
+// the workload clusters' own webhooks validate the copies placement sends
+// them, so the control plane skips it.
+func (s *startup) registerInferenceServiceWebhook() bool {
+	if !s.options.enableWebhook {
+		return true
 	}
-	if err := mgr.AddReadyzCheck("readyz", probeChecker); err != nil {
-		setupLog.Error(err, "Unable to set up ready check")
-		os.Exit(1)
+	if s.isControlPlane {
+		setupLog.Info("control-plane role: InferenceService validator webhook disabled (runtime selection runs on workload clusters)")
+		return true
 	}
+	if err := ctrl.NewWebhookManagedBy(s.mgr, &v1beta1.InferenceService{}).
+		WithValidator(s.inferenceServiceValidator()).
+		Complete(); err != nil {
+		return stop(err, "Failed to create InferenceService webhook", "webhook", "v1beta1")
+	}
+	return true
+}
 
-	// Start the Cmd
+// inferenceServiceValidator is the InferenceService validator, fed the same
+// facts the controllers run with, so admission checks a service as it will
+// run.
+func (s *startup) inferenceServiceValidator() *isvc.InferenceServiceValidator {
+	return &isvc.InferenceServiceValidator{
+		Client:          s.mgr.GetClient(),
+		Reader:          s.mgr.GetAPIReader(),
+		RuntimeSelector: s.runtimeSelector,
+		// A policy reference is refused when its CRD is absent, so a reference
+		// never does nothing on a cluster without the feature.
+		AutoscalerPolicyEnabled: s.autoscalerPolicyFound,
+		RolloutPolicyEnabled:    s.rolloutPolicyFound,
+		// Inline plans and policy bodies share one size cap.
+		RolloutMaxPlanBytes: s.rolloutMaxPlanBytes,
+		// The tolerance the rollout resolves an omitted maintainRatio.tolerance
+		// to, so the drain-feasibility rule sees the group as it will run.
+		DefaultRatioTolerancePercent: s.defaultRatioTolerancePercent,
+		// The replica fill the reconciler applies to a Component with no
+		// minReplicas, so a member with no replica fields is sized as the
+		// rollout will size it.
+		DefaultMinReplicas: s.deployConfig.Replicas.Min(),
+		// The passthrough prefixes and the typed traffic fields the active
+		// translator supports, so admission refuses what the reconciler could
+		// not apply.
+		KnownPassthroughPrefixes: s.trafficTranslator.SupportedPassthroughPrefixes(),
+		SupportedTrafficFields:   sets.List(s.trafficTranslator.SupportedTrafficFields()),
+	}
+}
+
+// addHealthChecks registers the liveness and readiness checks. Both report
+// the webhook server's started state when the webhook runs, else a ping, so
+// a standby replica that serves the webhook reports Ready.
+func (s *startup) addHealthChecks() bool {
+	probeChecker := managerProbeChecker(s.options.enableWebhook, s.mgr.GetWebhookServer)
+	if err := s.mgr.AddHealthzCheck("healthz", probeChecker); err != nil {
+		return stop(err, "Unable to set up health check")
+	}
+	if err := s.mgr.AddReadyzCheck("readyz", probeChecker); err != nil {
+		return stop(err, "Unable to set up ready check")
+	}
+	return true
+}
+
+// startManager runs the manager until it is told to stop.
+func (s *startup) startManager() bool {
 	setupLog.Info("Starting manager")
 	managerCtx := signals.SetupSignalHandler()
-	if err := mgr.Start(managerCtx); err != nil {
-		setupLog.Error(err, "Failed to start manager")
-		os.Exit(1)
+	if err := s.mgr.Start(managerCtx); err != nil {
+		return stop(err, "Failed to start manager")
 	}
+	return true
 }

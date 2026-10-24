@@ -11,27 +11,22 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1beta1 "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestModelConfigReconciler_Reconcile(t *testing.T) {
 	logf.SetLogger(logr.Discard())
 	g := gomega.NewWithT(t)
 
-	// Scheme
-	s := runtime.NewScheme()
-	g.Expect(scheme.AddToScheme(s)).To(gomega.Succeed())
-	g.Expect(v1beta1.AddToScheme(s)).To(gomega.Succeed())
-	g.Expect(corev1.AddToScheme(s)).To(gomega.Succeed())
+	s := fakeclient.Scheme(t)
 
 	// Common objects
 	isvcName := "test-isvc"
@@ -407,14 +402,9 @@ func TestModelConfigReconciler_Reconcile(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			// Create fake client
-			clBuilder := fake.NewClientBuilder().WithScheme(s)
-			if len(tc.existingObjects) > 0 {
-				clBuilder.WithObjects(tc.existingObjects...)
-			}
-			// Add the ISVC itself to the client for OwnerReference resolution and fetching by reconciler
-			clBuilder.WithObjects(tc.isvc)
-			c := clBuilder.Build()
+			// The store holds the row's objects and the ISVC itself, which the
+			// reconciler fetches and names as the owner.
+			c := fakeclient.New(t, fakeclient.WithScheme(s), fakeclient.WithObjects(tc.existingObjects...), fakeclient.WithObjects(tc.isvc))
 
 			// Create reconciler
 			kubeClient := kubefake.NewSimpleClientset()

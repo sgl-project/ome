@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-func TestValidateSupportedModelFormats(t *testing.T) {
+func TestValidateSupportedModelFormats_Entries_RequireFormatAndFrameworkNames(t *testing.T) {
 	tests := []struct {
 		name    string
 		formats []v1beta1.SupportedModelFormat
@@ -67,7 +67,7 @@ func TestValidateSupportedModelFormats(t *testing.T) {
 	}
 }
 
-func TestValidateModelFormatPrioritySame(t *testing.T) {
+func TestValidateModelFormatPrioritySame_RepeatedName_AutoSelectedPrioritiesAgree(t *testing.T) {
 	tests := []struct {
 		name    string
 		spec    *v1beta1.ServingRuntimeSpec
@@ -120,7 +120,7 @@ func TestValidateModelFormatPrioritySame(t *testing.T) {
 	}
 }
 
-func TestValidateRuntimeAutoscalerPolicyRefs(t *testing.T) {
+func TestValidateRuntimeAutoscalerPolicyRefs_RefOnAnyComponentConfig_Rejected(t *testing.T) {
 	ref := &v1beta1.AutoscalerPolicyRef{Name: "request-activity-v1"}
 	tests := []struct {
 		name      string
@@ -185,5 +185,22 @@ func TestValidateRuntimeAutoscalerPolicyRefs(t *testing.T) {
 				t.Fatalf("error %q lacks the operator guidance", err.Error())
 			}
 		})
+	}
+}
+
+func TestValidateRuntimeRouterCapacityEndpoint_EndpointOnRuntime_Rejected(t *testing.T) {
+	for _, spec := range []*v1beta1.ServingRuntimeSpec{nil, {}, {RouterConfig: &v1beta1.RouterSpec{}}} {
+		if err := ValidateRuntimeRouterCapacityEndpoint(spec); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+	err := ValidateRuntimeRouterCapacityEndpoint(&v1beta1.ServingRuntimeSpec{RouterConfig: &v1beta1.RouterSpec{
+		CapacityEndpoint: &v1beta1.RouterCapacityEndpoint{Path: "/capacity", Port: 9090},
+	}})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "set spec.router.capacityEndpoint on the InferenceService") {
+		t.Fatalf("error %q lacks the operator guidance", err.Error())
 	}
 }

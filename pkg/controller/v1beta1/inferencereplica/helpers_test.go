@@ -273,13 +273,14 @@ func decisionsFor(t *testing.T, r *Reconciler, key client.ObjectKey) readerDecis
 	ready.LastTransitionTime, stalled.LastTransitionTime = metav1.Time{}, metav1.Time{}
 	live := revision.CollectLiveRevisionNames(ir.Status.CurrentRevision, ir.Status.UpdateRevision, observedFromIR(ir).InstanceStatuses)
 	sort.Strings(live)
+	staged, _ := stagedAtPartition(&ir.Status, ir.Spec.Lifecycle, ir.Spec.Pacing)
 	return readerDecisions{
 		observed:       observedFromIR(ir),
 		anyFailed:      hasFailedInstance(ir.Status.InstanceStatuses),
 		ready:          ready,
 		stalled:        stalled,
 		liveRevisions:  live,
-		stagedAtPartit: stagedAtPartition(&ir.Status, ir.Spec.Lifecycle, ir.Spec.Pacing),
+		stagedAtPartit: staged,
 	}
 }
 
@@ -425,6 +426,7 @@ func newReconciler(t *testing.T, objs ...client.Object) (*Reconciler, client.Cli
 		WithIndex(&schedulingv1alpha1.PodGroup{}, workloadgang.PodGroupControllerUIDIndexField, workloadgang.PodGroupControllerUIDIndexExtractor).
 		WithIndex(&v1beta1.InferenceReplica{}, irUIDIndexField, irUIDIndexExtractor).
 		WithIndex(&corev1.Pod{}, "spec.nodeName", func(o client.Object) []string { return []string{o.(*corev1.Pod).Spec.NodeName} }).
+		WithIndex(&corev1.Node{}, query.NodeUnschedulableField, query.NodeUnschedulableIndexExtractor).
 		Build()
 	return &Reconciler{
 		Client:                   c,

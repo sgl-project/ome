@@ -73,6 +73,7 @@ func (r *DeploymentReconciler) ReconcileRawDeployment(
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile %s", componentType)
 	}
+	var result ctrl.Result
 	if err := autoscaler.DispatchForRawComponent(ctx, autoscaler.RawDispatchInput{
 		Client:             r.Client,
 		Scheme:             r.Scheme,
@@ -83,11 +84,18 @@ func (r *DeploymentReconciler) ReconcileRawDeployment(
 		PolicySourced:      resolved.FromPolicy,
 		PolicyHold:         resolved.Hold,
 	}); err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to dispatch autoscaler for raw %s", componentType)
+		if !autoscaler.IsTransitionPending(err) {
+			return ctrl.Result{}, errors.Wrapf(err, "failed to dispatch autoscaler for raw %s", componentType)
+		}
+		// A switch between an HPA and a KEDA ScaledObject that waits for KEDA,
+		// or for a deletion, requeues through the rate limiter instead of
+		// failing, so the status below is still propagated.
+		r.Log.Info("Autoscaler switch in progress", "inferenceService", isvc.Name, "namespace", isvc.Namespace, "component", componentType, "detail", err.Error())
+		result.Requeue = true
 	}
 
 	r.StatusManager.PropagateRawStatus(&isvc.Status, componentType, deployment, reconciler.URL)
-	return ctrl.Result{}, nil
+	return result, nil
 }
 
 // ReconcileMultiNodeDeployment handles multi-node deployment using LeaderWorkerSet

@@ -80,6 +80,12 @@ following holds:
   or the node status entry needed for the shared-artifact check cannot be
   read, the agent errs toward preserving the files.
 
+When another model references a descendant of the directory being deleted,
+the agent removes only unreferenced files and subdirectories. It preserves
+the referenced subtree and its ancestor directories. For example, a reference
+to `/mnt/models/model/releases/rev-002` protects that revision while allowing
+old top-level weights and unreferenced revisions to be removed.
+
 ## Retaining files with `models.ome/reserve-model-artifact`
 
 To keep the downloaded weights on disk while removing the model resource (or

@@ -147,3 +147,56 @@ func deadlineTermination(now time.Time, op *types.InstanceOperation) *types.Inst
 		Time:    metav1.NewTime(now),
 	}
 }
+
+// ReconcilePausedMigrationDeadlines keeps a move record's window measured
+// outside the operator's pause, as ReconcileGatedDeadlines does for the
+// operations on the move's two rows. A paused Component drives no record
+// and plans no expiry, so a record whose window ran out under the pause
+// would otherwise close Failed on the first pass after the pause clears,
+// its replacement retired and its source restored, for a wait the
+// operator asked for.
+//
+// For each open Manual record:
+//   - paused with a live deadline -> the deadline is zeroed; the record's
+//     clock stops, and a zero deadline never expires.
+//   - not paused with a zero deadline -> now + timeout; the clock starts
+//     again from the pass the pause clears, a full window as for a row.
+//   - anything else -> untouched, so a record no pause has held keeps the
+//     deadline the accept pass gave it.
+//
+// A non-positive timeout means no readiness window is configured, so a
+// zero deadline stands. Writes happen only on the two transitions.
+func ReconcilePausedMigrationDeadlines(ctx context.Context, input types.ReconcileInput, paused bool, timeout time.Duration) error {
+	now := metav1.NewTime(input.Now())
+	for i := range input.ObservedState.Migrations {
+		rec := &input.ObservedState.Migrations[i]
+		if rec.Trigger != types.MigrationTriggerManual || rec.Phase.Terminal() {
+			continue
+		}
+		var next metav1.Time
+		switch {
+		case paused && !rec.Deadline.IsZero():
+			next = metav1.Time{}
+		case !paused && rec.Deadline.IsZero() && timeout > 0:
+			next = types.DeadlineAt(now, timeout)
+		default:
+			continue
+		}
+		if input.MutateMigration == nil {
+			return fmt.Errorf("ReconcilePausedMigrationDeadlines: MutateMigration not wired (uuid=%s)", rec.RequestUUID)
+		}
+		if err := input.MutateMigration(ctx, rec.RequestUUID, func(m *types.MigrationRecord) bool {
+			// Decided again on the fresh record: a clock another pass
+			// already moved the same way is left as it is.
+			if m.Phase.Terminal() || m.Deadline.IsZero() == next.IsZero() {
+				return false
+			}
+			m.Deadline = next
+			return true
+		}); err != nil {
+			return fmt.Errorf("set the deadline of migration %s for the pause: %w", rec.RequestUUID, err)
+		}
+		rec.Deadline = next
+	}
+	return nil
+}

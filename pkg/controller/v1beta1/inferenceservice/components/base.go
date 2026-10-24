@@ -21,12 +21,12 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/podmonitor"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/status"
 	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
+	workloadtypes "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 	"sigs.k8s.io/ome/pkg/render"
 )
 
@@ -51,7 +51,7 @@ type BaseComponentFields struct {
 	// bookkeeping cache. Currently unread on the ISVC side — the
 	// InferenceReplica controller owns its own instance. nil for
 	// non-OMENative modes.
-	Expectations *omenative.Expectations
+	Expectations *workloadtypes.Expectations
 	// Recorder is the parent controller's event recorder.
 	Recorder record.EventRecorder
 	// GangSchedulingAvailable is the cluster-discovery boolean threaded
@@ -75,10 +75,12 @@ type BaseComponentFields struct {
 	// the InferenceReplica projector. Empty governs everything.
 	QuotaAcceleratorResources []string
 
-	// PacingPartition is the canary machine's rollout-control partition for
-	// this Component, threaded from ComponentInputs to the InferenceReplica
-	// projector. nil when no canary governs the Component.
-	PacingPartition *int32
+	// PacingPartition sizes the canary machine's rollout-control partition
+	// for this Component, threaded from ComponentInputs to the
+	// InferenceReplica projector. nil when no canary governs the Component.
+	PacingPartition     irprojector.PartitionResolver
+	CoordinatorFollower bool
+	CoordinatorTarget   *int32
 }
 
 // newBaseComponentFields is the ONE place BaseComponentFields is
@@ -114,6 +116,8 @@ func newBaseComponentFields(deps *ComponentDeps, in ComponentInputs, loggerName 
 		StatusManager:             status.NewStatusReconciler(),
 		PolicyResolver:            in.PolicyResolver,
 		PacingPartition:           in.PacingPartition,
+		CoordinatorFollower:       in.CoordinatorFollower,
+		CoordinatorTarget:         in.CoordinatorTarget,
 	}
 }
 
@@ -157,6 +161,9 @@ func resolveComponentAutoscaling(ctx context.Context, b *BaseComponentFields, is
 		return ComponentAutoscaling{}, err
 	}
 	resolved, source, hold := autoscaler.ResolveComponentAutoscalerWithPolicy(b.Runtime, isvc, componentType, outcome)
+	if b.CoordinatorFollower && source == autoscaler.SpecSourceDefault && !hold {
+		resolved = &v1beta1.ComponentAutoscaler{Class: v1beta1.AutoscalerNone}
+	}
 	res := ComponentAutoscaling{Outcome: outcome, Resolved: resolved, Source: source, Hold: hold}
 	if hold {
 		emitHoldEvent(b, isvc, componentType, outcome)
@@ -220,25 +227,45 @@ func mergeRequeueAfter(result ctrl.Result, after time.Duration) ctrl.Result {
 // trigger content stays frozen — or dispatches nothing at all when no record
 // exists: a policy failure never tears a scaler down and never substitutes a
 // default HPA.
-func dispatchIRAutoscaler(ctx context.Context, b *BaseComponentFields, isvc *v1beta1.InferenceService, ir *v1beta1.InferenceReplica, componentExt *v1beta1.ComponentExtensionSpec, res ComponentAutoscaling) error {
+//
+// A switch between an HPA and a KEDA ScaledObject that waits for KEDA, or
+// for a deletion, is not a failure: the pass requeues through the rate
+// limiter so the component status still gets written, and the next pass
+// checks again.
+func dispatchIRAutoscaler(ctx context.Context, b *BaseComponentFields, isvc *v1beta1.InferenceService, ir *v1beta1.InferenceReplica, componentExt *v1beta1.ComponentExtensionSpec, res ComponentAutoscaling) (ctrl.Result, error) {
 	dispatchBlock := res.Resolved
 	if res.Hold {
 		if ir.Spec.Autoscaler == nil {
-			return nil
+			return ctrl.Result{}, nil
 		}
 		dispatchBlock = ir.Spec.Autoscaler.DeepCopy()
 	} else if res.Source == autoscaler.SpecSourcePolicy {
 		if err := b.PolicyResolver.EnsureTriggerAuthentications(ctx, isvc.Namespace, res.Resolved); err != nil {
-			return err
+			return ctrl.Result{}, err
 		}
 	}
-	return autoscaler.DispatchForIRComponent(ctx, autoscaler.IRDispatchInput{
+	err := autoscaler.DispatchForIRComponent(ctx, autoscaler.IRDispatchInput{
 		Client:             b.Client,
 		Scheme:             b.Scheme,
 		IR:                 ir,
 		ResolvedAutoscaler: dispatchBlock,
 		ComponentExt:       componentExt,
 	})
+	if autoscaler.IsTransitionPending(err) {
+		b.Log.Info("Autoscaler switch in progress", "inferenceService", isvc.Name, "namespace", isvc.Namespace, "inferenceReplica", ir.Name, "reason", transitionPendingReason(err), "detail", err.Error())
+		return ctrl.Result{Requeue: true}, nil
+	}
+	return ctrl.Result{}, err
+}
+
+// transitionPendingReason returns the AutoscalerSwitched reason carried by a
+// pending autoscaler switch.
+func transitionPendingReason(err error) string {
+	var pending *autoscaler.TransitionPendingError
+	if errors.As(err, &pending) {
+		return pending.Reason
+	}
+	return ""
 }
 
 // resolveRawComponentAutoscaling is the RawDeployment counterpart: policy

@@ -220,10 +220,13 @@ func (t *Trace) callback(format string, args ...any) {
 // depend on which fields a particular write touched. The rest appear when
 // the row carries them.
 //
-// ReadyPodCount, ScheduledPodCount and NodesOccupied are materialized only
-// on the status publication path, which the driver does not run, and the
-// workload package forbids reading them anywhere else. They are therefore
-// outside what a row line can honestly report.
+// The pod counters are the status publication's: the driver runs it
+// after every pass and hands the pod, serving and available counts to
+// the next pass on the rows it reads, but the store's rows, which every
+// write starts from, never hold them. A row line therefore carries a
+// counter only when a stamp copies one into the row. ReadyPodCount,
+// ScheduledPodCount and NodesOccupied are never handed to a pass at all,
+// and the workload package forbids reading them.
 func (t *Trace) rowFields(row types.InstanceStatus) []string {
 	parts := []string{
 		"incarnation=" + fmt.Sprint(row.Incarnation),

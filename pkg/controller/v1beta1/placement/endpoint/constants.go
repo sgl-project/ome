@@ -14,12 +14,12 @@ const (
 	ManagedByValue = "placement-endpoint"
 
 	// PlacementClusterLabel records which WorkloadCluster a published backend
-	// resource points at. Each home carries its own value; observational.
+	// resource points at. Each cluster carries its own value; observational.
 	PlacementClusterLabel = "ome.io/placement-cluster"
 
 	// PlacementEndpointISVCLabel records which source InferenceService a published
-	// resource belongs to. In All/Split a service has many per-home backend
-	// resources, so teardown and stale-home GC list by this label.
+	// resource belongs to. In All/Split a service has many per-cluster backend
+	// resources, so teardown and stale-cluster GC list by this label.
 	PlacementEndpointISVCLabel = "ome.io/placement-endpoint-isvc"
 
 	// PlacementEndpointISVCNamespaceLabel records the source InferenceService's

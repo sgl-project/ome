@@ -15,16 +15,15 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/utils/ptr"
 	"knative.dev/pkg/apis"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func gatewayTrafficMap(owner *v1beta1.InferenceService, entries ...v1beta1.TrafficMapEntry) *v1beta1.TrafficMap {
@@ -44,60 +43,6 @@ func gatewayTrafficMapEntry(cluster, host string, weight int32) v1beta1.TrafficM
 		Endpoint: &apis.URL{Scheme: "https", Host: host},
 		Weight:   weight,
 	}
-}
-
-type staleGatewayAPIReadClient struct {
-	client.Client
-}
-
-func (c staleGatewayAPIReadClient) Get(
-	_ context.Context,
-	key client.ObjectKey,
-	_ client.Object,
-	_ ...client.GetOption,
-) error {
-	return apierrors.NewNotFound(schema.GroupResource{Group: gatewayapiv1.GroupVersion.Group, Resource: "objects"}, key.Name)
-}
-
-func (c staleGatewayAPIReadClient) List(
-	_ context.Context,
-	_ client.ObjectList,
-	_ ...client.ListOption,
-) error {
-	return nil
-}
-
-type failingGatewayAPIReader struct {
-	client.Reader
-	getErr    error
-	listErr   error
-	getCalls  int
-	listCalls int
-}
-
-func (r *failingGatewayAPIReader) Get(
-	ctx context.Context,
-	key client.ObjectKey,
-	obj client.Object,
-	opts ...client.GetOption,
-) error {
-	r.getCalls++
-	if r.getErr != nil {
-		return r.getErr
-	}
-	return r.Reader.Get(ctx, key, obj, opts...)
-}
-
-func (r *failingGatewayAPIReader) List(
-	ctx context.Context,
-	list client.ObjectList,
-	opts ...client.ListOption,
-) error {
-	r.listCalls++
-	if r.listErr != nil {
-		return r.listErr
-	}
-	return r.Reader.List(ctx, list, opts...)
 }
 
 func gatewayCollisionRoute(
@@ -137,7 +82,7 @@ func gatewayTrafficMapWithJournal(
 	return trafficMap
 }
 
-func TestGatewayAPITrafficMapPublisherIdentityAndOptions(t *testing.T) {
+func TestGatewayAPITrafficMapPublisher_Constructed_NamesItselfAndRejectsAnyOption(t *testing.T) {
 	p := NewGatewayAPITrafficMapPublisher(nil, nil, baseConfig())
 
 	assert.Equal(t, GatewayAPITrafficMapPublisherName, p.Name())
@@ -155,7 +100,7 @@ func TestGatewayAPITrafficMapPublisherIdentityAndOptions(t *testing.T) {
 	assert.Contains(t, err.Error(), "global options: unused")
 }
 
-func TestGatewayAPITrafficMapPreflightRejectsExactGatewayHostnameCollisions(t *testing.T) {
+func TestGatewayAPITrafficMapPreflight_SameHostOnSameGateway_FailsTerminally(t *testing.T) {
 	const hostname = "shared.global.example"
 	explicitGatewayNamespace := gatewayapiv1.Namespace("ome-system")
 	desiredNamespace := gatewayapiv1.Namespace("prod")
@@ -206,7 +151,7 @@ func TestGatewayAPITrafficMapPreflightRejectsExactGatewayHostnameCollisions(t *t
 				tt.route.DeletionTimestamp = &now
 				tt.route.Finalizers = []string{"test.example/finalizer"}
 			}
-			c := fakeclient.NewClientBuilder().WithScheme(pubScheme(t)).WithObjects(tt.route).Build()
+			c := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(tt.route))
 			publisher := NewGatewayAPITrafficMapPublisher(c, c, tt.config)
 			plan, err := publisher.Plan(owner, gatewayTrafficMap(owner), nil)
 			require.NoError(t, err)
@@ -219,7 +164,7 @@ func TestGatewayAPITrafficMapPreflightRejectsExactGatewayHostnameCollisions(t *t
 	}
 }
 
-func TestGatewayAPITrafficMapPreflightAllowsDistinctTargets(t *testing.T) {
+func TestGatewayAPITrafficMapPreflight_OtherHostOrOtherGateway_Passes(t *testing.T) {
 	const hostname = "shared.global.example"
 	gatewayNamespace := gatewayapiv1.Namespace("ome-system")
 	routes := []client.Object{
@@ -232,19 +177,19 @@ func TestGatewayAPITrafficMapPreflightAllowsDistinctTargets(t *testing.T) {
 	}
 	owner := testISVC()
 	owner.Annotations = map[string]string{GlobalHostAnnotation: hostname}
-	c := fakeclient.NewClientBuilder().WithScheme(pubScheme(t)).WithObjects(routes...).Build()
+	c := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(routes...))
 	publisher := NewGatewayAPITrafficMapPublisher(c, c, baseConfig())
 	plan, err := publisher.Plan(owner, gatewayTrafficMap(owner), nil)
 	require.NoError(t, err)
 	require.NoError(t, publisher.Preflight(context.Background(), plan))
 }
 
-func TestGatewayAPITrafficMapPreflightVerifiesDesiredRouteOwnership(t *testing.T) {
+func TestGatewayAPITrafficMapPreflight_DesiredRouteOwnedByAnother_FailsTerminally(t *testing.T) {
 	owner := testISVC()
 	foreign := gatewayCollisionRoute("prod", "svc-global", "unrelated.example", gatewayapiv1.ParentReference{
 		Name: "other-gateway",
 	})
-	c := fakeclient.NewClientBuilder().WithScheme(pubScheme(t)).WithObjects(foreign).Build()
+	c := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(foreign))
 	publisher := NewGatewayAPITrafficMapPublisher(c, c, baseConfig())
 	plan, err := publisher.Plan(owner, gatewayTrafficMap(owner), nil)
 	require.NoError(t, err)
@@ -255,16 +200,16 @@ func TestGatewayAPITrafficMapPreflightVerifiesDesiredRouteOwnership(t *testing.T
 	assert.ErrorContains(t, terminal.err, "belongs to another source")
 }
 
-func TestGatewayAPITrafficMapPreflightUsesUncachedReader(t *testing.T) {
+func TestGatewayAPITrafficMapPreflight_CollisionOnlyInLiveReads_FailsTerminally(t *testing.T) {
 	const hostname = "shared.global.example"
 	gatewayNamespace := gatewayapiv1.Namespace("ome-system")
 	collision := gatewayCollisionRoute("foreign", "occupied", hostname, gatewayapiv1.ParentReference{
 		Name: "global-gw", Namespace: &gatewayNamespace,
 	})
-	live := fakeclient.NewClientBuilder().WithScheme(pubScheme(t)).WithObjects(collision).Build()
+	live := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(collision))
 	owner := testISVC()
 	owner.Annotations = map[string]string{GlobalHostAnnotation: hostname}
-	publisher := NewGatewayAPITrafficMapPublisher(staleGatewayAPIReadClient{Client: live}, live, baseConfig())
+	publisher := NewGatewayAPITrafficMapPublisher(fakeclient.Wrap(t, live, blindCache()), live, baseConfig())
 	plan, err := publisher.Plan(owner, gatewayTrafficMap(owner), nil)
 	require.NoError(t, err)
 
@@ -274,11 +219,12 @@ func TestGatewayAPITrafficMapPreflightUsesUncachedReader(t *testing.T) {
 	assert.ErrorContains(t, terminal.err, "already published")
 }
 
-func TestGatewayAPITrafficMapPreflightSkipsWithdrawal(t *testing.T) {
-	reader := &failingGatewayAPIReader{
-		getErr:  errors.New("unexpected get"),
-		listErr: errors.New("unexpected list"),
-	}
+func TestGatewayAPITrafficMapPreflight_PlanRemovesPublication_ReadsNothing(t *testing.T) {
+	gets := fakeclient.CountingVerb(fakeclient.Get)
+	lists := fakeclient.CountingVerb(fakeclient.List)
+	reader := fakeclient.New(t, gets, lists,
+		fakeclient.FailingVerb(fakeclient.Get, fakeclient.EveryCall, errors.New("unexpected get")),
+		fakeclient.FailingVerb(fakeclient.List, fakeclient.EveryCall, errors.New("unexpected list")))
 	cfg := baseConfig()
 	cfg.BackendPort = 0
 	owner := testISVC()
@@ -287,11 +233,11 @@ func TestGatewayAPITrafficMapPreflightSkipsWithdrawal(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, publisher.Preflight(context.Background(), plan))
-	assert.Zero(t, reader.getCalls)
-	assert.Zero(t, reader.listCalls)
+	assert.Zero(t, gets.Count())
+	assert.Zero(t, lists.Count())
 }
 
-func TestGatewayAPITrafficMapPreflightReadFailuresAreRetryable(t *testing.T) {
+func TestGatewayAPITrafficMapPreflight_GetOrListFails_FailsRetryably(t *testing.T) {
 	tests := []struct {
 		name    string
 		getErr  error
@@ -303,8 +249,15 @@ func TestGatewayAPITrafficMapPreflightReadFailuresAreRetryable(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			live := fakeclient.NewClientBuilder().WithScheme(pubScheme(t)).Build()
-			reader := &failingGatewayAPIReader{Reader: live, getErr: tt.getErr, listErr: tt.listErr}
+			live := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install))
+			var refusals []fakeclient.Option
+			if tt.getErr != nil {
+				refusals = append(refusals, fakeclient.FailingVerb(fakeclient.Get, fakeclient.EveryCall, tt.getErr))
+			}
+			if tt.listErr != nil {
+				refusals = append(refusals, fakeclient.FailingVerb(fakeclient.List, fakeclient.EveryCall, tt.listErr))
+			}
+			reader := fakeclient.Wrap(t, live, refusals...)
 			owner := testISVC()
 			publisher := NewGatewayAPITrafficMapPublisher(live, reader, baseConfig())
 			plan, err := publisher.Plan(owner, gatewayTrafficMap(owner), nil)
@@ -318,7 +271,7 @@ func TestGatewayAPITrafficMapPreflightReadFailuresAreRetryable(t *testing.T) {
 	}
 }
 
-func TestGatewayAPITrafficMapHostnameChangeCollisionPreservesPublishedRoute(t *testing.T) {
+func TestGatewayAPITrafficMap_NewHostTakenByAnotherRoute_KeepsOldRouteAndRejects(t *testing.T) {
 	const (
 		oldHostname = "h1.global.example"
 		newHostname = "h2.global.example"
@@ -340,7 +293,7 @@ func TestGatewayAPITrafficMapHostnameChangeCollisionPreservesPublishedRoute(t *t
 	oldRoute := renderer.publisher.buildHTTPRoute(owner, Target{
 		GlobalHost:           oldHostname,
 		WeightsAuthoritative: true,
-		Homes: []Home{{
+		Clusters: []ServingCluster{{
 			Cluster: "cluster-a", BackendHost: "old-backend.example", Weight: 37,
 		}},
 	})
@@ -348,12 +301,7 @@ func TestGatewayAPITrafficMapHostnameChangeCollisionPreservesPublishedRoute(t *t
 	occupied := gatewayCollisionRoute("foreign", "occupied-h2", newHostname, gatewayapiv1.ParentReference{
 		Name: "global-gw", Namespace: &gatewayNamespace,
 	})
-	scheme := pubScheme(t)
-	kubeClient := fakeclient.NewClientBuilder().
-		WithScheme(scheme).
-		WithStatusSubresource(&v1beta1.TrafficMap{}).
-		WithObjects(owner, trafficMap, oldRoute, occupied).
-		Build()
+	kubeClient := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithStatusSubresource(&v1beta1.TrafficMap{}), fakeclient.WithObjects(owner, trafficMap, oldRoute, occupied))
 	publisher := NewGatewayAPITrafficMapPublisher(kubeClient, kubeClient, cfg)
 	reconciler := &TrafficMapPublisherReconciler{
 		Client: kubeClient, APIReader: kubeClient, Log: logr.Discard(), Publisher: publisher, Active: true,
@@ -386,7 +334,7 @@ func TestGatewayAPITrafficMapHostnameChangeCollisionPreservesPublishedRoute(t *t
 	}, &corev1.Service{})), "collision rejection must not apply backend Services")
 }
 
-func TestGatewayAPITrafficMapLegacyDuplicateRoutesBothReportCollision(t *testing.T) {
+func TestGatewayAPITrafficMap_TwoSourcesPublishedOneHost_BothReportClaimRejected(t *testing.T) {
 	const hostname = "duplicate.global.example"
 	cfg := baseConfig()
 	renderer := NewGatewayAPITrafficMapPublisher(nil, nil, cfg)
@@ -424,12 +372,7 @@ func TestGatewayAPITrafficMapLegacyDuplicateRoutesBothReportCollision(t *testing
 		maps = append(maps, trafficMap)
 		objects = append(objects, owner, trafficMap, route)
 	}
-	scheme := pubScheme(t)
-	kubeClient := fakeclient.NewClientBuilder().
-		WithScheme(scheme).
-		WithStatusSubresource(&v1beta1.TrafficMap{}).
-		WithObjects(objects...).
-		Build()
+	kubeClient := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithStatusSubresource(&v1beta1.TrafficMap{}), fakeclient.WithObjects(objects...))
 	publisher := NewGatewayAPITrafficMapPublisher(kubeClient, kubeClient, cfg)
 	reconciler := &TrafficMapPublisherReconciler{
 		Client: kubeClient, APIReader: kubeClient, Log: logr.Discard(), Publisher: publisher, Active: true,
@@ -451,9 +394,8 @@ func TestGatewayAPITrafficMapLegacyDuplicateRoutesBothReportCollision(t *testing
 	}
 }
 
-func TestGatewayAPITrafficMapPlanIsImmutableAndAppliesWeights(t *testing.T) {
-	scheme := pubScheme(t)
-	c := fakeclient.NewClientBuilder().WithScheme(scheme).Build()
+func TestGatewayAPITrafficMapPlan_InputsMutatedAfterPlanning_AppliesPlannedWeights(t *testing.T) {
+	c := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install))
 	cfg := baseConfig()
 	p := NewGatewayAPITrafficMapPublisher(c, c, cfg)
 	owner := testISVC()
@@ -494,7 +436,7 @@ func TestGatewayAPITrafficMapPlanIsImmutableAndAppliesWeights(t *testing.T) {
 	assert.Equal(t, int32(0), *route.Spec.Rules[0].BackendRefs[1].Weight)
 }
 
-func TestGatewayAPITrafficMapBackendNamesUseStructuredIdentities(t *testing.T) {
+func TestGatewayAPITrafficMapNames_DottedOrLongSources_StayDistinctDNSLabels(t *testing.T) {
 	legacy := NewGatewayAPIPublisher(nil, baseConfig())
 	trafficMap := NewGatewayAPITrafficMapPublisher(nil, nil, baseConfig())
 	assert.Equal(t, "svc-global", legacy.routeName(testISVC()))
@@ -556,30 +498,30 @@ func TestGatewayAPITrafficMapBackendNamesUseStructuredIdentities(t *testing.T) {
 	)
 }
 
-func TestGatewayAPITrafficMapMigratesLegacyBackendResourcesAfterRouteSwitch(t *testing.T) {
+func TestGatewayAPITrafficMapApply_LegacyBackendsPresent_PrunesAfterRouteSwitch(t *testing.T) {
 	cfg := gatewayBackendConfig()
 	owner := testISVC()
-	home := Home{Cluster: "cluster-a", BackendHost: "backend.example", Weight: 5}
+	cluster := ServingCluster{Cluster: "cluster-a", BackendHost: "backend.example", Weight: 5}
 	target := Target{
 		GlobalHost:           "svc.prod.global.example",
-		Homes:                []Home{home},
+		Clusters:             []ServingCluster{cluster},
 		WeightsAuthoritative: true,
 	}
 	addresses := []BackendAddress{{Address: "192.0.2.10", Type: discoveryv1.AddressTypeIPv4}}
-	resolver := staticBackendAddressResolver{home.Cluster: addresses}
+	resolver := staticBackendAddressResolver{cluster.Cluster: addresses}
 
 	legacy := NewGatewayAPIPublisher(nil, cfg, WithBackendAddressResolver(resolver))
-	legacyServiceName := legacy.serviceName(owner, home.Cluster)
-	legacyService := legacy.buildExternalNameService(owner, legacyServiceName, home)
-	legacySlices, err := legacy.buildEndpointSlices(owner, legacyServiceName, home, addresses)
+	legacyServiceName := legacy.serviceName(owner, cluster.Cluster)
+	legacyService := legacy.buildExternalNameService(owner, legacyServiceName, cluster)
+	legacySlices, err := legacy.buildEndpointSlices(owner, legacyServiceName, cluster, addresses)
 	require.NoError(t, err)
 	require.Len(t, legacySlices, 1)
-	legacyPolicy := legacy.buildBackendTLSPolicy(owner, legacyServiceName, home)
+	legacyPolicy := legacy.buildBackendTLSPolicy(owner, legacyServiceName, cluster)
 	legacyRoute := legacy.buildHTTPRoute(owner, target)
 
 	objects := []client.Object{legacyService, legacySlices[0], legacyPolicy, legacyRoute}
 	setGatewayFakeObjectIdentity(objects...)
-	kubeClient := fakeclient.NewClientBuilder().WithScheme(pubScheme(t)).WithObjects(objects...).Build()
+	kubeClient := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(objects...))
 	publisher := NewGatewayAPITrafficMapPublisher(
 		kubeClient,
 		kubeClient,
@@ -587,19 +529,19 @@ func TestGatewayAPITrafficMapMigratesLegacyBackendResourcesAfterRouteSwitch(t *t
 		WithBackendAddressResolver(resolver),
 	)
 	plan, err := publisher.Plan(owner, gatewayTrafficMap(owner,
-		gatewayTrafficMapEntry(home.Cluster, home.BackendHost, home.Weight),
+		gatewayTrafficMapEntry(cluster.Cluster, cluster.BackendHost, cluster.Weight),
 	), nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"v1:httproute:prod/svc-global"}, plan.Claims())
 	assert.Equal(t, "svc-global", legacyRoute.Name)
 
-	v2ServiceName := publisher.publisher.serviceName(owner, home.Cluster)
+	v2ServiceName := publisher.publisher.serviceName(owner, cluster.Cluster)
 	require.NotEqual(t, legacyServiceName, v2ServiceName)
-	v2Slices, err := publisher.publisher.buildEndpointSlices(owner, v2ServiceName, home, addresses)
+	v2Slices, err := publisher.publisher.buildEndpointSlices(owner, v2ServiceName, cluster, addresses)
 	require.NoError(t, err)
 	require.Len(t, v2Slices, 1)
 
-	publisher.publisher.client = routeUpdateFailClient{Client: kubeClient}
+	publisher.publisher.client = fakeclient.Wrap(t, kubeClient, routeUpdatesRefused())
 	_, err = publisher.Apply(context.Background(), plan)
 	require.ErrorContains(t, err, "route update failed")
 
@@ -654,9 +596,8 @@ func TestGatewayAPITrafficMapMigratesLegacyBackendResourcesAfterRouteSwitch(t *t
 	}
 }
 
-func TestGatewayAPITrafficMapApplyPreservesEmptyAndAllZeroMaps(t *testing.T) {
-	scheme := pubScheme(t)
-	c := newGatewayFakeClientBuilder(t, scheme).Build()
+func TestGatewayAPITrafficMapApply_EmptyOrAllZeroMap_KeepsTheRouteAsPlanned(t *testing.T) {
+	c := gatewayClient(t)
 	p := NewGatewayAPITrafficMapPublisher(c, c, baseConfig())
 	owner := testISVC()
 
@@ -692,9 +633,8 @@ func TestGatewayAPITrafficMapApplyPreservesEmptyAndAllZeroMaps(t *testing.T) {
 	assert.Equal(t, int32(0), *route.Spec.Rules[0].BackendRefs[1].Weight)
 }
 
-func TestGatewayAPITrafficMapApplyWithdrawsWhenHostIsRemoved(t *testing.T) {
-	scheme := pubScheme(t)
-	c := newGatewayFakeClientBuilder(t, scheme).Build()
+func TestGatewayAPITrafficMapApply_GlobalHostRemoved_RemovesRouteAndServices(t *testing.T) {
+	c := gatewayClient(t)
 	cfg := baseConfig()
 	cfg.GlobalHostTemplate = ""
 	p := NewGatewayAPITrafficMapPublisher(c, c, cfg)
@@ -722,9 +662,8 @@ func TestGatewayAPITrafficMapApplyWithdrawsWhenHostIsRemoved(t *testing.T) {
 		types.NamespacedName{Namespace: "prod", Name: p.publisher.serviceName(owner, "cluster-a")}, &corev1.Service{})))
 }
 
-func TestGatewayAPITrafficMapApplyWithdrawsWhenConfigIsDisabled(t *testing.T) {
-	scheme := pubScheme(t)
-	c := newGatewayFakeClientBuilder(t, scheme).Build()
+func TestGatewayAPITrafficMapApply_BackendPortUnset_RemovesPublishedRoute(t *testing.T) {
+	c := gatewayClient(t)
 	owner := testISVC()
 	trafficMap := gatewayTrafficMap(owner, gatewayTrafficMapEntry("cluster-a", "a.example", 5))
 
@@ -747,19 +686,18 @@ func TestGatewayAPITrafficMapApplyWithdrawsWhenConfigIsDisabled(t *testing.T) {
 		types.NamespacedName{Namespace: "prod", Name: "svc-global"}, &gatewayapiv1.HTTPRoute{})))
 }
 
-func TestGatewayAPITrafficMapApplyRejectsUnownedResourcesBeforeMutation(t *testing.T) {
+func TestGatewayAPITrafficMapApply_RouteOrServiceOwnedByAnother_WritesNothing(t *testing.T) {
 	owner := testISVC()
 	trafficMap := gatewayTrafficMap(owner, gatewayTrafficMapEntry("cluster-a", "a.example", 5))
 
 	t.Run("route", func(t *testing.T) {
-		scheme := pubScheme(t)
 		foreign := &gatewayapiv1.HTTPRoute{
 			ObjectMeta: metav1.ObjectMeta{Namespace: "prod", Name: "svc-global"},
 			Spec: gatewayapiv1.HTTPRouteSpec{
 				Hostnames: []gatewayapiv1.Hostname{"foreign.example"},
 			},
 		}
-		c := fakeclient.NewClientBuilder().WithScheme(scheme).WithObjects(foreign).Build()
+		c := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(foreign))
 		p := NewGatewayAPITrafficMapPublisher(c, c, baseConfig())
 		plan, err := p.Plan(owner, trafficMap, nil)
 		require.NoError(t, err)
@@ -775,7 +713,6 @@ func TestGatewayAPITrafficMapApplyRejectsUnownedResourcesBeforeMutation(t *testi
 	})
 
 	t.Run("service", func(t *testing.T) {
-		scheme := pubScheme(t)
 		p := NewGatewayAPITrafficMapPublisher(nil, nil, baseConfig())
 		serviceName := p.publisher.serviceName(owner, "cluster-a")
 		foreign := &corev1.Service{
@@ -785,7 +722,7 @@ func TestGatewayAPITrafficMapApplyRejectsUnownedResourcesBeforeMutation(t *testi
 				ExternalName: "foreign.example",
 			},
 		}
-		c := fakeclient.NewClientBuilder().WithScheme(scheme).WithObjects(foreign).Build()
+		c := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(foreign))
 		p = NewGatewayAPITrafficMapPublisher(c, c, baseConfig())
 		plan, err := p.Plan(owner, trafficMap, nil)
 		require.NoError(t, err)
@@ -801,7 +738,7 @@ func TestGatewayAPITrafficMapApplyRejectsUnownedResourcesBeforeMutation(t *testi
 	})
 }
 
-func TestGatewayAPITrafficMapPlanRejectsInvalidInputs(t *testing.T) {
+func TestGatewayAPITrafficMapPlan_InvalidEntriesOptionsOrHost_ReturnsError(t *testing.T) {
 	p := NewGatewayAPITrafficMapPublisher(nil, nil, baseConfig())
 	owner := testISVC()
 
@@ -842,7 +779,7 @@ func TestGatewayAPITrafficMapPlanRejectsInvalidInputs(t *testing.T) {
 		gatewayTrafficMapEntry("c82303-"+collisionSuffix, "b.example", 1),
 	), nil)
 	require.NoError(t, err)
-	assert.Len(t, plan.(*gatewayAPITrafficMapPlan).target.Homes, 2)
+	assert.Len(t, plan.(*gatewayAPITrafficMapPlan).target.Clusters, 2)
 
 	_, err = p.Plan(owner, gatewayTrafficMap(owner), map[string]string{"unexpected": "value"})
 	require.ErrorContains(t, err, "effective options")
@@ -860,7 +797,7 @@ func TestGatewayAPITrafficMapPlanRejectsInvalidInputs(t *testing.T) {
 	require.NoError(t, err, "Gateway API permits a wildcard in the first hostname label")
 }
 
-func TestGatewayAPITrafficMapPlanValidatesPublishedResourceConfig(t *testing.T) {
+func TestGatewayAPITrafficMapPlan_InvalidPortGatewayLabelsOrTLS_ReturnsError(t *testing.T) {
 	owner := testISVC()
 	trafficMap := gatewayTrafficMap(owner)
 	tests := []struct {
@@ -933,7 +870,7 @@ func TestGatewayAPITrafficMapPlanValidatesPublishedResourceConfig(t *testing.T) 
 	require.ErrorContains(t, err, "cannot be used as a label value")
 }
 
-func TestValidateGatewayAPIHTTPRouteClaims(t *testing.T) {
+func TestValidateGatewayAPIHTTPRouteClaims_ValidAndMalformed_SortsOrRejects(t *testing.T) {
 	valid := "v1:httproute:gateway-system/service-global"
 	routeKeys, err := validateGatewayAPIHTTPRouteClaims([]string{
 		"v1:httproute:z-system/z-route",
@@ -973,8 +910,7 @@ func TestValidateGatewayAPIHTTPRouteClaims(t *testing.T) {
 	}
 }
 
-func TestGatewayAPITrafficMapDrainValidatesAllClaimsBeforeMutation(t *testing.T) {
-	scheme := pubScheme(t)
+func TestGatewayAPITrafficMapDrain_InvalidSourceOrClaim_ZerosNothing(t *testing.T) {
 	route := &gatewayapiv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "prod",
@@ -991,7 +927,7 @@ func TestGatewayAPITrafficMapDrainValidatesAllClaimsBeforeMutation(t *testing.T)
 			}},
 		}}},
 	}
-	c := fakeclient.NewClientBuilder().WithScheme(scheme).WithObjects(route).Build()
+	c := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(route))
 	p := NewGatewayAPITrafficMapPublisher(c, c, baseConfig())
 	validClaim := "v1:httproute:prod/svc-global"
 
@@ -1013,9 +949,8 @@ func TestGatewayAPITrafficMapDrainValidatesAllClaimsBeforeMutation(t *testing.T)
 	assert.Equal(t, int32(0), *got.Spec.Rules[0].BackendRefs[0].Weight)
 }
 
-func TestGatewayAPITrafficMapUnpublishUsesOnlyJournalAndSourceKey(t *testing.T) {
-	scheme := pubScheme(t)
-	c := newGatewayFakeClientBuilder(t, scheme).Build()
+func TestGatewayAPITrafficMapUnpublish_JournalAndSourceKeyOnly_RemovesEverything(t *testing.T) {
+	c := gatewayClient(t)
 	p := NewGatewayAPITrafficMapPublisher(c, c, baseConfig())
 	owner := testISVC()
 	trafficMap := gatewayTrafficMap(owner, gatewayTrafficMapEntry("cluster-a", "a.example", 3))
@@ -1035,9 +970,8 @@ func TestGatewayAPITrafficMapUnpublishUsesOnlyJournalAndSourceKey(t *testing.T) 
 		types.NamespacedName{Namespace: "prod", Name: p.publisher.serviceName(owner, "cluster-a")}, &corev1.Service{})))
 }
 
-func TestGatewayAPITrafficMapCleanupUsesUncachedReader(t *testing.T) {
-	scheme := pubScheme(t)
-	live := newGatewayFakeClientBuilder(t, scheme).Build()
+func TestGatewayAPITrafficMapCleanup_StaleCache_DrainsAndRemovesFromLiveReads(t *testing.T) {
+	live := gatewayClient(t)
 	cfg := baseConfig()
 	owner := testISVC()
 	trafficMap := gatewayTrafficMap(owner, gatewayTrafficMapEntry("cluster-a", "a.example", 3))
@@ -1047,7 +981,7 @@ func TestGatewayAPITrafficMapCleanupUsesUncachedReader(t *testing.T) {
 	_, err = publisher.Apply(context.Background(), plan)
 	require.NoError(t, err)
 
-	publisher = NewGatewayAPITrafficMapPublisher(staleGatewayAPIReadClient{Client: live}, live, cfg)
+	publisher = NewGatewayAPITrafficMapPublisher(fakeclient.Wrap(t, live, blindCache()), live, cfg)
 	sourceKey := types.NamespacedName{Namespace: owner.Namespace, Name: owner.Name}
 	require.NoError(t, publisher.Drain(context.Background(), sourceKey, plan.Claims()))
 	route := &gatewayapiv1.HTTPRoute{}
@@ -1064,8 +998,7 @@ func TestGatewayAPITrafficMapCleanupUsesUncachedReader(t *testing.T) {
 		types.NamespacedName{Namespace: "prod", Name: publisher.publisher.serviceName(owner, "cluster-a")}, &corev1.Service{})))
 }
 
-func TestGatewayAPITrafficMapUnpublishValidatesWholeJournalBeforeMutation(t *testing.T) {
-	scheme := pubScheme(t)
+func TestGatewayAPITrafficMapUnpublish_InvalidSourceClaimOrOwner_DeletesNothing(t *testing.T) {
 	route := &gatewayapiv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{
 		Namespace: "prod",
 		Name:      "svc-global",
@@ -1075,7 +1008,7 @@ func TestGatewayAPITrafficMapUnpublishValidatesWholeJournalBeforeMutation(t *tes
 			PlacementEndpointISVCNamespaceLabel: "prod",
 		},
 	}}
-	c := fakeclient.NewClientBuilder().WithScheme(scheme).WithObjects(route).Build()
+	c := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(route))
 	p := NewGatewayAPITrafficMapPublisher(c, c, baseConfig())
 	sourceKey := types.NamespacedName{Namespace: "prod", Name: "svc"}
 

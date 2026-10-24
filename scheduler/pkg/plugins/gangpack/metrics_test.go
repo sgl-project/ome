@@ -10,28 +10,29 @@ import (
 	"sigs.k8s.io/ome/scheduler/pkg/placement"
 )
 
-// TestPinMetrics: a successful pin bumps gang_pin_total{result=pinned} and the
-// pinned_groups gauge; an unplaceable gang bumps gang_pin_total{result=no_fit}.
+// TestAssignGangDomain_AssignedAndNoFit_CountsEachResult: a successful assignment adds one to
+// gang_pin_total{result=pinned} and raises the pinned_groups gauge; an
+// unplaceable gang adds one to gang_pin_total{result=no_fit}.
 // Deltas (not absolutes) keep the test independent of the shared global registry.
-func TestPinMetrics(t *testing.T) {
-	g := &GangPack{pins: placement.New()}
+func TestAssignGangDomain_AssignedAndNoFit_CountsEachResult(t *testing.T) {
+	g := &GangPack{assignments: placement.New()}
 	nodes := []framework.NodeInfo{
 		nodeInfo(gpuNode("n1", "a", "4")), nodeInfo(gpuNode("n2", "a", "4")),
 	}
 	pod := gpuPod("4")
 
-	pinnedBefore := counterValue(t, gangPinTotal.WithLabelValues("pinned"))
-	g.pinGang(newCycleState(), nodes, gangInfo{key: "team/pf", minMember: 2, topologyKey: testKey}, pod)
-	if d := counterValue(t, gangPinTotal.WithLabelValues("pinned")) - pinnedBefore; d != 1 {
+	pinnedBefore := counterValue(t, gangAssignmentTotal.WithLabelValues("pinned"))
+	g.assignGangDomain(newCycleState(), nodes, gangInfo{key: "team/pf", minMember: 2, topologyKey: testKey}, pod)
+	if d := counterValue(t, gangAssignmentTotal.WithLabelValues("pinned")) - pinnedBefore; d != 1 {
 		t.Fatalf("pinned counter delta = %v, want 1", d)
 	}
-	if v := gaugeValue(t, pinnedGroups); v < 1 {
-		t.Fatalf("pinned_groups gauge = %v, want >= 1 after a pin", v)
+	if v := gaugeValue(t, assignedGroups); v < 1 {
+		t.Fatalf("pinned_groups gauge = %v, want >= 1 after an assignment", v)
 	}
 
-	noFitBefore := counterValue(t, gangPinTotal.WithLabelValues("no_fit"))
-	g.pinGang(newCycleState(), nodes, gangInfo{key: "team/big", minMember: 9, topologyKey: testKey}, pod)
-	if d := counterValue(t, gangPinTotal.WithLabelValues("no_fit")) - noFitBefore; d != 1 {
+	noFitBefore := counterValue(t, gangAssignmentTotal.WithLabelValues("no_fit"))
+	g.assignGangDomain(newCycleState(), nodes, gangInfo{key: "team/big", minMember: 9, topologyKey: testKey}, pod)
+	if d := counterValue(t, gangAssignmentTotal.WithLabelValues("no_fit")) - noFitBefore; d != 1 {
 		t.Fatalf("no_fit counter delta = %v, want 1", d)
 	}
 }

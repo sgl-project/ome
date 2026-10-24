@@ -68,6 +68,8 @@ All options below are under `ome.multicluster.config`. Each has a consumer in
 | `placement.gcInterval` | Keep. Orphan cleanup has a separate lifecycle from readiness reconciliation. |
 | `placement.maxConcurrentReconciles`, `.fanoutTimeout` | Keep as worker and remote-operation bounds. |
 | `placement.winnerLostGrace` | Relevant to sticky single-active placement; not a Split distribution control. |
+| `placement.observationGrace` | Keep. How long a home whose reads fail keeps its last ready count, and so its traffic share. The start of the failure is stored in the candidate status, so a restart keeps it. Empty withdraws the count at the first failed read. |
+| `placement.memberReadRetry` (`maxAttempts`, `initialBackoff`, `maxBackoff`) | Keep. Re-reads a member within one reconcile after a timeout, a dropped connection, throttling, or a server error, and while the member's first connection since the controller started is still being made. Each read has its own `fanoutTimeout`, so a reconcile can spend up to `maxAttempts` times that per member, plus the backoff waits between reads. |
 | `placement.dispatcherMode`, `.dispatcherStepSize`, `.dispatcherRoundTimeout` | Candidate-dispatch tuning for single-active placement. The step/dwell knobs are unused by AllAtOnce; Split follows its apportionment path. |
 | `placement.localQueue` | Optional fallback only. A source's `ome.io/local-queue` annotation wins. Leave empty for a fleet with per-service quota leaves. |
 | `placement.memberOperatorNamespace` | Namespace of each member's `inferenceservice-config` and pinned runtime revisions. Required for SplitByCapacity, and for any mode that must resolve a pinned runtime or an operator-default floor. Empty holds that resolution. |
@@ -93,7 +95,7 @@ installs.
 | `routing.observer.maxConcurrentReconciles`, `.maxConcurrentRequests`, `.maxResponseBytes`, `.minPeriod`, `.maxSamples` | Keep chart defaults. Validation requires these bounds when routing is enabled, even if active probes are not configured. |
 | `routing.publisher.name`, `.resyncInterval`, `.options` | Keep. Selects and configures the publication backend and its periodic recovery cadence. |
 | `routing.probe` (`path`, `method`, `acceptStatuses`, `gateStatuses`, `period`, `timeout`, `failureThreshold`, `successThreshold`, `allFailedPolicy`) | Optional active endpoint health checks. Omit when readiness-based health is sufficient. |
-| `routing.capacity` (`path`, `method`, `format`, `options`, `samples`, `quorum`, `period`, `timeout`, `maxAge`) | Optional endpoint-reported capacity ceiling. Independent of probing; omit when planned capacity is sufficient. |
+| `routing.capacity` (`mode`, `path`, `method`, `format`, `options`, `samples`, `quorum`, `period`, `timeout`, `maxAge`) | Optional endpoint capacity polling. Unset mode or `Ceiling` caps replica-based capacity; `Reported` uses the endpoint's capacity, in replicas, directly, and the replica count for a home without a usable report. Independent of probing. |
 
 With an external publisher, Gateway backend settings, probes, and capacity polling
 need no override unless those capabilities are deliberately used. They remain

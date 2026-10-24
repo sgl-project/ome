@@ -277,7 +277,7 @@ At the 2026-09-14 baseline, the source tree has the following status:
 | Observation and configuration | Implemented | Every replica builds snapshots and publishes gauges; configuration hot-reloads with last-known-good fallback. |
 | Capacity-descheduling Policy #1 | Partially implemented | Fragmentation scoring, cheap candidate generation, arbitration, and reporting run; GPU arithmetic is not scheduler feasibility. |
 | Arbiter and Reporter | Implemented baseline | Core admission gates and truthful UUID request outcomes are connected. Durable serial dispatch bookkeeping complements retained status, cooldowns and the in-memory breaker. |
-| Node-Health Policy #2 | Implemented | Four-state health observation and independently configured maintenance markers exclude unsafe targets. Whole-instance candidates share the simulator, arbiter and guarded dispatcher. Repair/maintenance lifecycle reports require fresh observation evidence. RawDeployment, LWS and non-steady OMENative instances remain advisory. |
+| Node-Health Policy #2 | Implemented | Four-state health observation and independently configured maintenance markers exclude unsafe targets. Whole-instance candidates share the simulator, arbiter and guarded dispatcher. Repair/maintenance lifecycle reports require fresh observation evidence. RawDeployment, LWS and non-steady OMENative instances remain advisory. TPU instances are advisory unless `tpuSliceMigrationEnabled` lets per-Instance slice instances move. |
 | Scheduler profile selection and simulation protocol | Implemented | Exact effective scheduler profiles select trusted startup workers. Whole-placement responses are fenced to request/snapshot/profile identity. Optional `migrationFromNode` distinguishes the actual API's one-node exclusion from recommendation all-source exclusion. |
 | Predictive simulation inputs | Implemented | Full public objects and checked source cohorts produce private Pods/PodGroups without a workload preview or renderer import. Execution overlays the existing API's required hostname exclusion and weight-50 soft hints; sources remain occupied. |
 | Scheduler simulation worker | Implemented | The separate `pkg/alfred/simulator` module runs Kubernetes v1.35.4 plus the same OMEGangPack plugin through private snapshot-only clients. Production invokes its trusted exact-profile subprocess registry; profile configuration alone never enables migration. |
@@ -1509,6 +1509,73 @@ tolerate). Labels alone do not prevent scheduling without corresponding hard
 affinity. `NoExecute` can evict live pods independently of Alfred's safe
 migration path. Alfred never adds or removes these Node restrictions.
 
+#### Optional maintenance cordon
+
+Planned maintenance can be signalled by a label alone, such as a start time.
+Nothing then stops schedulers from placing new work on those nodes, so the
+nodes may never empty, and a replacement may land on another node of the same
+group. An operator who wants Alfred to close that gap sets `cordon: true` on a
+maintenance rule, runs Alfred with `--enable-maintenance-cordon`, and grants the
+separate `ome-alfred-maintenance-cordon` ClusterRole (`get`, `patch` on nodes).
+The chart does all three with `maintenanceCordon.enabled: true`.
+
+In execute mode Alfred then cordons each node that such a rule puts under
+maintenance, before it decides moves. It re-reads the node from the API server,
+not its cache, acts only while the rule still matches it, records the rule in the
+`alfred.ome.io/cordoned-for-maintenance` annotation and emits
+`NodeCordonedForMaintenance`. It never uncordons, and it leaves an existing
+cordon unclaimed: the tooling that owns the node returns it to service.
+Returning a node to service means clearing its maintenance signal (the label,
+condition or taint the rule matches) as well as uncordoning it. While the rule
+still matches, Alfred cordons the node again on its next decision pass.
+Recommend-only mode never cordons.
+
+A replacement may land on any schedulable node, including one Alfred failed to
+cordon. While a cordon fails, Alfred therefore submits no migration request,
+and withholds admitted moves with `MaintenanceCordonFailed`. It retries the
+cordon on the next decision pass.
+
+The cordon write is limited by Alfred's code, not by an admission policy as
+migration writes are: `patch` on nodes would let a faulty Alfred change any
+node field. Grant the role only where that trust is acceptable.
+
+#### TPU instances on per-Instance slices
+
+Surge planning and the scheduler simulation model GPUs only, so a TPU instance
+is advisory (`AcceleratorPlacementUnmodeled`) by default. OME can also give each
+TPU Instance its own slice (`ome.io/tpu-slice-provisioning: "true"`). When it
+migrates such an Instance, it creates a new slice for the replacement and the
+slice scheduler picks the partition. Alfred cannot simulate that choice.
+
+`tpuSliceMigrationEnabled: true` lets these instances move anyway. A finding
+becomes executable only when every member pod is slice-provisioned with one
+topology (the pod nodeSelector `tpuSlicePartitions.topologyLabel`), and at least
+one partition of that topology is free. A partition is the set of nodes that
+share its id label (`tpuSlicePartitions.idLabel`, `%s` replaced by the topology). It is
+free when it has at least one of those nodes per member pod, and every one of
+them is an acceptable destination, reports `healthyState` in `stateLabel`,
+holds no accelerator pod, and fits the member pods' node selectors and required
+node affinity. The replacement keeps those, except the slice and topology
+selectors (`sliceLabel`, `topologyLabel`) that the slice provisioner writes onto
+nodes when it forms the new slice.
+No free partition gives the advisory `NoTPUSliceCapacity`.
+
+An executable TPU slice move names no target nodes and claims no GPUs. The
+dispatcher skips only the simulation: the fresh policy replay re-checks free
+capacity, and source identity, budgets, cooldowns, the admission guard and the
+write-ahead journal apply as for any other move. So migration dispatch does not
+need a simulation worker for these moves: without `--simulation-workers`, Alfred
+dispatches TPU slice moves and withholds every move that needs a simulation as
+`SimulationUnavailable`. Configured workers must still load at startup. The free-partition count is an
+estimate, not a reservation. A slice created after the check, or a partition
+the slice scheduler rejects, can leave the replacement waiting until the
+owning controller's migration deadline restores the source.
+
+The slice scheduler places only on partitions it considers schedulable. To keep
+replacements and new slices off nodes under maintenance, the maintenance
+tooling must still make those nodes unschedulable, for example by cordoning
+them, as the scheduling boundary above requires.
+
 #### The narrow-contracts property (no new RBAC, no cloud credentials)
 
 State it plainly, because it is the load-bearing reason Policy #2 is cheap and
@@ -1523,7 +1590,8 @@ Alfred already holds.** Those three, and nothing more:
 
 There is **no** `patch nodes`, **no** `update nodes/status`, **no** cordon (which
 is a node spec write), **no** drain, **no** cloud-API call, **no** pod-level
-write of any kind. RawDeployment and LWS remain advisory in Alpha, and therefore
+write of any kind, unless an operator opts into the
+[maintenance cordon](#optional-maintenance-cordon) described above. RawDeployment and LWS remain advisory in Alpha, and therefore
 **no** cloud credential anywhere in Policy #2. Emitting an Event whose `involvedObject`
 is a Node requires only the `create events` permission Alfred already has for its
 recommendations — it does not require write access to the Node itself.
@@ -1763,6 +1831,7 @@ config.yaml: |
   # Also requires immutable startup --migration-api-version=v1 and a verified
   # admission guard; these are not hot policy settings or liveness discovery.
   lwsRecommendationsEnabled: true      # produce recommendations for LWS (never execute)
+  tpuSliceMigrationEnabled: false      # TPU instances on per-Instance OME slices may move
 
   # Output
   recommendationsConfigMapEnabled: true
@@ -2331,7 +2400,7 @@ perform on that resource:
 
 | Resource | Verbs | What the write can do | Why no broader grant |
 |---|---|---|---|
-| `nodes` | get, list, watch | nothing — read-only | Policy #2 evacuates *workloads*, it never touches the Node object; node cordon/drain belongs to maintenance tooling, not the caretaker |
+| `nodes` | get, list, watch | nothing — read-only | Policy #2 evacuates *workloads* and by default never touches the Node object; node cordon/drain belongs to maintenance tooling. The opt-in [maintenance cordon](#optional-maintenance-cordon) adds `get, patch` in a separate ClusterRole and only sets `spec.unschedulable` plus its annotation; Alfred's code enforces that, not an admission policy |
 | `pods` | get, list, watch | nothing — read-only | physical placement and current readiness; Alfred never performs pod-level lifecycle actions |
 | `persistentvolumeclaims`, `persistentvolumes` | get, list, watch | nothing — read-only | model-volume access modes and topology for placement feasibility |
 | `inferencereplicas` | get, list, watch | nothing — read-only | stable OMENative Instance identity, lifecycle state, and authoritative migration status |
@@ -2687,8 +2756,8 @@ New unit coverage for the engine refactor:
     profile; `ome-scheduler` and custom names select only their exact mappings;
     mixed names, missing templates, invalid profile identities, and a gang on a
     non-gang profile fail closed. With no worker registered, verify the preserved
-    advisory reason plus structured `SimulationUnavailable` diagnostics and no
-    dispatch path.
+    advisory reason plus structured `SimulationUnavailable` diagnostics, and that
+    only TPU slice moves, which need no simulation, reach dispatch.
 15. **Protocol result validation and no live writes.** Reject mismatched request,
     snapshot, or profile identities; partial/duplicate/foreign Pod placements;
     unknown or explicitly excluded nodes; and unsupported decisions. Worker tests must assert

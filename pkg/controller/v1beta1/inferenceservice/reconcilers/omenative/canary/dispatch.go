@@ -19,7 +19,9 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/irstatus"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
+	workloadstatus "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/status"
 	"sigs.k8s.io/ome/pkg/rollout"
 	"sigs.k8s.io/ome/pkg/utils"
 )
@@ -117,10 +119,11 @@ func Dispatch(ctx context.Context, d DispatchDeps) (Outcome, error) {
 		return Outcome{}, nil
 	}
 	// Observe per-revision pods for EVERY configured component (not just the
-	// primary): the canary stages capacity on all of them, so the gate must wait
-	// on all of them before shifting traffic. perRev supplies revision presence
-	// and routing Service inputs. readyRev keeps Pod readiness in every capacity
-	// gate; IR runner topology groups those Pods into complete Instances.
+	// primary): the canary stages capacity on all of them. perRev supplies
+	// revision presence and routing Service inputs; readyRev is the rollback,
+	// re-arm and cutover view of live pods. Capacity itself is each replica's
+	// own account of its Instances (observeCanaryRevisions), where a multi-pod
+	// gang is one Instance and rotation is recorded.
 	// d.Reader is the live API reader (no Pod field index) — useIndex=false skips
 	// the doomed MatchingFields probe and goes straight to the label-selector List.
 	perRev, readyRev, routingRev, observedPods, err := coordination.ObservePerRevisionPods(ctx, d.Reader, d.ISVC, configuredComponents(d.Group), false)
@@ -148,8 +151,9 @@ func Dispatch(ctx context.Context, d DispatchDeps) (Outcome, error) {
 		// uses CreateOrUpdate, whose Gets are cache-served and cheap, and
 		// recreates a missing Service. Gating ensure on revision-set
 		// convergence would strand the weighted-route consumer on a
-		// dead backend.
-		for hash := range perRev[comp] {
+		// dead backend. The revisions are walked in sorted order so a pass
+		// is repeatable.
+		for _, hash := range coordination.SortedRevisionHashes(perRev[comp]) {
 			if hash == "" {
 				continue
 			}
@@ -188,7 +192,7 @@ func Dispatch(ctx context.Context, d DispatchDeps) (Outcome, error) {
 		now = time.Now()
 	}
 
-	secondaryReady, secondaryFresh, secondaryObserved, err := secondaryCapacityReady(ctx, d.Reader, d.ISVC, perRev, readyRev, observedPods, primary, d.Group)
+	secondaryReady, secondaryFresh, secondaryObserved, secondaryWait, err := secondaryCapacityReady(ctx, d.Reader, d.ISVC, perRev, observedPods, primary, d.Group, now)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -234,11 +238,11 @@ func Dispatch(ctx context.Context, d DispatchDeps) (Outcome, error) {
 		return Outcome{}, err
 	}
 	groupPods, groupStable := groupRollbackInputs(d.ISVC, d.Group, primary, perRev)
-	secondaries, err := secondaryRevisions(ctx, d.Client, d.ISVC, primary, d.Group, secondaryObserved, groupStable, readyRev, observedPods)
+	secondaries, err := secondaryRevisions(ctx, d.Client, d.ISVC, primary, d.Group, secondaryObserved, groupStable, readyRev)
 	if err != nil {
 		return Outcome{}, err
 	}
-	res, err := Reconcile(ctx, ReconcileInputs{
+	in := ReconcileInputs{
 		Client:                    d.Client,
 		Reader:                    d.Reader,
 		Recorder:                  d.Recorder,
@@ -250,8 +254,9 @@ func Dispatch(ctx context.Context, d DispatchDeps) (Outcome, error) {
 		StableRevisionHash:        stableHash,
 		CanaryPairingProtocol:     canaryProtocol,
 		StablePairingProtocol:     stableProtocol,
-		ReadyCanaryInstances:      revisions.readyTargetInstanceCount(observedPods[primary]),
-		DesiredReplicas:           componentReplicas(d.ISVC, primary),
+		ReadyCanaryInstances:      revisions.servingTargetInstances(),
+		CapacityWindowWait:        soonestWait(revisions.windowWait(observedPods[primary], now), secondaryWait),
+		DesiredReplicas:           DesiredReplicas(revisions.replicas, componentExtension(d.ISVC, primary)),
 		PerRevisionPods:           readyRev[primary],
 		GroupTotalPerRevisionPods: groupPods,
 		GroupStableRevisionHashes: groupStable,
@@ -270,15 +275,19 @@ func Dispatch(ctx context.Context, d DispatchDeps) (Outcome, error) {
 		DefaultReadyTimeout:       d.DefaultReadyTimeout,
 		Requeue:                   d.Requeue,
 		ParkedRequeue:             d.ParkedRequeue,
-	})
+	}
+	res, err := Reconcile(ctx, in)
 	if err != nil {
 		return Outcome{}, err
 	}
 
-	// With no ladder active on the unit the rolled-out records are not the
+	// With no roll active on the unit the rolled-out records are not the
 	// memory of a traffic shift: each member's record follows the revision
-	// its InferenceReplica has settled on.
-	if !res.Active {
+	// its InferenceReplica has settled on. A rejection the unit rests on is
+	// no roll either: the revert is complete, so a member it wrote nothing
+	// for, one with no stable revision, is recorded on the revision its
+	// replica settled on rather than left unrecorded until the next push.
+	if !res.Active || restsRolledBack(d.ISVC, d.Group, primary) {
 		recordSettledRevisions(d.ISVC, d.Group, primary, revisions, secondaryObserved, perRev, readyRev)
 	}
 
@@ -306,10 +315,10 @@ func Dispatch(ctx context.Context, d DispatchDeps) (Outcome, error) {
 		// still visible after the flush inert, so it is handed back for
 		// removal once the flush has carried the park.
 		if cs := rollout.CanaryStatusFor(&d.ISVC.Status, primary); cs != nil && cs.Failed == nil {
-			parkFailed(d.ISVC, primary, cs, v1beta1.CanaryFailureStableRevisionMissing, now)
 			emit(d.Recorder, d.ISVC, corev1.EventTypeWarning, EventReasonCanaryStableRevisionMissing,
 				"%s cannot roll back: no ControllerRevision is retained for its stable revision; parked Failed until a new target appears", primary)
-			if isRollbackRequested(d.ISVC) {
+			parkFailed(in, cs, v1beta1.CanaryFailureStableRevisionMissing)
+			if rollbackRequestSpendable(d.ISVC, d.Policies, primary, cs) {
 				res.Consume = append(res.Consume, constants.RolloutRollbackAnnotation)
 			}
 		}
@@ -438,6 +447,14 @@ func stableRevisionName(ctx context.Context, reads client.Reader, isvc *v1beta1.
 // identity every OMENative writer keeps, coordination for its Components and
 // the canary executor at each completed promotion and rollback for its
 // members, so a secondary resolves even when no run records it.
+// restsRolledBack reports a unit resting on a rejection: its revert is
+// complete and nothing of it is in flight, so no roll is active on the unit
+// until a new target starts it again or a resume clears the rejection.
+func restsRolledBack(isvc *v1beta1.InferenceService, g *v1beta1.RolloutGroup, primary v1beta1.ComponentType) bool {
+	cs := rollout.CanaryStatusFor(&isvc.Status, primary)
+	return rollout.StateOf(cs, isvc.Status.Components[primary].RolloutPhase, len(g.Canary.Steps)) == rollout.CanaryStateRolledBack
+}
+
 func componentStableRevisionHash(isvc *v1beta1.InferenceService, comp, primary v1beta1.ComponentType) string {
 	if stable := activeRunStableRevisionHash(isvc, comp); stable != "" {
 		return stable
@@ -485,13 +502,14 @@ func groupRollbackInputs(isvc *v1beta1.InferenceService, g *v1beta1.RolloutGroup
 // traffic writer: the target the capacity gate observed on its IR, so a
 // member's targets name the revision whose capacity was verified, and the
 // persisted stable revision the rollback check uses, so a rollback returns
-// traffic to the revision the member reverts to. The Ready capacity on the
-// target is counted as the capacity gate counts it, so the member's latest
-// ready revision is published on the same evidence the gate reads, and the
-// member's steady instance count is what that capacity must reach for the
-// cutover to be complete. The protocols come from the two ControllerRevisions
-// through the cached client, as the primary's do.
-func secondaryRevisions(ctx context.Context, reads client.Reader, isvc *v1beta1.InferenceService, primary v1beta1.ComponentType, g *v1beta1.RolloutGroup, observed map[v1beta1.ComponentType]observedCanaryRevisions, stable map[v1beta1.ComponentType]string, readyPerRev map[v1beta1.ComponentType]map[string]int32, observedPods map[v1beta1.ComponentType][]*corev1.Pod) (map[v1beta1.ComponentType]MemberRevisions, error) {
+// traffic to the revision the member reverts to. The capacity on the target
+// is counted as the capacity gate counts it, the replica's own serving
+// Instances, so the member's latest ready revision is published on the same
+// evidence the gate reads, and the Instance count the replica is scaled to
+// is what that capacity must reach for the cutover to be complete. The
+// protocols come from the two ControllerRevisions through the cached client,
+// as the primary's do.
+func secondaryRevisions(ctx context.Context, reads client.Reader, isvc *v1beta1.InferenceService, primary v1beta1.ComponentType, g *v1beta1.RolloutGroup, observed map[v1beta1.ComponentType]observedCanaryRevisions, stable map[v1beta1.ComponentType]string, readyPerRev map[v1beta1.ComponentType]map[string]int32) (map[v1beta1.ComponentType]MemberRevisions, error) {
 	out := map[v1beta1.ComponentType]MemberRevisions{}
 	for _, comp := range configuredComponents(g) {
 		if comp == primary {
@@ -501,8 +519,8 @@ func secondaryRevisions(ctx context.Context, reads client.Reader, isvc *v1beta1.
 		m := MemberRevisions{
 			CanaryRevisionHash:  target,
 			StableRevisionHash:  stable[comp],
-			ReadyCanaryCapacity: readyCapacityCount(readyPerRev[comp][target], observed[comp].readyTargetInstanceCount(observedPods[comp])),
-			DesiredReplicas:     componentReplicas(isvc, comp),
+			ReadyCanaryCapacity: canaryCapacity(observed[comp].servingTargetInstances(), readyPerRev[comp][target]),
+			DesiredReplicas:     DesiredReplicas(observed[comp].replicas, componentExtension(isvc, comp)),
 		}
 		prefix := irprojector.RoleReplicaPrefix(isvc, comp)
 		var err error
@@ -605,25 +623,25 @@ func configuredComponents(g *v1beta1.RolloutGroup) []v1beta1.ComponentType {
 // resolves to the only revision present — so there is nothing to stage and it is
 // treated as ready, rather than blocking the rollout forever.
 //
-// IR runner topology provides the gang-safe ready Instance count. readyPerRev
-// keeps ready Pods as a required capacity signal. perRev detects a live peer
-// revision while an equal current/target pair settles.
+// Capacity is each member's replica's own account: its serving Instances on
+// the target revision (servingTargetInstances) against the Instance count it
+// is scaled to. perRev detects a live peer revision while an equal
+// current/target pair settles.
 //
 // It also returns each secondary's observed revision pair, so the traffic
 // writer keys a member's targets to the very target its capacity was checked
-// against. The pair is complete only when the gate reports a fresh view.
-func secondaryCapacityReady(ctx context.Context, reads client.Reader, isvc *v1beta1.InferenceService, perRev, readyPerRev map[v1beta1.ComponentType]map[string]int32, observedPods map[v1beta1.ComponentType][]*corev1.Pod, primary v1beta1.ComponentType, g *v1beta1.RolloutGroup) (ready, fresh bool, observed map[v1beta1.ComponentType]observedCanaryRevisions, err error) {
+// against. The pair is complete only when the gate reports a fresh view. The
+// wait is how long until the soonest pod of a short member clears its
+// window, zero when no short member is waiting on one.
+func secondaryCapacityReady(ctx context.Context, reads client.Reader, isvc *v1beta1.InferenceService, perRev map[v1beta1.ComponentType]map[string]int32, observedPods map[v1beta1.ComponentType][]*corev1.Pod, primary v1beta1.ComponentType, g *v1beta1.RolloutGroup, now time.Time) (ready, fresh bool, observed map[v1beta1.ComponentType]observedCanaryRevisions, wait time.Duration, err error) {
 	observed = map[v1beta1.ComponentType]observedCanaryRevisions{}
 	if g == nil || g.Canary == nil || len(g.Canary.Steps) == 0 {
-		return true, true, observed, nil
+		return true, true, observed, 0, nil
 	}
 	plan := g.Canary
 	idx := int32(0)
 	if cs := rollout.CanaryStatusFor(&isvc.Status, primary); cs != nil {
-		idx = cs.CurrentStep
-	}
-	if idx < 0 {
-		idx = 0
+		idx = rollout.StepOf(cs, isvc.Status.Components[primary].RolloutPhase, plan.Steps)
 	}
 	if int(idx) >= len(plan.Steps) {
 		idx = int32(len(plan.Steps) - 1)
@@ -636,10 +654,10 @@ func secondaryCapacityReady(ctx context.Context, reads client.Reader, isvc *v1be
 		}
 		revisions, err := observeCanaryRevisions(ctx, reads, isvc, c)
 		if err != nil {
-			return false, false, observed, err
+			return false, false, observed, 0, err
 		}
 		if !revisions.statusFresh {
-			return false, false, observed, nil
+			return false, false, observed, 0, nil
 		}
 		observed[c] = revisions
 		secHash := revisions.targetHash
@@ -654,101 +672,127 @@ func secondaryCapacityReady(ctx context.Context, reads client.Reader, isvc *v1be
 			}
 			continue
 		}
-		readyInstances := revisions.readyTargetInstanceCount(observedPods[c])
-		readyCapacity := readyCapacityCount(readyPerRev[c][secHash], readyInstances)
-		if readyCapacity < stepStagedCount(step, componentReplicas(isvc, c)) {
+		serving := revisions.servingTargetInstances()
+		if serving == nil || *serving < stepStagedCount(step, DesiredReplicas(revisions.replicas, componentExtension(isvc, c))) {
 			ready = false
+			wait = soonestWait(wait, revisions.windowWait(observedPods[c], now))
 		}
 	}
-	return ready, true, observed, nil
+	return ready, true, observed, wait, nil
 }
 
+// soonestWait is the shorter of two waits; a zero wait is nothing waiting
+// and defers to the other.
+func soonestWait(a, b time.Duration) time.Duration {
+	switch {
+	case a <= 0:
+		return b
+	case b <= 0 || a <= b:
+		return a
+	}
+	return b
+}
+
+// observedCanaryRevisions is one replica's account of its own rollout: the
+// revision pair, the Instance count it is scaled to, its declared Instance
+// shape, its readiness window and its per-Instance rows.
 type observedCanaryRevisions struct {
 	currentHash string
 	targetHash  string
-	runners     []v1beta1.Runner
-	// rows are the IR's per-Instance rows in the dense shape, the anchors
-	// the crash reading needs; empty when the observation is not an IR's.
+	// replicas is the Instance count the replica is scaled to; nil when the
+	// replica carries none.
+	replicas *int32
+	runners  []v1beta1.Runner
+	// minReadySeconds is the Component's availability window: a target
+	// Instance counts toward a step's capacity only once the replica reports
+	// its pods available, Ready for at least that long.
+	minReadySeconds int32
+	// rows are the IR's per-Instance rows in the dense shape, the capacity
+	// gate's count and the crash reading's anchors; empty when the
+	// observation is not an IR's.
 	rows        []v1beta1.OMENativeInstanceStatus
 	fromIR      bool
 	statusFresh bool
 }
 
-// readyTargetInstanceCount counts target Instances whose complete declared
-// runner set is PodReady. Runner ordinals prevent duplicate Pods from filling a
-// multi-pod gang's missing role. A non-IR observation returns nil.
-func (r observedCanaryRevisions) readyTargetInstanceCount(pods []*corev1.Pod) *int32 {
+// servingTargetInstances is the replica's account of the capacity its target
+// revision has: the Instances whose row runs the target revision with the
+// declared pod set in rotation and, under the Component's minReadySeconds,
+// reported available (Ready for at least that long). A multi-pod gang is one
+// Instance, counted once and only whole; a pod that is Ready but held out of
+// rotation does not count. A non-IR observation returns nil.
+func (r observedCanaryRevisions) servingTargetInstances() *int32 {
 	if !r.fromIR {
 		return nil
 	}
-	ready := int32(0)
-	if r.targetHash == "" || len(r.runners) == 0 {
-		return &ready
+	serving := int32(0)
+	if r.targetHash == "" {
+		return &serving
 	}
-	required := make(map[v1beta1.RunnerName]int32, len(r.runners))
-	for _, runner := range r.runners {
-		if runner.Size < 1 {
-			return &ready
+	target := query.RevisionFromHash(r.targetHash)
+	shape := instanceShape(r.runners)
+	for i := range r.rows {
+		row := &r.rows[i]
+		if !query.RevisionFromName(row.RunningRevision).Same(target) {
+			continue
 		}
-		if _, duplicate := required[runner.Name]; duplicate {
-			return &ready
+		if !workloadstatus.InstanceMeetsThreshold(row.PodCount, row.ServingPodCount, shape) {
+			continue
 		}
-		required[runner.Name] = runner.Size
+		if r.minReadySeconds > 0 && !workloadstatus.InstanceMeetsThreshold(row.PodCount, row.AvailablePodCount, shape) {
+			continue
+		}
+		serving++
 	}
+	return &serving
+}
 
-	readyPods := make(map[int32]map[v1beta1.RunnerName]map[int32]struct{})
+// instanceShape is the pod count one Instance of the declared runner set
+// materializes; zero when the set is undeclared, which makes the serving
+// threshold every live pod of the Instance.
+func instanceShape(runners []v1beta1.Runner) int32 {
+	var pods int32
+	for _, runner := range runners {
+		if runner.Size < 1 {
+			return 0
+		}
+		pods += runner.Size
+	}
+	return pods
+}
+
+// windowWait is how long until the soonest target pod that serves but has not
+// yet held Ready for the Component's minReadySeconds clears the window, zero
+// when none is waiting. The crossing raises no pod event, so a gate short on
+// the window alone wakes for it; the replica republishes its available count
+// at the same instant, and that count is what the gate reads.
+func (r observedCanaryRevisions) windowWait(pods []*corev1.Pod, now time.Time) time.Duration {
+	if !r.fromIR || r.minReadySeconds <= 0 || r.targetHash == "" {
+		return 0
+	}
+	var wait time.Duration
 	for _, pod := range pods {
 		if pod == nil || pod.Labels[query.LabelRevisionHash] != r.targetHash || !coordination.PodReadyAndServing(pod) {
 			continue
 		}
-		index, ok := query.InstanceIdxFromLabels(pod)
-		if !ok {
-			continue
-		}
-		runner := v1beta1.RunnerName(pod.Labels[query.LabelRunner])
-		size, known := required[runner]
-		if !known {
-			continue
-		}
-		ordinal, ok := query.PodOrdinalFromLabels(pod)
-		if !ok {
-			continue
-		}
-		if ordinal < 0 || (size == 1 && ordinal > 1) || (size > 1 && ordinal >= size) {
-			continue
-		}
-		if readyPods[index] == nil {
-			readyPods[index] = make(map[v1beta1.RunnerName]map[int32]struct{}, len(required))
-		}
-		if readyPods[index][runner] == nil {
-			readyPods[index][runner] = make(map[int32]struct{})
-		}
-		readyPods[index][runner][ordinal] = struct{}{}
-	}
-	for _, byRunner := range readyPods {
-		complete := true
-		for runner, size := range required {
-			if int32(len(byRunner[runner])) < size {
-				complete = false
-				break
-			}
-		}
-		if complete {
-			ready++
+		if available, remaining := podreadiness.IsPodAvailable(pod, r.minReadySeconds, now); !available {
+			wait = soonestWait(wait, remaining)
 		}
 	}
-	return &ready
+	return wait
 }
 
-// observeCanaryRevisions reads the current and target hashes from one IR
-// snapshot. The pair assigns stable and canary roles without relying on pod
-// population, whose new-revision pods can precede the IR status update. A
-// missing IR or empty revision pair is not authoritative and leaves statusFresh
-// false so the caller waits without mutating rollout state.
+// observeCanaryRevisions reads one replica's rollout account: the current and
+// target revisions, the Instance count it is scaled to and its decoded
+// per-Instance rows. The revision pair assigns stable and canary roles without
+// relying on pod population, whose new-revision pods can precede the IR status
+// update. A missing IR or empty revision pair is not authoritative and leaves
+// statusFresh false so the caller waits without mutating rollout state.
 //
 // The per-Instance rows are decoded with the decoder the reader carries, so
-// the crash reading has each Instance's entry into Ready; a payload that
-// cannot be decoded is an error, as it is for every reader of the rows.
+// the capacity gate and the crash reading read each Instance as the replica
+// published it; a payload that cannot be decoded is an error, as it is for
+// every reader of the rows.
 func observeCanaryRevisions(ctx context.Context, reads client.Reader, isvc *v1beta1.InferenceService, c v1beta1.ComponentType) (observedCanaryRevisions, error) {
 	if reads != nil {
 		ir := &v1beta1.InferenceReplica{}
@@ -760,26 +804,18 @@ func observeCanaryRevisions(ctx context.Context, reads client.Reader, isvc *v1be
 			if targetHash == "" {
 				targetHash = currentHash
 			}
-			statusFresh := ir.Status.ObservedGeneration == ir.Generation
-			if !statusFresh {
-				return observedCanaryRevisions{
-					currentHash: currentHash,
-					targetHash:  targetHash,
-					runners:     ir.Spec.Runners,
-					rows:        ir.Status.InstanceStatuses,
-					fromIR:      true,
-					statusFresh: false,
-				}, nil
+			observed := observedCanaryRevisions{
+				currentHash:     currentHash,
+				targetHash:      targetHash,
+				replicas:        ir.Spec.Replicas,
+				runners:         ir.Spec.Runners,
+				minReadySeconds: ir.Spec.MinReadySeconds,
+				rows:            ir.Status.InstanceStatuses,
+				fromIR:          true,
+				statusFresh:     ir.Status.ObservedGeneration == ir.Generation,
 			}
-			if targetHash != "" {
-				return observedCanaryRevisions{
-					currentHash: currentHash,
-					targetHash:  targetHash,
-					runners:     ir.Spec.Runners,
-					rows:        ir.Status.InstanceStatuses,
-					fromIR:      true,
-					statusFresh: true,
-				}, nil
+			if !observed.statusFresh || targetHash != "" {
+				return observed, nil
 			}
 		case !apierrors.IsNotFound(err):
 			return observedCanaryRevisions{}, err
@@ -839,31 +875,24 @@ func primaryComponentOf(g *v1beta1.RolloutGroup) v1beta1.ComponentType {
 	return rollout.PrimaryOf(g)
 }
 
-// componentReplicas is the steady replica count for a Component (MinReplicas,
-// falling back to MaxReplicas, else 0).
-func componentReplicas(isvc *v1beta1.InferenceService, c v1beta1.ComponentType) int32 {
-	var ext *v1beta1.ComponentExtensionSpec
+// componentExtension is a Component's declared replica bounds and lifecycle;
+// nil when the InferenceService does not declare the Component.
+func componentExtension(isvc *v1beta1.InferenceService, c v1beta1.ComponentType) *v1beta1.ComponentExtensionSpec {
 	switch c {
 	case v1beta1.EngineComponent:
 		if isvc.Spec.Engine != nil {
-			ext = &isvc.Spec.Engine.ComponentExtensionSpec
+			return &isvc.Spec.Engine.ComponentExtensionSpec
 		}
 	case v1beta1.DecoderComponent:
 		if isvc.Spec.Decoder != nil {
-			ext = &isvc.Spec.Decoder.ComponentExtensionSpec
+			return &isvc.Spec.Decoder.ComponentExtensionSpec
 		}
 	case v1beta1.RouterComponent:
 		if isvc.Spec.Router != nil {
-			ext = &isvc.Spec.Router.ComponentExtensionSpec
+			return &isvc.Spec.Router.ComponentExtensionSpec
 		}
 	}
-	if ext == nil {
-		return 0
-	}
-	if ext.MinReplicas != nil {
-		return int32(*ext.MinReplicas)
-	}
-	return int32(ext.MaxReplicas)
+	return nil
 }
 
 // otherRevision returns the non-canary revision hash with live pods (the stable

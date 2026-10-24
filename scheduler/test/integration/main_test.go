@@ -1,6 +1,6 @@
 // Package integration exercises the OMEGangPack plugin inside a real
 // kube-scheduler against an envtest API server — the authoritative proof that the
-// choose/pin/enforce/gate loop actually schedules, covering the informer/New/
+// choose/assign/enforce/gate loop actually schedules, covering the informer/New/
 // snapshot glue that unit tests fake. Mirrors sigs.k8s.io/scheduler-plugins'
 // test/integration harness.
 package integration
@@ -14,13 +14,21 @@ import (
 	"testing"
 
 	"k8s.io/client-go/rest"
+	"k8s.io/klog/v2"
+	"k8s.io/klog/v2/textlogger"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
 // globalKubeConfig is the envtest API server connection shared by the tests.
 var globalKubeConfig *rest.Config
 
+// discardedPods counts the scheduler log line for a pod its queue dropped as
+// tracked twice. Every scheduler and plugin log line passes through it.
+var discardedPods = &logCounter{out: os.Stderr, marker: []byte(discardedPodMarker)}
+
 func TestMain(m *testing.M) {
+	klog.SetLoggerWithOptions(textlogger.NewLogger(textlogger.NewConfig(textlogger.Output(discardedPods))), klog.ContextualLogger(true))
+
 	crdPath, err := podGroupCRDPath()
 	if err != nil {
 		log.Fatalf("locate PodGroup CRD: %v", err)

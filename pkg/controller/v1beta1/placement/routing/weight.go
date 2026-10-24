@@ -1,11 +1,11 @@
 // Package routing computes the capacity-aware traffic weights that project a
 // multi-cluster InferenceService's placement onto a gateway-neutral routing
 // table. Placement decides WHERE replicas run and quota decides HOW MUCH each
-// home may run; this package decides the WEIGHTS a gateway consumes.
+// cluster may run; this package decides the WEIGHTS a gateway consumes.
 //
-// The weight math is pure: it depends only on per-home capacity inputs, has no
-// Kubernetes or controller-runtime dependencies, and is exhaustively unit
-// tested. The routing controller adapts placement status into these inputs and
+// The weight math is pure: it depends only on per-cluster capacity inputs, has no
+// Kubernetes API calls or controller-runtime dependencies. The routing
+// controller adapts placement status and endpoint reports into these inputs and
 // writes the results onto a TrafficMap.
 package routing
 
@@ -13,77 +13,73 @@ import (
 	"math/big"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 // maxTrafficMapWeight is the strictest limit among the built-in TrafficMap
 // consumers. Gateway API BackendRef.Weight rejects values above this bound.
 const maxTrafficMapWeight = 1_000_000
 
-// Home is the capacity input for one serving home's weight.
-type Home struct {
-	// Cluster identifies the home; carried through so a caller can associate the
-	// index-aligned output weight back to its home.
+// ClusterCapacity is the capacity input for one serving cluster's weight.
+type ClusterCapacity struct {
+	// Mode selects the capacity authority. In Reported mode a usable
+	// ReportedWeight is the cluster's capacity in replica units: it already
+	// includes hardware and workload normalization, and replica counts do not
+	// cap it. Without one the cluster keeps its replica count, so a reporter outage
+	// degrades to the replica-based weight rather than to zero.
+	Mode           v1beta1.RoutingCapacityMode
+	ReportedWeight *resource.Quantity
+
+	// Cluster is the cluster name; carried through so a caller can associate the
+	// index-aligned output weight back to its cluster.
 	Cluster string
 
-	// Allocated is the number of replicas the home is intended to run — the count
-	// basis of the weight (Split apportionment intersected with the home's
-	// quota-admitted count).
+	// Allocated is the intended replica count — the count basis of the weight
+	// (Split apportionment intersected with the cluster's quota-admitted count).
+	// A usable ReportedWeight replaces it.
 	Allocated int32
 
-	// Ready is the home's live ready-replica count. It caps the count basis of
-	// the weight, so partial readiness changes traffic proportionally. Zero gates
-	// the home's weight to 0.
+	// Ready caps the count basis of the weight, so partial readiness changes
+	// traffic proportionally. Zero gates the cluster's weight to 0. A usable
+	// ReportedWeight is neither capped nor gated by it.
 	Ready int32
 
-	// Factor is the per-replica relative serving capacity of the home's
-	// accelerator (baseline 1, higher = faster), so heterogeneous hardware is
-	// weighted by capacity rather than raw replica count. Nil or non-positive is
-	// treated as the multiplicative identity (1) — a home is never black-holed by
+	// Factor applies whenever the replica count is the basis: the per-replica
+	// capacity of the cluster's accelerator (baseline 1, higher = faster), so
+	// heterogeneous hardware is weighted by capacity rather than raw replica
+	// count. A usable ReportedWeight already includes it. Nil or non-positive is
+	// treated as the multiplicative identity (1) — a cluster is never black-holed by
 	// a missing or malformed factor. It is operator-supplied config, never
 	// derived from raw hardware FLOPS.
 	Factor *resource.Quantity
 
-	// Reported is the home's own count of what it can currently serve, present
-	// only when a capacity source is configured and the home answered. It is a
-	// CEILING on Allocated and never raises it.
-	//
-	// Only the home knows its realized prefill/decode pairing: the control plane
-	// computes MIN(ready_prefill, ready_decode), which is an upper bound on
-	// usable pairs rather than a count of them. Allowing a report to raise a
-	// share would reintroduce the reactive drift capacity planning exists to
-	// remove, and would let a hot, buggy or stale home claim more traffic than
-	// the plan ever granted it. Constrained to a ceiling it can say only "I
-	// cannot yet serve what you planned for me".
-	//
-	// Nil means no report — the plan stands. A reported 0 is a real signal
-	// (the home can serve nothing) and is distinct from nil, which is why this
-	// is a pointer.
+	// Reported is the accepted replica count in Ceiling mode. It can lower
+	// Allocated but never raise it. Nil leaves Allocated unchanged; zero says
+	// the cluster cannot serve traffic. Reported mode uses ReportedWeight instead.
 	Reported *int32
 
-	// Reachable is the verdict of the active end-to-end probe against the home's
+	// Reachable is the verdict of the active end-to-end probe against the cluster's
 	// externally-addressable endpoint, ANDed into the health gate.
 	//
-	// Nil means the home was not probed — probing is off, or no verdict has been
-	// reached yet — and never gates. That state is uniform across homes when the
+	// Nil means the cluster was not probed — probing is off, or no verdict has been
+	// reached yet — and never gates. That state is uniform across clusters when the
 	// prober itself is broken, so treating it as failure would zero the entire
-	// fleet at once. False gates the home to weight 0; it is set only once the
+	// fleet at once. False gates the cluster to weight 0; it is set only once the
 	// caller's consecutive-failure threshold has been met, so a single failed
 	// probe cannot move a large traffic share.
 	Reachable *bool
 }
 
-// EffectiveAllocated is the home's allocation after the reported ceiling is
-// applied: min(Allocated, Reported), or Allocated when the home did not report.
-// It is the count the weight is actually computed from, and the value a caller
-// should record as the entry's allocation provenance so the written table
-// explains the weight it carries.
-func (h Home) EffectiveAllocated() int32 {
+// EffectiveAllocated is the cluster's allocation after the reported ceiling is
+// applied: min(Allocated, Reported), or Allocated when the cluster did not report.
+// A usable ReportedWeight replaces this count when calculating weight.
+func (h ClusterCapacity) EffectiveAllocated() int32 {
 	if h.Reported == nil || *h.Reported >= h.Allocated {
 		return h.Allocated
 	}
 	if *h.Reported < 0 {
 		// A negative report is malformed, not an instruction to serve nothing.
-		// Fail open to the plan rather than silently black-holing the home.
+		// Fail open to the plan rather than silently black-holing the cluster.
 		return h.Allocated
 	}
 	return *h.Reported
@@ -91,7 +87,7 @@ func (h Home) EffectiveAllocated() int32 {
 
 // RoutableReplicas is the capacity that is both allocated and currently ready.
 // Readiness may lower an allocation but never raise it.
-func (h Home) RoutableReplicas() int32 {
+func (h ClusterCapacity) RoutableReplicas() int32 {
 	allocated := h.EffectiveAllocated()
 	if h.Ready < 0 {
 		return 0
@@ -103,76 +99,125 @@ func (h Home) RoutableReplicas() int32 {
 }
 
 // Weights computes the final, apply-verbatim traffic weights for a set of
-// serving homes, index-aligned with homes.
+// serving clusters, index-aligned with clusters.
 //
-// For each home: raw_h = min(effectiveAllocated_h, ready_h) * factor_h, gated to
-// 0 when its probe says it is unreachable. The raw values
-// are then reduced to their smallest whole-number ratio, yielding relative
-// non-negative integers matching Gateway API and Envoy weighted-cluster
-// semantics — a consumer applies them verbatim or divides by their sum for a
-// percentage. A ratio that cannot fit the strictest built-in publisher limit is
+// Ceiling mode uses min(effectiveAllocated, ready) * factor. Reported mode uses
+// a usable ReportedWeight directly and the Ceiling formula for a cluster without
+// one. A failed probe gates either to zero. The raw values are then reduced to
+// their smallest whole-number ratio, yielding relative non-negative integers
+// matching Gateway API and Envoy weighted-cluster semantics — a consumer
+// applies them verbatim or divides by their sum for a percentage. A ratio that cannot fit the strictest built-in publisher limit is
 // scaled proportionally into that range while preserving every positive arm.
 //
 // An all-zero capacity result remains all-zero. PreserveTraffic may ignore only
-// probe gates, and only when every home has a conclusive failing verdict; the
-// fallback still honors admitted, ready, and reported capacity.
-func Weights(homes []Home) []int32 {
-	return weights(homes, AllFailedPolicyPreserveTraffic)
+// probe gates, and only when every cluster has a conclusive failing verdict; the
+// fallback still honors the selected capacity mode.
+func Weights(clusters []ClusterCapacity) []int32 {
+	return weights(clusters, AllFailedPolicyPreserveTraffic)
 }
 
-// weights applies PreserveTraffic only when every home has a conclusive failing
+// weights applies PreserveTraffic only when every cluster has a conclusive failing
 // probe verdict. Unknown probe state never authorizes the fallback, and Drain
 // preserves the all-zero result.
-func weights(homes []Home, allFailedPolicy AllFailedPolicy) []int32 {
-	if len(homes) == 0 {
+func weights(clusters []ClusterCapacity, allFailedPolicy AllFailedPolicy) []int32 {
+	if len(clusters) == 0 {
 		return []int32{}
 	}
 
-	raw, gcd := rawWeights(homes, false)
+	raw, gcd := rawWeights(clusters, false)
 	if gcd.Sign() != 0 {
 		return normalizeRawWeights(raw, gcd)
 	}
-	if allFailedPolicy != AllFailedPolicyPreserveTraffic || !allProbesFailed(homes) {
-		return make([]int32, len(homes))
+	if allFailedPolicy != AllFailedPolicyPreserveTraffic || !allProbesFailed(clusters) {
+		return make([]int32, len(clusters))
 	}
 
 	// Every probe conclusively failed, so PreserveTraffic may ignore only that
-	// signal. Recompute from the remaining capacity gates; an unready,
-	// unadmitted, or zero-reported-capacity home stays at zero.
-	raw, gcd = rawWeights(homes, true)
+	// signal. Recompute from the selected capacity mode; a zero reported weight
+	// stays at zero, and a cluster without one weighs its ready replicas.
+	raw, gcd = rawWeights(clusters, true)
 	if gcd.Sign() == 0 {
-		return make([]int32, len(homes))
+		return make([]int32, len(clusters))
 	}
 	return normalizeRawWeights(raw, gcd)
 }
 
-// rawWeights returns each home's unnormalized capacity and their GCD. When
-// ignoreProbeGates is true, admitted, ready, and reported capacity still apply.
-func rawWeights(homes []Home, ignoreProbeGates bool) ([]*big.Int, *big.Int) {
-	// raw_h in milli-units: allocated * (factor scaled by 1000). Arbitrary-
-	// precision integers keep both the Quantity conversion and multiplication
-	// safe before the ratio is reduced to TrafficMap's int32 representation.
-	raw := make([]*big.Int, len(homes))
-	gcd := new(big.Int)
-	for i := range homes {
-		raw[i] = new(big.Int)
-		h := &homes[i]
-		capacity := h.RoutableReplicas()
-		if capacity <= 0 || (!ignoreProbeGates && h.Reachable != nil && !*h.Reachable) {
+// rawWeights returns each cluster's unnormalized capacity and their GCD. When
+// ignoreProbeGates is true, the selected capacity mode still applies.
+func rawWeights(clusters []ClusterCapacity, ignoreProbeGates bool) ([]*big.Int, *big.Int) {
+	values := make([]*big.Rat, len(clusters))
+	denominator := big.NewInt(1)
+	for i := range clusters {
+		values[i] = new(big.Rat)
+		h := &clusters[i]
+		if !ignoreProbeGates && h.Reachable != nil && !*h.Reachable {
 			continue
 		}
-		raw[i].Mul(big.NewInt(int64(capacity)), factorMilli(h.Factor))
-		gcd = new(big.Int).GCD(nil, nil, gcd, raw[i])
+		values[i] = h.capacityValue()
+		gcd := new(big.Int).GCD(nil, nil, denominator, values[i].Denom())
+		denominator.Mul(new(big.Int).Quo(denominator, gcd), values[i].Denom())
+	}
+	raw := make([]*big.Int, len(clusters))
+	gcd := new(big.Int)
+	for i, value := range values {
+		raw[i] = new(big.Int).Mul(value.Num(), new(big.Int).Quo(denominator, value.Denom()))
+		gcd.GCD(nil, nil, gcd, raw[i])
 	}
 	return raw, gcd
 }
 
-func allProbesFailed(homes []Home) bool {
-	if len(homes) == 0 {
+func (h ClusterCapacity) capacityValue() *big.Rat {
+	if h.usesReportedWeight() {
+		if h.ReportedWeight.Sign() <= 0 {
+			return new(big.Rat)
+		}
+		return quantityRatio(h.ReportedWeight)
+	}
+	if n := h.RoutableReplicas(); n > 0 {
+		return new(big.Rat).SetFrac(new(big.Int).Mul(big.NewInt(int64(n)), factorMilli(h.Factor)), big.NewInt(1000))
+	}
+	return new(big.Rat)
+}
+
+func (h ClusterCapacity) hasReadyCapacity() bool {
+	if h.usesReportedWeight() {
+		return h.capacityValue().Sign() > 0
+	}
+	return h.Ready > 0
+}
+
+// usesReportedWeight reports whether the cluster's capacity is its reported
+// weight rather than its replica count.
+func (h ClusterCapacity) usesReportedWeight() bool {
+	return h.Mode == v1beta1.RoutingCapacityModeReported && h.ReportedWeight != nil
+}
+
+// appliedFactor is the factor the weight multiplies by: none for a reported
+// weight, which already includes the hardware.
+func (h ClusterCapacity) appliedFactor() *resource.Quantity {
+	if h.usesReportedWeight() {
+		return nil
+	}
+	return h.Factor
+}
+
+func quantityRatio(q *resource.Quantity) *big.Rat {
+	copy := q.DeepCopy()
+	decimal := copy.AsDec()
+	n := new(big.Int).Set(decimal.UnscaledBig())
+	scale := int64(decimal.Scale())
+	if scale < 0 {
+		return new(big.Rat).SetInt(n.Mul(n, powerOfTen(-scale)))
+	}
+	return new(big.Rat).SetFrac(n, powerOfTen(scale))
+}
+
+func allProbesFailed(clusters []ClusterCapacity) bool {
+	if len(clusters) == 0 {
 		return false
 	}
-	for i := range homes {
-		if homes[i].Reachable == nil || *homes[i].Reachable {
+	for i := range clusters {
+		if clusters[i].Reachable == nil || *clusters[i].Reachable {
 			return false
 		}
 	}
@@ -205,7 +250,7 @@ func factorMilli(q *resource.Quantity) *big.Int {
 // normalizeRawWeights first reduces the exact ratio by its GCD. If the reduced
 // ratio cannot fit a built-in publisher, it scales every arm proportionally so
 // the largest maps exactly to the supported limit, rounding positive arms
-// upward so no serving home disappears. Exact representable ratios stay exact;
+// upward so no serving cluster disappears. Exact representable ratios stay exact;
 // unrepresentable ratios remain ordered, non-negative, and routable.
 func normalizeRawWeights(raw []*big.Int, gcd *big.Int) []int32 {
 	weights := make([]int32, len(raw))

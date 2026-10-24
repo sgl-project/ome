@@ -6,6 +6,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
@@ -48,10 +49,10 @@ func createRealisticAccelerators() map[string]*v1beta1.AcceleratorClassSpec {
 				MemoryGB:            resource.NewQuantity(80*1024*1024*1024, resource.BinarySI),
 				MemoryBandwidthGBps: resource.NewQuantity(3000, resource.DecimalSI),
 				Performance: &v1beta1.AcceleratorPerformance{
-					Fp32Tflops: int64Ptr(67),
-					Fp16Tflops: int64Ptr(1979),
-					Int8Tops:   int64Ptr(3958), // FP8 capable
-					Int4Tops:   int64Ptr(7916),
+					Fp32Tflops: ptr.To[int64](67),
+					Fp16Tflops: ptr.To[int64](1979),
+					Int8Tops:   ptr.To[int64](3958), // FP8 capable
+					Int4Tops:   ptr.To[int64](7916),
 				},
 				Features:          []string{"cuda", "tensor-cores", "nvlink", "fp8"},
 				ComputeCapability: "9.0",
@@ -71,9 +72,9 @@ func createRealisticAccelerators() map[string]*v1beta1.AcceleratorClassSpec {
 				MemoryGB:            resource.NewQuantity(40*1024*1024*1024, resource.BinarySI),
 				MemoryBandwidthGBps: resource.NewQuantity(1555, resource.DecimalSI),
 				Performance: &v1beta1.AcceleratorPerformance{
-					Fp32Tflops: int64Ptr(19),
-					Fp16Tflops: int64Ptr(312),
-					Int8Tops:   int64Ptr(624),
+					Fp32Tflops: ptr.To[int64](19),
+					Fp16Tflops: ptr.To[int64](312),
+					Int8Tops:   ptr.To[int64](624),
 				},
 				Features:          []string{"cuda", "tensor-cores", "nvlink"},
 				ComputeCapability: "8.0",
@@ -93,9 +94,9 @@ func createRealisticAccelerators() map[string]*v1beta1.AcceleratorClassSpec {
 				MemoryGB:            resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
 				MemoryBandwidthGBps: resource.NewQuantity(320, resource.DecimalSI),
 				Performance: &v1beta1.AcceleratorPerformance{
-					Fp32Tflops: int64Ptr(8),
-					Fp16Tflops: int64Ptr(65),
-					Int8Tops:   int64Ptr(130),
+					Fp32Tflops: ptr.To[int64](8),
+					Fp16Tflops: ptr.To[int64](65),
+					Int8Tops:   ptr.To[int64](130),
 				},
 				Features:          []string{"cuda", "tensor-cores"},
 				ComputeCapability: "7.5",
@@ -122,7 +123,7 @@ func TestSelectBestFit_Integration(t *testing.T) {
 		{
 			name: "40GB requirement - A100 best fit",
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory:           int64Ptr(40),
+				MinMemory:           ptr.To[int64](40),
 				PreferredPrecisions: []string{"fp16"},
 			},
 			candidateNames: []string{"nvidia-h100-80gb", "nvidia-a100-40gb"},
@@ -132,7 +133,7 @@ func TestSelectBestFit_Integration(t *testing.T) {
 		{
 			name: "80GB requirement - H100 only option",
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory:           int64Ptr(80),
+				MinMemory:           ptr.To[int64](80),
 				PreferredPrecisions: []string{"fp16"},
 			},
 			candidateNames: []string{"nvidia-h100-80gb", "nvidia-a100-40gb", "nvidia-t4"},
@@ -142,7 +143,7 @@ func TestSelectBestFit_Integration(t *testing.T) {
 		{
 			name: "FP8 preference with high memory - H100 selected",
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory:           int64Ptr(80),
+				MinMemory:           ptr.To[int64](80),
 				PreferredPrecisions: []string{"fp8", "fp16"},
 			},
 			candidateNames: []string{"nvidia-h100-80gb", "nvidia-a100-40gb"},
@@ -152,7 +153,7 @@ func TestSelectBestFit_Integration(t *testing.T) {
 		{
 			name: "NVLink required - filters out T4",
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory:        int64Ptr(16),
+				MinMemory:        ptr.To[int64](16),
 				RequiredFeatures: []string{"nvlink"},
 			},
 			candidateNames: []string{"nvidia-a100-40gb", "nvidia-t4"},
@@ -162,8 +163,8 @@ func TestSelectBestFit_Integration(t *testing.T) {
 		{
 			name: "Single candidate after filtering",
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory: int64Ptr(16),
-				MaxMemory: int64Ptr(20),
+				MinMemory: ptr.To[int64](16),
+				MaxMemory: ptr.To[int64](20),
 			},
 			candidateNames: []string{"nvidia-h100-80gb", "nvidia-a100-40gb", "nvidia-t4"},
 			expectedName:   "nvidia-t4",
@@ -229,7 +230,7 @@ func TestSelectCheapest_Integration(t *testing.T) {
 		{
 			name: "All meet requirements - T4 cheapest",
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory: int64Ptr(16),
+				MinMemory: ptr.To[int64](16),
 			},
 			candidateNames: []string{"nvidia-h100-80gb", "nvidia-a100-40gb", "nvidia-t4"},
 			expectedName:   "nvidia-t4",
@@ -238,7 +239,7 @@ func TestSelectCheapest_Integration(t *testing.T) {
 		{
 			name: "Spot pricing preferred",
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory: int64Ptr(40),
+				MinMemory: ptr.To[int64](40),
 			},
 			candidateNames: []string{"nvidia-h100-80gb", "nvidia-a100-40gb"},
 			expectedName:   "nvidia-a100-40gb",
@@ -247,7 +248,7 @@ func TestSelectCheapest_Integration(t *testing.T) {
 		{
 			name: "High memory requirement - H100 vs A100",
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory: int64Ptr(80),
+				MinMemory: ptr.To[int64](80),
 			},
 			candidateNames: []string{"nvidia-h100-80gb", "nvidia-a100-40gb"},
 			expectedName:   "nvidia-h100-80gb",
@@ -457,7 +458,7 @@ func TestSelectMostCapable_Integration(t *testing.T) {
 		{
 			name: "FP8 workload - H100 most capable",
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory: int64Ptr(16),
+				MinMemory: ptr.To[int64](16),
 			},
 			candidateNames:      []string{"nvidia-h100-80gb", "nvidia-a100-40gb", "nvidia-t4"},
 			preferredPrecisions: []string{"fp8", "fp16"},
@@ -467,7 +468,7 @@ func TestSelectMostCapable_Integration(t *testing.T) {
 		{
 			name: "FP16 workload - H100 most capable",
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory: int64Ptr(16),
+				MinMemory: ptr.To[int64](16),
 			},
 			candidateNames:      []string{"nvidia-h100-80gb", "nvidia-a100-40gb", "nvidia-t4"},
 			preferredPrecisions: []string{"fp16"},
@@ -477,7 +478,7 @@ func TestSelectMostCapable_Integration(t *testing.T) {
 		{
 			name: "FP32 workload - H100 most capable",
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory: int64Ptr(16),
+				MinMemory: ptr.To[int64](16),
 			},
 			candidateNames:      []string{"nvidia-h100-80gb", "nvidia-a100-40gb", "nvidia-t4"},
 			preferredPrecisions: []string{"fp32"},
@@ -487,8 +488,8 @@ func TestSelectMostCapable_Integration(t *testing.T) {
 		{
 			name: "Memory constraint filters H100",
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory: int64Ptr(16),
-				MaxMemory: int64Ptr(50),
+				MinMemory: ptr.To[int64](16),
+				MaxMemory: ptr.To[int64](50),
 			},
 			candidateNames:      []string{"nvidia-h100-80gb", "nvidia-a100-40gb", "nvidia-t4"},
 			preferredPrecisions: []string{"fp16"},
@@ -556,7 +557,7 @@ func TestGetAcceleratorClassByPolicy_AllPolicies(t *testing.T) {
 			name:   "BestFit policy - A100 for 40GB",
 			policy: v1beta1.BestFitPolicy,
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory:           int64Ptr(40),
+				MinMemory:           ptr.To[int64](40),
 				PreferredPrecisions: []string{"fp16"},
 			},
 			expectedName: "nvidia-a100-40gb",
@@ -566,7 +567,7 @@ func TestGetAcceleratorClassByPolicy_AllPolicies(t *testing.T) {
 			name:   "Cheapest policy - T4 for 16GB",
 			policy: v1beta1.CheapestPolicy,
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory: int64Ptr(16),
+				MinMemory: ptr.To[int64](16),
 			},
 			expectedName: "nvidia-t4",
 			description:  "Cheapest should select T4 ($1/hr)",
@@ -575,7 +576,7 @@ func TestGetAcceleratorClassByPolicy_AllPolicies(t *testing.T) {
 			name:   "MostCapable policy - H100 for fp8",
 			policy: v1beta1.MostCapablePolicy,
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory:           int64Ptr(16),
+				MinMemory:           ptr.To[int64](16),
 				PreferredPrecisions: []string{"fp8"},
 			},
 			expectedName: "nvidia-h100-80gb",
@@ -585,7 +586,7 @@ func TestGetAcceleratorClassByPolicy_AllPolicies(t *testing.T) {
 			name:   "FirstAvailable policy - first in list",
 			policy: v1beta1.FirstAvailablePolicy,
 			constraints: &v1beta1.AcceleratorConstraints{
-				MinMemory: int64Ptr(16),
+				MinMemory: ptr.To[int64](16),
 			},
 			expectedName: "nvidia-h100-80gb",
 			description:  "FirstAvailable should select first in runtime list",
@@ -684,7 +685,7 @@ func TestEdgeCases(t *testing.T) {
 
 		// Filter with impossible constraint
 		constraints := &v1beta1.AcceleratorConstraints{
-			MinMemory: int64Ptr(100), // T4 only has 16GB
+			MinMemory: ptr.To[int64](100), // T4 only has 16GB
 		}
 		validCandidates := filterCandidates(ctx, candidates, constraints)
 

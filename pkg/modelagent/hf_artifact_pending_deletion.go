@@ -19,6 +19,19 @@ type HfArtifactPendingDeletion struct {
 	ModelUID       types.UID          `json:"modelUID"`
 	ParentLockID   string             `json:"parentLockId,omitempty"`
 	ParentWasReady bool               `json:"parentWasReady,omitempty"`
+	// Preserve interrupted work when another consumer prevents parent deletion.
+	// ParentWasReady remains for receipts written by older agents.
+	ParentStatusBeforeDeletion HfArtifactStatus `json:"parentStatusBeforeDeletion,omitempty"`
+}
+
+func (pending HfArtifactPendingDeletion) parentStatusBeforeDeletion() HfArtifactStatus {
+	if pending.ParentStatusBeforeDeletion != "" {
+		return pending.ParentStatusBeforeDeletion
+	}
+	if pending.ParentWasReady {
+		return HfArtifactStatusReady
+	}
+	return HfArtifactStatusFailed
 }
 
 func (pending HfArtifactPendingDeletion) parentForChild(key string) HfArtifactEntry {
@@ -30,7 +43,7 @@ func (pending HfArtifactPendingDeletion) parentForChild(key string) HfArtifactEn
 }
 
 func (r *HfArtifactRepository) pendingDeletion(ctx context.Context, key string) (*HfArtifactPendingDeletion, error) {
-	cm, err := r.configMaps.getConfigMap(ctx)
+	cm, err := r.configMaps.getConfigMapForHfArtifactCleanup(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +90,8 @@ func (r *HfArtifactRepository) claimPendingDeletion(ctx context.Context, key str
 			return false, err
 		}
 		if found {
-			if !isValidHfArtifactStatus(parent.Status) || parent.Status == HfArtifactStatusUpdating && (expected.ParentLockID == "" || parent.LockID != expected.ParentLockID) {
+			if !isValidHfArtifactStatus(parent.Status) || parent.blocksNewOperation() &&
+				(expected.ParentLockID == "" || parent.LockID != expected.ParentLockID) {
 				return false, fmt.Errorf("shared artifact %s has another owner or invalid status", parent.Key)
 			}
 		}
@@ -175,7 +189,7 @@ func (r *HfArtifactRepository) deletionParent(ctx context.Context, key string, p
 			}
 			return false, nil
 		}
-		if parent.Status == HfArtifactStatusUpdating {
+		if parent.blocksNewOperation() {
 			if expected.ParentLockID == "" || parent.LockID != expected.ParentLockID {
 				return false, fmt.Errorf("shared artifact %s has another owner", parent.Key)
 			}
@@ -190,6 +204,7 @@ func (r *HfArtifactRepository) deletionParent(ctx context.Context, key string, p
 		// Another child may have finished deletion while this receipt waited.
 		// Capture the current status, not the status at the original removal.
 		next.ParentWasReady = parent.Status == HfArtifactStatusReady
+		next.ParentStatusBeforeDeletion = parent.Status
 		next.ParentLockID = lockID
 		parent.Status = HfArtifactStatusUpdating
 		parent.LockID = lockID
@@ -233,7 +248,8 @@ func pendingDeletionParent(data map[string]string, childKey string, pending HfAr
 		if err := validateHfArtifactCleanPath(parent.LocalPath); err != nil {
 			return HfArtifactEntry{}, false, err
 		}
-		if !parentAbsent || !isValidHfArtifactStatus(parent.Status) || parent.Status == HfArtifactStatusUpdating && parent.LockID == "" {
+		if !parentAbsent || !isValidHfArtifactStatus(parent.Status) ||
+			parent.Status == HfArtifactStatusUpdating && parent.LockID == "" && parent.LastCompletedLockID == "" {
 			return HfArtifactEntry{}, false, fmt.Errorf("cannot finish deletion of replaced parent %s", key)
 		}
 		return HfArtifactEntry{}, false, nil
@@ -310,11 +326,11 @@ func (h *hfArtifactTaskHandler) resumePendingDeletion(ctx context.Context, input
 	}
 	if found && len(parent.Children) == 0 && pending.ParentLockID != "" {
 		if referenced {
-			if err := h.releaseParentDeletionLock(ctx, parent, pending.ParentWasReady); err != nil {
+			if err := h.releaseParentDeletionLock(ctx, parent, pending.parentStatusBeforeDeletion()); err != nil {
 				return newHfArtifactRetryResult(parent.Key, err), nil
 			}
 		} else {
-			result, err := h.deleteLockedParent(ctx, parent, input.ModelStoreRoot, pending.ParentWasReady)
+			result, err := h.deleteLockedParent(ctx, parent, input.ModelStoreRoot, pending.parentStatusBeforeDeletion())
 			if err != nil || result.Outcome != hfArtifactTaskDone {
 				return result, err
 			}

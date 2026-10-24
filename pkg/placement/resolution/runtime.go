@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/ome/pkg/runtimeselector"
 )
 
-// Resolver uses a direct client for the identified member. OperatorNamespace
+// Resolver uses the identified member client, including its cached kinds. OperatorNamespace
 // locates that member's configuration and runtime revisions; it has no fallback.
 // ComponentUnits is the replica count of each component in one measured
 // capacity unit; nil measures one replica of every declared component.
@@ -167,8 +167,8 @@ func readPinState(ctx context.Context, reads client.Client, desired, standing *v
 	if standing == nil || current.UID != standing.UID {
 		return fmt.Errorf("standing member service identity changed")
 	}
-	// Pin state comes from the live read; the supplied observation fences the
-	// member's spec and metadata. The snapshot rechecks the live pin separately.
+	// Pin state belongs to the same observed member identity and spec. The
+	// dependency check also detects pin changes delivered during resolution.
 	expected := standing.DeepCopy()
 	expected.Status = current.Status
 	want, err := objectIdentity(expected)

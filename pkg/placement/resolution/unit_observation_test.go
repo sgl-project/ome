@@ -16,6 +16,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestResolveUnitRejectsIncompleteReads(t *testing.T) {
@@ -29,27 +30,31 @@ func TestResolveUnitRejectsIncompleteReads(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f, cm := newUnitFixture()
 			unitAccelerator(&f)
-			changed := false
-			cl := unitClient(t, f, interceptor.Funcs{Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, object client.Object, opts ...client.GetOption) error {
-				if _, config := object.(*corev1.ConfigMap); config && tt.operation == "config-error" {
-					return errors.New("config read unavailable")
-				}
-				// The accelerator class is read while the engine's render inputs
-				// are built: after the rendering config, before the observation
-				// is checked.
-				if _, accelerator := object.(*v1beta1.AcceleratorClass); accelerator && tt.operation == "config-change" && !changed {
-					fresh := &corev1.ConfigMap{}
-					if err := cl.Get(ctx, client.ObjectKeyFromObject(cm), fresh); err != nil {
-						return err
+			var faults []fakeclient.Option
+			switch tt.operation {
+			case "config-error":
+				faults = append(faults, fakeclient.FailingVerb(fakeclient.Get, fakeclient.EveryCall, errors.New("config read unavailable")).OnKind(&corev1.ConfigMap{}))
+			case "config-change":
+				changed := false
+				faults = append(faults, fakeclient.WithInterceptors(interceptor.Funcs{Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, object client.Object, opts ...client.GetOption) error {
+					// The accelerator class is read while the engine's render inputs
+					// are built: after the rendering config, before the observation
+					// is checked.
+					if _, accelerator := object.(*v1beta1.AcceleratorClass); accelerator && !changed {
+						fresh := &corev1.ConfigMap{}
+						if err := cl.Get(ctx, client.ObjectKeyFromObject(cm), fresh); err != nil {
+							return err
+						}
+						fresh.Data[controllerconfig.AcceleratorResourcesConfigName] = `[]`
+						if err := cl.Update(ctx, fresh); err != nil {
+							return err
+						}
+						changed = true
 					}
-					fresh.Data[controllerconfig.AcceleratorResourcesConfigName] = `[]`
-					if err := cl.Update(ctx, fresh); err != nil {
-						return err
-					}
-					changed = true
-				}
-				return cl.Get(ctx, key, object, opts...)
-			}})
+					return cl.Get(ctx, key, object, opts...)
+				}}))
+			}
+			cl := unitClient(t, f, faults...)
 			got, err := (Resolver{Client: cl, OperatorNamespace: f.namespace}).ResolveUnit(t.Context(), f.service, nil)
 			if err == nil {
 				t.Fatal("incomplete observation was accepted")
@@ -122,7 +127,7 @@ func TestResolvedUnitDependencyFences(t *testing.T) {
 			unitAccelerator(&f)
 			f.service.Spec.Engine.RuntimeClassName = ptr.To("sandbox")
 			f.extra = append(f.extra, &nodev1.RuntimeClass{ObjectMeta: metav1.ObjectMeta{Name: "sandbox", UID: "class-uid"}, Handler: "sandbox-handler"})
-			cl := unitClient(t, f, interceptor.Funcs{})
+			cl := unitClient(t, f)
 			resolver := Resolver{Client: cl, OperatorNamespace: f.namespace}
 			original, err := resolver.ResolveUnit(t.Context(), f.service, nil)
 			if err != nil {
@@ -147,7 +152,7 @@ func TestResolvedUnitDependencyFences(t *testing.T) {
 
 func TestResolveUnitExcludesReplicaFloorsFromDemand(t *testing.T) {
 	f, _ := newUnitFixture()
-	resolver := Resolver{Client: unitClient(t, f, interceptor.Funcs{}), OperatorNamespace: f.namespace}
+	resolver := Resolver{Client: unitClient(t, f), OperatorNamespace: f.namespace}
 	original, err := resolver.ResolveUnit(t.Context(), f.service, nil)
 	if err != nil {
 		t.Fatal(err)

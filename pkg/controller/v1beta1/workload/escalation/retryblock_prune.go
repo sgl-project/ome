@@ -104,7 +104,11 @@ func PruneSupersededRetryBlocks(ctx context.Context, input types.ReconcileInput,
 // rebuild promotes without pruning the block (status.StampReady), so this
 // is where a crash that never came back costs its one attempt and clears,
 // while a loop, whose rebuilt pods never hold the window, exhausts the
-// ladder. Runs with the supersede-prune, at the end of the reconcile.
+// ladder. With no window configured no row outlives a failure by time,
+// so nothing is pruned here: the block stands until the roll converges
+// on the revision, a newer revision replaces it, or an operator
+// releases it, and every further death of a rebuilt set counts on it.
+// Runs with the supersede-prune, at the end of the reconcile.
 func PruneOutlivedRetryBlocks(ctx context.Context, input types.ReconcileInput, plan types.ComponentPlan, target *appsv1.ControllerRevision, pods func(context.Context) (map[int32][]*corev1.Pod, error)) error {
 	if input.MutateRetryBlock == nil || len(input.ObservedState.RetryBlocks) == 0 {
 		return nil
@@ -112,6 +116,9 @@ func PruneOutlivedRetryBlocks(ctx context.Context, input types.ReconcileInput, p
 	window := plan.MinReadySeconds
 	if grace := int32(input.StuckPodGrace / time.Second); grace > window {
 		window = grace
+	}
+	if window <= 0 {
+		return nil
 	}
 	now := input.Now()
 	rows := input.ObservedState.InstanceStatuses
@@ -136,7 +143,8 @@ func PruneOutlivedRetryBlocks(ctx context.Context, input types.ReconcileInput, p
 		if target != nil && rev == target.Name {
 			born = target.CreationTimestamp.Time
 		}
-		if !rowsOutlived(rows, byIdx, desiredByIdx, rev, born, window, now, plan.RestartPolicy) {
+		rollTarget := target != nil && rev == target.Name
+		if !rowsOutlived(rows, byIdx, desiredByIdx, rev, born, rollTarget, window, now, plan.RestartPolicy) {
 			continue
 		}
 		if err := input.MutateRetryBlock(ctx, rev, func(*types.RetryBlock) types.RetryBlockDisposition {
@@ -158,13 +166,18 @@ func PruneOutlivedRetryBlocks(ctx context.Context, input types.ReconcileInput, p
 // operation open, has been Ready for window holding the serving bar, and
 // owes no rebuild: under RecreateInstanceOnPodRestart a runner that
 // restarted since the row entered Ready is rebuilt, and the block paces
-// that rebuild until it opens.
-func rowsOutlived(rows []types.InstanceStatus, byIdx map[int32][]*corev1.Pod, desiredByIdx map[int32]int32, rev string, revisionBorn time.Time, window int32, now time.Time, policy types.RestartPolicy) bool {
+// that rebuild until it opens. While rev is the roll target, a row off it
+// still has to roll onto it: the block paces that row's next attempt, so
+// rows that never left rev do not outlive the failure on its behalf.
+func rowsOutlived(rows []types.InstanceStatus, byIdx map[int32][]*corev1.Pod, desiredByIdx map[int32]int32, rev string, revisionBorn time.Time, rollTarget bool, window int32, now time.Time, policy types.RestartPolicy) bool {
 	held := 0
 	for i := range rows {
 		row := &rows[i]
 		pinned := row.Operation != nil && row.Operation.TargetRevision == rev
 		if row.RunningRevision != rev && row.TargetRevision != rev && !pinned {
+			if rollTarget {
+				return false
+			}
 			continue
 		}
 		if row.Phase != types.InstancePhaseReady || row.Operation != nil || row.RunningRevision != rev {

@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-func TestValidatePVCStorage(t *testing.T) {
+func TestValidatePVCStorage_UriScopeAndDistribution_RejectsWrongPrefixOrSharded(t *testing.T) {
 	tests := []struct {
 		name            string
 		spec            *v1beta1.BaseModelSpec

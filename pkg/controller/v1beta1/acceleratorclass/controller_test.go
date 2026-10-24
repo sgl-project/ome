@@ -3,29 +3,22 @@ package acceleratorclass
 import (
 	"context"
 	"testing"
-	"time"
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestAcceleratorClass_Reconcile_AddsFinalizerAndUpdatesStatus(t *testing.T) {
 	g := NewWithT(t)
-
-	// Setup scheme
-	scheme := runtime.NewScheme()
-	g.Expect(v1beta1.AddToScheme(scheme)).To(Succeed())
-	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
 
 	// Initial objects: one AcceleratorClass and one matching Node
 	ac := &v1beta1.AcceleratorClass{
@@ -52,17 +45,12 @@ func TestAcceleratorClass_Reconcile_AddsFinalizerAndUpdatesStatus(t *testing.T) 
 		},
 	}
 
-	// Create fake client with status subresource
-	c := ctrlclientfake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(ac, node).
-		WithStatusSubresource(&v1beta1.AcceleratorClass{}).
-		Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(ac, node), fakeclient.WithStatusSubresource(&v1beta1.AcceleratorClass{}))
 
 	reconciler := &AcceleratorClassReconciler{
 		Client:   c,
 		Log:      ctrl.Log.WithName("AcceleratorClassTest"),
-		Scheme:   scheme,
+		Scheme:   c.Scheme(),
 		Recorder: record.NewFakeRecorder(10),
 	}
 
@@ -83,10 +71,6 @@ func TestAcceleratorClass_Reconcile_AddsFinalizerAndUpdatesStatus(t *testing.T) 
 func TestAcceleratorClass_Reconcile_MatchDiscovery(t *testing.T) {
 	g := NewWithT(t)
 
-	scheme := runtime.NewScheme()
-	g.Expect(v1beta1.AddToScheme(scheme)).To(Succeed())
-	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
-
 	ac := &v1beta1.AcceleratorClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-ac-discovery"},
 		Spec: v1beta1.AcceleratorClassSpec{
@@ -101,13 +85,9 @@ func TestAcceleratorClass_Reconcile_MatchDiscovery(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "node-b", Labels: map[string]string{"accel": "amd"}},
 	}
 
-	c := ctrlclientfake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(ac, nodeA, nodeB).
-		WithStatusSubresource(&v1beta1.AcceleratorClass{}).
-		Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(ac, nodeA, nodeB), fakeclient.WithStatusSubresource(&v1beta1.AcceleratorClass{}))
 
-	reconciler := &AcceleratorClassReconciler{Client: c, Log: ctrl.Log.WithName("AcceleratorClassTest"), Scheme: scheme, Recorder: record.NewFakeRecorder(5)}
+	reconciler := &AcceleratorClassReconciler{Client: c, Log: ctrl.Log.WithName("AcceleratorClassTest"), Scheme: c.Scheme(), Recorder: record.NewFakeRecorder(5)}
 
 	ctx := context.TODO()
 	_, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: ac.Name}})
@@ -122,10 +102,6 @@ func TestAcceleratorClass_Reconcile_MatchDiscovery(t *testing.T) {
 
 func TestAcceleratorClass_Reconcile_MatchDeclaredResources(t *testing.T) {
 	g := NewWithT(t)
-
-	scheme := runtime.NewScheme()
-	g.Expect(v1beta1.AddToScheme(scheme)).To(Succeed())
-	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
 
 	ac := &v1beta1.AcceleratorClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-ac-resources"},
@@ -157,13 +133,9 @@ func TestAcceleratorClass_Reconcile_MatchDeclaredResources(t *testing.T) {
 		},
 	}
 
-	c := ctrlclientfake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(ac, nodeA, nodeB).
-		WithStatusSubresource(&v1beta1.AcceleratorClass{}).
-		Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(ac, nodeA, nodeB), fakeclient.WithStatusSubresource(&v1beta1.AcceleratorClass{}))
 
-	reconciler := &AcceleratorClassReconciler{Client: c, Log: ctrl.Log.WithName("AcceleratorClassTest"), Scheme: scheme, Recorder: record.NewFakeRecorder(5)}
+	reconciler := &AcceleratorClassReconciler{Client: c, Log: ctrl.Log.WithName("AcceleratorClassTest"), Scheme: c.Scheme(), Recorder: record.NewFakeRecorder(5)}
 
 	ctx := context.TODO()
 	_, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: ac.Name}})
@@ -179,10 +151,6 @@ func TestAcceleratorClass_Reconcile_MatchDeclaredResources(t *testing.T) {
 func TestAcceleratorClass_Reconcile_DoesNotUpdateTimestampOnNoChange(t *testing.T) {
 	g := NewWithT(t)
 
-	scheme := runtime.NewScheme()
-	g.Expect(v1beta1.AddToScheme(scheme)).To(Succeed())
-	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
-
 	ac := &v1beta1.AcceleratorClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-ac-ts"},
 		Spec: v1beta1.AcceleratorClassSpec{
@@ -194,29 +162,29 @@ func TestAcceleratorClass_Reconcile_DoesNotUpdateTimestampOnNoChange(t *testing.
 		ObjectMeta: metav1.ObjectMeta{Name: "node-a", Labels: map[string]string{"accel": "nvidia"}},
 	}
 
-	c := ctrlclientfake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(ac, node).
-		WithStatusSubresource(&v1beta1.AcceleratorClass{}).
-		Build()
+	// LastUpdated is set only inside a status write, so a pass that writes
+	// no status cannot move it; counting the writes proves that without a clock.
+	statusPatches := fakeclient.CountingVerb(fakeclient.StatusPatch)
+	statusUpdates := fakeclient.CountingVerb(fakeclient.StatusUpdate)
+	statusWrites := func() int { return statusPatches.Count() + statusUpdates.Count() }
+	c := fakeclient.New(t, fakeclient.WithObjects(ac, node), fakeclient.WithStatusSubresource(&v1beta1.AcceleratorClass{}), statusPatches, statusUpdates)
 
-	reconciler := &AcceleratorClassReconciler{Client: c, Log: ctrl.Log.WithName("AcceleratorClassTest"), Scheme: scheme, Recorder: record.NewFakeRecorder(5)}
+	reconciler := &AcceleratorClassReconciler{Client: c, Log: ctrl.Log.WithName("AcceleratorClassTest"), Scheme: c.Scheme(), Recorder: record.NewFakeRecorder(5)}
 
 	ctx := context.TODO()
 	_, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: ac.Name}})
 	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(statusWrites()).To(Equal(1))
 
 	curr := &v1beta1.AcceleratorClass{}
 	g.Expect(c.Get(ctx, types.NamespacedName{Name: ac.Name}, curr)).To(Succeed())
 	firstUpdate := curr.Status.LastUpdated
 	g.Expect(firstUpdate.IsZero()).To(BeFalse())
 
-	// Wait briefly to ensure a future Now() would differ if called
-	time.Sleep(5 * time.Millisecond)
-
-	// Second reconcile with no changes should not bump LastUpdated
+	// The same nodes again: nothing to record, so no status write at all.
 	_, err = reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: ac.Name}})
 	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(statusWrites()).To(Equal(1))
 
 	post := &v1beta1.AcceleratorClass{}
 	g.Expect(c.Get(ctx, types.NamespacedName{Name: ac.Name}, post)).To(Succeed())

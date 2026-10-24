@@ -1,10 +1,71 @@
 package modelagent
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestCanonicalModelPath(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	real := filepath.Join(root, "real")
+	model := filepath.Join(real, "model")
+	require.NoError(t, os.MkdirAll(model, 0o755))
+	alias := filepath.Join(root, "alias")
+	require.NoError(t, os.Symlink(real, alias))
+	link := filepath.Join(real, "model-link")
+	require.NoError(t, os.Symlink(model, link))
+	broken := filepath.Join(real, "broken")
+	require.NoError(t, os.Symlink(filepath.Join(root, "absent"), broken))
+	loop := filepath.Join(real, "loop")
+	require.NoError(t, os.Symlink(loop, loop))
+
+	for _, tc := range []struct {
+		name    string
+		path    string
+		want    string
+		wantErr bool
+	}{
+		{name: "directory alias", path: filepath.Join(alias, "model"), want: model},
+		{name: "missing directories below alias", path: filepath.Join(alias, "missing", "revision"), want: filepath.Join(real, "missing", "revision")},
+		{name: "leaf symlink through alias", path: filepath.Join(alias, "model-link"), want: link},
+		{name: "broken leaf symlink", path: filepath.Join(alias, "broken"), want: broken},
+		{name: "looping ancestor", path: filepath.Join(loop, "revision"), wantErr: true},
+		{name: "empty path", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := canonicalModelPath(tc.path)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestModelPathWithin(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		parent string
+		path   string
+		want   bool
+	}{
+		{name: "same path", parent: "/models/model", path: "/models/model", want: true},
+		{name: "descendant", parent: "/models/model", path: "/models/model/releases/rev-002", want: true},
+		{name: "sibling prefix", parent: "/models/model", path: "/models/model-bf16"},
+		{name: "ancestor", parent: "/models/model", path: "/models"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, modelPathWithin(tc.parent, tc.path))
+		})
+	}
+}
 
 func TestSameStringPtr(t *testing.T) {
 	left := "value"

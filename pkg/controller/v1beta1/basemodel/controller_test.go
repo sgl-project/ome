@@ -8,32 +8,22 @@ import (
 	"time"
 
 	"github.com/onsi/gomega"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel/shared"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
-func TestBaseModelReconcile(t *testing.T) {
+func TestBaseModelReconcile_NewReadyOrDeleting_FinalizerStatusAndRemoval(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-
-	// Create scheme
-	scheme := runtime.NewScheme()
-	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
-	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
-	// batchv1 needed for cleanupStalePVCArtifacts which lists Jobs on
-	// every non-PVC reconcile (idempotent no-op when none exist; the
-	// List itself still requires the scheme).
-	g.Expect(batchv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 
 	tests := []struct {
 		name       string
@@ -54,7 +44,7 @@ func TestBaseModelReconcile(t *testing.T) {
 						Name: "safetensors",
 					},
 					Storage: &v1beta1.StorageSpec{
-						StorageUri: stringPtr("oci://bucket/model"),
+						StorageUri: ptr.To("oci://bucket/model"),
 					},
 				},
 			},
@@ -561,11 +551,7 @@ func TestBaseModelReconcile(t *testing.T) {
 			t.Parallel()
 
 			// Create client
-			c := ctrlclientfake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(tt.baseModel).
-				WithStatusSubresource(tt.baseModel).
-				Build()
+			c := fakeclient.New(t, fakeclient.WithObjects(tt.baseModel), fakeclient.WithStatusSubresource(tt.baseModel))
 
 			// Setup test mocks
 			tt.setupMocks(c)
@@ -595,17 +581,8 @@ func TestBaseModelReconcile(t *testing.T) {
 	}
 }
 
-func TestClusterBaseModelReconcile(t *testing.T) {
+func TestClusterBaseModelReconcile_NewShardedOrMultiNode_FinalizerAndStatus(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-
-	// Create scheme
-	scheme := runtime.NewScheme()
-	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
-	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
-	// batchv1 needed for cleanupStalePVCArtifacts which lists Jobs on
-	// every non-PVC reconcile (idempotent no-op when none exist; the
-	// List itself still requires the scheme).
-	g.Expect(batchv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 
 	tests := []struct {
 		name             string
@@ -721,11 +698,7 @@ func TestClusterBaseModelReconcile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := ctrlclientfake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(tt.clusterBaseModel).
-				WithStatusSubresource(tt.clusterBaseModel).
-				Build()
+			c := fakeclient.New(t, fakeclient.WithObjects(tt.clusterBaseModel), fakeclient.WithStatusSubresource(tt.clusterBaseModel))
 
 			if tt.setupMocks != nil {
 				tt.setupMocks(c)
@@ -735,7 +708,7 @@ func TestClusterBaseModelReconcile(t *testing.T) {
 				Client:    c,
 				APIReader: c,
 				Log:       ctrl.Log.WithName("test"),
-				Scheme:    scheme,
+				Scheme:    c.Scheme(),
 			}
 
 			req := ctrl.Request{
@@ -759,7 +732,7 @@ func TestClusterBaseModelReconcile(t *testing.T) {
 	}
 }
 
-func TestUpdateSpecWithConfig(t *testing.T) {
+func TestUpdateSpecWithConfig_EmptySetOrNilFields_FillsOnlyEmptyFields(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
 	tests := []struct {
@@ -815,14 +788,14 @@ func TestUpdateSpecWithConfig(t *testing.T) {
 		{
 			name: "No update when fields already set",
 			initialSpec: &v1beta1.BaseModelSpec{
-				ModelType:         stringPtr("existing-type"),
-				ModelArchitecture: stringPtr("existing-arch"),
+				ModelType:         ptr.To("existing-type"),
+				ModelArchitecture: ptr.To("existing-arch"),
 				Quantization:      quantPtr("existing-quant"),
 				ModelFormat: v1beta1.ModelFormat{
 					Name:    "existing-format",
-					Version: stringPtr("1.0.0"),
+					Version: ptr.To("1.0.0"),
 				},
-				MaxTokens: int32Ptr(2048),
+				MaxTokens: ptr.To[int32](2048),
 			},
 			config: &shared.ModelConfig{
 				ModelType:         "new-type",
@@ -874,14 +847,6 @@ func TestUpdateSpecWithConfig(t *testing.T) {
 }
 
 // Helper functions
-func stringPtr(s string) *string {
-	return &s
-}
-
 func quantPtr(q v1beta1.ModelQuantization) *v1beta1.ModelQuantization {
 	return &q
-}
-
-func int32Ptr(i int32) *int32 {
-	return &i
 }

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -20,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	schedulingv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
 
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/drain"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 )
 
@@ -379,6 +382,15 @@ func (d *driver) interceptors() interceptor.Funcs {
 			return nil
 		},
 		Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+			// The apiserver writes creationTimestamp on every object it
+			// admits and the fake client writes none. The engine reads the
+			// target revision's creation time to place a failure record
+			// before or after the revision being rolled, so a revision
+			// minted without one would hold every fresh set behind the
+			// record of a set an older revision lost.
+			if rev, ok := obj.(*appsv1.ControllerRevision); ok && rev.CreationTimestamp.IsZero() {
+				rev.CreationTimestamp = metav1.NewTime(d.clock.Now())
+			}
 			if pod, ok := obj.(*corev1.Pod); ok {
 				// Pod names are stable and reused, so a successor starts
 				// from no teardown of its own.
@@ -415,6 +427,9 @@ func (d *driver) interceptors() interceptor.Funcs {
 			}
 			if d.traced(obj) {
 				d.trace.object(kindOf(obj), "create", obj.GetName(), d.createDetail(obj))
+				if pod, ok := obj.(*corev1.Pod); ok {
+					d.tickPodWrites = append(d.tickPodWrites, PodWrite{Verb: "create", Pod: pod.DeepCopy()})
+				}
 			}
 			if pod, ok := obj.(*corev1.Pod); ok {
 				// The pod watch confirms a create as soon as the object
@@ -499,6 +514,9 @@ func (d *driver) recordWrite(ctx context.Context, obj client.Object, verb, baseV
 	}
 	after := d.snapshotPod(ctx, obj)
 	d.trace.object(kindOf(obj), verb, obj.GetName(), d.podWriteDiff(before, after))
+	if after != nil {
+		d.tickPodWrites = append(d.tickPodWrites, PodWrite{Verb: verb, Pod: after})
+	}
 	return nil
 }
 
@@ -875,6 +893,32 @@ func (d *driver) setEndpointNow(ctx context.Context, serviceName, podName string
 		return d.cli.Create(ctx, slice)
 	}
 	return d.cli.Update(ctx, slice)
+}
+
+// routedRotation maps each pod name to the per-revision routed Service
+// whose EndpointSlice publishes it as an available endpoint, read the way
+// the engine reads rotation. The headless Service publishes every pod and
+// says nothing about traffic, so its slice is left out.
+func (d *driver) routedRotation(ctx context.Context) (map[string]string, error) {
+	slices := &discoveryv1.EndpointSliceList{}
+	if err := d.cli.List(ctx, slices, client.InNamespace(d.opts.Namespace)); err != nil {
+		return nil, fmt.Errorf("replay: list endpointslices for rotation: %w", err)
+	}
+	headless := query.HeadlessServiceName(d.opts.OwnerName, d.opts.Component)
+	routed := map[string]string{}
+	for i := range slices.Items {
+		service := slices.Items[i].Labels[discoveryv1.LabelServiceName]
+		if service == "" || service == headless {
+			continue
+		}
+		for _, ep := range slices.Items[i].Endpoints {
+			if ep.TargetRef == nil || !drain.EndpointAvailable(ep) {
+				continue
+			}
+			routed[ep.TargetRef.Name] = service
+		}
+	}
+	return routed, nil
 }
 
 func endpointName(ep discoveryv1.Endpoint) string {

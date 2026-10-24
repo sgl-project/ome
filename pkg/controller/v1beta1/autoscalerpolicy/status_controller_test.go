@@ -5,60 +5,34 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-logr/logr/testr"
 	"github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/autoscalerpolicy/render"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/policystatus"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
-
-// testPolicyRefIndexer mirrors the extractor the InferenceService controller
-// registers for the spec.autoscalerPolicyRefs field index: the distinct
-// policy names across all component slots.
-func testPolicyRefIndexer(obj client.Object) []string {
-	isvc, ok := obj.(*v1beta1.InferenceService)
-	if !ok {
-		return nil
-	}
-	seen := map[string]bool{}
-	var names []string
-	for _, componentType := range policyRefComponents {
-		ref := autoscaler.ComponentPolicyRef(isvc, componentType)
-		if ref == nil || ref.Name == "" || seen[ref.Name] {
-			continue
-		}
-		seen[ref.Name] = true
-		names = append(names, ref.Name)
-	}
-	return names
-}
 
 const testProviderConfig = `{"metricProviders":{"llm-metrics":{"serverAddress":"http://prometheus.example.com"}}}`
 
-func newReconciler(t *testing.T, configJSON string, objs ...client.Object) *StatusReconciler {
+type reconciler = policystatus.Reconciler[*v1beta1.AutoscalerPolicy]
+
+func newReconciler(t *testing.T, configJSON string, objs ...client.Object) *reconciler {
 	t.Helper()
-	scheme := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(scheme); err != nil {
-		t.Fatalf("AddToScheme: %v", err)
-	}
-	c := ctrlclientfake.NewClientBuilder().
-		WithScheme(scheme).
-		WithStatusSubresource(&v1beta1.AutoscalerPolicy{}).
-		WithIndex(&v1beta1.InferenceService{}, autoscalerPolicyRefIndexField, testPolicyRefIndexer).
-		WithObjects(objs...).
-		Build()
+	c := fakeclient.New(t,
+		fakeclient.WithStatusSubresource(&v1beta1.AutoscalerPolicy{}),
+		fakeclient.WithIndex(&v1beta1.InferenceService{}, PolicyRefIndexField, PolicyRefIndexer),
+		fakeclient.WithObjects(objs...),
+	)
 
 	clientset := k8sfake.NewSimpleClientset()
 	if configJSON != "" {
@@ -70,23 +44,21 @@ func newReconciler(t *testing.T, configJSON string, objs ...client.Object) *Stat
 			Data: map[string]string{controllerconfig.AutoscalerPolicyConfigName: configJSON},
 		})
 	}
-	return &StatusReconciler{
-		Client:      c,
-		Clientset:   clientset,
-		ConfigCache: controllerconfig.NewConfigCache(0),
-		Log:         testr.New(t),
-		Scheme:      scheme,
+	return &reconciler{
+		Client: c,
+		Kind:   kind{},
+		Config: policystatus.ConfigSource{Clientset: clientset, Cache: controllerconfig.NewConfigCache(0)},
 	}
 }
 
-func runReconcile(t *testing.T, r *StatusReconciler, namespace, name string) {
+func runReconcile(t *testing.T, r *reconciler, namespace, name string) {
 	t.Helper()
 	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: namespace, Name: name}}); err != nil {
 		t.Fatalf("Reconcile(%s/%s): %v", namespace, name, err)
 	}
 }
 
-func getPolicy(t *testing.T, r *StatusReconciler, namespace, name string) *v1beta1.AutoscalerPolicy {
+func getPolicy(t *testing.T, r *reconciler, namespace, name string) *v1beta1.AutoscalerPolicy {
 	t.Helper()
 	policy := &v1beta1.AutoscalerPolicy{}
 	if err := r.Get(context.Background(), types.NamespacedName{Namespace: namespace, Name: name}, policy); err != nil {
@@ -272,23 +244,8 @@ func TestReconcileConfigFetchErrorIsTransient(t *testing.T) {
 	g.Expect(got.Status.Conditions).To(gomega.BeEmpty())
 }
 
-func TestReconcileSkipsUnchangedStatus(t *testing.T) {
-	g := gomega.NewWithT(t)
-	r := newReconciler(t, testProviderConfig,
-		mkPolicy("ns1", "req-activity", 1, kedaSpec("llm-metrics", nil)),
-		mkISVC("ns1", "consumer-a", "req-activity", "", ""))
-
-	runReconcile(t, r, "ns1", "req-activity")
-	first := getPolicy(t, r, "ns1", "req-activity")
-
-	runReconcile(t, r, "ns1", "req-activity")
-	second := getPolicy(t, r, "ns1", "req-activity")
-
-	g.Expect(second.ResourceVersion).To(gomega.Equal(first.ResourceVersion))
-}
-
 // Provider bindings are consulted from the operator config, which emits no
-// watch event toward this controller — the reconcile must self-schedule a
+// watch event toward this controller. The reconcile must self-schedule a
 // re-check once per config cache TTL, for both binding outcomes, so Ready
 // converges after a binding edit without a policy write.
 func TestReconcileRequeuesAfterConsultingBindings(t *testing.T) {
@@ -304,7 +261,7 @@ func TestReconcileRequeuesAfterConsultingBindings(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := gomega.NewWithT(t)
 			r := newReconciler(t, testProviderConfig, tc.policy)
-			r.ConfigCache = controllerconfig.NewConfigCache(ttl)
+			r.Config.Cache = controllerconfig.NewConfigCache(ttl)
 
 			result, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "req-activity"}})
 			g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -331,16 +288,8 @@ func TestReconcileSkipsBindingRequeue(t *testing.T) {
 
 	// Positive TTL, policy with no provider references.
 	r = newReconciler(t, testProviderConfig, mkPolicy("ns1", "cpu-policy", 1, v1beta1.AutoscalerPolicySpec{Class: v1beta1.AutoscalerHPA}))
-	r.ConfigCache = controllerconfig.NewConfigCache(30 * time.Second)
+	r.Config.Cache = controllerconfig.NewConfigCache(30 * time.Second)
 	result, err = r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "cpu-policy"}})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	g.Expect(result).To(gomega.Equal(ctrl.Result{}))
-}
-
-func TestReconcileMissingPolicyIsNoop(t *testing.T) {
-	g := gomega.NewWithT(t)
-	r := newReconciler(t, testProviderConfig)
-	result, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "gone"}})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(result).To(gomega.Equal(ctrl.Result{}))
 }
@@ -366,17 +315,13 @@ func TestAttachDetachFlipsInUse(t *testing.T) {
 	g.Expect(inUse.Reason).To(gomega.Equal(v1beta1.AutoscalerPolicyReasonNoConsumers))
 }
 
-func TestPoliciesReferencedBy(t *testing.T) {
+func TestPolicyRefIndexer(t *testing.T) {
 	g := gomega.NewWithT(t)
-	r := newReconciler(t, testProviderConfig)
 
-	// Distinct names only: engine+decoder share a policy, router names another.
-	reqs := r.policiesReferencedBy(context.Background(), mkISVC("ns1", "consumer-a", "policy-a", "policy-a", "policy-b"))
-	g.Expect(reqs).To(gomega.ConsistOf(
-		ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "policy-a"}},
-		ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "policy-b"}},
-	))
-
-	g.Expect(r.policiesReferencedBy(context.Background(), mkISVC("ns1", "no-refs", "", "", ""))).To(gomega.BeEmpty())
-	g.Expect(r.policiesReferencedBy(context.Background(), &corev1.Pod{})).To(gomega.BeNil())
+	// Distinct names only: engine and decoder share a policy, the router
+	// names another.
+	g.Expect(PolicyRefIndexer(mkISVC("ns1", "consumer-a", "policy-a", "policy-a", "policy-b"))).
+		To(gomega.Equal([]string{"policy-a", "policy-b"}))
+	g.Expect(PolicyRefIndexer(mkISVC("ns1", "no-refs", "", "", ""))).To(gomega.BeNil())
+	g.Expect(PolicyRefIndexer(&corev1.Pod{})).To(gomega.BeNil())
 }

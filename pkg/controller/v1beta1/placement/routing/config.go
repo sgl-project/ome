@@ -3,6 +3,8 @@ package routing
 import (
 	"fmt"
 	"time"
+
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
 // Config holds the operator-supplied, config-driven inputs for the routing
@@ -22,8 +24,8 @@ type Config struct {
 	// installation cannot accidentally run an unbounded observer.
 	Observer ObserverConfig
 
-	// Probe configures the active end-to-end health probe. Zero-valued (no path)
-	// means no probing, and the health gate stays readyReplicas > 0.
+	// Probe configures end-to-end health checks. With no path, health depends
+	// only on the selected capacity mode.
 	Probe ProbeConfig
 
 	// Capacity configures endpoint-reported capacity. Zero-valued (no path)
@@ -113,7 +115,7 @@ type ObserverConfig struct {
 	// MinPeriod is the shortest permitted probe or capacity polling period.
 	MinPeriod time.Duration
 
-	// MaxSamples caps the effective per-home capacity history window.
+	// MaxSamples caps the effective per-cluster capacity history window.
 	MaxSamples int
 }
 
@@ -161,9 +163,9 @@ func (c PublisherConfig) IsEnabled() bool {
 	return c.Name != ""
 }
 
-// ProbeConfig configures the active end-to-end probe of each home's
+// ProbeConfig configures the active end-to-end probe of each cluster's
 // externally-addressable endpoint — the URL a client uses, so the verdict
-// covers the whole serving path rather than pod readiness inside the home.
+// covers the whole serving path rather than pod readiness inside the cluster.
 //
 // Every field is operator-supplied with no in-code default. An unconfigured
 // probe does not run, rather than silently probing a guessed path: a guess is a
@@ -176,9 +178,9 @@ type ProbeConfig struct {
 	// probing off entirely — it is the enable switch, not merely a default.
 	//
 	// Depth is the whole decision here: a liveness path proves a process is up,
-	// while an inference path proves the home can actually serve, and only the
+	// while an inference path proves the cluster can actually serve, and only the
 	// second catches the failure this feature exists for. The trade is cost —
-	// on a disaggregated home a synthetic inference request occupies real
+	// on a disaggregated cluster a synthetic inference request occupies real
 	// serving capacity — so the choice is the operator's, per install.
 	Path string
 
@@ -197,29 +199,29 @@ type ProbeConfig struct {
 	// The two lists are explicit and separate because the interesting codes are
 	// the ones that belong to neither: 429 means alive and overloaded, so gating
 	// it removes capacity exactly when the fleet is hot, and 401/403 means the
-	// prober's own credentials are wrong, so failing the home hides a
+	// prober's own credentials are wrong, so failing the cluster hides a
 	// control-plane defect and takes traffic down with it.
 	GateStatuses []int
 
-	// Period is how often each home is probed.
+	// Period is how often each cluster is probed.
 	Period time.Duration
 
 	// Timeout bounds a single probe request. A timeout counts as a failure.
 	Timeout time.Duration
 
-	// FailureThreshold is the number of consecutive failures before a home is
+	// FailureThreshold is the number of consecutive failures before a cluster is
 	// gated. A single failed probe must never move a large traffic share, and
 	// the reprogramming churn from flapping would itself be the outage.
 	FailureThreshold int
 
-	// SuccessThreshold is the number of consecutive passes before a gated home
+	// SuccessThreshold is the number of consecutive passes before a gated cluster
 	// is restored.
 	SuccessThreshold int
 
-	// AllFailedPolicy controls what happens after every home has independently
+	// AllFailedPolicy controls what happens after every cluster has independently
 	// crossed the probe failure threshold. PreserveTraffic ignores only the probe
 	// gates and recomputes from ready capacity; Drain preserves the all-zero result
-	// so the publisher removes every route arm. It has no effect while any home is
+	// so the publisher removes every route arm. It has no effect while any cluster is
 	// passing or has no conclusive verdict.
 	AllFailedPolicy AllFailedPolicy
 }
@@ -290,7 +292,7 @@ func (p ProbeConfig) Validate() error {
 		return fmt.Errorf("routing.probe.timeout must be positive when routing.probe.path is set")
 	}
 	if p.Timeout >= p.Period {
-		// Otherwise a slow home's probes overlap and pile up, and the effective
+		// Otherwise a slow cluster's probes overlap and pile up, and the effective
 		// probe rate silently stops matching the configured period.
 		return fmt.Errorf("routing.probe.timeout (%s) must be shorter than routing.probe.period (%s)",
 			p.Timeout, p.Period)
@@ -316,15 +318,15 @@ type Verdict int
 const (
 	// VerdictInconclusive leaves the gate and the failure count untouched. It
 	// covers a status in neither list — 429 (alive but overloaded), 401/403 (the
-	// prober's credentials, not the home's health) — and the probe that could
-	// not run at all. That last case is uniform across homes, so counting it as
+	// prober's credentials, not the cluster's health) — and the probe that could
+	// not run at all. That last case is uniform across clusters, so counting it as
 	// failure would zero the whole fleet at once.
 	VerdictInconclusive Verdict = iota
 
-	// VerdictPass counts toward restoring a gated home.
+	// VerdictPass counts toward restoring a gated cluster.
 	VerdictPass
 
-	// VerdictFail counts toward gating a home.
+	// VerdictFail counts toward gating a cluster.
 	VerdictFail
 )
 
@@ -343,8 +345,7 @@ func (p ProbeConfig) ClassifyStatus(code int) Verdict {
 	return VerdictInconclusive
 }
 
-// CapacityConfig configures polling a home for what it can currently serve,
-// applied as a CEILING on the control-plane plan.
+// CapacityConfig configures polling a cluster for its replica ceiling or weight.
 //
 // Like the probe, every field is operator-supplied with no in-code default, and
 // Path is the enable switch: without a target there is nothing to ask and the
@@ -352,14 +353,18 @@ func (p ProbeConfig) ClassifyStatus(code int) Verdict {
 //
 // +kubebuilder:object:generate=false
 type CapacityConfig struct {
-	// Path is the capacity endpoint appended to each home's endpoint. Empty
+	// Mode selects whether reports cap replica counts or replace them. A cluster
+	// without a usable report keeps its replica count in either mode.
+	Mode v1beta1.RoutingCapacityMode
+
+	// Path is the capacity endpoint appended to each cluster's endpoint. Empty
 	// turns the input off.
 	Path string
 
 	// Method is the HTTP method for the capacity request.
 	Method string
 
-	// Format names the response shape the home answers with. Other formats come
+	// Format names the response shape the cluster answers with. Other formats come
 	// from optional packages compiled into the binary; naming one this build
 	// does not carry is a startup error, not a silent fallback.
 	Format CapacityFormat
@@ -370,42 +375,41 @@ type CapacityConfig struct {
 	// without leaving a field behind that nothing reads.
 	Options map[string]string
 
-	// Period is how often each home is polled.
+	// Period is how often each cluster is polled.
 	Period time.Duration
 
 	// Timeout bounds a single capacity request.
 	Timeout time.Duration
 
-	// Samples is how many recent readings the applied ceiling is derived from.
+	// Samples is how many recent readings the accepted value is derived from.
 	//
-	// The control plane polls one address per home, so behind a load balancer
+	// The control plane polls one address per cluster, so behind a load balancer
 	// successive polls may sample different reporters. Keeping only the latest
 	// is neither min nor max but any-responder: a lucky high reading raises a
 	// ceiling that an earlier reading correctly lowered.
 	//
 	// The window smooths; it does not protect. A longer window delays recovery,
 	// because a low reading has to age out before the ceiling rises again.
-	// Outlier protection is Quorum's job.
+	// Outlier protection is Quorum's job for a ceiling, and the lower median's in
+	// Reported mode.
 	Samples int
 
 	// Quorum is how many readings in the window must corroborate a lower value
-	// before it is applied: the ceiling is the Quorum-th smallest reading, not
+	// before it is applied: the accepted value is the Quorum-th smallest reading, not
 	// the smallest.
 	//
-	// It tolerates Quorum-1 misbehaving reporters. That is the difference
-	// between believing a pessimist and believing a bug: one router that has
-	// lost its watch reports a near-zero figure, and a strict minimum would take
-	// it at face value and hold the home there for the whole window -- with a
-	// round-robin balancer and a window at least as long as the replica count,
-	// permanently. Requiring corroboration means a reporter can still always
-	// lower the ceiling; it just cannot do so alone.
+	// These are observations, not distinct reporters. One router can supply
+	// repeated readings, so the window does not establish reporter consensus.
 	//
 	// It is also the lag before a genuine drop is believed: Quorum polls.
+	//
+	// In Reported mode Quorum is only the minimum window size: the accepted
+	// value is the lower median of the window, because a report that is too high
+	// misroutes traffic as surely as one that is too low.
 	Quorum int
 
 	// MaxAge is the exclusive upper age bound for a report's observedAt stamp.
-	// At or beyond it the poller falls open to the plan, so a home whose reporter
-	// froze releases its ceiling instead of holding a stale one forever.
+	// Expired samples cannot constrain Ceiling mode or supply Reported weight.
 	MaxAge time.Duration
 }
 
@@ -422,6 +426,12 @@ func (c CapacityConfig) resolvedFormat() CapacityFormat {
 // Validate rejects a partially-configured capacity source, for the same reason
 // the probe does: half-configured reads as enabled while behaving arbitrarily.
 func (c CapacityConfig) Validate() error {
+	if c.Mode != "" && c.Mode != v1beta1.RoutingCapacityModeCeiling && c.Mode != v1beta1.RoutingCapacityModeReported {
+		return fmt.Errorf("routing.capacity.mode %q must be Ceiling or Reported", c.Mode)
+	}
+	if c.Mode == v1beta1.RoutingCapacityModeReported && !c.IsEnabled() {
+		return fmt.Errorf("routing.capacity.mode Reported requires capacity polling")
+	}
 	if !c.IsEnabled() {
 		return nil
 	}
@@ -451,7 +461,7 @@ func (c CapacityConfig) Validate() error {
 	}
 	if c.MaxAge <= 0 {
 		// Without a bound the staleness guard cannot fire, and a frozen reporter
-		// would pin a home's ceiling indefinitely.
+		// would pin a cluster's ceiling indefinitely.
 		return fmt.Errorf("routing.capacity.maxAge must be positive when routing.capacity.path is set")
 	}
 	if c.Samples <= 0 {

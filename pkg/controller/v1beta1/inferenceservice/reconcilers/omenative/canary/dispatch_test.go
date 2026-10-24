@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,27 +24,30 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/rollout"
 )
 
-// mustSecondaryReady calls secondaryCapacityReady and fails the test on a read
-// error, so gate assertions stay one-liners.
+// mustSecondaryReady runs secondaryCapacityReady over the replicas reads
+// holds, each seeded with the per-Instance rows the gate counts: one Ready
+// row per Instance of each revision in perRev, the first readyPerRev of them
+// with their pod in rotation. It fails the test on a read error, so gate
+// assertions stay one-liners.
 func mustSecondaryReady(t *testing.T, ctx context.Context, reads client.Reader, isvc *v1beta1.InferenceService, perRev, readyPerRev map[v1beta1.ComponentType]map[string]int32, primary v1beta1.ComponentType) bool {
 	t.Helper()
-	observedPods := make(map[v1beta1.ComponentType][]*corev1.Pod, len(readyPerRev))
-	for component, revisions := range readyPerRev {
-		for hash, count := range revisions {
-			for index := int32(0); index < count; index++ {
-				name := fmt.Sprintf("%s-%s-%s-%d", isvc.Name, component, hash, index)
-				pod := canaryRunnerPod(isvc.Namespace, isvc.Name, string(component), hash, name, v1beta1.RunnerNameDefault, "0")
-				pod.Labels[query.LabelInstanceIdx] = strconv.Itoa(int(index))
-				observedPods[component] = append(observedPods[component], pod)
-			}
-		}
+	list := &v1beta1.InferenceReplicaList{}
+	if err := reads.List(ctx, list); err != nil {
+		t.Fatalf("list replicas: %v", err)
 	}
-	ok, fresh, _, err := secondaryCapacityReady(ctx, reads, isvc, perRev, readyPerRev, observedPods, primary, rollout.CanaryGroup(isvc, rollout.Policies{}))
+	objects := make([]runtime.Object, 0, len(list.Items))
+	for i := range list.Items {
+		r := &list.Items[i]
+		objects = append(objects, withInstanceRows(r, perRev[r.Spec.Component], readyPerRev[r.Spec.Component]))
+	}
+	seeded := fake.NewClientBuilder().WithScheme(canaryScheme(t)).WithRuntimeObjects(objects...).Build()
+	ok, fresh, _, _, err := secondaryCapacityReady(ctx, seeded, isvc, perRev, nil, primary, rollout.CanaryGroup(isvc, rollout.Policies{}), time.Unix(1000, 0))
 	if err != nil {
 		t.Fatalf("secondaryCapacityReady error: %v", err)
 	}
@@ -53,6 +57,155 @@ func mustSecondaryReady(t *testing.T, ctx context.Context, reads client.Reader, 
 	return ok
 }
 
+// withInstanceRows returns a copy of the replica carrying one Ready row per
+// Instance of each revision in total, the first serving[hash] of them with
+// their pod in rotation and the rest with it out of rotation.
+func withInstanceRows(r *v1beta1.InferenceReplica, total, serving map[string]int32) *v1beta1.InferenceReplica {
+	out := r.DeepCopy()
+	out.ResourceVersion = ""
+	out.Status.InstanceStatuses = nil
+	hashes := make([]string, 0, len(total))
+	for hash := range total {
+		hashes = append(hashes, hash)
+	}
+	slices.Sort(hashes)
+	index := int32(0)
+	for _, hash := range hashes {
+		for i := int32(0); i < total[hash]; i++ {
+			inRotation := int32(0)
+			if i < serving[hash] {
+				inRotation = 1
+			}
+			out.Status.InstanceStatuses = append(out.Status.InstanceStatuses, v1beta1.OMENativeInstanceStatus{
+				Index:             index,
+				Phase:             v1beta1.OMENativeInstanceReady,
+				RunningRevision:   out.Name + "-" + hash,
+				PodCount:          1,
+				ServingPodCount:   inRotation,
+				AvailablePodCount: inRotation,
+			})
+			index++
+		}
+	}
+	return out
+}
+
+// syncInstanceRows publishes on each Component's replica the per-Instance
+// rows the replica controller would publish for the pods the fake client
+// holds: one row per Instance index, on the revision of its serving target
+// pod (else its first serving pod, else its first pod), its pods counted and
+// the ones Ready with the serving gate and not terminating in rotation. A
+// row the fixture already holds keeps its phase, anchors and record and
+// takes the revision and the counts; an Instance whose pods are all gone
+// keeps its row at zero pods. Fixtures that move pods between passes call it
+// before the next dispatch. A Component without a replica is left alone.
+func syncInstanceRows(t *testing.T, c client.Client, isvc *v1beta1.InferenceService, components ...v1beta1.ComponentType) {
+	t.Helper()
+	ctx := context.Background()
+	for _, comp := range components {
+		ir := &v1beta1.InferenceReplica{}
+		if err := c.Get(ctx, irprojector.RoleReplicaKey(isvc, comp), ir); err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			t.Fatal(err)
+		}
+		pods := &corev1.PodList{}
+		if err := c.List(ctx, pods, client.InNamespace(isvc.Namespace), client.MatchingLabels{
+			constants.InferenceServicePodLabelKey: irprojector.RoleReplicaPrefix(isvc, comp),
+			constants.OMEComponentLabel:           string(comp),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		ir.Status.InstanceStatuses = instanceRowsFromPods(ir, pods.Items)
+		// A fake that registers the status subresource takes the rows there;
+		// one that does not takes them on the object.
+		if err := c.Status().Update(ctx, ir); err != nil {
+			if err := c.Update(ctx, ir); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+// instanceRowsFromPods is the replica's rows for its pods: the fixture's own
+// rows refreshed from the pods at their index, then a Ready row for every
+// index the fixture has no row for, in index order.
+func instanceRowsFromPods(ir *v1beta1.InferenceReplica, pods []corev1.Pod) []v1beta1.OMENativeInstanceStatus {
+	target := query.RevisionFromName(ir.Status.UpdateRevision).Hash()
+	byIndex := map[int32][]*corev1.Pod{}
+	for i := range pods {
+		pod := &pods[i]
+		index, ok := query.InstanceIdxFromLabels(pod)
+		if !ok {
+			continue
+		}
+		byIndex[index] = append(byIndex[index], pod)
+	}
+	seen := map[int32]bool{}
+	rows := make([]v1beta1.OMENativeInstanceStatus, 0, len(ir.Status.InstanceStatuses)+len(byIndex))
+	for _, row := range ir.Status.InstanceStatuses {
+		seen[row.Index] = true
+		if group := byIndex[row.Index]; len(group) > 0 {
+			row.RunningRevision = ir.Name + "-" + instanceRevision(group, target)
+		}
+		row.PodCount, row.ServingPodCount = countInstancePods(byIndex[row.Index])
+		row.AvailablePodCount = row.ServingPodCount
+		rows = append(rows, row)
+	}
+	for index, group := range byIndex {
+		if seen[index] {
+			continue
+		}
+		total, serving := countInstancePods(group)
+		rows = append(rows, v1beta1.OMENativeInstanceStatus{
+			Index:             index,
+			Phase:             v1beta1.OMENativeInstanceReady,
+			RunningRevision:   ir.Name + "-" + instanceRevision(group, target),
+			PodCount:          total,
+			ServingPodCount:   serving,
+			AvailablePodCount: serving,
+		})
+	}
+	slices.SortFunc(rows, func(a, b v1beta1.OMENativeInstanceStatus) int { return int(a.Index - b.Index) })
+	return rows
+}
+
+// instanceRevision is the revision hash an Instance's pods run: its serving
+// pod on the target revision, else its first serving pod, else its first
+// pod, by name.
+func instanceRevision(group []*corev1.Pod, target string) string {
+	slices.SortFunc(group, func(a, b *corev1.Pod) int { return strings.Compare(a.Name, b.Name) })
+	revision, serving := "", ""
+	for _, pod := range group {
+		hash := pod.Labels[query.LabelRevisionHash]
+		if revision == "" {
+			revision = hash
+		}
+		if !coordination.PodReadyAndServing(pod) {
+			continue
+		}
+		if serving == "" || hash == target {
+			serving = hash
+		}
+	}
+	if serving != "" {
+		return serving
+	}
+	return revision
+}
+
+// countInstancePods counts an Instance's pods and the ones in rotation.
+func countInstancePods(pods []*corev1.Pod) (total, serving int32) {
+	for _, pod := range pods {
+		total++
+		if coordination.PodReadyAndServing(pod) {
+			serving++
+		}
+	}
+	return total, serving
+}
+
 // ir builds an InferenceReplica whose UpdateRevision names the per-Component
 // canary target observed by Dispatch.
 func ir(ns, isvc string, comp v1beta1.ComponentType, hash string) *v1beta1.InferenceReplica {
@@ -60,6 +213,7 @@ func ir(ns, isvc string, comp v1beta1.ComponentType, hash string) *v1beta1.Infer
 	r := &v1beta1.InferenceReplica{ObjectMeta: metav1.ObjectMeta{
 		Namespace: ns, Name: name, UID: canaryIRUID(name),
 	}}
+	r.Spec.Component = comp
 	r.Spec.Runners = []v1beta1.Runner{{Name: v1beta1.RunnerNameDefault, Size: 1}}
 	r.Status.UpdateRevision = isvc + "-" + string(comp) + "-" + hash
 	return r
@@ -92,7 +246,7 @@ func TestSecondaryCapacityReady(t *testing.T) {
 
 	// PD: router primary + engine secondary; step 0 newCount = 50% of 4 = 2. The
 	// canary group couples [router, engine]. Revision hashes are PER-Component:
-	// router=rtr, engine=eng — distinct, as in production.
+	// router=rtr, engine=eng — distinct, as in a deployed service.
 	pdPlan := &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{{
 		Components: []v1beta1.ComponentType{v1beta1.RouterComponent, v1beta1.EngineComponent},
 		Canary:     &v1beta1.GroupCanary{Steps: steps},
@@ -177,7 +331,7 @@ func TestSecondaryCapacityReadyRequiresAuthoritativeIR(t *testing.T) {
 				objects = append(objects, tc.ir)
 			}
 			reads := fake.NewClientBuilder().WithScheme(canaryScheme(t)).WithRuntimeObjects(objects...).Build()
-			ready, fresh, _, err := secondaryCapacityReady(context.Background(), reads, isvc, perRev, perRev, nil, v1beta1.RouterComponent, rollout.CanaryGroup(isvc, rollout.Policies{}))
+			ready, fresh, _, _, err := secondaryCapacityReady(context.Background(), reads, isvc, perRev, nil, v1beta1.RouterComponent, rollout.CanaryGroup(isvc, rollout.Policies{}), time.Unix(1000, 0))
 			if err != nil {
 				t.Fatalf("secondaryCapacityReady: %v", err)
 			}
@@ -378,124 +532,59 @@ func canaryRoutingSelectorMatches(selector, podLabels map[string]string) bool {
 	return labels.SelectorFromSet(selector).Matches(labels.Set(podLabels))
 }
 
-func TestReadyTargetInstanceCount(t *testing.T) {
-	gang := observedCanaryRevisions{
-		targetHash:  "target",
-		runners:     []v1beta1.Runner{{Name: v1beta1.RunnerNameLeader, Size: 1}, {Name: v1beta1.RunnerNameWorker, Size: 1}},
-		fromIR:      true,
-		statusFresh: true,
-	}
-	makePod := func(index int, runner v1beta1.RunnerName, ordinal, suffix string) *corev1.Pod {
-		pod := canaryRunnerPod("default", "svc", "engine", "target", fmt.Sprintf("pod-%d-%s", index, suffix), runner, ordinal)
-		pod.Labels[query.LabelInstanceIdx] = strconv.Itoa(index)
-		return pod
-	}
-	assertCount := func(t *testing.T, observation observedCanaryRevisions, pods []*corev1.Pod, want int32) {
-		t.Helper()
-		got := observation.readyTargetInstanceCount(pods)
-		if got == nil || *got != want {
-			t.Fatalf("ready target Instances = %v, want %d", got, want)
+// The capacity a revision has is its serving Instances as the replica
+// reports them: a gang counts once and only whole, a pod out of rotation
+// does not count, rows on another revision are not the target's capacity,
+// and under a readiness window an Instance counts only once the replica
+// also reports it available.
+func TestServingTargetInstances(t *testing.T) {
+	const stable, target = "svc-engine-stable", "svc-engine-target"
+	row := func(index int32, revision string, pods, serving, available int32) v1beta1.OMENativeInstanceStatus {
+		return v1beta1.OMENativeInstanceStatus{
+			Index: index, Phase: v1beta1.OMENativeInstanceReady, RunningRevision: revision,
+			PodCount: pods, ServingPodCount: serving, AvailablePodCount: available,
 		}
 	}
-
-	t.Run("one ready pod per gang is incomplete", func(t *testing.T) {
-		pods := make([]*corev1.Pod, 0, 8)
-		for index := 0; index < 8; index++ {
-			pods = append(pods, makePod(index, v1beta1.RunnerNameLeader, "0", "leader"))
-		}
-		assertCount(t, gang, pods, 0)
-	})
-	t.Run("complete gang", func(t *testing.T) {
-		assertCount(t, gang, []*corev1.Pod{
-			makePod(0, v1beta1.RunnerNameLeader, "0", "leader"),
-			makePod(0, v1beta1.RunnerNameWorker, "0", "worker"),
-		}, 1)
-	})
-	t.Run("missing runner", func(t *testing.T) {
-		assertCount(t, gang, []*corev1.Pod{makePod(0, v1beta1.RunnerNameLeader, "0", "leader")}, 0)
-	})
-	t.Run("duplicate runner ordinal", func(t *testing.T) {
-		workers := observedCanaryRevisions{
-			targetHash:  "target",
-			runners:     []v1beta1.Runner{{Name: v1beta1.RunnerNameWorker, Size: 2}},
-			fromIR:      true,
-			statusFresh: true,
-		}
-		assertCount(t, workers, []*corev1.Pod{
-			makePod(0, v1beta1.RunnerNameWorker, "0", "worker-a"),
-			makePod(0, v1beta1.RunnerNameWorker, "0", "worker-b"),
-		}, 0)
-	})
-	t.Run("legacy pods share ordinal zero", func(t *testing.T) {
-		workers := observedCanaryRevisions{
-			targetHash: "target", runners: []v1beta1.Runner{{Name: v1beta1.RunnerNameWorker, Size: 2}}, fromIR: true,
-		}
-		first := makePod(0, v1beta1.RunnerNameWorker, "0", "worker-a")
-		second := makePod(0, v1beta1.RunnerNameWorker, "0", "worker-b")
-		delete(first.Labels, query.LabelPodOrdinal)
-		delete(second.Labels, query.LabelPodOrdinal)
-		assertCount(t, workers, []*corev1.Pod{first, second}, 0)
-	})
-	t.Run("malformed ordinal", func(t *testing.T) {
-		one := observedCanaryRevisions{
-			targetHash: "target", runners: []v1beta1.Runner{{Name: v1beta1.RunnerNameDefault, Size: 1}}, fromIR: true,
-		}
-		assertCount(t, one, []*corev1.Pod{makePod(0, v1beta1.RunnerNameDefault, "bad", "default")}, 0)
-	})
-	t.Run("numeric ordinals outside runner slots", func(t *testing.T) {
-		workers := observedCanaryRevisions{
-			targetHash: "target", runners: []v1beta1.Runner{{Name: v1beta1.RunnerNameWorker, Size: 2}}, fromIR: true,
-		}
-		assertCount(t, workers, []*corev1.Pod{
-			makePod(0, v1beta1.RunnerNameWorker, "2", "worker-a"),
-			makePod(0, v1beta1.RunnerNameWorker, "3", "worker-b"),
-		}, 0)
-		one := observedCanaryRevisions{
-			targetHash: "target", runners: []v1beta1.Runner{{Name: v1beta1.RunnerNameDefault, Size: 1}}, fromIR: true,
-		}
-		assertCount(t, one, []*corev1.Pod{makePod(0, v1beta1.RunnerNameDefault, "2", "default")}, 0)
-	})
-	t.Run("valid runner slot boundaries", func(t *testing.T) {
-		workers := observedCanaryRevisions{
-			targetHash: "target", runners: []v1beta1.Runner{{Name: v1beta1.RunnerNameWorker, Size: 2}}, fromIR: true,
-		}
-		assertCount(t, workers, []*corev1.Pod{
-			makePod(0, v1beta1.RunnerNameWorker, "0", "worker-a"),
-			makePod(0, v1beta1.RunnerNameWorker, "1", "worker-b"),
-		}, 1)
-		one := observedCanaryRevisions{
-			targetHash: "target", runners: []v1beta1.Runner{{Name: v1beta1.RunnerNameDefault, Size: 1}}, fromIR: true,
-		}
-		assertCount(t, one, []*corev1.Pod{makePod(0, v1beta1.RunnerNameDefault, "1", "default")}, 1)
-	})
-	t.Run("ineligible pods", func(t *testing.T) {
-		one := observedCanaryRevisions{
-			targetHash:  "target",
-			runners:     []v1beta1.Runner{{Name: v1beta1.RunnerNameDefault, Size: 1}},
-			fromIR:      true,
-			statusFresh: true,
-		}
-		valid := makePod(0, v1beta1.RunnerNameDefault, "0", "valid")
-		wrongRevision := makePod(1, v1beta1.RunnerNameDefault, "0", "wrong-revision")
-		wrongRevision.Labels[query.LabelRevisionHash] = "other"
-		missingIndex := makePod(2, v1beta1.RunnerNameDefault, "0", "missing-index")
-		delete(missingIndex.Labels, query.LabelInstanceIdx)
-		terminating := makePod(3, v1beta1.RunnerNameDefault, "0", "terminating")
-		deletedAt := metav1.Now()
-		terminating.DeletionTimestamp = &deletedAt
-		notReady := makePod(4, v1beta1.RunnerNameDefault, "0", "not-ready")
-		notReady.Status.Conditions[0].Status = corev1.ConditionFalse
-		assertCount(t, one, []*corev1.Pod{valid, wrongRevision, missingIndex, terminating, notReady}, 1)
-	})
-	t.Run("default single pod", func(t *testing.T) {
-		one := observedCanaryRevisions{
-			targetHash:  "target",
-			runners:     []v1beta1.Runner{{Name: v1beta1.RunnerNameDefault, Size: 1}},
-			fromIR:      true,
-			statusFresh: true,
-		}
-		assertCount(t, one, []*corev1.Pod{makePod(0, v1beta1.RunnerNameDefault, "0", "default")}, 1)
-	})
+	gang := []v1beta1.Runner{{Name: v1beta1.RunnerNameLeader, Size: 1}, {Name: v1beta1.RunnerNameWorker, Size: 3}}
+	single := []v1beta1.Runner{{Name: v1beta1.RunnerNameDefault, Size: 1}}
+	leadersOnly := make([]v1beta1.OMENativeInstanceStatus, 0, 8)
+	for i := int32(0); i < 8; i++ {
+		leadersOnly = append(leadersOnly, row(i, target, 1, 1, 1))
+	}
+	for _, tc := range []struct {
+		name    string
+		runners []v1beta1.Runner
+		window  int32
+		rows    []v1beta1.OMENativeInstanceStatus
+		want    int32
+	}{
+		{"a whole serving gang counts once", gang, 0, []v1beta1.OMENativeInstanceStatus{row(0, target, 4, 4, 4)}, 1},
+		{"a gang with a pod out of rotation does not count", gang, 0, []v1beta1.OMENativeInstanceStatus{row(0, target, 4, 3, 3)}, 0},
+		{"a partial gang does not count", gang, 0, []v1beta1.OMENativeInstanceStatus{row(0, target, 2, 2, 2)}, 0},
+		{"eight serving leaders are no gang", gang, 0, leadersOnly, 0},
+		{"two whole gangs count twice", gang, 0, []v1beta1.OMENativeInstanceStatus{row(0, target, 4, 4, 4), row(1, target, 4, 4, 4), row(2, stable, 4, 4, 4)}, 2},
+		{"stable rows are not canary capacity", single, 0, []v1beta1.OMENativeInstanceStatus{row(0, stable, 1, 1, 1), row(1, target, 1, 1, 1)}, 1},
+		{"a surge pod beside the serving pod counts once", single, 0, []v1beta1.OMENativeInstanceStatus{row(0, target, 2, 1, 1)}, 1},
+		{"a single pod out of rotation does not count", single, 0, []v1beta1.OMENativeInstanceStatus{row(0, target, 1, 0, 0)}, 0},
+		{"an undeclared shape needs every pod serving", nil, 0, []v1beta1.OMENativeInstanceStatus{row(0, target, 2, 1, 1)}, 0},
+		{"an undeclared shape with every pod serving", nil, 0, []v1beta1.OMENativeInstanceStatus{row(0, target, 2, 2, 2)}, 1},
+		{"no rows is no capacity", single, 0, nil, 0},
+		{"no window reads rotation alone", single, 0, []v1beta1.OMENativeInstanceStatus{row(0, target, 1, 1, 0)}, 1},
+		{"under a window a serving pod inside it does not count", single, 30, []v1beta1.OMENativeInstanceStatus{row(0, target, 1, 1, 0)}, 0},
+		{"under a window an available pod counts", single, 30, []v1beta1.OMENativeInstanceStatus{row(0, target, 1, 1, 1)}, 1},
+		{"under a window a gang waits for its last member", gang, 30, []v1beta1.OMENativeInstanceStatus{row(0, target, 4, 4, 3)}, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			observation := observedCanaryRevisions{targetHash: "target", runners: tc.runners, minReadySeconds: tc.window, rows: tc.rows, fromIR: true, statusFresh: true}
+			got := observation.servingTargetInstances()
+			if got == nil || *got != tc.want {
+				t.Fatalf("serving target Instances = %v, want %d", got, tc.want)
+			}
+		})
+	}
+	if got := (observedCanaryRevisions{}).servingTargetInstances(); got != nil {
+		t.Fatalf("with no replica observed the pod count stands in, got %d", *got)
+	}
 }
 
 func TestDispatch_HoldsUntilIRIdentifiesCanaryTarget(t *testing.T) {
@@ -529,6 +618,7 @@ func TestDispatch_HoldsUntilIRIdentifiesCanaryTarget(t *testing.T) {
 	ctx := context.Background()
 	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}
 
+	syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 	if _, err := Dispatch(ctx, deps); err != nil {
 		t.Fatalf("Dispatch with lagging IR status: %v", err)
 	}
@@ -612,6 +702,7 @@ func TestDispatch_ArmsFromLivePodsWhenCurrentRevisionUnpromoted(t *testing.T) {
 	ctx := context.Background()
 	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}
 
+	syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 	if _, err := Dispatch(ctx, deps); err != nil {
 		t.Fatalf("Dispatch with unpromoted current revision: %v", err)
 	}
@@ -887,6 +978,7 @@ func TestDispatch_RepairsInvertedStableIdentity(t *testing.T) {
 	).Build()
 	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}
 
+	syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 	isvc.Annotations = map[string]string{constants.PausedRolloutAnnotation: "true"}
 	if _, err := Dispatch(context.Background(), deps); err != nil {
 		t.Fatalf("Dispatch while paused: %v", err)
@@ -1009,6 +1101,7 @@ func TestDispatch_ReadyTargetHashResyncsBeforePromotion(t *testing.T) {
 	).Build()
 	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}
 
+	syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 	if _, err := Dispatch(context.Background(), deps); err != nil {
 		t.Fatalf("Dispatch error: %v", err)
 	}
@@ -1159,6 +1252,7 @@ func TestDispatch_ServicesHashAndRollbackWarning(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(canaryScheme(t)).WithRuntimeObjects(objs...).Build()
 	ctx := context.Background()
 
+	syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 	if _, err := Dispatch(ctx, DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}); err != nil {
 		t.Fatalf("Dispatch error: %v", err)
 	}
@@ -1328,6 +1422,7 @@ func TestDispatch_SecondaryOnlyTargetStartsCanary(t *testing.T) {
 	}
 	c := fake.NewClientBuilder().WithScheme(canaryScheme(t)).WithRuntimeObjects(objects...).Build()
 
+	syncInstanceRows(t, c, isvc, v1beta1.RouterComponent, v1beta1.EngineComponent)
 	if _, err := Dispatch(context.Background(), DispatchDeps{
 		Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}); err != nil {
 		t.Fatal(err)
@@ -1676,22 +1771,6 @@ func TestOtherRevision(t *testing.T) {
 	}
 }
 
-func TestComponentReplicas(t *testing.T) {
-	n := 4
-	isvc := &v1beta1.InferenceService{}
-	isvc.Spec.Engine = &v1beta1.EngineSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: &n, MaxReplicas: 6}}
-	if got := componentReplicas(isvc, v1beta1.EngineComponent); got != 4 {
-		t.Fatalf("MinReplicas wins → 4, got %d", got)
-	}
-	isvc.Spec.Engine.MinReplicas = nil
-	if got := componentReplicas(isvc, v1beta1.EngineComponent); got != 6 {
-		t.Fatalf("fallback MaxReplicas → 6, got %d", got)
-	}
-	if got := componentReplicas(isvc, v1beta1.DecoderComponent); got != 0 {
-		t.Fatalf("absent component → 0, got %d", got)
-	}
-}
-
 // missingStableFixture seeds a single-engine canary serving its first step
 // whose stable revision has no retained ControllerRevision: only the canary
 // revision's is present. It returns the working copy and the store.
@@ -1766,6 +1845,52 @@ func TestDispatch_RollbackWithoutStableRevisionParksFailed(t *testing.T) {
 		}
 		if got.Spec.Pacing != nil && got.Spec.Pacing.RollbackToRevision != nil {
 			t.Fatalf("pass %d: no rollback target must be signaled when the stable revision is gone: %+v", pass, got.Spec.Pacing)
+		}
+	}
+}
+
+// A rollback request on a unit with no run open parks on a missing stable
+// revision. A canary of version 2 is half done when the run that pinned it
+// closes and no run opens again, because the plan stopped composing; the
+// inline body still executes, so the unit is dispatched and holds at the
+// run-lost hold. The executor reads the operator's rollback request before
+// that hold: it records version 2 as rejected and starts the revert, and
+// with no retained ControllerRevision for version 1 the same pass parks the
+// unit Failed with the reason StableRevisionMissing, writes no revert target
+// on the replica and hands the request back for removal. The pass after
+// finds the park as it was and hands the request back again.
+func TestDispatch_ARollbackRequestWithNoRunOpenParksOnAMissingStableRevision(t *testing.T) {
+	isvc, c := missingStableFixture(t, "no-run-no-stable")
+	isvc.Status.Rollout = &v1beta1.RolloutStatus{LastRun: &v1beta1.RolloutRunRecord{
+		Outcome:         v1beta1.RolloutRunSuperseded,
+		TargetRevisions: []v1beta1.RolloutRunTarget{{Component: v1beta1.EngineComponent, Revision: "new", StableRevision: "old"}},
+	}}
+	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}
+	isvc.Annotations = map[string]string{constants.RolloutRollbackAnnotation: "true"}
+	for pass := 0; pass < 2; pass++ {
+		out, err := Dispatch(context.Background(), deps)
+		if err != nil {
+			t.Fatalf("Dispatch pass %d: %v", pass, err)
+		}
+		if v1beta1.RolloutRunActive(isvc) {
+			t.Fatalf("pass %d: the dispatch opened a run", pass)
+		}
+		cs := rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent)
+		if cs == nil || cs.RolledBackRevisionHash != "new" || cs.Failed == nil || cs.Failed.Reason != v1beta1.CanaryFailureStableRevisionMissing {
+			t.Fatalf("pass %d: want version 2 recorded as rejected and the park for want of its stable revision, got %+v", pass, cs)
+		}
+		if got := phaseOf(isvc); got != v1beta1.RolloutPhaseFailed {
+			t.Fatalf("pass %d: phase %q, want Failed", pass, got)
+		}
+		got := &v1beta1.InferenceReplica{}
+		if err := c.Get(context.Background(), types.NamespacedName{Namespace: isvc.Namespace, Name: isvc.Name + "-engine"}, got); err != nil {
+			t.Fatal(err)
+		}
+		if got.Spec.Pacing != nil && got.Spec.Pacing.RollbackToRevision != nil {
+			t.Fatalf("pass %d: no revert target must be written for a revision the replica does not retain: %+v", pass, got.Spec.Pacing)
+		}
+		if !slices.Contains(out.Consume, constants.RolloutRollbackAnnotation) {
+			t.Fatalf("pass %d must hand the request back for removal, got %v", pass, out.Consume)
 		}
 	}
 }
@@ -2117,6 +2242,7 @@ func TestDispatch_RunReopenedAfterRollbackArmsTheNewTarget(t *testing.T) {
 	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}
 	dispatch := func(pass string) {
 		t.Helper()
+		syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 		if _, err := Dispatch(ctx, deps); err != nil {
 			t.Fatalf("Dispatch (%s): %v", pass, err)
 		}
@@ -2238,6 +2364,7 @@ func TestDispatch_RunReopenedWhileRollingBackArmsTheNewTarget(t *testing.T) {
 	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}
 	dispatch := func(pass string) {
 		t.Helper()
+		syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 		if _, err := Dispatch(ctx, deps); err != nil {
 			t.Fatalf("Dispatch (%s): %v", pass, err)
 		}
@@ -2312,5 +2439,436 @@ func TestDispatch_RunReopenedWhileRollingBackArmsTheNewTarget(t *testing.T) {
 	dispatch("serve")
 	if cs := status(); cs.RolledBackRevisionHash != "" || cs.CanaryRevisionHash != "v3" || phaseOf(isvc) != v1beta1.RolloutPhasePaused {
 		t.Fatalf("the new target must serve its first step, got %+v phase=%q", cs, phaseOf(isvc))
+	}
+}
+
+// The marker is the record of a park with no stable revision to return to.
+// A status write that drops it leaves the rejected hash and the Failed
+// phase, which the executor reads as a revert in flight; the same pass finds
+// the stable revision still unretained and parks the unit again before
+// anything is flushed. The park survives the write; only its time is new.
+func TestDispatch_MissingStableParkSurvivesADroppedMarker(t *testing.T) {
+	isvc, c := missingStableFixture(t, "park-marker")
+	ctx := context.Background()
+	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, Now: time.Unix(1000, 0), ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}
+	annotate(isvc, constants.RolloutRollbackAnnotation, "true")
+	if _, err := Dispatch(ctx, deps); err != nil {
+		t.Fatalf("Dispatch (park): %v", err)
+	}
+	delete(isvc.Annotations, constants.RolloutRollbackAnnotation)
+	cs := rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent)
+	if cs == nil || cs.Failed == nil || cs.Failed.Reason != v1beta1.CanaryFailureStableRevisionMissing {
+		t.Fatalf("setup: expected a StableRevisionMissing park, got %+v", cs)
+	}
+
+	// The marker leaves the record; the phase and the rejected hash stay.
+	cs.Failed = nil
+	deps.Now = deps.Now.Add(time.Minute)
+	out, err := Dispatch(ctx, deps)
+	if err != nil {
+		t.Fatalf("Dispatch (dropped marker): %v", err)
+	}
+	cs = rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent)
+	if cs == nil || cs.Failed == nil || cs.Failed.Reason != v1beta1.CanaryFailureStableRevisionMissing || cs.Failed.Time == nil || !cs.Failed.Time.Time.Equal(deps.Now) {
+		t.Fatalf("the pass must park the unit again, got %+v", cs)
+	}
+	if cs.RolledBackRevisionHash != "new" {
+		t.Errorf("the rejected hash must stay recorded, got %+v", cs)
+	}
+	if phaseOf(isvc) != v1beta1.RolloutPhaseFailed {
+		t.Errorf("phase %q, want Failed", phaseOf(isvc))
+	}
+	if len(out.Consume) != 0 {
+		t.Errorf("a pass that reads no request takes nothing, got %v", out.Consume)
+	}
+	got := &v1beta1.InferenceReplica{}
+	if err := c.Get(ctx, types.NamespacedName{Namespace: isvc.Namespace, Name: isvc.Name + "-engine"}, got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Spec.Pacing != nil && got.Spec.Pacing.RollbackToRevision != nil {
+		t.Errorf("no rollback target must be signaled when the stable revision is gone: %+v", got.Spec.Pacing)
+	}
+}
+
+// TestWindowWait_RunsFromPodReady: under minReadySeconds the capacity
+// gate's wake is how long until the soonest serving target pod has held
+// Ready for the window, measured from the Ready condition's transition and
+// never from ContainersReady. Containers up at T, the pod Ready at T+60,
+// window 30: nothing waits at T+30 (the pod is not Ready), 30s remain at
+// T+60, 28s at T+62 and nothing at T+90. A gang waits for its last member; a
+// pod that was never Ready raises no wait; no window waits for nothing.
+func TestWindowWait_RunsFromPodReady(t *testing.T) {
+	containersUp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	readyAt := containersUp.Add(60 * time.Second)
+	window := int32(30)
+	single := observedCanaryRevisions{
+		targetHash:      "target",
+		runners:         []v1beta1.Runner{{Name: v1beta1.RunnerNameDefault, Size: 1}},
+		minReadySeconds: window,
+		fromIR:          true,
+		statusFresh:     true,
+	}
+	noWindow := single
+	noWindow.minReadySeconds = 0
+	gang := single
+	gang.runners = []v1beta1.Runner{{Name: v1beta1.RunnerNameLeader, Size: 1}, {Name: v1beta1.RunnerNameWorker, Size: 1}}
+	// windowPod is a target pod of Instance 0 whose containers came up at
+	// containersUp and whose Ready condition turned True at ready; a zero
+	// ready leaves the pod not Ready.
+	windowPod := func(runner v1beta1.RunnerName, ready time.Time) *corev1.Pod {
+		pod := canaryRunnerPod("default", "svc", "engine", "target", "pod-0-"+string(runner), runner, "0")
+		pod.Labels[query.LabelInstanceIdx] = "0"
+		pod.Status.Conditions = []corev1.PodCondition{
+			{Type: corev1.ContainersReady, Status: corev1.ConditionTrue, LastTransitionTime: metav1.NewTime(containersUp)},
+			{Type: corev1.PodReady, Status: corev1.ConditionFalse, LastTransitionTime: metav1.NewTime(containersUp)},
+		}
+		if !ready.IsZero() {
+			pod.Status.Conditions[1] = corev1.PodCondition{Type: corev1.PodReady, Status: corev1.ConditionTrue, LastTransitionTime: metav1.NewTime(ready)}
+		}
+		return pod
+	}
+	gangPods := []*corev1.Pod{
+		windowPod(v1beta1.RunnerNameWorker, readyAt.Add(-20*time.Second)),
+		windowPod(v1beta1.RunnerNameLeader, readyAt),
+	}
+	cases := []struct {
+		name        string
+		observation observedCanaryRevisions
+		pods        []*corev1.Pod
+		now         time.Time
+		wantWait    time.Duration
+	}{
+		{"containers up for the window but not yet Ready", single, []*corev1.Pod{windowPod(v1beta1.RunnerNameDefault, time.Time{})}, containersUp.Add(30 * time.Second), 0},
+		{"Ready just now is inside the window", single, []*corev1.Pod{windowPod(v1beta1.RunnerNameDefault, readyAt)}, readyAt, 30 * time.Second},
+		{"Ready for 2s is inside the window", single, []*corev1.Pod{windowPod(v1beta1.RunnerNameDefault, readyAt)}, readyAt.Add(2 * time.Second), 28 * time.Second},
+		{"Ready for the window waits no longer", single, []*corev1.Pod{windowPod(v1beta1.RunnerNameDefault, readyAt)}, readyAt.Add(30 * time.Second), 0},
+		{"never Ready never waits", single, []*corev1.Pod{windowPod(v1beta1.RunnerNameDefault, time.Time{})}, readyAt.Add(30 * time.Second), 0},
+		{"no window waits for nothing", noWindow, []*corev1.Pod{windowPod(v1beta1.RunnerNameDefault, readyAt)}, readyAt, 0},
+		{"a gang waits for its last member", gang, gangPods, readyAt.Add(20 * time.Second), 10 * time.Second},
+		{"a gang clear of the window waits no longer", gang, gangPods, readyAt.Add(30 * time.Second), 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if wait := tc.observation.windowWait(tc.pods, tc.now); wait != tc.wantWait {
+				t.Fatalf("wait until the next pod clears its window = %s, want %s", wait, tc.wantWait)
+			}
+		})
+	}
+}
+
+// TestSecondaryCapacityReady_WindowRunsFromPodReady: a secondary member's
+// capacity gate counts its canary Instances on the same bar as the
+// primary's, as the member's replica accounts them: in rotation and, under
+// the member's minReadySeconds, available. Two engine canary Instances in
+// rotation but not yet available under a 30-second window leave the step
+// short, with the wait until their pods clear the window; once the replica
+// reports them available, they fill it.
+func TestSecondaryCapacityReady_WindowRunsFromPodReady(t *testing.T) {
+	ns := "default"
+	n4 := 4
+	readyAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "pd"}}
+	isvc.Spec.Router = &v1beta1.RouterSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: &n4}}
+	isvc.Spec.Engine = &v1beta1.EngineSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: &n4}}
+	isvc.Spec.Rollout = &v1beta1.RolloutSpec{Groups: []v1beta1.RolloutGroup{{
+		Components: []v1beta1.ComponentType{v1beta1.RouterComponent, v1beta1.EngineComponent},
+		Canary: &v1beta1.GroupCanary{Steps: []v1beta1.RolloutGroupStep{
+			{Capacity: intstr.FromString("50%"), Traffic: 50},
+			{Capacity: intstr.FromString("100%"), Traffic: 100},
+		}},
+	}}}
+	engine := ir(ns, "pd", v1beta1.EngineComponent, "eng")
+	engine.Status.CurrentRevision = "pd-engine-engOld"
+	engine.Spec.MinReadySeconds = 30
+	// rows is the engine replica's account with its two canary Instances in
+	// rotation and available pods of them reported available.
+	rows := func(available int32) []v1beta1.OMENativeInstanceStatus {
+		return []v1beta1.OMENativeInstanceStatus{
+			{Index: 0, Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "pd-engine-eng", PodCount: 1, ServingPodCount: 1, AvailablePodCount: available},
+			{Index: 1, Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "pd-engine-eng", PodCount: 1, ServingPodCount: 1, AvailablePodCount: available},
+			{Index: 2, Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "pd-engine-engOld", PodCount: 1, ServingPodCount: 1, AvailablePodCount: 1},
+			{Index: 3, Phase: v1beta1.OMENativeInstanceReady, RunningRevision: "pd-engine-engOld", PodCount: 1, ServingPodCount: 1, AvailablePodCount: 1},
+		}
+	}
+	engine.Status.InstanceStatuses = rows(0)
+	reads := fake.NewClientBuilder().WithScheme(canaryScheme(t)).
+		WithStatusSubresource(&v1beta1.InferenceReplica{}).
+		WithRuntimeObjects(ir(ns, "pd", v1beta1.RouterComponent, "rtr"), engine).Build()
+	perRev := map[v1beta1.ComponentType]map[string]int32{
+		v1beta1.RouterComponent: {"rtr": 2},
+		v1beta1.EngineComponent: {"eng": 2, "engOld": 2},
+	}
+	observedPods := map[v1beta1.ComponentType][]*corev1.Pod{}
+	for index := 0; index < 2; index++ {
+		pod := canaryRunnerPod(ns, "pd", "engine", "eng", fmt.Sprintf("pd-engine-%d", index), v1beta1.RunnerNameDefault, "0")
+		pod.Labels[query.LabelInstanceIdx] = strconv.Itoa(index)
+		pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue, LastTransitionTime: metav1.NewTime(readyAt)}}
+		observedPods[v1beta1.EngineComponent] = append(observedPods[v1beta1.EngineComponent], pod)
+	}
+	group := rollout.CanaryGroup(isvc, rollout.Policies{})
+
+	ready, fresh, _, wait, err := secondaryCapacityReady(context.Background(), reads, isvc, perRev, observedPods, v1beta1.RouterComponent, group, readyAt.Add(2*time.Second))
+	if err != nil || !fresh {
+		t.Fatalf("secondaryCapacityReady: fresh=%v err=%v", fresh, err)
+	}
+	if ready {
+		t.Fatal("engine canary Instances in rotation but not yet available under a 30s window must leave the step short")
+	}
+	if wait != 28*time.Second {
+		t.Fatalf("wait until the pods clear their window = %s, want 28s", wait)
+	}
+
+	// The replica reports the Instances available once their pods have held
+	// Ready for the window.
+	published := &v1beta1.InferenceReplica{}
+	if err := reads.Get(context.Background(), client.ObjectKeyFromObject(engine), published); err != nil {
+		t.Fatal(err)
+	}
+	published.Status.InstanceStatuses = rows(1)
+	if err := reads.Status().Update(context.Background(), published); err != nil {
+		t.Fatal(err)
+	}
+	ready, fresh, _, wait, err = secondaryCapacityReady(context.Background(), reads, isvc, perRev, observedPods, v1beta1.RouterComponent, group, readyAt.Add(30*time.Second))
+	if err != nil || !fresh {
+		t.Fatalf("secondaryCapacityReady: fresh=%v err=%v", fresh, err)
+	}
+	if !ready || wait != 0 {
+		t.Fatalf("engine canary Instances the replica reports available must fill the step: ready=%v wait=%s", ready, wait)
+	}
+}
+
+// settledHoldFixture is a unit whose canary rejected "new" and whose revert
+// completed with no run left open: the run closed RolledBack, every engine
+// pod is back on "old", the engine's record is level with it, and the
+// replica still names "new" as its spec target with no revert signal on it.
+// stableRetained says whether the replica controls a ControllerRevision for
+// "old"; otherwise only a copy another replica controls carries the hash.
+func settledHoldFixture(t *testing.T, name string, stableRetained bool) (*v1beta1.InferenceService, client.Client) {
+	t.Helper()
+	ns := "default"
+	n4 := 4
+	isvc := canaryISVC(twoStep(), nil)
+	isvc.Namespace = ns
+	isvc.Name = name
+	isvc.Spec.Engine = &v1beta1.EngineSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: &n4}}
+	rollout.SetCanaryStatusFor(&isvc.Status, v1beta1.EngineComponent, &v1beta1.CanaryStatus{
+		CanaryRevisionHash: "new", StableRevisionHash: "old", RolledBackRevisionHash: "new",
+	})
+	engine := isvc.Status.Components[v1beta1.EngineComponent]
+	engine.RolloutPhase = v1beta1.RolloutPhaseRolledBack
+	engine.LatestRolledoutRevision = coordination.PerRevisionServiceName(name, v1beta1.EngineComponent, "old")
+	engine.LatestReadyRevision = engine.LatestRolledoutRevision
+	isvc.Status.Components[v1beta1.EngineComponent] = engine
+	isvc.Status.Rollout = &v1beta1.RolloutStatus{LastRun: &v1beta1.RolloutRunRecord{
+		Outcome:         v1beta1.RolloutRunRolledBack,
+		TargetRevisions: []v1beta1.RolloutRunTarget{{Component: v1beta1.EngineComponent, Revision: "new", StableRevision: "old"}},
+	}}
+	engineIR := ir(ns, name, v1beta1.EngineComponent, "new")
+	engineIR.Status.CurrentRevision = name + "-engine-old"
+	stable := canaryControllerRevision(ns, name, "engine", "old", 1)
+	if !stableRetained {
+		stable.Name = name + "-engine-copy-old"
+		stable.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(
+			&metav1.ObjectMeta{Name: "pool-a", UID: canaryIRUID("pool-a")},
+			v1beta1.SchemeGroupVersion.WithKind("InferenceReplica"),
+		)}
+	}
+	c := fake.NewClientBuilder().WithScheme(canaryScheme(t)).WithRuntimeObjects(
+		isvc, engineIR,
+		canaryPod(ns, name, "engine", "old", "old-0"),
+		canaryPod(ns, name, "engine", "old", "old-1"),
+		canaryPod(ns, name, "engine", "old", "old-2"),
+		canaryPod(ns, name, "engine", "old", "old-3"),
+		stable,
+		canaryControllerRevision(ns, name, "engine", "new", 2),
+	).Build()
+	return isvc, c
+}
+
+// A settled hold keeps its revert signal with no run open. The rejected
+// revision stays the replica's spec target for as long as the hold stands,
+// so every pass resolves the member's stable revision, from the rolled-back
+// run's record, to the ControllerRevision the replica controls and keeps
+// the replica pointed at it; the record, level with the stable revision, is
+// not consulted and not moved.
+func TestDispatch_ASettledHoldKeepsItsRevertSignalWithNoRunOpen(t *testing.T) {
+	isvc, c := settledHoldFixture(t, "settled-hold", true)
+	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}
+	record := isvc.Status.Components[v1beta1.EngineComponent].LatestRolledoutRevision
+	for pass := 0; pass < 2; pass++ {
+		if _, err := Dispatch(context.Background(), deps); err != nil {
+			t.Fatalf("Dispatch pass %d: %v", pass, err)
+		}
+		if got := phaseOf(isvc); got != v1beta1.RolloutPhaseRolledBack {
+			t.Fatalf("pass %d: phase %q, want RolledBack", pass, got)
+		}
+		got := &v1beta1.InferenceReplica{}
+		if err := c.Get(context.Background(), types.NamespacedName{Namespace: isvc.Namespace, Name: isvc.Name + "-engine"}, got); err != nil {
+			t.Fatal(err)
+		}
+		if got.Spec.Pacing == nil || got.Spec.Pacing.RollbackToRevision == nil || *got.Spec.Pacing.RollbackToRevision != isvc.Name+"-engine-old" {
+			t.Fatalf("pass %d: the replica must stay pointed at the stable revision's ControllerRevision, got pacing=%+v", pass, got.Spec.Pacing)
+		}
+		if cur := isvc.Status.Components[v1beta1.EngineComponent]; cur.LatestRolledoutRevision != record || cur.PreviousRolledoutRevision != "" {
+			t.Fatalf("pass %d: the hold moved the record: %+v", pass, cur)
+		}
+	}
+}
+
+// A settled hold whose stable revision leaves the replica's history fails.
+// The hold resolves its stable revision on every pass; once no retained
+// ControllerRevision the replica controls carries it (a replica re-projected
+// under a new scope controls none of the old ones), the dispatch stops the
+// unit with the Failed reason StableRevisionMissing rather than keep a revert
+// it cannot point the replica at, and the rejected hash stays recorded.
+func TestDispatch_ASettledHoldFailsWhenItsStableRevisionLeavesTheHistory(t *testing.T) {
+	isvc, c := settledHoldFixture(t, "settled-gone", false)
+	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}
+	for pass := 0; pass < 2; pass++ {
+		if _, err := Dispatch(context.Background(), deps); err != nil {
+			t.Fatalf("Dispatch pass %d: %v", pass, err)
+		}
+		cs := rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent)
+		if cs == nil || cs.Failed == nil || cs.Failed.Reason != v1beta1.CanaryFailureStableRevisionMissing || cs.RolledBackRevisionHash != "new" {
+			t.Fatalf("pass %d: expected the Failed reason StableRevisionMissing with the rejection kept, got %+v", pass, cs)
+		}
+		if got := phaseOf(isvc); got != v1beta1.RolloutPhaseFailed {
+			t.Fatalf("pass %d: phase %q, want Failed", pass, got)
+		}
+		got := &v1beta1.InferenceReplica{}
+		if err := c.Get(context.Background(), types.NamespacedName{Namespace: isvc.Namespace, Name: isvc.Name + "-engine"}, got); err != nil {
+			t.Fatal(err)
+		}
+		if got.Spec.Pacing != nil && got.Spec.Pacing.RollbackToRevision != nil {
+			t.Fatalf("pass %d: no revert target must be written for a revision the replica does not control: %+v", pass, got.Spec.Pacing)
+		}
+	}
+}
+
+// settledHoldWithAStableLessDecoderFixture is a settled hold on a unit of
+// an engine and a decoder: the engine's canary of version 2 was rolled back
+// onto version 1, and the decoder was created in the same change that put
+// it in the group, so the run recorded no stable revision for it and the
+// revert wrote nothing on it. The engine's stable ControllerRevision is
+// retained; the decoder runs its only revision.
+func settledHoldWithAStableLessDecoderFixture(t *testing.T, name string) (*v1beta1.InferenceService, client.Client) {
+	t.Helper()
+	ns := "default"
+	n4, one := 4, 1
+	isvc := canaryISVC(twoStep(), nil)
+	isvc.Namespace = ns
+	isvc.Name = name
+	isvc.Spec.Rollout.Groups[0].Components = []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent}
+	isvc.Spec.Engine = &v1beta1.EngineSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: &n4}}
+	isvc.Spec.Decoder = &v1beta1.DecoderSpec{ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{MinReplicas: &one}}
+	rollout.SetCanaryStatusFor(&isvc.Status, v1beta1.EngineComponent, &v1beta1.CanaryStatus{
+		CanaryRevisionHash: "new", StableRevisionHash: "old", RolledBackRevisionHash: "new",
+	})
+	engine := isvc.Status.Components[v1beta1.EngineComponent]
+	engine.RolloutPhase = v1beta1.RolloutPhaseRolledBack
+	engine.LatestRolledoutRevision = coordination.PerRevisionServiceName(name, v1beta1.EngineComponent, "old")
+	engine.LatestReadyRevision = engine.LatestRolledoutRevision
+	isvc.Status.Components[v1beta1.EngineComponent] = engine
+	isvc.Status.Components[v1beta1.DecoderComponent] = v1beta1.ComponentStatusSpec{}
+	isvc.Status.Rollout = &v1beta1.RolloutStatus{LastRun: &v1beta1.RolloutRunRecord{
+		Outcome: v1beta1.RolloutRunRolledBack,
+		TargetRevisions: []v1beta1.RolloutRunTarget{
+			{Component: v1beta1.EngineComponent, Revision: "new", StableRevision: "old"},
+			{Component: v1beta1.DecoderComponent, Revision: "dec"},
+		},
+	}}
+	engineIR := ir(ns, name, v1beta1.EngineComponent, "new")
+	engineIR.Status.CurrentRevision = name + "-engine-old"
+	decoderIR := ir(ns, name, v1beta1.DecoderComponent, "dec")
+	decoderIR.Status.CurrentRevision = name + "-decoder-dec"
+	c := fake.NewClientBuilder().WithScheme(canaryScheme(t)).WithRuntimeObjects(
+		isvc, engineIR, decoderIR,
+		canaryPod(ns, name, "engine", "old", "old-0"),
+		canaryPod(ns, name, "engine", "old", "old-1"),
+		canaryPod(ns, name, "engine", "old", "old-2"),
+		canaryPod(ns, name, "engine", "old", "old-3"),
+		canaryPod(ns, name, "decoder", "dec", "dec-0"),
+		canaryControllerRevision(ns, name, "engine", "old", 1),
+		canaryControllerRevision(ns, name, "engine", "new", 2),
+		canaryControllerRevision(ns, name, "decoder", "dec", 1),
+	).Build()
+	return isvc, c
+}
+
+// A settled hold records a member with no stable revision on the revision
+// its replica settled on. The engine's canary of version 2 was rolled back
+// onto version 1, and the decoder, created in the same change that put it
+// in the group, has no stable revision the run or the revert could have
+// recorded: the completed revert's write leaves its empty record empty,
+// and the rolled-back run names it with no stable. A unit resting on a
+// rejection has no roll active, so the settled write that keeps an idle
+// unit's records level with its replicas runs under the hold too: the
+// decoder, settled on its only revision with a Ready pod, is recorded on
+// it in the first pass of the hold, and from then on the hold resolves
+// that revision as its stable and points its replica at the revision it
+// already runs. The engine's stable still comes from the rolled-back
+// run's record and its replica stays pointed at that ControllerRevision.
+func TestDispatch_ASettledHoldRecordsAMemberWithNoStableRevisionOnTheRevisionItsReplicaSettledOn(t *testing.T) {
+	isvc, c := settledHoldWithAStableLessDecoderFixture(t, "settled-pd")
+	deps := DispatchDeps{Client: c, Reader: c, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{})}
+	settled := revisionServiceName(isvc, v1beta1.DecoderComponent, "dec")
+	for pass := 0; pass < 2; pass++ {
+		if _, err := Dispatch(context.Background(), deps); err != nil {
+			t.Fatalf("Dispatch pass %d: %v", pass, err)
+		}
+		if got := phaseOf(isvc); got != v1beta1.RolloutPhaseRolledBack {
+			t.Fatalf("pass %d: phase %q, want RolledBack", pass, got)
+		}
+		if cs := rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent); cs.Failed != nil {
+			t.Fatalf("pass %d: the member with no stable revision parked the unit: %+v", pass, cs.Failed)
+		}
+		engine := &v1beta1.InferenceReplica{}
+		if err := c.Get(context.Background(), types.NamespacedName{Namespace: isvc.Namespace, Name: isvc.Name + "-engine"}, engine); err != nil {
+			t.Fatal(err)
+		}
+		if engine.Spec.Pacing == nil || engine.Spec.Pacing.RollbackToRevision == nil || *engine.Spec.Pacing.RollbackToRevision != isvc.Name+"-engine-old" {
+			t.Fatalf("pass %d: the engine must stay pointed at its stable revision, got pacing=%+v", pass, engine.Spec.Pacing)
+		}
+		rec := isvc.Status.Components[v1beta1.DecoderComponent]
+		if rec.LatestRolledoutRevision != settled || rec.PreviousRolledoutRevision != "" || rec.LatestReadyRevision != settled {
+			t.Fatalf("pass %d: the hold must record the member with no stable revision on the revision its replica settled on (%s), got %+v", pass, settled, rec)
+		}
+		if got := componentStableRevisionHash(isvc, v1beta1.DecoderComponent, v1beta1.EngineComponent); got != "dec" {
+			t.Fatalf("pass %d: the recorded member resolved %q as its stable, want the revision it runs", pass, got)
+		}
+		decoder := &v1beta1.InferenceReplica{}
+		if err := c.Get(context.Background(), types.NamespacedName{Namespace: isvc.Namespace, Name: isvc.Name + "-decoder"}, decoder); err != nil {
+			t.Fatal(err)
+		}
+		if decoder.Spec.Pacing == nil || decoder.Spec.Pacing.RollbackToRevision == nil || *decoder.Spec.Pacing.RollbackToRevision != isvc.Name+"-decoder-dec" {
+			t.Fatalf("pass %d: the hold points a recorded member at the revision it already runs, got pacing=%+v", pass, decoder.Spec.Pacing)
+		}
+	}
+}
+
+// With no run open, a member's stable revision for the revert check is
+// read from the records: the primary's from its canary record once the last
+// run on file is not a rollback, a secondary's from its own rolled-out
+// revision, and a secondary with neither resolves to nothing.
+func TestComponentStableRevisionHashWithNoRunOpen(t *testing.T) {
+	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "svc"}}
+	rollout.SetCanaryStatusFor(&isvc.Status, v1beta1.RouterComponent, &v1beta1.CanaryStatus{StableRevisionHash: "rtrstable"})
+	engine := isvc.Status.Components[v1beta1.EngineComponent]
+	engine.LatestRolledoutRevision = coordination.PerRevisionServiceName("svc", v1beta1.EngineComponent, "engstable")
+	isvc.Status.Components[v1beta1.EngineComponent] = engine
+	for name, rollout := range map[string]*v1beta1.RolloutStatus{
+		"no run on file":              nil,
+		"the last run on file closed": {LastRun: &v1beta1.RolloutRunRecord{Outcome: v1beta1.RolloutRunCompleted, TargetRevisions: []v1beta1.RolloutRunTarget{{Component: v1beta1.EngineComponent, StableRevision: "completedstable"}}}},
+	} {
+		isvc.Status.Rollout = rollout
+		if got := componentStableRevisionHash(isvc, v1beta1.RouterComponent, v1beta1.RouterComponent); got != "rtrstable" {
+			t.Fatalf("%s: the primary's stable = %q, want its canary record's rtrstable", name, got)
+		}
+		if got := componentStableRevisionHash(isvc, v1beta1.EngineComponent, v1beta1.RouterComponent); got != "engstable" {
+			t.Fatalf("%s: the secondary's stable = %q, want its rolled-out revision engstable", name, got)
+		}
+		if got := componentStableRevisionHash(isvc, v1beta1.DecoderComponent, v1beta1.RouterComponent); got != "" {
+			t.Fatalf("%s: a secondary with no record resolves %q, want nothing", name, got)
+		}
 	}
 }

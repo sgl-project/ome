@@ -976,9 +976,9 @@ func TestRDMAProfiles_AreNotPrivileged(t *testing.T) {
 // UCX_TLS and UCX_NET_DEVICES decide which transports and devices UCX may
 // use. NCCL's built-in IB transport never reads them, so a profile gains
 // nothing by pinning them, while UCX-based KV transfer such as NIXL quietly
-// falls back to whatever they allow: TCP over eth0 under the old oci-roce
-// values (#837). Runtimes that want a restriction set it on the container.
-func TestRDMAProfiles_DoNotPinUCXTransports(t *testing.T) {
+// falls back to whatever they allow. Runtimes that want a restriction set it
+// on the container.
+func TestRDMAProfiles_EveryProfile_LeavesUCXTransportEnvUnset(t *testing.T) {
 	for name, profile := range RDMAProfiles {
 		for _, key := range []string{"UCX_TLS", "UCX_NET_DEVICES"} {
 			_, has := profile.EnvVars[key]
@@ -986,4 +986,45 @@ func TestRDMAProfiles_DoNotPinUCXTransports(t *testing.T) {
 				"profile %q sets %s, which overrides UCX transport selection for every UCX user in the pod", name, key)
 		}
 	}
+}
+
+// =========================================================================
+// RDMA cks-gb-sglang profile
+// =========================================================================
+
+func TestRDMAProfiles_cksGbSglang_HasExpectedShape(t *testing.T) {
+	p, ok := RDMAProfiles["cks-gb-sglang"]
+	assert.True(t, ok)
+	want := []string{
+		"MC_TE_METRIC",
+		"NCCL_MNNVL_ENABLE",
+		"NCCL_CUMEM_ENABLE",
+		"NCCL_IB_ADDR_FAMILY",
+		"NCCL_SOCKET_IFNAME",
+		"NCCL_SOCKET_FAMILY",
+	}
+	for _, k := range want {
+		_, has := p.EnvVars[k]
+		assert.True(t, has, "missing %q", k)
+	}
+	assert.Len(t, p.EnvVars, len(want), "extra env vars — add them to the want list deliberately")
+	// Pin the absence of env vars deliberately excluded from this
+	// profile so a re-add is a deliberate decision.
+	for _, k := range []string{
+		"PYTHONUNBUFFERED",
+		"GLOO_SOCKET_IFNAME",
+		"SGLANG_SET_CPU_AFFINITY",
+		"SGLANG_ENABLE_JIT_DEEPGEMM",
+		"NVSHMEM_IB_GID_INDEX",
+		"NVSHMEM_ENABLE_NIC_PE_MAPPING",
+	} {
+		_, has := p.EnvVars[k]
+		assert.False(t, has, "%q is excluded on purpose", k)
+	}
+	assert.Len(t, p.Volumes, 2)
+	assert.Len(t, p.VolumeMounts, 2)
+	assert.NotNil(t, p.SecurityContext)
+	// Not privileged: that would bypass the device cgroup and hand the pod
+	// every GPU on the node instead of its allocated ones.
+	assert.Nil(t, p.SecurityContext.Privileged)
 }

@@ -1,0 +1,29 @@
+{
+  "recordedOn": {
+    "commit": "unrecorded",
+    "date": "2026-10-20",
+    "machine": "linux/amd64, 30 cores, go1.26"
+  },
+  "reason": "Added the mid-roll-podless moment at both shapes: every row still on the old revision with every pod gone, under RecreateInstanceOnPodRestart, so the restart selection asks about every row. The held set it asks against is read once per pass, so the moment costs 43,600 allocations at 4,000 single-pod Instances (51,605 when each ask read the set) and 1,502 at 160 gangs (1,821). Every Plan moment gains the one allocation of the pass's held-set record.",
+  "tolerancePercent": 10,
+  "budgets": {
+    "160x8/fresh/BuildPlan": 196,
+    "160x8/fresh/Plan": 1316,
+    "160x8/idle/BuildPlan": 413,
+    "160x8/idle/Plan": 1798,
+    "160x8/mid-roll-podless/Plan": 1502,
+    "160x8/mid-roll/BuildPlan": 413,
+    "160x8/mid-roll/Plan": 1171,
+    "160x8/scale-up/BuildPlan": 374,
+    "160x8/scale-up/Plan": 1684,
+    "4000x1/fresh/BuildPlan": 4077,
+    "4000x1/fresh/Plan": 39546,
+    "4000x1/idle/BuildPlan": 8368,
+    "4000x1/idle/Plan": 31818,
+    "4000x1/mid-roll-podless/Plan": 43600,
+    "4000x1/mid-roll/BuildPlan": 8368,
+    "4000x1/mid-roll/Plan": 19839,
+    "4000x1/scale-up/BuildPlan": 7228,
+    "4000x1/scale-up/Plan": 33821
+  }
+}

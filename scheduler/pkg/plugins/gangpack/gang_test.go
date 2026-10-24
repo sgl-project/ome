@@ -44,7 +44,7 @@ func gangPod(namespace, pg string) *v1.Pod {
 	return &v1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Labels: labels}}
 }
 
-func TestPodGroupNameOf(t *testing.T) {
+func TestPodGroupNameOf_LabelledOrUnlabelledPod_ReturnsNameOnlyWhenLabelled(t *testing.T) {
 	ns, name, ok := podGroupNameOf(gangPod("team", "svc-a-prefill"))
 	if !ok || ns != "team" || name != "svc-a-prefill" {
 		t.Fatalf("podGroupNameOf = %q,%q,%v want team,svc-a-prefill,true", ns, name, ok)
@@ -54,10 +54,10 @@ func TestPodGroupNameOf(t *testing.T) {
 	}
 }
 
-// TestSplitGangKey round-trips a gang key back to its namespace/name, and rejects
+// TestSplitGangKey_WellFormedOrMalformedKey_SplitsOnlyWellFormed round-trips a gang key back to its namespace/name, and rejects
 // malformed keys — the reservation reconciler resolves PodGroup facts from the key
 // alone, so a bad split must not fabricate a lookup.
-func TestSplitGangKey(t *testing.T) {
+func TestSplitGangKey_WellFormedOrMalformedKey_SplitsOnlyWellFormed(t *testing.T) {
 	ns, name, ok := splitGangKey("team/svc-a")
 	if !ok || ns != "team" || name != "svc-a" {
 		t.Fatalf("splitGangKey = %q,%q,%v want team,svc-a,true", ns, name, ok)
@@ -69,11 +69,11 @@ func TestSplitGangKey(t *testing.T) {
 	}
 }
 
-// TestResolveGang: the plugin learns everything about a gang from its PodGroup —
+// TestResolveGang_PodGroupFactsPresentOrNot_ResolvesOnlyCompleteFacts: the plugin learns everything about a gang from its PodGroup —
 // size and its declared topology key — nothing from global config. A pod that
 // isn't a gang member, whose PodGroup is missing, or whose PodGroup declares no
-// topology key, is not resolvable (it won't be domain-pinned).
-func TestResolveGang(t *testing.T) {
+// topology key, is not resolvable (it won't be domain-assigned).
+func TestResolveGang_PodGroupFactsPresentOrNot_ResolvesOnlyCompleteFacts(t *testing.T) {
 	reader := fakeReader{
 		"team/svc-a-prefill": {min: 18, topo: "nvidia.com/gpu.clique"},
 		"team/no-topo":       {min: 4, topo: ""},

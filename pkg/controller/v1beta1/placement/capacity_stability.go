@@ -40,7 +40,7 @@ func (r *Reconciler) stableCapacity(source *v1beta1.InferenceService, samples ma
 		}
 		current[name] = &v1beta1.CandidateAllocationStatus{ClusterUID: sample.ClusterUID, Capacity: evidence}
 	}
-	// Removed homes do not contribute to the new matched-set hardware ratios.
+	// Removed members do not contribute to the new matched-set hardware ratios.
 	for name := range previous {
 		if _, matched := current[name]; !matched {
 			delete(previous, name)

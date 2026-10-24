@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func TestDecodeArgs(t *testing.T) {
+func TestDecodeArgs_EveryFieldSet_ReadsEachAndRequiresGCInterval(t *testing.T) {
 	configured, err := decodeArgs(&runtime.Unknown{Raw: []byte(`{
 		"topologyKey":"topology.ome.io/domain",
 		"podGroupTopologyKeyAnnotation":"workloads.example/topology-key",
@@ -41,7 +41,7 @@ func TestDecodeArgs(t *testing.T) {
 	}
 }
 
-func TestDecodeArgsRejectsInvalidValues(t *testing.T) {
+func TestDecodeArgs_InvalidOrMissingValues_ReturnsError(t *testing.T) {
 	for _, raw := range []string{
 		`{"topologyKey":"not a label key/"}`,
 		`{"podGroupTopologyKeyAnnotation":"not a key/"}`,

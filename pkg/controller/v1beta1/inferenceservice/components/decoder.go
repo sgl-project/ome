@@ -167,6 +167,8 @@ func (d *Decoder) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferen
 			TopologySpread:            d.decoderSpec.TopologySpread,
 			TopologySpreadKey:         d.decoderSpec.TopologySpreadKey,
 			PacingPartition:           d.PacingPartition,
+			CoordinatorFollower:       d.CoordinatorFollower,
+			CoordinatorTarget:         d.CoordinatorTarget,
 			ResolvedAutoscaler:        res.Resolved,
 			PreserveAutoscaler:        res.Hold,
 			QuotaAcceleratorResources: d.QuotaAcceleratorResources,
@@ -194,12 +196,13 @@ func (d *Decoder) reconcileDeployment(ctx context.Context, isvc *v1beta1.Inferen
 		// Autoscaler dispatch is always-on per InferenceReplica.
 		// See engine dispatch for the full owner-ref + scaleTargetRef
 		// rationale.
-		if err := dispatchIRAutoscaler(ctx, &d.BaseComponentFields, isvc, ir, &d.decoderSpec.ComponentExtensionSpec, res); err != nil {
+		dispatchResult, err := dispatchIRAutoscaler(ctx, &d.BaseComponentFields, isvc, ir, &d.decoderSpec.ComponentExtensionSpec, res)
+		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to dispatch autoscaler for decoder")
 		}
 		// A policy hold recovers via config edits that emit no event; carry
 		// its periodic requeue on the result (smaller-nonzero merge).
-		return mergeRequeueAfter(ctrl.Result{}, res.RequeueAfter), nil
+		return mergeRequeueAfter(dispatchResult, res.RequeueAfter), nil
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for decoder")
 	}

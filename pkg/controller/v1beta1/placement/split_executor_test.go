@@ -15,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	"knative.dev/pkg/apis"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -163,34 +162,34 @@ func TestReconcileSplitInitialAllocation(t *testing.T) {
 func TestAdvanceSplitPlanPauseAndCleanup(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
-		edit    func(*v1beta1.InferenceService, map[string]plannedHomeObservation)
+		edit    func(*v1beta1.InferenceService, map[string]plannedMemberObservation)
 		want    allocation.Step
 		wantErr bool
 	}{
-		{name: "new placement waits for every standing pause", edit: func(_ *v1beta1.InferenceService, obs map[string]plannedHomeObservation) {
+		{name: "new placement waits for every standing pause", edit: func(_ *v1beta1.InferenceService, obs map[string]plannedMemberObservation) {
 			o := obs["a"]
 			o.PauseAcknowledged = false
 			obs["a"] = o
 		}, want: allocation.Step{Targets: map[string]int32{"a": 1, "b": 0}, Reason: "AwaitingSurgePause"}},
 		{name: "acknowledged pause allows one shared surge", want: allocation.Step{Targets: map[string]int32{"a": 1, "b": 1}, Reason: "AwaitingMemberConvergence"}},
-		{name: "existing rollout uses the allowance", edit: func(_ *v1beta1.InferenceService, obs map[string]plannedHomeObservation) {
+		{name: "existing rollout uses the allowance", edit: func(_ *v1beta1.InferenceService, obs map[string]plannedMemberObservation) {
 			o := obs["a"]
 			o.RolloutReserved = 1
 			obs["a"] = o
 		}, want: allocation.Step{Targets: map[string]int32{"a": 1, "b": 0}, Reason: "SurgeBudgetExhausted"}},
-		{name: "unknown route cannot fund a reduction", edit: func(_ *v1beta1.InferenceService, obs map[string]plannedHomeObservation) {
+		{name: "unknown route cannot fund a reduction", edit: func(_ *v1beta1.InferenceService, obs map[string]plannedMemberObservation) {
 			o := obs["a"]
-			o.Home.Known = false
+			o.MemberState.Known = false
 			obs["a"] = o
 		}, want: allocation.Step{Targets: map[string]int32{"a": 1, "b": 0}, Reason: "ObservationUnknown"}},
-		{name: "released floor still waits for physical cleanup", edit: func(s *v1beta1.InferenceService, obs map[string]plannedHomeObservation) {
+		{name: "released floor still waits for physical cleanup", edit: func(s *v1beta1.InferenceService, obs map[string]plannedMemberObservation) {
 			s.Status.Placement.Candidates[0].Allocation.DesiredReplicas = 1
 			s.Status.Placement.Candidates[1].Allocation.DesiredReplicas = 0
 			o := obs["a"]
-			o.Home.Occupied = 2
+			o.MemberState.Occupied = 2
 			obs["a"] = o
 		}, want: allocation.Step{Targets: map[string]int32{"a": 1, "b": 0}, Reason: "AwaitingMemberCleanup"}},
-		{name: "settled floor releases pause", edit: func(s *v1beta1.InferenceService, _ map[string]plannedHomeObservation) {
+		{name: "settled floor releases pause", edit: func(s *v1beta1.InferenceService, _ map[string]plannedMemberObservation) {
 			s.Status.Placement.Candidates[0].Allocation.DesiredReplicas = 1
 			s.Status.Placement.Candidates[1].Allocation.DesiredReplicas = 0
 		}, want: allocation.Step{Targets: map[string]int32{"a": 1, "b": 0}, Complete: true}},
@@ -203,9 +202,9 @@ func TestAdvanceSplitPlanPauseAndCleanup(t *testing.T) {
 				{Cluster: "a", Allocation: &v1beta1.CandidateAllocationStatus{ClusterUID: "a-uid", OriginalReplicas: 1, CurrentReplicas: 1}},
 				{Cluster: "b", Allocation: &v1beta1.CandidateAllocationStatus{ClusterUID: "b-uid", DesiredReplicas: 1}},
 			}
-			observations := map[string]plannedHomeObservation{
-				"a": {Home: allocation.Home{Known: true, Applied: true, Routable: true, Occupied: 1, Ready: 1}, PauseAcknowledged: true},
-				"b": {Home: allocation.Home{Known: true, Absent: true, Eligible: true}},
+			observations := map[string]plannedMemberObservation{
+				"a": {MemberState: allocation.MemberState{Known: true, Applied: true, Routable: true, Occupied: 1, Ready: 1}, PauseAcknowledged: true},
+				"b": {MemberState: allocation.MemberState{Known: true, Absent: true, Eligible: true}},
 			}
 			if tt.edit != nil {
 				tt.edit(source, observations)
@@ -234,15 +233,20 @@ func TestReconcileMoveUsesRoutingIntent(t *testing.T) {
 		{name: "Single cancellation after original loss", mode: v1beta1.PlacementModeSingle, cancel: true, absent: true},
 	} {
 		for _, published := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/published=%t", tt.name, published), func(t *testing.T) { testMoveUsesRoutingIntent(t, tt.mode, tt.cancel, tt.absent, published) })
+			t.Run(fmt.Sprintf("%s/published=%t", tt.name, published), func(t *testing.T) { testMoveUsesRoutingIntent(t, tt.mode, tt.cancel, tt.absent, published, true) })
 		}
+		// Without OME routing the same move proceeds on member state alone.
+		t.Run(tt.name+"/routing disabled", func(t *testing.T) { testMoveUsesRoutingIntent(t, tt.mode, tt.cancel, tt.absent, false, false) })
 	}
 }
 
-func testMoveUsesRoutingIntent(t *testing.T, mode v1beta1.PlacementMode, cancelMove, absentOriginal, published bool) {
+func testMoveUsesRoutingIntent(t *testing.T, mode v1beta1.PlacementMode, cancelMove, absentOriginal, published, routed bool) {
 	fixture := observationFixture(t)
 	source := fixture.source
 	source.Namespace = "prod"
+	if !routed {
+		source.Spec.Routing = &v1beta1.RoutingSpec{Enabled: ptr.To(false)}
+	}
 	source.Spec.Placement.Split.Replicas = ptr.To[int32](1)
 	source.Spec.Placement.ClusterAffinity = testAffinity("target=true")
 	source.Status.Placement.Plan.PauseSurge = false
@@ -253,18 +257,18 @@ func testMoveUsesRoutingIntent(t *testing.T, mode v1beta1.PlacementMode, cancelM
 		source.Spec.Placement.Mode, source.Spec.Placement.Split = mode, nil
 		source.Spec.Engine.MinReplicas = ptr.To(1)
 		source.Status.Placement.Plan.Mode = mode
-		home := &v1beta1.PlacementHomePolicy{InputDigest: "initial-intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.EngineComponent, Replicas: 1}}}
-		source.Status.Placement.Candidates[0].Allocation.CurrentHome = home.DeepCopy()
-		source.Status.Placement.Candidates[0].Allocation.DesiredHome = home.DeepCopy()
+		policy := &v1beta1.PlacementHomePolicy{InputDigest: "initial-intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.EngineComponent, Replicas: 1}}}
+		source.Status.Placement.Candidates[0].Allocation.CurrentHome = policy.DeepCopy()
+		source.Status.Placement.Candidates[0].Allocation.DesiredHome = policy.DeepCopy()
 	}
 	if mode == v1beta1.PlacementModeSingle {
 		source.Spec.Placement.Mode, source.Spec.Placement.Split = mode, nil
 		source.Spec.Engine.MinReplicas = ptr.To(1)
 		source.Status.Placement.Cluster = "a"
 		source.Status.Placement.Plan.Mode, source.Status.Placement.Plan.Winner = mode, "a"
-		home := &v1beta1.PlacementHomePolicy{InputDigest: "initial-intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.EngineComponent, Replicas: 1}}}
-		source.Status.Placement.Candidates[0].Allocation.CurrentHome = home.DeepCopy()
-		source.Status.Placement.Candidates[0].Allocation.DesiredHome = home.DeepCopy()
+		policy := &v1beta1.PlacementHomePolicy{InputDigest: "initial-intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.EngineComponent, Replicas: 1}}}
+		source.Status.Placement.Candidates[0].Allocation.CurrentHome = policy.DeepCopy()
+		source.Status.Placement.Candidates[0].Allocation.DesiredHome = policy.DeepCopy()
 	}
 	fixture.member.Namespace = source.Namespace
 	fixture.member.Spec.Engine.MinReplicas = ptr.To(1)
@@ -354,6 +358,9 @@ func testMoveUsesRoutingIntent(t *testing.T, mode v1beta1.PlacementMode, cancelM
 		}
 	}
 	publish := func(weights map[string]int32) {
+		if !routed {
+			return
+		}
 		live := readSource()
 		tm := &v1beta1.TrafficMap{}
 		err := root.Get(t.Context(), client.ObjectKeyFromObject(source), tm)
@@ -586,7 +593,7 @@ func TestAdoptSplitMembers(t *testing.T) {
 			f.member.Spec.Engine.MinReplicas = ptr.To(1)
 			f.member.Spec.Decoder = &v1beta1.DecoderSpec{}
 		}, wantErr: true},
-		{name: "missing registration cannot erase a standing home", edit: func(f *plannedObservationFixture) {
+		{name: "missing registration cannot erase a standing member", edit: func(f *plannedObservationFixture) {
 			f.source.Status.Placement.Candidates = append(f.source.Status.Placement.Candidates, v1beta1.CandidatePlacement{Cluster: "removed"})
 		}, wantErr: true},
 	} {
@@ -669,6 +676,7 @@ func TestReconcileSplitApplyErrorsKeepServingHealth(t *testing.T) {
 		wantInfos  []string
 	}{
 		{name: "write failure", failure: fmt.Errorf("member write unavailable"), wantReason: "MemberApplicationFailed", wantErrors: []string{"planned member application failed"}},
+		{name: "concurrent create", failure: apierrors.NewAlreadyExists(schema.GroupResource{Group: "ome.io", Resource: "inferenceservices"}, "service-a"), wantReason: "MemberApplicationPending", wantInfos: []string{"planned member application conflicted; retrying"}},
 		{name: "optimistic lock conflict", failure: conflict, wantReason: "MemberApplicationPending", wantInfos: []string{"planned member application conflicted; retrying"}},
 		{name: "wrapped optimistic lock conflict", failure: fmt.Errorf("member apply: %w", conflict), wantReason: "MemberApplicationPending", wantInfos: []string{"planned member application conflicted; retrying"}},
 	} {
@@ -752,9 +760,8 @@ func TestReconcileSplitConflictDoesNotHideWriteFailure(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// The conflicting member's write is retried from a fresh read; the
-			// failing member's is not.
-			if diff := cmp.Diff(1+retry.DefaultRetry.Steps, attempts); diff != "" {
+			// Each member gets one write attempt per reconciliation.
+			if diff := cmp.Diff(2, attempts); diff != "" {
 				t.Fatalf("member attempts (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(time.Second, result.RequeueAfter); diff != "" {
@@ -804,9 +811,9 @@ func TestSplitMemberUpdatesRequireEligibility(t *testing.T) {
 		name              string
 		unready, outgoing bool
 	}{
-		{name: "eligible home receives source spec"},
-		{name: "unready home retains serving spec", unready: true},
-		{name: "outgoing home retains serving spec", outgoing: true},
+		{name: "eligible member receives source spec"},
+		{name: "unready member retains serving spec", unready: true},
+		{name: "outgoing member retains serving spec", outgoing: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			f := observationFixture(t)
@@ -890,7 +897,7 @@ func TestSplitObservationWithoutPublication(t *testing.T) {
 			clusters := identifiedTestClusters{fakeClusters: fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{"member-a": workloadcluster.NewNeverCachingClient(worker)}}, uid: "member-a-uid"}
 			r, _ := newPlacer(scheme, clusters, f.source, plannedTestRegistration())
 			observations := r.observeSplitMembers(t.Context(), f.source, []string{"member-a"})
-			if diff := cmp.Diff(tt.known, observations["member-a"].Home.Known); diff != "" {
+			if diff := cmp.Diff(tt.known, observations["member-a"].MemberState.Known); diff != "" {
 				t.Error(diff)
 			}
 			step, err := advanceSplitPlan(f.source, observations)
@@ -904,8 +911,68 @@ func TestSplitObservationWithoutPublication(t *testing.T) {
 	}
 }
 
+// TestSplitObservationWithoutRouting covers sources OME publishes no routing
+// for. No routing intent can ever appear, so member state alone decides what a
+// member serves, and a requested drain has no OME-managed traffic to wait for.
+func TestSplitObservationWithoutRouting(t *testing.T) {
+	type member struct {
+		Known, Routable, Drained bool
+	}
+	for _, tt := range []struct {
+		name   string
+		edit   func(*plannedObservationFixture)
+		want   member
+		target int32
+	}{
+		{name: "a serving member is routable", want: member{Known: true, Routable: true}, target: 1},
+		{name: "a changed target is not held for routing intent", edit: func(f *plannedObservationFixture) {
+			f.source.Status.Placement.Candidates[0].Allocation.DesiredReplicas = 2
+		}, want: member{Known: true, Routable: true}, target: 2},
+		{name: "a requested drain needs no routing intent", edit: func(f *plannedObservationFixture) {
+			f.source.Status.Placement.Candidates[0].Allocation.CurrentReplicas = 0
+			f.source.Status.Placement.Candidates[0].Allocation.DesiredReplicas = 0
+			f.source.Status.Placement.Candidates[0].Allocation.DrainRequested = true
+		}, want: member{Known: true, Drained: true}},
+		{name: "unverified inventory stays unknown", edit: func(f *plannedObservationFixture) { f.resources.pods[0].OwnerReferences = nil }, target: 1},
+	} {
+		for _, disabled := range []string{"source", "installation"} {
+			t.Run(fmt.Sprintf("%s/disabled by %s", tt.name, disabled), func(t *testing.T) {
+				f := observationFixture(t)
+				f.source.Status.Placement.Plan.AssignedReplicas = 1
+				f.source.Status.Placement.Plan.OriginalUnassignedReplicas = 1
+				if disabled == "source" {
+					f.source.Spec.Routing = &v1beta1.RoutingSpec{Enabled: ptr.To(false)}
+				}
+				if tt.edit != nil {
+					tt.edit(&f)
+				}
+				scheme := testScheme(t)
+				worker := fake.NewClientBuilder().WithScheme(scheme).WithObjects(f.member, f.resources.ir, &f.resources.pods[0]).Build()
+				clusters := identifiedTestClusters{fakeClusters: fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{"member-a": workloadcluster.NewNeverCachingClient(worker)}}, uid: "member-a-uid"}
+				r, _ := newPlacer(scheme, clusters, f.source, plannedTestRegistration())
+				r.RoutingDisabled = disabled == "installation"
+				observations := r.observeSplitMembers(t.Context(), f.source, []string{"member-a"})
+				observed := observations["member-a"].MemberState
+				if diff := cmp.Diff(tt.want, member{observed.Known, observed.Routable, observed.Drained}); diff != "" {
+					t.Errorf("member (-want +got):\n%s", diff)
+				}
+				step, err := advanceSplitPlan(f.source, observations)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if tt.want.Known && step.Reason == "ObservationUnknown" {
+					t.Errorf("observed member held for routing intent: %+v", step)
+				}
+				if diff := cmp.Diff(tt.target, step.Targets["member-a"]); diff != "" {
+					t.Errorf("target (-want +got):\n%s; reason: %s", diff, step.Reason)
+				}
+			})
+		}
+	}
+}
+
 // TestSplitObservationOfBusyMembers observes members whose service and every
-// component are rewritten between any two reads of them. Each home is observed
+// component are rewritten between any two reads of them. Each member is observed
 // from its fresh reads and acknowledges the accepted plan.
 func TestSplitObservationOfBusyMembers(t *testing.T) {
 	f := observationFixture(t)
@@ -958,14 +1025,14 @@ func TestSplitObservationOfBusyMembers(t *testing.T) {
 	r, _ := newPlacer(scheme, connections, controlPlane...)
 	observations := r.observeSplitMembers(t.Context(), f.source, members)
 	for _, name := range members {
-		type home struct {
+		type member struct {
 			Known, ObservationKnown bool
 			Applied                 string
 			Occupied, Ready         int32
 		}
 		observed := observations[name]
-		got := home{observed.Home.Known, observed.Candidate.ObservationKnown, observed.Candidate.AppliedPlanID, observed.Home.Occupied, observed.Candidate.ReadyReplicas}
-		if diff := cmp.Diff(home{Known: true, ObservationKnown: true, Applied: "plan-a", Occupied: 1, Ready: 1}, got); diff != "" {
+		got := member{observed.MemberState.Known, observed.Candidate.ObservationKnown, observed.Candidate.AppliedPlanID, observed.MemberState.Occupied, observed.Candidate.ReadyReplicas}
+		if diff := cmp.Diff(member{Known: true, ObservationKnown: true, Applied: "plan-a", Occupied: 1, Ready: 1}, got); diff != "" {
 			t.Errorf("%s (-want +got):\n%s", name, diff)
 		}
 	}

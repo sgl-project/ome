@@ -3,9 +3,11 @@ package inferenceservice
 import (
 	"context"
 	"reflect"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -15,7 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative"
 )
 
 // isvcGroupKind identifies an InferenceService controller owner reference,
@@ -32,7 +33,7 @@ var isvcGroupKind = v1beta1.SchemeGroupVersion.WithKind("InferenceService").Grou
 // controls, keeps the parsed name. Slices of any other Service map to
 // nothing.
 func (r *InferenceServiceReconciler) endpointSliceToISVC(ctx context.Context, obj client.Object) []reconcile.Request {
-	reqs := omenative.EndpointSliceToISVC(ctx, obj)
+	reqs := EndpointSliceToISVC(ctx, obj)
 	slice, ok := obj.(*discoveryv1.EndpointSlice)
 	if len(reqs) == 0 || !ok {
 		return nil
@@ -45,6 +46,69 @@ func (r *InferenceServiceReconciler) endpointSliceToISVC(ctx context.Context, ob
 		}
 	}
 	return reqs
+}
+
+// headlessServiceSuffix is the trailing component of the per-Component
+// headless Service name (`<prefix>-<component>-headless`). The
+// EndpointSlice mapper uses it to recognise an OMENative-owned slice
+// and reverse-lookup the name prefix.
+const headlessServiceSuffix = "-headless"
+
+// EndpointSliceToISVC maps an EndpointSlice for an OMENative headless
+// Service to the InferenceService reconcile key its name prefix spells.
+// Returns an empty slice for any event that doesn't target an
+// OMENative-managed Service — the EndpointSlice watch is unfiltered, so
+// the mapper does all the filtering.
+//
+// EndpointSlice carries the `kubernetes.io/service-name` label pointing
+// at its parent Service. OMENative headless Services are named
+// `<prefix>-<component>-headless`, prefix being the replica's name
+// prefix: the InferenceService name for a projected replica, which is
+// what the parse recovers. The controller's mapper refines the result
+// through the Service's owner when an InferenceService controls it.
+func EndpointSliceToISVC(ctx context.Context, obj client.Object) []reconcile.Request {
+	slice, ok := obj.(*discoveryv1.EndpointSlice)
+	if !ok {
+		return nil
+	}
+	serviceName := slice.Labels[discoveryv1.LabelServiceName]
+	isvcName, _, ok := isvcFromHeadlessServiceName(serviceName)
+	if !ok {
+		return nil
+	}
+	return []reconcile.Request{{
+		NamespacedName: types.NamespacedName{
+			Namespace: slice.Namespace,
+			Name:      isvcName,
+		},
+	}}
+}
+
+// isvcFromHeadlessServiceName parses `<isvc>-<component>-headless`
+// into (isvc, component, ok). The component segment is matched
+// against the v1beta1 component-type set so an arbitrary
+// `-foo-headless` Service in the same namespace doesn't masquerade
+// as OMENative-owned.
+func isvcFromHeadlessServiceName(name string) (string, v1beta1.ComponentType, bool) {
+	if name == "" || !strings.HasSuffix(name, headlessServiceSuffix) {
+		return "", "", false
+	}
+	trimmed := strings.TrimSuffix(name, headlessServiceSuffix)
+	for _, component := range []v1beta1.ComponentType{
+		v1beta1.RouterComponent,
+		v1beta1.EngineComponent,
+		v1beta1.DecoderComponent,
+	} {
+		suffix := "-" + string(component)
+		if strings.HasSuffix(trimmed, suffix) {
+			isvc := strings.TrimSuffix(trimmed, suffix)
+			if isvc == "" {
+				return "", "", false
+			}
+			return isvc, component, true
+		}
+	}
+	return "", "", false
 }
 
 // isvcReconcileTriggerPredicate gates the controller's For(&InferenceService{})
@@ -67,6 +131,10 @@ func (r *InferenceServiceReconciler) endpointSliceToISVC(ctx context.Context, ob
 // when generation changed OR labels/annotations changed, and drop updates that
 // only touched status / resourceVersion / managedFields.
 //
+// A status update that changes a canary record (status.components[*].canary
+// or the status.canary alias) is admitted too: the record is the canary
+// executor's state, and a write to it from any writer is read only by a pass.
+//
 // An InferenceService under deletion passes on every update, whatever the
 // update touched. The delete of a finalizer-bearing object is an UPDATE
 // (deletionTimestamp set) and the reconciler's finalizer pass is what the
@@ -87,9 +155,37 @@ func isvcReconcileTriggerPredicate() predicate.Predicate {
 			if e.ObjectNew.GetDeletionTimestamp() != nil {
 				return true
 			}
-			return metaOrSpecChanged(e.ObjectOld, e.ObjectNew)
+			return metaOrSpecChanged(e.ObjectOld, e.ObjectNew) || canaryRecordChanged(e.ObjectOld, e.ObjectNew)
 		},
 	}
+}
+
+// canaryRecordChanged reports whether an update touched a canary record. The
+// executor stamps a record only on a transition or a sample, never on every
+// pass, so its own flush of a changed record wakes one pass, not a loop.
+func canaryRecordChanged(oldObj, newObj client.Object) bool {
+	before, ok := oldObj.(*v1beta1.InferenceService)
+	if !ok {
+		return false
+	}
+	after, ok := newObj.(*v1beta1.InferenceService)
+	if !ok {
+		return false
+	}
+	if !equality.Semantic.DeepEqual(before.Status.Canary, after.Status.Canary) {
+		return true
+	}
+	for c, cs := range after.Status.Components {
+		if !equality.Semantic.DeepEqual(before.Status.Components[c].Canary, cs.Canary) {
+			return true
+		}
+	}
+	for c, cs := range before.Status.Components {
+		if _, kept := after.Status.Components[c]; !kept && cs.Canary != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // ownedStatusIgnoringPredicate gates an Owns() watch so the reconciler reacts

@@ -2,13 +2,16 @@ package placement
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	toolscache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -94,8 +97,8 @@ func TestPlaceOnWritesThroughMemberStatusChurn(t *testing.T) {
 	assert.Equal(t, "yes", got.Labels["worker.io/managed"], "worker label preserved")
 }
 
-// A write that loses to a concurrent member write is retried from a fresh read.
-func TestPlaceOnRetriesMemberConflict(t *testing.T) {
+// A conflict returns to reconciliation before attempting another member write.
+func TestPlaceOnRetriesMemberConflictOnNextReconcile(t *testing.T) {
 	s := testScheme(t)
 	updates := 0
 	worker := memberWorker(s, interceptor.Funcs{Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
@@ -107,9 +110,11 @@ func TestPlaceOnRetriesMemberConflict(t *testing.T) {
 	}}, ownedMember())
 	r := placerFor(t, s, workloadcluster.NewNeverCachingClient(worker))
 
+	require.True(t, apierrors.IsConflict(r.placeOn(t.Context(), "a", srcISVC(""), false)))
+	assert.Equal(t, 1, updates, "a conflict must not loop over the same cached state")
 	require.NoError(t, r.placeOn(t.Context(), "a", srcISVC(""), false))
 
-	assert.Equal(t, 2, updates, "one conflicted write and one retry")
+	assert.Equal(t, 2, updates, "one conflicted write and one subsequent reconcile")
 	got := liveMember(t, worker)
 	assert.NotNil(t, got.Spec.Engine, "desired spec applied")
 	assert.Equal(t, "uid-1", got.Labels[PlacementOriginLabel])
@@ -117,8 +122,7 @@ func TestPlaceOnRetriesMemberConflict(t *testing.T) {
 	assert.Equal(t, int64(1), got.Status.ObservedGeneration, "concurrent status write preserved")
 }
 
-// Each retry repeats the ownership checks against the object it would replace,
-// so a member that changes hands between attempts is never overwritten.
+// Each reconciliation checks ownership before replacing a member.
 func TestPlaceOnRetryRechecksMemberOwnership(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
@@ -208,7 +212,10 @@ func TestPlaceOnRetryRechecksMemberOwnership(t *testing.T) {
 			r := placerFor(t, s, workloadcluster.NewNeverCachingClient(worker))
 
 			err := r.placeOn(t.Context(), "a", srcISVC(""), false)
-			require.ErrorContains(t, err, tt.wantErr)
+			require.True(t, isMemberWriteRace(err), "the API must reject the concurrent replacement: %v", err)
+			if tt.name != "replaced by another derived instance" {
+				require.ErrorContains(t, r.placeOn(t.Context(), "a", srcISVC(""), false), tt.wantErr)
+			}
 			require.True(t, raced, "the write raced the ownership change")
 			tt.want(t, liveMember(t, worker))
 		})
@@ -223,7 +230,10 @@ type staleCacheClient struct {
 }
 
 func (c *staleCacheClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-	if member, ok := obj.(*v1beta1.InferenceService); ok && key == memberKey {
+	if member, ok := obj.(*v1beta1.InferenceService); ok && (c.stale == nil || key == memberKey) {
+		if c.stale == nil {
+			return apierrors.NewNotFound(schema.GroupResource{Group: "ome.io", Resource: "inferenceservices"}, key.Name)
+		}
 		c.stale.DeepCopyInto(member)
 		return nil
 	}
@@ -238,16 +248,84 @@ func (c *staleCacheClient) DirectClient() client.WithWatch {
 	return c.WithWatch
 }
 
-// The member write reads through the direct client, so a cache that lags the
-// member cannot pin the write to a stale resourceVersion.
-func TestPlaceOnIgnoresStaleMemberCache(t *testing.T) {
+// Stale observations may reject a write, but cannot overwrite newer member state.
+func TestPlaceOnWaitsForMemberCacheAfterConflict(t *testing.T) {
 	s := testScheme(t)
 	worker := memberWorker(s, interceptor.Funcs{}, ownedMember())
-	stale := liveMember(t, worker)
+	cached := &staleCacheClient{WithWatch: worker, stale: liveMember(t, worker)}
 	bumpMemberStatus(t.Context(), t, worker)
-	r := placerFor(t, s, &staleCacheClient{WithWatch: worker, stale: stale})
+	r := placerFor(t, s, cached)
 
+	require.True(t, apierrors.IsConflict(r.placeOn(t.Context(), "a", srcISVC(""), false)))
+	assert.Nil(t, liveMember(t, worker).Spec.Engine)
+	cached.stale = liveMember(t, worker)
 	require.NoError(t, r.placeOn(t.Context(), "a", srcISVC(""), false))
+	assert.NotNil(t, liveMember(t, worker).Spec.Engine)
+}
 
-	assert.NotNil(t, liveMember(t, worker).Spec.Engine, "desired spec applied")
+func TestPolicyPruningUsesSuccessfulWriteResponse(t *testing.T) {
+	for _, pruned := range []bool{false, true} {
+		t.Run(fmt.Sprintf("pruned=%t", pruned), func(t *testing.T) {
+			s := testScheme(t)
+			worker := memberWorker(s, interceptor.Funcs{Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+				if pruned {
+					obj.(*v1beta1.InferenceService).Spec.Engine.AutoscalerPolicyRef = nil
+				}
+				return c.Update(ctx, obj, opts...)
+			}}, ownedMember())
+			cached := &staleCacheClient{WithWatch: worker, stale: liveMember(t, worker)}
+			src := srcISVCWithRef("")
+			r, _ := newPlacer(s, fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{"a": cached}}, src, readyWC("a", nil))
+			require.NoError(t, r.placeOn(t.Context(), "a", src, false))
+			for range policyPruneRevertThreshold {
+				require.True(t, apierrors.IsConflict(r.placeOn(t.Context(), "a", src, false)))
+			}
+			require.Empty(t, r.policyState().prunedMembers(src.UID), "stale cache retries cannot establish repeated pruning")
+			for range policyPruneRevertThreshold {
+				cached.stale = liveMember(t, worker)
+				require.NoError(t, r.placeOn(t.Context(), "a", src, false))
+			}
+			if pruned {
+				require.Equal(t, []string{"a"}, r.policyState().prunedMembers(src.UID))
+			} else {
+				require.Empty(t, r.policyState().prunedMembers(src.UID))
+			}
+		})
+	}
+}
+
+func TestCachedAbsenceCannotReleaseUnobservedMember(t *testing.T) {
+	for _, state := range []string{"exists", "absent", "unreadable"} {
+		t.Run(state, func(t *testing.T) {
+			s := testScheme(t)
+			fixture := observationFixture(t)
+			var objects []client.Object
+			if state == "exists" {
+				objects = append(objects, fixture.member)
+			}
+			gets := 0
+			worker := memberWorker(s, interceptor.Funcs{Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, member := obj.(*v1beta1.InferenceService); member {
+					gets++
+					if state == "unreadable" {
+						return context.DeadlineExceeded
+					}
+				}
+				return c.Get(ctx, key, obj, opts...)
+			}}, objects...)
+			cached := &staleCacheClient{WithWatch: worker}
+			clusters := identifiedTestClusters{fakeClusters: fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{"member-a": cached}}, uid: "member-a-uid"}
+			r, _ := newPlacer(s, clusters, fixture.source, plannedTestRegistration())
+			got, err := r.observePlannedMember(t.Context(), fixture.source, fixture.source.Status.Placement.Candidates[0], fixture.components)
+			require.Equal(t, 1, gets, "allocation release requires one direct absence confirmation")
+			if state == "absent" {
+				require.NoError(t, err)
+				require.True(t, got.MemberState.Absent)
+			} else {
+				require.Error(t, err)
+				require.False(t, got.MemberState.Known)
+				require.False(t, got.MemberState.Absent)
+			}
+		})
+	}
 }

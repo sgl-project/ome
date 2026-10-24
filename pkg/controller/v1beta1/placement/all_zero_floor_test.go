@@ -1,6 +1,8 @@
 package placement
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -9,6 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/placement/allocation"
@@ -39,17 +42,17 @@ func TestAllZeroFloorPolicyChanges(t *testing.T) {
 		want             int32
 		wantErr          bool
 	}{
-		{name: "authored scale to zero retains the home", current: 2, want: 0},
-		{name: "authored positive floor refreshes the existing home", desired: 2, want: 2},
+		{name: "authored scale to zero retains the member", current: 2, want: 0},
+		{name: "authored positive floor refreshes the existing member", desired: 2, want: 2},
 		{name: "unresolved input retains the accepted floor", current: 2, pending: true, want: 2},
 		{name: "active movement cannot accept a zero contract", current: 2, pause: true, want: 2, wantErr: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			home := func(n int32) *v1beta1.PlacementHomePolicy {
+			policy := func(n int32) *v1beta1.PlacementHomePolicy {
 				return &v1beta1.PlacementHomePolicy{InputDigest: "intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.EngineComponent, Replicas: n}}}
 			}
 			proposal := plan.Proposal{Mode: v1beta1.PlacementModeAll, InputDigest: "intent", PauseSurge: tt.pause, Assignments: map[string]v1beta1.CandidateAllocationStatus{
-				"member-a": {Matched: true, ClusterUID: "member-a-uid", CurrentHome: home(tt.current), DesiredHome: home(tt.desired), OriginalReplicas: tt.current, CurrentReplicas: tt.current, DesiredReplicas: tt.desired, HomeInputsPending: tt.pending},
+				"member-a": {Matched: true, ClusterUID: "member-a-uid", CurrentHome: policy(tt.current), DesiredHome: policy(tt.desired), OriginalReplicas: tt.current, CurrentReplicas: tt.current, DesiredReplicas: tt.desired, HomeInputsPending: tt.pending},
 			}}
 			source := srcISVCMode(v1beta1.PlacementModeAll, "")
 			source.Status.Placement = &v1beta1.PlacementStatus{Plan: &v1beta1.PlacementPlanStatus{Mode: v1beta1.PlacementModeAll}}
@@ -61,7 +64,7 @@ func TestAllZeroFloorPolicyChanges(t *testing.T) {
 				t.Fatal(diff)
 			}
 			a := proposal.Assignments["member-a"]
-			if diff := cmp.Diff(home(tt.want), a.CurrentHome); diff != "" {
+			if diff := cmp.Diff(policy(tt.want), a.CurrentHome); diff != "" {
 				t.Fatal(diff)
 			}
 			if diff := cmp.Diff(tt.want, a.CurrentReplicas); diff != "" {
@@ -82,9 +85,9 @@ func TestAllZeroFloorRetention(t *testing.T) {
 		edit        func(*testing.T, *backendFixture)
 		wantReason  string
 	}{
-		{name: "idle engine homes retain their policies"},
-		{name: "idle disaggregated homes retain every component", pd: true},
-		{name: "restart retains idle homes", restart: true},
+		{name: "idle engine members retain their policies"},
+		{name: "idle disaggregated members retain every component", pd: true},
+		{name: "restart retains idle members", restart: true},
 		{name: "autoscaler requests are not orphaned allocations", replicas: 3},
 		{name: "unknown inventory retains accepted authority", wantReason: "AwaitingMemberConvergence", edit: func(_ *testing.T, f *backendFixture) {
 			f.connections.m["member-a"] = unreadablePodInventory(f, "member-a")
@@ -139,10 +142,10 @@ func TestAllZeroFloorMovement(t *testing.T) {
 	for _, pd := range []bool{false, true} {
 		t.Run(fmt.Sprintf("disaggregated=%t", pd), func(t *testing.T) {
 			f := allZeroFixture(t, pd)
-			selectHome := func(s *v1beta1.InferenceService, name string) {
+			selectMember := func(s *v1beta1.InferenceService, name string) {
 				s.Spec.Placement.ClusterAffinity = []v1beta1.ClusterAffinityTerm{{MatchFields: []v1beta1.ClusterSelectorRequirement{{Key: "metadata.name", Operator: corev1.NodeSelectorOpIn, Values: []string{name}}}}}
 			}
-			selectHome(f.source, "member-a")
+			selectMember(f.source, "member-a")
 			if err := f.reconciler.Update(t.Context(), f.source); err != nil {
 				t.Fatal(err)
 			}
@@ -151,7 +154,7 @@ func TestAllZeroFloorMovement(t *testing.T) {
 			acknowledgeSingleFloor(t, f, "member-a", 3)
 			source := f.reconcile(t)
 			accepted := source.Status.Placement.Plan.DeepCopy()
-			selectHome(source, "member-b")
+			selectMember(source, "member-b")
 			source.Generation++
 			if err := f.reconciler.Update(t.Context(), source); err != nil {
 				t.Fatal(err)
@@ -212,23 +215,23 @@ func TestAllZeroFloorMovement(t *testing.T) {
 func TestAllZeroFloorConvergence(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
-		home   allocation.Home
+		member allocation.MemberState
 		remove bool
 		want   allocation.Step
 	}{
-		{name: "idle policy is acknowledged", home: allocation.Home{Known: true, Applied: true}, want: allocation.Step{Targets: map[string]int32{"a": 0}, Complete: true}},
-		{name: "autoscaled occupancy remains active", home: allocation.Home{Known: true, Applied: true, Ready: 3, Occupied: 3, Routable: true}, want: allocation.Step{Targets: map[string]int32{"a": 0}, Complete: true}},
-		{name: "missing component cannot acknowledge zero", home: allocation.Home{Known: true}, want: allocation.Step{Targets: map[string]int32{"a": 0}, Reason: "AwaitingMemberConvergence"}},
-		{name: "unreachable home is not empty", want: allocation.Step{Targets: map[string]int32{"a": 0}, Reason: "AwaitingMemberConvergence"}},
-		{name: "zero floor cannot authorize retirement", home: allocation.Home{Known: true, Applied: true}, remove: true, want: allocation.Step{Targets: map[string]int32{"a": 0}, Reason: "PositiveFloorRequired"}},
+		{name: "idle policy is acknowledged", member: allocation.MemberState{Known: true, Applied: true}, want: allocation.Step{Targets: map[string]int32{"a": 0}, Complete: true}},
+		{name: "autoscaled occupancy remains active", member: allocation.MemberState{Known: true, Applied: true, Ready: 3, Occupied: 3, Routable: true}, want: allocation.Step{Targets: map[string]int32{"a": 0}, Complete: true}},
+		{name: "missing component cannot acknowledge zero", member: allocation.MemberState{Known: true}, want: allocation.Step{Targets: map[string]int32{"a": 0}, Reason: "AwaitingMemberConvergence"}},
+		{name: "unreachable member is not empty", want: allocation.Step{Targets: map[string]int32{"a": 0}, Reason: "AwaitingMemberConvergence"}},
+		{name: "zero floor cannot authorize retirement", member: allocation.MemberState{Known: true, Applied: true}, remove: true, want: allocation.Step{Targets: map[string]int32{"a": 0}, Reason: "PositiveFloorRequired"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			home := &v1beta1.PlacementHomePolicy{InputDigest: "intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.EngineComponent}}}
-			source := &v1beta1.InferenceService{Status: v1beta1.InferenceServiceStatus{Placement: &v1beta1.PlacementStatus{Candidates: []v1beta1.CandidatePlacement{{Cluster: "a", Allocation: &v1beta1.CandidateAllocationStatus{CurrentHome: home, DesiredHome: home.DeepCopy()}}}}}}
+			policy := &v1beta1.PlacementHomePolicy{InputDigest: "intent", ReplicaFloors: []v1beta1.PlacementComponentFloor{{Component: v1beta1.EngineComponent}}}
+			source := &v1beta1.InferenceService{Status: v1beta1.InferenceServiceStatus{Placement: &v1beta1.PlacementStatus{Candidates: []v1beta1.CandidatePlacement{{Cluster: "a", Allocation: &v1beta1.CandidateAllocationStatus{CurrentHome: policy, DesiredHome: policy.DeepCopy()}}}}}}
 			if tt.remove {
 				source.Status.Placement.Candidates[0].Allocation.DesiredHome = nil
 			}
-			got := advanceAllZeroFloors(source, map[string]plannedHomeObservation{"a": {Home: tt.home}})
+			got := advanceAllZeroFloors(source, map[string]plannedMemberObservation{"a": {MemberState: tt.member}})
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Fatal(diff)
 			}
@@ -237,8 +240,8 @@ func TestAllZeroFloorConvergence(t *testing.T) {
 }
 
 // TestAllZeroFloorUnreadableObservationKeepsAppliedPlan retains idle zero-floor
-// homes while one home's inventory read fails on alternating passes. The idle
-// plan never changes and the home's acknowledged plan survives every pass; an
+// members while one member's inventory read fails on alternating passes. The idle
+// plan never changes and the member's acknowledged plan survives every pass; an
 // unreadable pass reports only an unknown observation.
 func TestAllZeroFloorUnreadableObservationKeepsAppliedPlan(t *testing.T) {
 	f := allZeroFixture(t, false)
@@ -249,7 +252,7 @@ func TestAllZeroFloorUnreadableObservationKeepsAppliedPlan(t *testing.T) {
 	}
 	stored := f.reconcile(t)
 	if candidate := candidateOf(t, stored, "member-a"); !candidate.ObservationKnown || candidate.AppliedPlanID != stored.Status.Placement.Plan.ID {
-		t.Fatalf("idle home has not acknowledged the accepted plan: %+v", candidate)
+		t.Fatalf("idle member has not acknowledged the accepted plan: %+v", candidate)
 	}
 	readable := workloadcluster.NewNeverCachingClient(f.workers["member-a"])
 	unreadable := unreadableAllMember(f, "member-a")
@@ -285,11 +288,11 @@ func TestAllZeroFloorUnreadableObservationKeepsAppliedPlan(t *testing.T) {
 	}
 }
 
-// TestAllZeroFloorUnreadableHomesKeepPlaced converges idle zero-floor homes,
+// TestAllZeroFloorUnreadableMembersKeepPlaced converges idle zero-floor members,
 // then makes one pass unable to verify any of them. The pass keeps the Placed
 // phase and every acknowledged plan behind unknown observations, holds
 // convergence on the reason, and the next readable pass reconverges.
-func TestAllZeroFloorUnreadableHomesKeepPlaced(t *testing.T) {
+func TestAllZeroFloorUnreadableMembersKeepPlaced(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
 		unread func(*backendFixture, string) workloadcluster.SelectivelyCachingClient
@@ -306,7 +309,7 @@ func TestAllZeroFloorUnreadableHomesKeepPlaced(t *testing.T) {
 			}
 			stored := f.reconcile(t)
 			if diff := cmp.Diff(v1beta1.PlacementPhasePlaced, stored.Status.Placement.Phase); diff != "" {
-				t.Fatalf("idle homes did not settle as Placed (-want +got):\n%s", diff)
+				t.Fatalf("idle members did not settle as Placed (-want +got):\n%s", diff)
 			}
 			readable := map[string]workloadcluster.SelectivelyCachingClient{}
 			for name := range f.workers {
@@ -325,7 +328,7 @@ func TestAllZeroFloorUnreadableHomesKeepPlaced(t *testing.T) {
 				t.Fatalf("unreadable pass changed the idle plan (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(v1beta1.PlacementPhasePlaced, unknown.Status.Placement.Phase); diff != "" {
-				t.Fatalf("unreadable pass demoted the idle homes (-want +got):\n%s", diff)
+				t.Fatalf("unreadable pass demoted the idle members (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff("AwaitingMemberConvergence", unknown.Status.GetCondition(v1beta1.PlacementConverged).Reason); diff != "" {
 				t.Fatalf("unreadable pass decided on kept acknowledgements (-want +got):\n%s", diff)
@@ -342,10 +345,77 @@ func TestAllZeroFloorUnreadableHomesKeepPlaced(t *testing.T) {
 
 			recovered := f.reconcile(t)
 			if diff := cmp.Diff(v1beta1.PlacementPhasePlaced, recovered.Status.Placement.Phase); diff != "" {
-				t.Fatalf("readable pass did not keep the idle homes Placed (-want +got):\n%s", diff)
+				t.Fatalf("readable pass did not keep the idle members Placed (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff("AllocationConverged", recovered.Status.GetCondition(v1beta1.PlacementConverged).Reason); diff != "" {
 				t.Fatalf("readable pass did not reconverge (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+// TestAllZeroFloorHoldKeepsIdleMembersPlaced settles a member kept idle by a
+// zero minimum replica count as Placed, then makes every pass stop on a reason
+// it cannot act on: a move the zero minimums cannot carry, and a plan write
+// the store rejects. Each such pass carries the reason on the condition and
+// leaves the phase Placed, because nothing about the member's placement moved.
+func TestAllZeroFloorHoldKeepsIdleMembersPlaced(t *testing.T) {
+	selectMember := func(s *v1beta1.InferenceService, name string) {
+		s.Spec.Placement.ClusterAffinity = []v1beta1.ClusterAffinityTerm{{MatchFields: []v1beta1.ClusterSelectorRequirement{{Key: "metadata.name", Operator: corev1.NodeSelectorOpIn, Values: []string{name}}}}}
+	}
+	for _, tt := range []struct {
+		name       string
+		hold       func(*testing.T, *backendFixture, *v1beta1.InferenceService)
+		wantReason string
+	}{
+		{name: "move held on zero floors", wantReason: "PositiveFloorRequired", hold: func(_ *testing.T, _ *backendFixture, source *v1beta1.InferenceService) {
+			selectMember(source, "member-b")
+		}},
+		{name: "plan write rejected", wantReason: "PlanNotPersisted", hold: func(_ *testing.T, f *backendFixture, source *v1beta1.InferenceService) {
+			accepted := source.Status.Placement.Plan.ID
+			writer := f.reconciler.Client
+			f.reconciler.Client = interceptor.NewClient(writer.(client.WithWatch), interceptor.Funcs{SubResourceUpdate: func(ctx context.Context, c client.Client, name string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+				if written, ok := obj.(*v1beta1.InferenceService); ok && written.Status.Placement != nil && written.Status.Placement.Plan != nil && written.Status.Placement.Plan.ID != accepted {
+					return errors.New("plan write rejected")
+				}
+				return c.SubResource(name).Update(ctx, obj, opts...)
+			}})
+			source.Spec.Engine.MinReplicas = ptr.To(2)
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := allZeroFixture(t, false)
+			selectMember(f.source, "member-a")
+			if err := f.reconciler.Update(t.Context(), f.source); err != nil {
+				t.Fatal(err)
+			}
+			f.reconcile(t)
+			seedSingleAdmission(t, f, "member-a", declaredComponents(f.source)...)
+			acknowledgeSingleFloor(t, f, "member-a", 0)
+			stored := f.reconcile(t)
+			if diff := cmp.Diff(v1beta1.PlacementPhasePlaced, stored.Status.Placement.Phase); diff != "" {
+				t.Fatalf("idle member did not settle as Placed (-want +got):\n%s", diff)
+			}
+			if candidate := candidateOf(t, stored, "member-a"); candidate.AdmittedReplicas != 0 || candidate.AppliedPlanID != stored.Status.Placement.Plan.ID {
+				t.Fatalf("idle member is not an acknowledged zero floor: %+v", candidate)
+			}
+			source := stored.DeepCopy()
+			tt.hold(t, f, source)
+			source.Generation++
+			if err := f.reconciler.Update(t.Context(), source); err != nil {
+				t.Fatal(err)
+			}
+			for pass := range 3 {
+				got := f.reconcile(t)
+				if diff := cmp.Diff(tt.wantReason, got.Status.GetCondition(v1beta1.PlacementConverged).Reason); diff != "" {
+					t.Fatalf("pass %d hold reason (-want +got):\n%s", pass, diff)
+				}
+				if diff := cmp.Diff(stored.Status.Placement.Plan, got.Status.Placement.Plan); diff != "" {
+					t.Fatalf("pass %d changed the idle plan (-want +got):\n%s", pass, diff)
+				}
+				if diff := cmp.Diff(v1beta1.PlacementPhasePlaced, got.Status.Placement.Phase); diff != "" {
+					t.Fatalf("pass %d demoted the idle member while held (-want +got):\n%s", pass, diff)
+				}
 			}
 		})
 	}

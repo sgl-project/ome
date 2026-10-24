@@ -22,7 +22,7 @@ import (
 // never charges the revision's retry ladder; relocation keeps first try.
 const ReasonContainersNotReady = "ContainersNotReady"
 
-// podRunningNotReady reports whether a live pod is in readiness limbo.
+// PodRunningNotReady reports whether a live pod is in readiness limbo.
 //
 // The shape is deliberately narrow: phase Running, at least one
 // container status, EVERY regular container actually running, and
@@ -30,7 +30,7 @@ const ReasonContainersNotReady = "ContainersNotReady"
 // (CrashLoopBackOff, ImagePullBackOff, ...) is excluded because the
 // kubelet has already named that failure and the engine classifies it
 // on its own terms.
-func podRunningNotReady(pod *corev1.Pod) bool {
+func PodRunningNotReady(pod *corev1.Pod) bool {
 	if pod == nil || pod.DeletionTimestamp != nil || pod.Status.Phase != corev1.PodRunning {
 		return false
 	}
@@ -257,7 +257,7 @@ func FirstRunningNotReadyPod(pods []*corev1.Pod, attemptRev string) (*corev1.Pod
 		if podHasWaitingContainer(pod) {
 			return nil, ""
 		}
-		if limbo == nil && podRunningNotReady(pod) {
+		if limbo == nil && PodRunningNotReady(pod) {
 			limbo = pod
 		}
 	}

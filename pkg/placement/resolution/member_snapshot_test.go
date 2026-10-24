@@ -1,18 +1,16 @@
 package resolution
 
 import (
-	"context"
 	"strconv"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestResolveHomeWithMemberStatusUpdates(t *testing.T) {
@@ -25,23 +23,15 @@ func TestResolveHomeWithMemberStatusUpdates(t *testing.T) {
 			before := f.standing.DeepCopy()
 			calls := 0
 			checking := false
-			cl := interceptor.NewClient(fixtureClient(t, f), interceptor.Funcs{
-				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-					if err := c.Get(ctx, key, obj, opts...); err != nil {
-						return err
-					}
-					if member, ok := obj.(*v1beta1.InferenceService); ok {
-						calls++
-						if phase == "before resolution" || (phase == "during resolution" && calls > 1) || checking {
-							member.ResourceVersion = strconv.Itoa(calls + 1)
-							member.Status.ObservedGeneration = int64(calls)
-							member.Status.Components = map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{v1beta1.EngineComponent: {}}
-							member.ManagedFields = []metav1.ManagedFieldsEntry{{Manager: "member-controller", Subresource: "status", Time: ptr.To(metav1.Now())}}
-						}
-					}
-					return nil
-				},
-			})
+			cl := fixtureClient(t, f, fakeclient.EditedRead(func(member *v1beta1.InferenceService) {
+				calls++
+				if phase == "before resolution" || (phase == "during resolution" && calls > 1) || checking {
+					member.ResourceVersion = strconv.Itoa(calls + 1)
+					member.Status.ObservedGeneration = int64(calls)
+					member.Status.Components = map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{v1beta1.EngineComponent: {}}
+					member.ManagedFields = []metav1.ManagedFieldsEntry{{Manager: "member-controller", Subresource: "status", Time: ptr.To(metav1.Now())}}
+				}
+			}))
 			resolved, floors, err := (Resolver{Client: cl, OperatorNamespace: f.namespace}).ResolveHome(t.Context(), f.service, f.standing)
 			if err != nil {
 				t.Fatal(err)
@@ -92,21 +82,13 @@ func TestMemberRuntimeInputChanges(t *testing.T) {
 				f := newRuntimeFixture()
 				f.pin(t, false)
 				calls, checking := 0, false
-				cl := interceptor.NewClient(fixtureClient(t, f), interceptor.Funcs{
-					Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-						if err := c.Get(ctx, key, obj, opts...); err != nil {
-							return err
-						}
-						if member, ok := obj.(*v1beta1.InferenceService); ok {
-							calls++
-							if (phase == "during resolution" && calls > 1) || checking {
-								member.ResourceVersion = strconv.Itoa(calls + 1)
-								tt.edit(member)
-							}
-						}
-						return nil
-					},
-				})
+				cl := fixtureClient(t, f, fakeclient.EditedRead(func(member *v1beta1.InferenceService) {
+					calls++
+					if (phase == "during resolution" && calls > 1) || checking {
+						member.ResourceVersion = strconv.Itoa(calls + 1)
+						tt.edit(member)
+					}
+				}))
 				resolved, err := (Resolver{Client: cl, OperatorNamespace: f.namespace}).Resolve(t.Context(), f.service, f.standing)
 				if phase == "after resolution" {
 					if err != nil {

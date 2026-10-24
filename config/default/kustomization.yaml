@@ -69,11 +69,6 @@ replacements:
       kind: ValidatingWebhookConfiguration
       name: clusterbasemodel.ome.io
   - fieldPaths:
-    - spec.conversion.webhook.clientConfig.service.name
-    select:
-      kind: CustomResourceDefinition
-      name: inferenceservices.ome.io
-  - fieldPaths:
     - spec.commonName
     - spec.dnsNames.0
     options:
@@ -150,14 +145,6 @@ replacements:
       delimiter: '/'
       index: 0
     select:
-      kind: CustomResourceDefinition
-      name: inferenceservices.ome.io
-  - fieldPaths:
-    - metadata.annotations.[cert-manager.io/inject-ca-from]
-    options:
-      delimiter: '/'
-      index: 0
-    select:
       kind: MutatingWebhookConfiguration
       name: inferenceservice.ome.io
   - fieldPaths:
@@ -226,8 +213,6 @@ patches:
 - path: clusterservingruntime_validatingwebhook_cainjection_patch.yaml
 - path: servingruntime_validationwebhook_cainjection_patch.yaml
 - path: manager_resources_patch.yaml
-- path: isvc_conversion_webhook.yaml
-- path: cainjection_conversion_webhook.yaml
 - path: benchmarkjob_validationwebhook_cainjection_patch.yaml
 - path: controllerrevision_validatingwebhook_cainjection_patch.yaml
 - path: basemodel_validatingwebhook_cainjection_patch.yaml

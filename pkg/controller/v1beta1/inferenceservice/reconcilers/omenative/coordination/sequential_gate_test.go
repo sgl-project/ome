@@ -15,6 +15,7 @@ import (
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	workloadtypes "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
 // fakeClientForSeqISVC creates a fake client seeded with InferenceReplica objects
@@ -355,26 +356,28 @@ func TestCheckSequentialGate_SoakHoldsActiveComponent(t *testing.T) {
 	}
 }
 
-// TestCheckSequentialGate_SoakReasonStableAcrossElapsedTime pins that the
-// soak denial message carries only stable facts (component + configured
-// duration), not a live elapsed/remaining countdown: two consults against
-// the identical fixture, spaced apart in real wall-clock time (so
-// time.Since(decoderReady) genuinely differs between them), must return
-// byte-identical reason strings. A caller persisting this string into
-// status.rolloutHold.reason relies on that stability to avoid rewriting
-// status (and resetting rolloutHold.since) on every reconcile for the
-// entire soak window.
+// TestCheckSequentialGate_SoakReasonStableAcrossElapsedTime: the soak
+// denial message carries only stable facts (component + configured
+// duration), not a live elapsed/remaining countdown. Two consults against
+// the same shape, one with the decoder finished 1s ago and one with it
+// finished 6s ago, must return byte-identical reason strings. The gate
+// reads time.Since(decoderReady), so moving the finish 5s back is the
+// clock moving 5s forward between the consults. A caller persisting this
+// string into status.rolloutHold.reason relies on that stability to avoid
+// rewriting status (and resetting rolloutHold.since) on every reconcile for
+// the entire soak window.
 func TestCheckSequentialGate_SoakReasonStableAcrossElapsedTime(t *testing.T) {
 	const soak = 15 * time.Second
-	isvc := mkSequentialFixture("seq-isvc", soak)
-	setComponentRevisions(isvc, v1beta1.DecoderComponent, "rev2", "rev2")
-	setComponentRevisions(isvc, v1beta1.EngineComponent, "rev1", "rev2")
-	setComponentReadyAt(isvc, v1beta1.DecoderComponent, time.Now())
-	client := fakeClientForSeqISVC(isvc)
+	consult := func(finishedAgo time.Duration) (bool, string) {
+		isvc := mkSequentialFixture("seq-isvc", soak)
+		setComponentRevisions(isvc, v1beta1.DecoderComponent, "rev2", "rev2")
+		setComponentRevisions(isvc, v1beta1.EngineComponent, "rev1", "rev2")
+		setComponentReadyAt(isvc, v1beta1.DecoderComponent, time.Now().Add(-finishedAgo))
+		return CheckSequentialGate(context.Background(), fakeClientForSeqISVC(isvc), isvc, v1beta1.EngineComponent)
+	}
 
-	allowed1, reason1 := CheckSequentialGate(context.Background(), client, isvc, v1beta1.EngineComponent)
-	time.Sleep(50 * time.Millisecond)
-	allowed2, reason2 := CheckSequentialGate(context.Background(), client, isvc, v1beta1.EngineComponent)
+	allowed1, reason1 := consult(1 * time.Second)
+	allowed2, reason2 := consult(6 * time.Second)
 
 	if allowed1 || allowed2 {
 		t.Fatalf("both consults must stay denied within the soak window: allowed1=%v allowed2=%v", allowed1, allowed2)
@@ -1024,6 +1027,43 @@ func TestEmitSequentialDeferred_ActiveButNoLaterBump(t *testing.T) {
 	}
 }
 
+// TestEmitSequentialDeferred_AStagedEarlierComponentDefersNothing records the
+// warning's reading of a Component resting at its staged shape under a
+// partition: its roll stays in flight by design, but it is done for the
+// next Component, which rolls rather than waits, so no deferral is
+// reported. The same Component short of its staged shape still defers the
+// later one.
+func TestEmitSequentialDeferred_AStagedEarlierComponentDefersNothing(t *testing.T) {
+	g := ResolvedGroup{
+		Policy: v1beta1.CoordinationPolicySequential,
+		Order:  []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+	}
+	staged := GroupObservation{
+		Group: g,
+		Components: map[v1beta1.ComponentType]ComponentObservation{
+			v1beta1.EngineComponent:  {RolloutInFlight: true, AtDesiredShape: true, Partition: 3, TargetRevisionHash: "rev2"},
+			v1beta1.DecoderComponent: {RolloutInFlight: true, TargetRevisionHash: "rev2"},
+		},
+	}
+	rec := record.NewFakeRecorder(10)
+	emitSequentialDeferredEvent(rec, &v1beta1.InferenceService{}, g, staged, "")
+	if got := drainEvents(rec); len(got) != 0 {
+		t.Errorf("a staged earlier Component defers nothing; got %v", got)
+	}
+
+	rolling := staged
+	rolling.Components = map[v1beta1.ComponentType]ComponentObservation{
+		v1beta1.EngineComponent:  {RolloutInFlight: true, AtDesiredShape: false, Partition: 3, TargetRevisionHash: "rev2"},
+		v1beta1.DecoderComponent: {RolloutInFlight: true, TargetRevisionHash: "rev2"},
+	}
+	rec = record.NewFakeRecorder(10)
+	emitSequentialDeferredEvent(rec, &v1beta1.InferenceService{}, g, rolling, "")
+	got := drainEvents(rec)
+	if len(got) != 1 || !strings.Contains(got[0], "SequentialNextSpecBumpDeferred") || !strings.Contains(got[0], "decoder") {
+		t.Errorf("an earlier Component short of its staged shape defers the later one; got %v", got)
+	}
+}
+
 func TestEmitSequentialDeferred_FiresWhenLaterComponentAlsoBumped(t *testing.T) {
 	rec := record.NewFakeRecorder(10)
 	isvc := &v1beta1.InferenceService{}
@@ -1343,5 +1383,156 @@ func TestCheckSequentialGate_SoakIgnoresLegacyAvailableCondition(t *testing.T) {
 	allowed, reason := CheckSequentialGate(context.Background(), cl, isvc, v1beta1.EngineComponent)
 	if !allowed {
 		t.Errorf("legacy Available condition must not arm the soak clock: %s", reason)
+	}
+}
+
+// stagedIR is a Component's replica resting at its staged shape: replicas
+// Instances, the lowest held of them Ready on currentHash and the rest
+// Ready on updateHash, the partition on the replica's spec, the status
+// written for the replica's generation and the projection for the
+// service's, the counters saying every Instance serves, and the Ready
+// condition True with reason Staged since readyAt.
+func stagedIR(isvcName string, c v1beta1.ComponentType, currentHash, updateHash string, replicas, held int32, gen int64, readyAt time.Time) *v1beta1.InferenceReplica {
+	ir := seqReadyIR(isvcName, c, currentHash, updateHash, updateHash, replicas, gen)
+	for i := int32(0); i < held; i++ {
+		ir.Status.InstanceStatuses[i].RunningRevision = revName(isvcName, c, currentHash)
+	}
+	ir.Status.ReadyReplicas, ir.Status.ServingReplicas = replicas, replicas
+	ir.Status.Conditions = []metav1.Condition{{Type: conditionReady, Status: metav1.ConditionTrue, Reason: "Staged", LastTransitionTime: metav1.NewTime(readyAt)}}
+	return withIRSpecPartition(ir, held)
+}
+
+// TestCheckSequentialGate_TheWaitAfterReadinessIsMeasuredAfterAStagedComponent
+// 12 engines with 2 kept on version 1 by a partition, then 8 decoders, with
+// a ten-minute wait between the two. The ten movable engines serve version 2
+// and the engine rests at its staged shape, Ready. The decoder's first start
+// waits out the ten minutes from the moment the engine turned Ready, as it
+// does after an engine with no partition, and is admitted once they have
+// passed.
+func TestCheckSequentialGate_TheWaitAfterReadinessIsMeasuredAfterAStagedComponent(t *testing.T) {
+	const name = "seq-isvc"
+	isvc := mkSequentialFixtureEngineFirst(name)
+	isvc.Spec.Rollout.Groups[0].Soak = &metav1.Duration{Duration: 10 * time.Minute}
+	isvc = pinActiveRun(isvc)
+	isvc.Generation = 3
+	for _, tc := range []struct {
+		name       string
+		readyFor   time.Duration
+		wantAllow  bool
+		wantReason string
+	}{
+		{name: "one minute after the engine staged the decoder waits", readyFor: time.Minute, wantReason: "Sequential.Soak: decoder waiting out the 10m0s soak after engine"},
+		{name: "eleven minutes after the engine staged the decoder starts", readyFor: 11 * time.Minute, wantAllow: true, wantReason: "Sequential active Component"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			decoder := seqReadyIR(name, v1beta1.DecoderComponent, "v1", "v2", "v1", 8, 3)
+			decoder.Status.ReadyReplicas, decoder.Status.ServingReplicas = 8, 8
+			cl := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(
+				stagedIR(name, v1beta1.EngineComponent, "v1", "v2", 12, 2, 3, time.Now().Add(-tc.readyFor)),
+				decoder,
+			).Build()
+			allowed, reason := CheckSequentialGate(context.Background(), cl, isvc, v1beta1.DecoderComponent)
+			if allowed != tc.wantAllow || reason != tc.wantReason {
+				t.Fatalf("decoder: allowed=%v reason=%q, want allowed=%v reason=%q", allowed, reason, tc.wantAllow, tc.wantReason)
+			}
+			allowed, gate, reason := EvaluateUpdateGate(context.Background(), cl, isvc, v1beta1.DecoderComponent, revName(name, v1beta1.DecoderComponent, "v1"),
+				pairingCR("", name, v1beta1.DecoderComponent, "v2", ""), nil, GroupDefaults{}, workloadtypes.UpdateStrategyRecreatePod, 0, 0)
+			// The whole gate stack answers the same; an admitted start carries no reason.
+			wantGate, wantReason := v1beta1.RolloutHoldGate(""), ""
+			if !tc.wantAllow {
+				wantGate, wantReason = v1beta1.RolloutHoldGateSequential, tc.wantReason
+			}
+			if allowed != tc.wantAllow || gate != wantGate || reason != wantReason {
+				t.Fatalf("the gate stack answered allowed=%v gate=%q reason=%q, want allowed=%v gate=%q reason=%q", allowed, gate, reason, tc.wantAllow, wantGate, wantReason)
+			}
+		})
+	}
+}
+
+// seqReplicaWithRows is a fake InferenceReplica of one Sequential member
+// as the replica controller publishes it: its count and user partition on
+// the spec, the revision pair, and one Ready row per Instance on the
+// revision given, in index order. The parent-generation annotation and
+// the observed generation match the ISVC's, so only the revision pair and the
+// rows decide what the gate reads.
+func seqReplicaWithRows(isvc *v1beta1.InferenceService, c v1beta1.ComponentType, partition int32, current, update string, running ...string) *v1beta1.InferenceReplica {
+	rows := make([]v1beta1.OMENativeInstanceStatus, 0, len(running))
+	for i, rev := range running {
+		rows = append(rows, v1beta1.OMENativeInstanceStatus{Index: int32(i), Phase: v1beta1.OMENativeInstanceReady, RunningRevision: rev})
+	}
+	replicas := int32(len(running))
+	ir := &v1beta1.InferenceReplica{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        isvc.Name + "-" + string(c),
+			Namespace:   isvc.Namespace,
+			Generation:  isvc.Generation,
+			Annotations: parentGenAnnotation(isvc.Generation),
+		},
+		Spec: v1beta1.InferenceReplicaSpec{Replicas: &replicas},
+		Status: v1beta1.InferenceReplicaStatus{
+			ObservedGeneration: isvc.Generation,
+			Replicas:           replicas,
+			ReadyReplicas:      replicas,
+			CurrentRevision:    current,
+			UpdateRevision:     update,
+			InstanceStatuses:   rows,
+		},
+	}
+	if partition > 0 {
+		ir.Spec.Lifecycle = &v1beta1.LifecycleSpec{UpdateStrategy: &v1beta1.UpdateStrategy{
+			RollingUpdate: &v1beta1.RollingUpdate{Partition: &partition}}}
+	}
+	return ir
+}
+
+// TestCheckSequentialGate_APartitionAboveTheOldCountReleasesTheNextComponent
+// records the turn passing under a partition the first Component cannot fill.
+// The order is decoder then engine. The decoder has 12 Instances, 8 on the new revision
+// and 4 on the old, all Ready and nothing in flight, under a partition of
+// 8 raised after 8 moved. A partition holds the Instances still on the old
+// revision, so it holds those 4 and the decoder rests at that shape: the
+// engine's start is admitted. Under a partition of 2 the decoder still has
+// two Instances to move and the engine waits on it. A decoder scaled to 4
+// under a partition of 6, every Instance on the old revision, rests the
+// same way, and one scaled to 4 under a partition of 2 still rolls.
+func TestCheckSequentialGate_APartitionAboveTheOldCountReleasesTheNextComponent(t *testing.T) {
+	dec, eng := v1beta1.DecoderComponent, v1beta1.EngineComponent
+	revision := func(c v1beta1.ComponentType, hash string) string { return "seq-isvc-" + string(c) + "-" + hash }
+	fleet := func(c v1beta1.ComponentType, onNew, onOld int) []string {
+		var out []string
+		for i := 0; i < onNew; i++ {
+			out = append(out, revision(c, "rev2"))
+		}
+		for i := 0; i < onOld; i++ {
+			out = append(out, revision(c, "rev1"))
+		}
+		return out
+	}
+	for _, tc := range []struct {
+		name      string
+		partition int32
+		onNew     int
+		onOld     int
+		admitted  bool
+	}{
+		{name: "partition 8 raised after 8 of 12 moved releases the engine", partition: 8, onNew: 8, onOld: 4, admitted: true},
+		{name: "partition 4 met exactly releases the engine", partition: 4, onNew: 8, onOld: 4, admitted: true},
+		{name: "partition 2 with 4 still old keeps the turn", partition: 2, onNew: 8, onOld: 4, admitted: false},
+		{name: "a count scaled to 4 under a partition of 6 releases the engine", partition: 6, onNew: 0, onOld: 4, admitted: true},
+		{name: "a count scaled to 4 under a partition of 2 keeps the turn", partition: 2, onNew: 0, onOld: 4, admitted: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			isvc := mkSequentialFixture("seq-isvc", 0)
+			decoder := seqReplicaWithRows(isvc, dec, tc.partition, revision(dec, "rev1"), revision(dec, "rev2"), fleet(dec, tc.onNew, tc.onOld)...)
+			engine := seqReplicaWithRows(isvc, eng, 0, revision(eng, "rev1"), revision(eng, "rev2"), fleet(eng, 0, 2)...)
+			reads := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(decoder, engine).Build()
+			allowed, reason := CheckSequentialGate(context.Background(), reads, isvc, eng)
+			if allowed != tc.admitted {
+				t.Fatalf("engine start admitted=%v (%s), want %v", allowed, reason, tc.admitted)
+			}
+			if !tc.admitted && reason != "Sequential waiting on decoder" {
+				t.Fatalf("engine hold reads %q, want \"Sequential waiting on decoder\"", reason)
+			}
+		})
 	}
 }

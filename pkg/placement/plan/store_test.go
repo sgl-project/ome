@@ -1,7 +1,6 @@
 package plan
 
 import (
-	"context"
 	"errors"
 	"math"
 	"strings"
@@ -11,15 +10,12 @@ import (
 	"github.com/google/go-cmp/cmp"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func sourceFixture() *v1beta1.InferenceService {
@@ -49,13 +45,9 @@ func capacityFixture() *v1beta1.PlacementCapacitySample {
 	}}}
 }
 
-func storeFixture(t *testing.T, source *v1beta1.InferenceService, hooks interceptor.Funcs) Store {
+func storeFixture(t *testing.T, source *v1beta1.InferenceService, opts ...fakeclient.Option) Store {
 	t.Helper()
-	scheme := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
-	cl := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&v1beta1.InferenceService{}).WithObjects(source).WithInterceptorFuncs(hooks).Build()
+	cl := fakeclient.New(t, append([]fakeclient.Option{fakeclient.WithStatusSubresource(&v1beta1.InferenceService{}), fakeclient.WithObjects(source)}, opts...)...)
 	return Store{Client: cl, Reader: cl}
 }
 
@@ -70,7 +62,7 @@ func mustPersist(t *testing.T, store Store, source *v1beta1.InferenceService, pr
 
 func TestPersistPlanAcrossRestartAndRetarget(t *testing.T) {
 	source := sourceFixture()
-	store := storeFixture(t, source, interceptor.Funcs{})
+	store := storeFixture(t, source)
 	proposal := proposalFixture()
 	first := mustPersist(t, store, source, proposal)
 	want := &v1beta1.PlacementPlanStatus{ID: first.Status.Placement.Plan.ID, Revision: 1, SourceUID: source.UID, ObservedGeneration: 1, InputDigest: "intent-a", RequestedReplicas: 6, AssignedReplicas: 6}
@@ -152,11 +144,11 @@ func TestPersistFencesConcurrentChanges(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			source := sourceFixture()
-			initial := storeFixture(t, source, interceptor.Funcs{})
+			initial := storeFixture(t, source)
 			source = mustPersist(t, initial, source, proposalFixture())
 			current := source.DeepCopy()
 			tt.mutate(current)
-			store := storeFixture(t, current, interceptor.Funcs{})
+			store := storeFixture(t, current)
 			got, err := store.Persist(t.Context(), source, proposalFixture())
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("want %v, got %v", tt.want, err)
@@ -194,34 +186,26 @@ func TestPersistConflictAndReadback(t *testing.T) {
 		{name: "readback failure", readError: true, want: failure, wantWrites: 1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			writes, reads := 0, 0
-			hooks := interceptor.Funcs{
-				Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-					reads++
-					if tt.readError && reads == 2 {
-						return failure
-					}
-					if err := cl.Get(ctx, key, obj, opts...); err != nil {
-						return err
-					}
-					if tt.change != nil && reads == 2 {
-						tt.change(obj.(*v1beta1.InferenceService))
-					}
-					return nil
-				},
-				SubResourceUpdate: func(ctx context.Context, cl client.Client, sub string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
-					writes++
-					if tt.writeError {
-						return failure
-					}
-					if tt.conflict && writes == 1 {
-						return apierrors.NewConflict(schema.GroupResource{Group: "ome.io", Resource: "inferenceservices"}, obj.GetName(), failure)
-					}
-					return cl.SubResource(sub).Update(ctx, obj, opts...)
-				},
-			}
 			source := sourceFixture()
-			store := storeFixture(t, source, hooks)
+			writes := fakeclient.CountingVerb(fakeclient.StatusUpdate)
+			reads := 0
+			faults := []fakeclient.Option{writes, fakeclient.EditedRead(func(member *v1beta1.InferenceService) {
+				reads++
+				if tt.change != nil && reads == 2 {
+					tt.change(member)
+				}
+			})}
+			if tt.readError {
+				faults = append(faults, fakeclient.FailingVerb(fakeclient.Get, 2, failure))
+			}
+			if tt.writeError {
+				faults = append(faults, fakeclient.FailingVerb(fakeclient.StatusUpdate, fakeclient.EveryCall, failure))
+			}
+			if tt.conflict {
+				conflict := apierrors.NewConflict(schema.GroupResource{Group: "ome.io", Resource: "inferenceservices"}, source.Name, failure)
+				faults = append(faults, fakeclient.FailingVerb(fakeclient.StatusUpdate, 1, conflict))
+			}
+			store := storeFixture(t, source, faults...)
 			got, err := store.Persist(t.Context(), source, proposalFixture())
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("want %v, got %v", tt.want, err)
@@ -229,7 +213,7 @@ func TestPersistConflictAndReadback(t *testing.T) {
 			if tt.want != nil && got != nil {
 				t.Fatal("failed verification authorized member writes")
 			}
-			if diff := cmp.Diff(tt.wantWrites, writes); diff != "" {
+			if diff := cmp.Diff(tt.wantWrites, writes.Count()); diff != "" {
 				t.Fatal(diff)
 			}
 		})
@@ -246,7 +230,7 @@ func TestPersistPreservesObservationsByClusterIdentity(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			source := sourceFixture()
-			store := storeFixture(t, source, interceptor.Funcs{})
+			store := storeFixture(t, source)
 			source = mustPersist(t, store, source, proposalFixture())
 			source.Status.Placement.Candidates[0].ObservationKnown = true
 			source.Status.Placement.Candidates[0].AppliedPlanID = source.Status.Placement.Plan.ID
@@ -294,7 +278,7 @@ func TestPersistRejectsInvalidStoreOrSource(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			source := sourceFixture()
-			store := storeFixture(t, source, interceptor.Funcs{})
+			store := storeFixture(t, source)
 			tt.mutate(&store, &source)
 			proposal := proposalFixture()
 			proposal.InputDigest = "intent-b"
@@ -318,7 +302,7 @@ func TestPersistRejectsDamagedAcceptedAuthority(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			source := sourceFixture()
-			store := storeFixture(t, source, interceptor.Funcs{})
+			store := storeFixture(t, source)
 			source = mustPersist(t, store, source, proposalFixture())
 			tt.damage(source.Status.Placement)
 			if err := store.Client.Status().Update(t.Context(), source); err != nil {
@@ -341,7 +325,7 @@ func TestPersistEmptyAllocation(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			source := sourceFixture()
-			store := storeFixture(t, source, interceptor.Funcs{})
+			store := storeFixture(t, source)
 			proposal := Proposal{InputDigest: "empty-match", UnassignedReplicas: tt.unassigned}
 			got := mustPersist(t, store, source, proposal)
 			if diff := cmp.Diff(int64(tt.unassigned), got.Status.Placement.Plan.RequestedReplicas); diff != "" {

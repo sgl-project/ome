@@ -1,9 +1,23 @@
 package query
 
 import (
+	"errors"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
+
+// ErrRevisionUnknown means no named revision identifies a pod set or template.
+var ErrRevisionUnknown = errors.New("revision identity is unknown")
+
+// RequireNamedRevision rejects identities that cannot be recorded on a row.
+// A pod's hash alone is not a reference to its ControllerRevision.
+func RequireNamedRevision(rev RevisionID) error {
+	if rev.Name() == "" || rev.IsZero() {
+		return ErrRevisionUnknown
+	}
+	return nil
+}
 
 // RevisionID is the identity of a ControllerRevision. It may be FULL
 // (name + hash — from a ControllerRevision or a status name) or HASH-ONLY

@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-// Target identifies one observed serving home and its externally addressable
+// Target identifies one observed serving cluster and its externally addressable
 // endpoint. OwnerUID prevents a recreated InferenceService from inheriting
 // observations belonging to the previous object at the same name.
 type Target struct {
@@ -52,8 +52,8 @@ type probeIdentity struct {
 	PolicyDigest string
 }
 
-// homeProbeState is the prober's running verdict for one exact target identity.
-type homeProbeState struct {
+// targetProbeState is the prober's running verdict for one exact target identity.
+type targetProbeState struct {
 	identity probeIdentity
 
 	gated               bool
@@ -84,7 +84,7 @@ type Prober struct {
 	Log              logr.Logger
 
 	mu        sync.RWMutex
-	state     map[probeIdentity]*homeProbeState
+	state     map[probeIdentity]*targetProbeState
 	nextToken uint64
 }
 
@@ -115,7 +115,7 @@ func NewProber(
 		Clock:            clk,
 		MaxResponseBytes: maxResponseBytes,
 		Log:              log,
-		state:            map[probeIdentity]*homeProbeState{},
+		state:            map[probeIdentity]*targetProbeState{},
 	}, nil
 }
 
@@ -221,7 +221,7 @@ func (p *Prober) prepare(req ProbeReconcileRequest, targets []Target) []schedule
 		live[identity] = struct{}{}
 		state, found := p.state[identity]
 		if !found {
-			state = &homeProbeState{
+			state = &targetProbeState{
 				identity:         identity,
 				lastResult:       v1beta1.ProbeResultUnknown,
 				failureThreshold: req.Policy.Probe.FailureThreshold,
@@ -370,7 +370,7 @@ func (p *Prober) Provenance(target Target) *v1beta1.TrafficMapProbe {
 	return probe
 }
 
-func (p *Prober) lookup(target Target) *homeProbeState {
+func (p *Prober) lookup(target Target) *targetProbeState {
 	if p == nil || target.PolicyDigest == "" {
 		return nil
 	}
@@ -509,7 +509,7 @@ func (p *Prober) abandon(identity probeIdentity, generation uint64) {
 	state.nextProbeTime = p.Clock.Now()
 }
 
-func (p *Prober) hydrate(state *homeProbeState, persisted *v1beta1.TrafficMap, period time.Duration, now time.Time) {
+func (p *Prober) hydrate(state *targetProbeState, persisted *v1beta1.TrafficMap, period time.Duration, now time.Time) {
 	probe := persistedProbe(persisted, state.identity)
 	if probe == nil {
 		return

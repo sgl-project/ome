@@ -8,29 +8,15 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
-func newRBACTestScheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
-	scheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(scheme); err != nil {
-		t.Fatalf("corev1 AddToScheme: %v", err)
-	}
-	if err := rbacv1.AddToScheme(scheme); err != nil {
-		t.Fatalf("rbacv1 AddToScheme: %v", err)
-	}
-	return scheme
-}
-
 func TestEnsureMetadataJobRBAC_CreatesSAAndOMENamespaceRoleBinding(t *testing.T) {
-	scheme := newRBACTestScheme(t)
-	c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeclient.New(t)
 
 	ctx := context.Background()
 	const ns = "playground"
@@ -69,8 +55,7 @@ func TestEnsureMetadataJobRBAC_NoOpInOMENamespace(t *testing.T) {
 	// in the OME namespace. The controller must NOT create a duplicate
 	// RoleBinding there — it'd collide with the chart-managed objects on
 	// upgrade and confuse operators about ownership.
-	scheme := newRBACTestScheme(t)
-	c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeclient.New(t)
 
 	ctx := context.Background()
 	if err := ensureMetadataJobRBAC(ctx, c, logf.Log, constants.OMENamespace, "ome-model-metadata", "ome-model-metadata"); err != nil {
@@ -97,7 +82,6 @@ func TestEnsureMetadataJobRBAC_IdempotentWhenObjectsAlreadyExist(t *testing.T) {
 	// Create. Pin this so a future "always patch labels" change doesn't
 	// accidentally start writing on every reconcile (causes etcd churn
 	// and resourceVersion bumps that fan out to every watch consumer).
-	scheme := newRBACTestScheme(t)
 	const ns = "playground"
 	const sa = "ome-model-metadata"
 
@@ -110,7 +94,7 @@ func TestEnsureMetadataJobRBAC_IdempotentWhenObjectsAlreadyExist(t *testing.T) {
 		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: sa},
 		Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: sa, Namespace: ns}},
 	}
-	c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).WithObjects(preExistingSA, preExistingRB).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(preExistingSA, preExistingRB))
 
 	ctx := context.Background()
 	if err := ensureMetadataJobRBAC(ctx, c, logf.Log, ns, sa, sa); err != nil {
@@ -138,8 +122,7 @@ func TestEnsureMetadataJobRBAC_NoOpWhenSANameEmpty(t *testing.T) {
 	// The Image-must-be-configured guard in buildMetadataJob fires later
 	// and surfaces a clear PVCConfigMissing status. This function should
 	// not preempt that with a confusing nameless SA create error.
-	scheme := newRBACTestScheme(t)
-	c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeclient.New(t)
 
 	ctx := context.Background()
 	if err := ensureMetadataJobRBAC(ctx, c, logf.Log, "playground", "", ""); err != nil {
@@ -151,8 +134,7 @@ func TestEnsureMetadataJobRBAC_PerSourceNSRoleBindingNamesAreDistinct(t *testing
 	// Two BaseModels in two different user namespaces must both
 	// successfully ensure their RBAC — the OME-ns RoleBindings must be
 	// distinct so they don't overwrite each other's subjects.
-	scheme := newRBACTestScheme(t)
-	c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build()
+	c := fakeclient.New(t)
 
 	ctx := context.Background()
 	if err := ensureMetadataJobRBAC(ctx, c, logf.Log, "playground", "ome-model-metadata", "ome-model-metadata"); err != nil {

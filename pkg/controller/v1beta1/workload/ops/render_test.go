@@ -19,9 +19,7 @@ import (
 	workload "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
-// testISVCGVK is the GroupVersionKind for InferenceService owner refs
-// (duplicated from omenative/core to keep workload/ops free of the
-// dispatch-side helpers).
+// testISVCGVK is the GroupVersionKind for InferenceService owner refs.
 var testISVCGVK = v1beta1.SchemeGroupVersion.WithKind("InferenceService")
 
 // testKey produces the ISVC-form workload.Key the render path consumes:
@@ -1838,5 +1836,40 @@ func TestRender_PairingProtocolLabel(t *testing.T) {
 	}
 	if got, present := pod.Labels[query.LabelPairingProtocol]; present {
 		t.Errorf("protocol-free plan must not label pods, got %q", got)
+	}
+}
+
+// TestRender_EveryStampedLabelIsWorkloadOwned: every label a rendered pod
+// carries beyond its template is reported workload-owned, so the in-place
+// label diff, which skips those keys, never writes over a stamped value.
+func TestRender_EveryStampedLabelIsWorkloadOwned(t *testing.T) {
+	plan, inst, runners := multiPodPlan(1)
+	plan.PairingProtocol = "v1"
+	meta := &metav1.ObjectMeta{Labels: map[string]string{"example.com/tier": "gold"}}
+	for _, runner := range runners {
+		pod, err := testRenderWithRevision(basicISVC(), basicPodSpec(), meta, plan, inst, runner, 0, "abc123")
+		if err != nil {
+			t.Fatalf("render %s: %v", runner.Name, err)
+		}
+		for key := range pod.Labels {
+			if _, fromTemplate := meta.Labels[key]; fromTemplate {
+				continue
+			}
+			if !query.WorkloadOwnedLabel(key) {
+				t.Errorf("runner %s: rendered label %q is stamped by the renderer but not reported workload-owned", runner.Name, key)
+			}
+		}
+		if pod.Labels["example.com/tier"] != "gold" {
+			t.Errorf("runner %s: template label not rendered: %v", runner.Name, pod.Labels)
+		}
+	}
+	// The revision-owned and gang keys are in the set; a template key is not.
+	for _, key := range []string{query.LabelRevisionHash, query.LabelPairingProtocol, query.LabelPodGroup, query.LabelPodOrdinal} {
+		if !query.WorkloadOwnedLabel(key) {
+			t.Errorf("%q must be workload-owned", key)
+		}
+	}
+	if query.WorkloadOwnedLabel("example.com/tier") {
+		t.Error("a template label must not be workload-owned")
 	}
 }

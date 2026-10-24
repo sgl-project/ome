@@ -107,9 +107,8 @@ type ScalingMode string
 const (
 	// ScalingIndependent — each Component autoscales on its own metrics. Default.
 	ScalingIndependent ScalingMode = "Independent"
-	// ScalingProportional is accepted by the schema, but admission rejects a
-	// create or an update that sets or changes a policy with this mode: no
-	// controller applies it.
+	// ScalingProportional makes declared followers track their anchor's
+	// desired InferenceReplica count at the configured ratios.
 	ScalingProportional ScalingMode = "Proportional"
 	// ScalingPinned is accepted by the schema, but admission rejects a create
 	// or an update that sets or changes a policy with this mode: no
@@ -142,6 +141,10 @@ type ProportionalPolicy struct {
 	// Ratios maps each follower Component to its replica ratio relative to the
 	// anchor. A ratio of 1.0 means parity; 0.25 means one follower per four
 	// anchor replicas (rounded up). Components not listed scale independently.
+	// A follower's minReplicas is a floor on the count it is given. Its
+	// maxReplicas, when set, is a ceiling; a follower that sets none has no
+	// ceiling of its own, and the anchor's bounds cap its count. The status
+	// reports a follower as clamped when either bound moved its target.
 	// +optional
 	Ratios map[ComponentType]resource.Quantity `json:"ratios,omitempty"`
 }

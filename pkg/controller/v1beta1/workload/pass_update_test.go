@@ -20,35 +20,54 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/v1beta1convert"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/escalation"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/evidence"
 	workloadops "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/ops"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/revision"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
 // TestReconcile_UpdateGateNil_AllowsAll asserts the dispatcher treats
 // a nil UpdateGate as always-allowed — workload-side unit tests and
 // the IR adapter (which doesn't wire coordination gates) rely on this.
-// We assert by setting up a plan that would trigger Update if the
-// target diff fires, and confirming Reconcile doesn't error.
+// One Instance serves an earlier revision and the plan rolls it to the
+// target, so the start is the gate's to allow: the pass records the
+// Instance's update and ends without error.
 func TestReconcile_UpdateGateNil_AllowsAll(t *testing.T) {
-	scheme := makeScheme(t)
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
-	deps := types.Deps{Client: c}
-
 	in := minimalInput(t)
 	in.UpdateGate = nil
+	in.ObservedState.InstanceStatuses = []types.InstanceStatus{
+		{Index: 0, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: "llama-70b-engine-priorrev"},
+	}
+	rolled := false
+	in.MutateInstance = func(_ context.Context, _ int32, mutate func(*types.InstanceStatus) bool) error {
+		s := in.ObservedState.InstanceStatuses[0]
+		if mutate(&s) && s.Operation != nil && s.Operation.Type == types.InstanceOperationUpdate {
+			rolled = true
+		}
+		return nil
+	}
+	pod := testfixture.PodForInstance(in.OwnerObject.(*v1beta1.InferenceService), 0, true, true)
+	pod.Labels[query.LabelRevisionHash] = "priorrev"
+	c := fake.NewClientBuilder().WithScheme(makeScheme(t)).WithObjects(pod).Build()
+	deps := types.Deps{Client: c, Expectations: types.NewExpectations()}
+	target := desiredRevisionForTest(t, c, in)
 	plan := minimalPlan()
+	plan.UpdateStrategy = types.UpdateStrategy{Type: types.UpdateStrategyRecreatePod}
 
-	_, err := workload.Reconcile(context.Background(), deps, in, plan, nil)
-	if err != nil {
+	if _, err := workload.Reconcile(context.Background(), deps, in, plan, target); err != nil {
 		t.Fatalf("Reconcile: %v", err)
+	}
+	if !rolled {
+		t.Fatal("a nil gate must let the roll start; no update was recorded on the Instance")
 	}
 }
 
@@ -220,7 +239,7 @@ func TestHeldByPartition(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := workloadops.HeldByPartition(tc.partition, tc.rank); got != tc.held {
+			if got := query.HeldByPartition(tc.partition, tc.rank); got != tc.held {
 				t.Errorf("HeldByPartition(rank=%d) = %v, want %v", tc.rank, got, tc.held)
 			}
 		})
@@ -738,7 +757,7 @@ func TestReconcile_GangInPlaceFallbackIsGatedAsRecreate(t *testing.T) {
 				RunningRevision: "llama-70b-engine-priorrev", PodCount: podCount, ServingPodCount: podCount,
 			}}
 			var consulted []types.UpdateStrategyType
-			in.UpdateGate = func(strategy types.UpdateStrategyType, _, _ int32) (bool, types.RolloutHoldGate, string) {
+			in.UpdateGate = func(_ string, strategy types.UpdateStrategyType, _, _ int32) (bool, types.RolloutHoldGate, string) {
 				consulted = append(consulted, strategy)
 				if strategy == types.UpdateStrategyInPlaceIfPossible || strategy == types.UpdateStrategyInPlaceOnly {
 					return true, "", ""
@@ -848,7 +867,7 @@ func TestReconcile_SinglePodInPlaceDiffIsGatedAsRecreate(t *testing.T) {
 				RunningRevision: runningName, PodCount: 1, ServingPodCount: 1,
 			}}
 			var consulted []types.UpdateStrategyType
-			in.UpdateGate = func(strategy types.UpdateStrategyType, _, _ int32) (bool, types.RolloutHoldGate, string) {
+			in.UpdateGate = func(_ string, strategy types.UpdateStrategyType, _, _ int32) (bool, types.RolloutHoldGate, string) {
 				consulted = append(consulted, strategy)
 				if strategy == types.UpdateStrategyInPlaceIfPossible || strategy == types.UpdateStrategyInPlaceOnly {
 					return true, "", ""
@@ -1525,6 +1544,61 @@ func TestReconcile_CorrectedPushKeepsTheCeilingOverALiveExtraPod(t *testing.T) {
 	}
 }
 
+// TestReconcile_CorrectedPushUnderABudgetBelowTheKeptReplacements_StartsOneHolder
+// locks the arithmetic behind a lowered budget: both Instances keep a
+// replacement a failed attempt left standing, so two extra pods stand under a
+// maxSurge of 1. A start on either Instance evicts its own extra pod first
+// and adds no pod, so the other Instance's extra pod is no charge against
+// it: the first pass starts Instance 0 by evicting its pod, and Instance 1
+// waits behind that start, not behind a slot no start could free. The pass
+// after the eviction opens Instance 0's surge alone, and the Component
+// never lists more pods than stood when the push arrived.
+func TestReconcile_CorrectedPushUnderABudgetBelowTheKeptReplacements_StartsOneHolder(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	failure := &types.InstanceTermination{Reason: "DeadlineExceeded", Message: "Update/Surge exceeded InstanceReadyTimeout", Time: metav1.NewTime(now.Add(-time.Minute))}
+	rows := []types.InstanceStatus{
+		{Index: 0, Incarnation: 1, Phase: types.InstancePhaseFailed, RunningRevision: "llama-70b-engine-priorrev", TargetRevision: "llama-70b-engine-crashrev",
+			PodCount: 2, ServingPodCount: 1, LastFailure: failure},
+		{Index: 1, Incarnation: 1, Phase: types.InstancePhaseFailed, RunningRevision: "llama-70b-engine-priorrev", TargetRevision: "llama-70b-engine-crashrev",
+			PodCount: 2, ServingPodCount: 1, LastFailure: failure},
+	}
+	kept0 := liveEnginePod("llama-70b", "prod", 0, 1, "crashrev", now)
+	kept1 := liveEnginePod("llama-70b", "prod", 1, 1, "crashrev", now)
+	f := newTerminatingSurgeFixture(t, rows, []int32{0, 1}, []int32{0, 1}, kept0, kept1)
+
+	f.pass()
+
+	if row := f.in.ObservedState.Instance(0); row == nil || row.Phase != types.InstancePhaseUpdating || row.Operation == nil || row.Operation.Step != types.UpdateStepSurge {
+		t.Fatalf("Instance 0 must start by evicting the replacement it keeps, got %+v; hold %+v", row, f.holds)
+	}
+	if err := f.c.Get(context.Background(), client.ObjectKeyFromObject(kept0), &corev1.Pod{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("the start on Instance 0 must evict its own kept replacement, got %v", err)
+	}
+	if row := f.in.ObservedState.Instance(1); row == nil || row.Phase != types.InstancePhaseFailed || row.Operation != nil {
+		t.Fatalf("Instance 1 must wait behind the one start the budget admits, got %+v", row)
+	}
+	if err := f.c.Get(context.Background(), client.ObjectKeyFromObject(kept1), &corev1.Pod{}); err != nil {
+		t.Fatalf("Instance 1's kept replacement must stand until its own start replaces it, got %v", err)
+	}
+	if got := f.surgePods(); len(got) != 0 {
+		t.Fatalf("no surge pod may be created before the eviction is observed, got %v", got)
+	}
+
+	f.deps.ExpectationsCache().ObservedDelete("prod", "llama-70b", types.ComponentEngine, 0)
+	f.clk.Step(time.Second)
+	f.pass()
+
+	if got := f.surgePods(); !slices.Equal(got, []string{"llama-70b-engine-0-default-1"}) {
+		t.Fatalf("the pass after the eviction must open Instance 0's surge alone, got %v", got)
+	}
+	if listed := f.listedPods(); len(listed) > 4 {
+		t.Fatalf("the Component must never list more pods than stood when the push arrived (4), lists %v", listed)
+	}
+	if row := f.in.ObservedState.Instance(1); row == nil || row.Phase != types.InstancePhaseFailed || row.Operation != nil {
+		t.Fatalf("Instance 1 must wait while Instance 0's surge is in flight, got %+v", row)
+	}
+}
+
 // TestReconcile_SurgeHoldNamesTheLiveExtraPod pins the hold over a live
 // extra pod: when no start is admitted, the Component reports the Budget
 // hold naming the Terminating pod it waits on and the extra pod a start
@@ -1885,6 +1959,105 @@ func darkSince(pod *corev1.Pod, at time.Time) {
 	}
 }
 
+// crashLoopingSince marks pod Running with its runner parked in
+// CrashLoopBackOff: one restart on its record, the last run exited non-zero
+// at lastCrash, ContainersReady and PodReady False from then, the serving
+// gate written at promotion still True.
+func crashLoopingSince(pod *corev1.Pod, lastCrash time.Time) {
+	darkSince(pod, lastCrash)
+	pod.Status.ContainerStatuses[0].RestartCount = 1
+	pod.Status.ContainerStatuses[0].State = corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: evidence.ReasonCrashLoop}}
+	pod.Status.ContainerStatuses[0].LastTerminationState = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+		ExitCode: 1, Reason: "Error",
+		StartedAt:  metav1.NewTime(lastCrash.Add(-10 * time.Second)),
+		FinishedAt: metav1.NewTime(lastCrash),
+	}}
+}
+
+// TestReconcile_CrashLoopingRolledInstanceHoldsItsSlot pins the budget's
+// reading of an Instance the roll moved onto the target whose promoted pod
+// is parked in CrashLoopBackOff with its last crash dated before the row's
+// Ready anchor, under RecreatePod maxUnavailable 1: Instance 0 is Ready on
+// the target with that pod, Instance 1 Ready and serving on the prior
+// revision. The pod has been unready for the stuck-pod grace, but a
+// container the kubelet parked is never dark: Instance 0 keeps its slot,
+// the fresh start on Instance 1 is denied by a Budget hold naming
+// Instance 0, and Instance 1's pod stays in rotation. The same pod with
+// its runner running and failing readiness is dark, and the start on
+// Instance 1 is admitted past it.
+func TestReconcile_CrashLoopingRolledInstanceHoldsItsSlot(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	const grace = time.Minute
+	cases := []struct {
+		name  string
+		shape func(pod *corev1.Pod, since time.Time)
+		held  bool
+	}{
+		{name: "parked in CrashLoopBackOff, the slot holds", shape: crashLoopingSince, held: true},
+		{name: "running and failing readiness, the Instance is dark", shape: darkSince},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			readySince := now.Add(-2 * grace)
+			rows := []types.InstanceStatus{
+				{Index: 0, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: "llama-70b-engine-newtarget",
+					ReadySince: &metav1.Time{Time: readySince}, PodCount: 1, ServingPodCount: 0},
+				{Index: 1, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: "llama-70b-engine-priorrev",
+					PodCount: 1, ServingPodCount: 1},
+			}
+			promoted := liveEnginePod("llama-70b", "prod", 0, 0, "newtarget", readySince.Add(-time.Minute))
+			tc.shape(promoted, readySince.Add(-time.Second))
+			f := newTerminatingSurgeFixture(t, rows, []int32{0, 1}, []int32{1}, promoted)
+			f.plan.UpdateStrategy = types.UpdateStrategy{
+				Type:          types.UpdateStrategyRecreatePod,
+				RollingUpdate: &types.RollingUpdate{MaxSurge: intOrStringInt(0), MaxUnavailable: intOrStringInt(1)},
+			}
+			f.plan.RestartPolicy = types.RestartPolicyNone
+			f.in.StuckPodGrace = grace
+			// The roll is mid-way: the Component's current revision is still
+			// the prior one, so a pod parked on the target is not a wedge the
+			// restart pass repairs on the current revision.
+			f.in.ObservedState.CurrentRevision = "llama-70b-engine-priorrev"
+			source := servingEnginePod(1)
+			sourceLive := func() bool {
+				fresh := &corev1.Pod{}
+				err := f.c.Get(context.Background(), client.ObjectKeyFromObject(source), fresh)
+				if apierrors.IsNotFound(err) {
+					return false
+				}
+				if err != nil {
+					t.Fatalf("read the source: %v", err)
+				}
+				return fresh.DeletionTimestamp == nil
+			}
+
+			f.pass()
+
+			row := f.in.ObservedState.Instance(1)
+			if tc.held {
+				hold := f.lastHold()
+				if hold == nil || hold.Gate != types.RolloutHoldGateBudget || hold.Target != f.target.Name ||
+					!strings.Contains(hold.Reason, "unavailability budget 1 exhausted") || !holdNamesInstance(hold, 0) {
+					t.Fatalf("the start on Instance 1 must be denied by the Budget hold naming Instance 0, got %+v", hold)
+				}
+				if row == nil || row.Operation != nil {
+					t.Fatalf("Instance 1 must not start while Instance 0 holds the slot, got %+v", row)
+				}
+				if !sourceLive() {
+					t.Fatal("Instance 1's pod must stay while Instance 0 holds the slot")
+				}
+				return
+			}
+			if hold := f.lastHold(); hold != nil {
+				t.Fatalf("a dark Instance on the target holds nothing, got %+v", hold)
+			}
+			if row == nil || row.Operation == nil || row.Operation.Type != types.InstanceOperationUpdate {
+				t.Fatalf("the start on Instance 1 must be admitted past a dark Instance, got %+v", row)
+			}
+		})
+	}
+}
+
 // TestReconcile_DarkRolledInstanceHoldsNoFloor pins the floor's reading of
 // an Instance the roll moved onto the target whose promoted pod served
 // and then failed readiness, under SurgeThenDrain maxUnavailable 0:
@@ -1990,4 +2163,738 @@ func TestReconcile_DarkRolledInstanceHoldsNoFloor(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestReconcile_UpdateAdmissionConsultsTheGateWithTheRowRevision pins what
+// the admission tells the coordination gate about a fresh start: the
+// revision the Instance's row runs now. Two Instances on different
+// revisions each reach the gate under their own.
+func TestReconcile_UpdateAdmissionConsultsTheGateWithTheRowRevision(t *testing.T) {
+	scheme := makeScheme(t)
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	deps := types.Deps{Client: c}
+
+	in := minimalInput(t)
+	in.DesiredSpec.Replicas = 2
+	in.ObservedState.InstanceStatuses = []types.InstanceStatus{
+		{Index: 0, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: "llama-70b-engine-reva", PodCount: 1, ServingPodCount: 1},
+		{Index: 1, Incarnation: 1, Phase: types.InstancePhaseReady, RunningRevision: "llama-70b-engine-revb", PodCount: 1, ServingPodCount: 1},
+	}
+	var consulted []string
+	in.UpdateGate = func(fromRevision string, _ types.UpdateStrategyType, _, _ int32) (bool, types.RolloutHoldGate, string) {
+		consulted = append(consulted, fromRevision)
+		return false, types.RolloutHoldGateRatio, "projected serving ratio leaves the band"
+	}
+	plan := types.ComponentPlan{
+		Component: types.ComponentEngine,
+		Replicas:  2,
+		Instances: []types.InstancePlan{
+			{Index: 0, Incarnation: 1, Runners: []types.RunnerPlan{{Name: "default", Size: 1}}},
+			{Index: 1, Incarnation: 1, Runners: []types.RunnerPlan{{Name: "default", Size: 1}}},
+		},
+		UpdateStrategy: types.UpdateStrategy{
+			Type:          types.UpdateStrategySurgeThenDrain,
+			RollingUpdate: &types.RollingUpdate{MaxSurge: intOrStringInt(2), MaxUnavailable: intOrStringInt(0)},
+		},
+	}
+	target := &appsv1.ControllerRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "llama-70b-engine-newtarget", Namespace: "prod"},
+	}
+	if _, err := workload.Reconcile(context.Background(), deps, in, plan, target); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	slices.Sort(consulted)
+	want := []string{"llama-70b-engine-reva", "llama-70b-engine-revb"}
+	if !slices.Equal(consulted, want) {
+		t.Fatalf("gate consulted with %v, want each row's running revision %v", consulted, want)
+	}
+}
+
+// TestReconcile_GangWithLostWorker_RollReplacesItUnderTheGroupBudget:
+// two leader+worker gangs roll by recreate under an unavailability budget
+// of one, with a rolling group's gate in front of the Component, and the
+// worker of the gang the roll has not reached is taken away by its node.
+// The gang serves nothing as a whole, so the group's serving count already
+// carries it as the one Instance unavailable; its repair is left to the
+// roll, because the gang is off the roll target. The roll's own recreate
+// of that gang takes nothing further out of serving, so it must open
+// without paying the budget a second time: the gang is replaced onto the
+// new revision and the roll finishes, whether the worker is lost before
+// the push or once the healthy gang has already landed. No repair is
+// recorded for the gang, the roll stays inside its budget, every pod
+// created after the loss runs the new revision, and no serving gang is
+// taken down while the broken one is out of the count.
+func TestReconcile_GangWithLostWorker_RollReplacesItUnderTheGroupBudget(t *testing.T) {
+	const replicas = 2
+	const healthy, broken = int32(0), int32(replicas - 1)
+	for _, tc := range []struct {
+		name          string
+		lostAfterLand bool
+	}{
+		{name: "worker lost before the push"},
+		{name: "worker lost once the healthy gang landed", lostAfterLand: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			policy := types.RestartPolicyRecreateInstance
+			h := offTargetCrashHarness(t, true, types.UpdateStrategyRecreatePod, 0, 1, policy, replicas)
+			consults, denials := 0, 0
+			groupGate := rollingGroupGate(h, replicas, 0, 1, &consults)
+			h.gate = func(from string, strategy types.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, types.RolloutHoldGate, string) {
+				allowed, gate, reason := groupGate(from, strategy, inFlightSurge, inFlightUnavail)
+				if !allowed {
+					denials++
+				}
+				return allowed, gate, reason
+			}
+			done := func() bool { return h.settledOn(h.revFixed, replicas) }
+			if !tc.lostAfterLand {
+				breakInstance(t, h, broken, true, gangMemberLost)
+				h.events = nil
+				h.setTarget(h.revFixed, fixedImage)
+				requireDarkInstanceRollsFirst(t, h, broken, []int32{healthy}, nil, types.UpdateStrategyRecreatePod, 0, 1, done)
+				if consults == 0 || denials == 0 {
+					t.Fatalf("gate consults = %d, denials = %d: the healthy gang's start is still put to the gate, and held while the broken gang is out of the serving count", consults, denials)
+				}
+				return
+			}
+			h.setTarget(h.revFixed, fixedImage)
+			landedFirst := func() bool {
+				return h.untouchedOn(healthy, h.revFixed) && h.instanceServes(healthy) && h.untouchedOn(broken, h.revV1)
+			}
+			if !h.run(60, landedFirst) {
+				h.dumpState("first gang")
+				t.Fatalf("the healthy gang never landed on the fixed revision with the other gang still untouched")
+			}
+			breakInstance(t, h, broken, true, gangMemberLost)
+			h.events = nil
+			lostAt := h.clk.Now()
+			consults, denials = 0, 0
+			fixedHash := query.RevisionOf(h.revFixed).Hash()
+			invariant := func() {
+				if h.repairInFlight() {
+					h.dumpState("repair opened")
+					t.Fatalf("a repair opened on an Instance whose revision is not the roll target")
+				}
+				rollStaysWithinBudget(t, h, types.UpdateStrategyRecreatePod, 0, 1)
+				for _, pod := range h.livePods() {
+					if pod.CreationTimestamp.Time.After(lostAt) && (pod.Labels[query.LabelRevisionHash] != fixedHash || pod.Spec.Containers[0].Image != fixedImage) {
+						h.dumpState("pod created off the fix")
+						t.Fatalf("pod %s was created on %s after the loss; the roll owns the rebuild", pod.Name, pod.Spec.Containers[0].Image)
+					}
+				}
+			}
+			if !h.runWithInvariant(100, done, invariant) {
+				h.dumpState("after the loss")
+				t.Fatalf("the gang short of its worker was never replaced: the roll holds on %+v", h.lastHold())
+			}
+			if h.sawEvent(types.EventReasonRestartTriggered) {
+				t.Fatalf("a restart was recorded for an Instance the roll owned: %v", h.events)
+			}
+			if denials != 0 {
+				t.Fatalf("gate denials = %d, want 0: the broken gang is already the one Instance out of the serving count, so its own recreate pays no unavailability; last hold %+v", denials, h.lastHold())
+			}
+		})
+	}
+}
+
+// TestReconcile_InstanceWithNoPodLeft_RollReplacesItUnderTheGroupBudget:
+// three single-pod Instances roll by recreate under an unavailability
+// budget of one, with a rolling group's gate in front of the Component,
+// and the only pod of an Instance the roll has not reached is deleted.
+// The Instance serves nothing, so the group's serving count already
+// carries it as the one Instance unavailable; its repair is left to the
+// roll, because the Instance is off the roll target. The roll's own
+// recreate of that Instance takes nothing further out of serving, so it
+// must open without paying the budget a second time: the Instance is
+// rebuilt onto the new revision and the roll finishes, whether the pod
+// is lost as the push lands or once the first Instance has already
+// landed. No repair is recorded, the roll stays inside its budget, every
+// pod created after the loss runs the new revision, and no serving
+// Instance is taken down while the lost one is out of the count.
+func TestReconcile_InstanceWithNoPodLeft_RollReplacesItUnderTheGroupBudget(t *testing.T) {
+	const replicas = 3
+	const broken = int32(replicas - 1)
+	serving := []int32{0, 1}
+	for _, policy := range []types.RestartPolicy{types.RestartPolicyRecreateInstance, types.RestartPolicyNone} {
+		for _, tc := range []struct {
+			name          string
+			lostAfterLand bool
+		}{
+			{name: "the only pod lost as the push lands"},
+			{name: "the only pod lost once the first Instance landed", lostAfterLand: true},
+		} {
+			t.Run(string(policy)+"/"+tc.name, func(t *testing.T) {
+				h := offTargetCrashHarness(t, false, types.UpdateStrategyRecreatePod, 0, 1, policy, replicas)
+				consults, denials := 0, 0
+				groupGate := rollingGroupGate(h, replicas, 0, 1, &consults)
+				h.gate = func(from string, strategy types.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, types.RolloutHoldGate, string) {
+					allowed, gate, reason := groupGate(from, strategy, inFlightSurge, inFlightUnavail)
+					if !allowed {
+						denials++
+					}
+					return allowed, gate, reason
+				}
+				done := func() bool { return h.settledOn(h.revFixed, replicas) }
+				if !tc.lostAfterLand {
+					breakInstance(t, h, broken, false, podSetLost)
+					h.events = nil
+					h.setTarget(h.revFixed, fixedImage)
+					requireDarkInstanceRollsFirst(t, h, broken, serving, nil, types.UpdateStrategyRecreatePod, 0, 1, done)
+					if consults == 0 {
+						t.Fatalf("gate consults = 0: a serving Instance's start is still put to the gate")
+					}
+					if denials != 0 {
+						t.Fatalf("gate denials = %d, want 0: the lost Instance rolls first and pays no unavailability, and a serving Instance's start reaches the gate only once the budget has room; last hold %+v", denials, h.lastHold())
+					}
+					return
+				}
+				h.setTarget(h.revFixed, fixedImage)
+				landedFirst := func() bool {
+					return h.untouchedOn(0, h.revFixed) && h.instanceServes(0) && h.untouchedOn(1, h.revV1) && h.untouchedOn(broken, h.revV1)
+				}
+				if !h.run(60, landedFirst) {
+					h.dumpState("first Instance")
+					t.Fatalf("the first Instance never landed on the fixed revision with the other two still untouched")
+				}
+				breakInstance(t, h, broken, false, podSetLost)
+				h.events = nil
+				lostAt := h.clk.Now()
+				consults, denials = 0, 0
+				fixedHash := query.RevisionOf(h.revFixed).Hash()
+				invariant := func() {
+					if h.repairInFlight() {
+						h.dumpState("repair opened")
+						t.Fatalf("a repair opened on an Instance whose revision is not the roll target")
+					}
+					rollStaysWithinBudget(t, h, types.UpdateStrategyRecreatePod, 0, 1)
+					for _, pod := range h.livePods() {
+						if pod.CreationTimestamp.Time.After(lostAt) && (pod.Labels[query.LabelRevisionHash] != fixedHash || pod.Spec.Containers[0].Image != fixedImage) {
+							h.dumpState("pod created off the fix")
+							t.Fatalf("pod %s was created on %s after the loss; the roll owns the rebuild", pod.Name, pod.Spec.Containers[0].Image)
+						}
+					}
+				}
+				if !h.runWithInvariant(100, done, invariant) {
+					h.dumpState("after the loss")
+					t.Fatalf("the Instance with no pod left was never replaced: the roll holds on %+v", h.lastHold())
+				}
+				if h.sawEvent(types.EventReasonRestartTriggered) {
+					t.Fatalf("a restart was recorded for an Instance the roll owned: %v", h.events)
+				}
+				if denials != 0 {
+					t.Fatalf("gate denials = %d, want 0: the lost Instance is already the one Instance out of the serving count, so its own recreate pays no unavailability; last hold %+v", denials, h.lastHold())
+				}
+			})
+		}
+	}
+}
+
+// TestReconcile_InstanceWhosePodStaysTerminating_RollOpensItsRecreateUnderTheGroupBudget:
+// three single-pod Instances roll by recreate under an unavailability
+// budget of one, with a rolling group's gate in front of the Component.
+// Once the first Instance has landed, the only pod of the last Instance
+// is deleted while the kubelet under it is gone, so the pod stays
+// Terminating and the Instance serves nothing for as long as that
+// lasts. The group's serving count already carries the Instance as the
+// one unavailable, and nothing rebuilds it while its pod name is held,
+// so the roll's recreate of it must open without asking the gate: the
+// row carries the recreate, which waits for the pod to go, and no serving
+// Instance is taken down meanwhile. Once the kubelet returns and the pod
+// goes, the Instance is rebuilt on the new revision and the roll
+// finishes, no repair recorded and no start charged twice.
+func TestReconcile_InstanceWhosePodStaysTerminating_RollOpensItsRecreateUnderTheGroupBudget(t *testing.T) {
+	const replicas = 3
+	const broken = int32(replicas - 1)
+	for _, policy := range []types.RestartPolicy{types.RestartPolicyRecreateInstance, types.RestartPolicyNone} {
+		t.Run(string(policy), func(t *testing.T) {
+			h := offTargetCrashHarness(t, false, types.UpdateStrategyRecreatePod, 0, 1, policy, replicas)
+			consults, denials := 0, 0
+			groupGate := rollingGroupGate(h, replicas, 0, 1, &consults)
+			h.gate = func(from string, strategy types.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, types.RolloutHoldGate, string) {
+				allowed, gate, reason := groupGate(from, strategy, inFlightSurge, inFlightUnavail)
+				if !allowed {
+					denials++
+				}
+				return allowed, gate, reason
+			}
+			h.setTarget(h.revFixed, fixedImage)
+			landedFirst := func() bool {
+				return h.untouchedOn(0, h.revFixed) && h.instanceServes(0) && h.untouchedOn(1, h.revV1) && h.untouchedOn(broken, h.revV1)
+			}
+			if !h.run(60, landedFirst) {
+				h.dumpState("first Instance")
+				t.Fatalf("the first Instance never landed on the fixed revision with the other two still untouched")
+			}
+			lost := h.podsOf(broken)
+			if len(lost) != 1 {
+				t.Fatalf("instance %d must hold one pod, got %d", broken, len(lost))
+			}
+			h.loseNodeUnder(broken, "")
+			breakInstance(t, h, broken, false, podSetLost)
+			h.events = nil
+			consults, denials = 0, 0
+			recreateOpen := func() bool {
+				for _, row := range h.irStatuses() {
+					if row.Index == broken {
+						return row.Operation != nil && row.Operation.Type == types.InstanceOperationUpdate && row.Operation.TargetRevision == h.revFixed.Name
+					}
+				}
+				return false
+			}
+			stillHeld := func() {
+				if h.repairInFlight() {
+					h.dumpState("repair opened")
+					t.Fatalf("a repair opened on an Instance whose revision is not the roll target")
+				}
+				rollStaysWithinBudget(t, h, types.UpdateStrategyRecreatePod, 0, 1)
+				if !h.untouchedOn(1, h.revV1) || !h.instanceServes(1) {
+					h.dumpState("serving peer taken")
+					t.Fatalf("the serving Instance 1 was taken by the roll while the lost Instance %d is out of the count", broken)
+				}
+			}
+			if !h.runWithInvariant(8, recreateOpen, stillHeld) {
+				h.dumpState("pod still terminating")
+				t.Fatalf("the roll never opened the recreate of Instance %d while its pod stays Terminating: last hold %+v, gate denials %d", broken, h.lastHold(), denials)
+			}
+			if denials != 0 {
+				t.Fatalf("gate denials = %d, want 0: the lost Instance is already the one Instance out of the serving count, so its own recreate pays no unavailability; last hold %+v", denials, h.lastHold())
+			}
+			delete(h.kubeletGone, lost[0].Name)
+			done := func() bool { return h.settledOn(h.revFixed, replicas) }
+			if !h.runWithInvariant(100, done, func() {
+				if h.repairInFlight() {
+					h.dumpState("repair opened")
+					t.Fatalf("a repair opened on an Instance whose revision is not the roll target")
+				}
+				rollStaysWithinBudget(t, h, types.UpdateStrategyRecreatePod, 0, 1)
+			}) {
+				h.dumpState("after the kubelet returned")
+				t.Fatalf("the roll never finished once the Terminating pod went: last hold %+v", h.lastHold())
+			}
+			if h.sawEvent(types.EventReasonRestartTriggered) {
+				t.Fatalf("a restart was recorded for an Instance the roll owned: %v", h.events)
+			}
+			if denials != 0 {
+				t.Fatalf("gate denials = %d, want 0 once the lost Instance is rebuilt and the gate reads it serving; last hold %+v", denials, h.lastHold())
+			}
+		})
+	}
+}
+
+// TestReconcile_RolledInstanceWhosePodTheKubeletRefused_RollRebuildsItUnderItsOwnBudgetSlot:
+// four single-pod Instances roll by recreate under an unavailability
+// budget of one. Once the third Instance has landed on version 2 and
+// serves, its node refuses the pod: the kubelet reports it Failed with
+// OutOfcpu and the object stays in the API, holding the Instance's pod
+// name. The Instance is down, so the roll must not take the fourth
+// Instance down beside it, and the budget hold must say so; but the
+// Instance must not hold the roll for good either. Under restart policy
+// None the restart pass rebuilds nothing, so the refused pod has to be
+// read as no pod at all: the status publication writes the row Pending,
+// the Create pass deletes the refused pod with an event naming it and
+// its reason and rebuilds the Instance on version 2 under the budget
+// slot its own outage already holds, and the roll finishes with four of
+// four on version 2. Under RecreateInstanceOnPodRestart the restart pass
+// rebuilds the Instance at once, as it does for any Failed pod of a
+// Ready row, and the roll finishes the same way.
+func TestReconcile_RolledInstanceWhosePodTheKubeletRefused_RollRebuildsItUnderItsOwnBudgetSlot(t *testing.T) {
+	const replicas = 4
+	const refused = int32(2)
+	const last = int32(3)
+	for _, policy := range []types.RestartPolicy{types.RestartPolicyNone, types.RestartPolicyRecreateInstance} {
+		t.Run(string(policy), func(t *testing.T) {
+			h := offTargetCrashHarness(t, false, types.UpdateStrategyRecreatePod, 0, 1, policy, replicas)
+			h.setTarget(h.revFixed, fixedImage)
+			threeLanded := func() bool {
+				for idx := int32(0); idx <= refused; idx++ {
+					if !h.untouchedOn(idx, h.revFixed) || !h.instanceServes(idx) {
+						return false
+					}
+				}
+				return h.untouchedOn(last, h.revV1) && h.instanceServes(last)
+			}
+			if !h.run(80, threeLanded) {
+				h.dumpState("three landed")
+				t.Fatalf("the first three Instances never landed on the fixed revision with the last one still untouched on v1")
+			}
+			pod := h.rejectPod(refused, "OutOfcpu")
+			h.events = nil
+			h.holds = nil
+			done := func() bool { return h.settledOn(h.revFixed, replicas) }
+			budgetHoldNamedIt := false
+			invariant := func() {
+				rollStaysWithinBudget(t, h, types.UpdateStrategyRecreatePod, 0, 1)
+				if hold := h.lastHold(); hold != nil && hold.Gate == types.RolloutHoldGateBudget &&
+					strings.Contains(hold.Reason, fmt.Sprintf("Instance %d on revision %s not serving", refused, h.revFixed.Name)) {
+					budgetHoldNamedIt = true
+				}
+				if !h.instanceServes(refused) && (!h.untouchedOn(last, h.revV1) || !h.instanceServes(last)) {
+					h.dumpState("last Instance taken")
+					t.Fatalf("the roll took Instance %d while Instance %d serves nothing: the refused Instance is the one the budget allows down", last, refused)
+				}
+			}
+			if !h.runWithInvariant(60, done, invariant) {
+				h.dumpState("after the refusal")
+				t.Fatalf("the roll never finished after the kubelet refused Instance %d's pod: last hold %+v", refused, h.lastHold())
+			}
+			for _, live := range h.livePods() {
+				if live.UID == pod.UID {
+					t.Fatalf("the refused pod %s is still in the API; nothing deleted it", pod.Name)
+				}
+			}
+			restarted := h.sawEvent(types.EventReasonRestartTriggered)
+			switch policy {
+			case types.RestartPolicyNone:
+				if restarted {
+					t.Fatalf("restart policy None rebuilds nothing on its own, yet a restart was recorded: %v", h.events)
+				}
+				if !budgetHoldNamedIt {
+					t.Fatalf("no Budget hold named Instance %d as the one not serving while the roll waited; holds: %+v", refused, h.holds)
+				}
+				if !h.sawEventWith(types.EventReasonTerminalPodRecycled, pod.Name) || !h.sawEventWith(types.EventReasonTerminalPodRecycled, "OutOfcpu") {
+					t.Fatalf("no event named the refused pod %s and its reason OutOfcpu: %v", pod.Name, h.events)
+				}
+			case types.RestartPolicyRecreateInstance:
+				if !restarted {
+					t.Fatalf("restart policy RecreateInstanceOnPodRestart rebuilds a Ready Instance whose pod is Failed, yet no restart was recorded: %v", h.events)
+				}
+			}
+		})
+	}
+}
+
+// budgetFixture is a Component of replicas single-pod engine Instances on
+// the prior revision under RecreatePod maxUnavailable 1 and restart policy
+// None, with a serving pod for each index in serving and the extra pods
+// given; every Instance is planned.
+func budgetFixture(t *testing.T, rows []types.InstanceStatus, replicas int32, serving []int32, extra ...*corev1.Pod) *terminatingSurgeFixture {
+	t.Helper()
+	planned := make([]int32, 0, replicas)
+	for idx := int32(0); idx < replicas; idx++ {
+		planned = append(planned, idx)
+	}
+	f := newTerminatingSurgeFixture(t, rows, planned, serving, extra...)
+	f.in.DesiredSpec.Replicas = replicas
+	f.plan.Replicas = replicas
+	f.plan.UpdateStrategy = types.UpdateStrategy{
+		Type:          types.UpdateStrategyRecreatePod,
+		RollingUpdate: &types.RollingUpdate{MaxSurge: intOrStringInt(0), MaxUnavailable: intOrStringInt(1)},
+	}
+	f.plan.RestartPolicy = types.RestartPolicyNone
+	f.in.ObservedState.CurrentRevision = "llama-70b-engine-priorrev"
+	return f
+}
+
+// servingRow is a Ready Instance on the prior revision with its one pod
+// serving.
+func servingRow(idx int32) types.InstanceStatus {
+	return types.InstanceStatus{Index: idx, Incarnation: 1, Phase: types.InstancePhaseReady,
+		RunningRevision: "llama-70b-engine-priorrev", PodCount: 1, ServingPodCount: 1}
+}
+
+// requireBudgetHoldOnServingInstance asserts that the fresh start on idx
+// was denied by the per-Component unavailability budget of 1 and that the
+// Instance keeps serving: no operation on its row, its pod still live.
+func requireBudgetHoldOnServingInstance(t *testing.T, f *terminatingSurgeFixture, idx int32) {
+	t.Helper()
+	hold := f.lastHold()
+	if hold == nil || hold.Gate != types.RolloutHoldGateBudget || hold.Target != f.target.Name ||
+		!strings.Contains(hold.Reason, "unavailability budget 1 exhausted (would become 2)") {
+		t.Fatalf("the start on Instance %d must be denied by the unavailability budget, got %+v", idx, hold)
+	}
+	if row := f.in.ObservedState.Instance(idx); row == nil || row.Operation != nil {
+		t.Fatalf("Instance %d must not start while another Instance is down, got %+v", idx, row)
+	}
+	fresh := &corev1.Pod{}
+	if err := f.c.Get(context.Background(), client.ObjectKeyFromObject(servingEnginePod(idx)), fresh); err != nil || fresh.DeletionTimestamp != nil {
+		t.Fatalf("Instance %d's pod must stay in rotation, err=%v deleting=%v", idx, err, fresh != nil && fresh.DeletionTimestamp != nil)
+	}
+}
+
+// requireStartAdmitted asserts that the fresh start on idx was admitted: an
+// Update operation on its row and no hold reported.
+func requireStartAdmitted(t *testing.T, f *terminatingSurgeFixture, idx int32) {
+	t.Helper()
+	if hold := f.lastHold(); hold != nil {
+		t.Fatalf("no hold stands when every other Instance serves, got %+v", hold)
+	}
+	if row := f.in.ObservedState.Instance(idx); row == nil || row.Operation == nil || row.Operation.Type != types.InstanceOperationUpdate {
+		t.Fatalf("the start on Instance %d must be admitted, got %+v", idx, row)
+	}
+}
+
+// TestReconcile_ScaleUpInstanceStillStartingHoldsTheRoll: 4 engines under
+// RecreatePod with 1 Instance allowed down are scaled to 5, and the image
+// changes while the fifth pod is still starting. The fifth Instance serves
+// nothing yet, so the roll may take no serving Instance down beside it:
+// the first start is denied by the unavailability budget and every pod
+// stays in rotation. Once the fifth Instance serves, the roll starts.
+func TestReconcile_ScaleUpInstanceStillStartingHoldsTheRoll(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name  string
+		fifth func() (types.InstanceStatus, *corev1.Pod)
+		held  bool
+	}{
+		{name: "the fifth pod is still starting", held: true, fifth: func() (types.InstanceStatus, *corev1.Pod) {
+			row := types.InstanceStatus{Index: 4, Incarnation: 1, Phase: types.InstancePhaseCreating, PodCount: 1,
+				Operation: &types.InstanceOperation{Type: types.InstanceOperationCreate, Step: "CreatePods", TargetRevision: "llama-70b-engine-newtarget"}}
+			return row, liveEnginePod("llama-70b", "prod", 4, 0, "newtarget", now.Add(-10*time.Second))
+		}},
+		{name: "the fifth Instance serves", fifth: func() (types.InstanceStatus, *corev1.Pod) {
+			return servingRow(4), servingEnginePod(4)
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fifthRow, fifthPod := tc.fifth()
+			rows := []types.InstanceStatus{servingRow(0), servingRow(1), servingRow(2), servingRow(3), fifthRow}
+			f := budgetFixture(t, rows, 5, []int32{0, 1, 2, 3}, fifthPod)
+
+			f.pass()
+
+			if tc.held {
+				requireBudgetHoldOnServingInstance(t, f, 0)
+				return
+			}
+			requireStartAdmitted(t, f, 0)
+		})
+	}
+}
+
+// TestReconcile_BrokenStableInstanceHoldsTheCanarySplit: 8 engines under
+// RecreatePod with 1 Instance allowed down; engine 0's runner crashes at
+// every start, or its image cannot be pulled, and under restart policy None
+// with no grace configured no repair opens, so the Instance stays down. A
+// canary step then holds 7 Instances and releases engine 7. Engine 0 is
+// one Instance down already, so the split's rebuild of engine 7 waits on
+// the unavailability budget; with engine 0 serving, the split starts.
+func TestReconcile_BrokenStableInstanceHoldsTheCanarySplit(t *testing.T) {
+	waitingPod := func(reason string) func(idx int32) *corev1.Pod {
+		return func(idx int32) *corev1.Pod {
+			pod := enginePod("llama-70b", "prod", idx)
+			pod.CreationTimestamp = metav1.NewTime(time.Date(2025, 12, 31, 23, 0, 0, 0, time.UTC))
+			pod.Status.Phase = corev1.PodPending
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+				Name:  constants.MainContainerName,
+				State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: reason}},
+			}}
+			return pod
+		}
+	}
+	cases := []struct {
+		name   string
+		engine func(idx int32) *corev1.Pod
+		held   bool
+	}{
+		{name: "engine 0 crashes at every start", engine: waitingPod("CrashLoopBackOff"), held: true},
+		{name: "engine 0's image cannot be pulled", engine: waitingPod("ImagePullBackOff"), held: true},
+		{name: "engine 0 serves", engine: servingEnginePod},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := make([]types.InstanceStatus, 0, 8)
+			for idx := int32(0); idx < 8; idx++ {
+				rows = append(rows, servingRow(idx))
+			}
+			if tc.held {
+				rows[0].ServingPodCount = 0
+			}
+			f := budgetFixture(t, rows, 8, []int32{1, 2, 3, 4, 5, 6, 7}, tc.engine(0))
+			partition := int32(7)
+			f.in.DesiredSpec.Pacing = &types.WorkloadPacing{Partition: &partition}
+
+			f.pass()
+
+			if tc.held {
+				requireBudgetHoldOnServingInstance(t, f, 7)
+				return
+			}
+			requireStartAdmitted(t, f, 7)
+		})
+	}
+}
+
+// TestReconcile_CrashLoopingStableInstanceHoldsTheRollBetweenItsCrashes: 4
+// engines under RecreatePod with 1 Instance allowed down and a 30 s
+// minReadySeconds window; engine 0's runner restarted after the Instance
+// entered Ready and is Ready again, a crash loop read between two of its
+// crashes. A canary step holds 3 Instances and releases engine 3. Engine 0
+// has not held Ready for the window, so it counts as down and the start
+// on engine 3 waits; once engine 0 has held Ready for the window the start
+// is admitted.
+func TestReconcile_CrashLoopingStableInstanceHoldsTheRollBetweenItsCrashes(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	readySince := now.Add(-10 * time.Minute)
+	restartedPod := func(readyAgainFor time.Duration) *corev1.Pod {
+		pod := servingEnginePod(0)
+		pod.CreationTimestamp = metav1.NewTime(now.Add(-time.Hour))
+		readyAgain := now.Add(-readyAgainFor)
+		pod.Status.ContainerStatuses[0].RestartCount = 1
+		pod.Status.ContainerStatuses[0].State = corev1.ContainerState{Running: &corev1.ContainerStateRunning{StartedAt: metav1.NewTime(readyAgain.Add(-2 * time.Second))}}
+		pod.Status.ContainerStatuses[0].LastTerminationState = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+			ExitCode: 1, Reason: "Error",
+			StartedAt:  metav1.NewTime(now.Add(-time.Hour)),
+			FinishedAt: metav1.NewTime(readyAgain.Add(-3 * time.Second)),
+		}}
+		for i := range pod.Status.Conditions {
+			switch pod.Status.Conditions[i].Type {
+			case corev1.ContainersReady, corev1.PodReady:
+				pod.Status.Conditions[i].LastTransitionTime = metav1.NewTime(readyAgain)
+			}
+		}
+		return pod
+	}
+	cases := []struct {
+		name          string
+		readyAgainFor time.Duration
+		held          bool
+	}{
+		{name: "Ready again for 5 s of a 30 s window", readyAgainFor: 5 * time.Second, held: true},
+		{name: "Ready again for the whole window", readyAgainFor: 40 * time.Second},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := []types.InstanceStatus{servingRow(0), servingRow(1), servingRow(2), servingRow(3)}
+			rows[0].ReadySince = &metav1.Time{Time: readySince}
+			f := budgetFixture(t, rows, 4, []int32{1, 2, 3}, restartedPod(tc.readyAgainFor))
+			f.plan.MinReadySeconds = 30
+			partition := int32(3)
+			f.in.DesiredSpec.Pacing = &types.WorkloadPacing{Partition: &partition}
+
+			f.pass()
+
+			if tc.held {
+				requireBudgetHoldOnServingInstance(t, f, 3)
+				return
+			}
+			requireStartAdmitted(t, f, 3)
+		})
+	}
+}
+
+// TestReconcile_KeptFailedReplacementsBesideAStartingScaleUp: the two
+// budget rules read one shape. 24 single-pod engines serve version 1; a
+// push of version 2 left six failed replacements standing beside their
+// serving sources (Instances 0 to 5, recorded Failed with no attempt); the
+// operator scaled to 25 while version 2 was the target, so Instance 24
+// is still starting and has never served; the operator lowers maxSurge to
+// 1 and pushes version 3. The selection lists Instance 24 as the one
+// Instance down outside the roll and the six kept pods as surge slots.
+// Under SurgeThenDrain the first pass starts exactly one Instance that
+// keeps a failed replacement, by evicting it, while the rest wait: a start
+// that adds no pod is charged for no other Instance's kept pod, and the
+// starting Instance is no charge against a surge. Under RecreatePod with
+// one Instance allowed down, the starting Instance is one Instance down
+// already, so no serving Instance starts; once it serves, the first start
+// is admitted.
+func TestReconcile_KeptFailedReplacementsBesideAStartingScaleUp(t *testing.T) {
+	const replicas = 25
+	const kept = 6
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	failure := &types.InstanceTermination{Reason: "DeadlineExceeded", Message: "Update/Surge exceeded InstanceReadyTimeout", Time: metav1.NewTime(now.Add(-time.Minute))}
+	build := func(t *testing.T, strategy types.UpdateStrategy, scaleUpServes bool) *terminatingSurgeFixture {
+		t.Helper()
+		var rows []types.InstanceStatus
+		var serving []int32
+		var extra []*corev1.Pod
+		for idx := int32(0); idx < replicas-1; idx++ {
+			row := servingRow(idx)
+			if idx < kept {
+				row.Phase = types.InstancePhaseFailed
+				row.TargetRevision = "llama-70b-engine-crashrev"
+				row.PodCount = 2
+				row.LastFailure = failure
+				extra = append(extra, liveEnginePod("llama-70b", "prod", idx, 1, "crashrev", now))
+			}
+			rows = append(rows, row)
+			serving = append(serving, idx)
+		}
+		if scaleUpServes {
+			rows = append(rows, servingRow(replicas-1))
+			serving = append(serving, replicas-1)
+		} else {
+			rows = append(rows, types.InstanceStatus{Index: replicas - 1, Incarnation: 1, Phase: types.InstancePhaseCreating, PodCount: 1,
+				Operation: &types.InstanceOperation{Type: types.InstanceOperationCreate, Step: "CreatePods", TargetRevision: "llama-70b-engine-crashrev"}})
+			extra = append(extra, liveEnginePod("llama-70b", "prod", replicas-1, 0, "crashrev", now.Add(-10*time.Second)))
+		}
+		f := budgetFixture(t, rows, replicas, serving, extra...)
+		f.plan.UpdateStrategy = strategy
+		return f
+	}
+	surge := types.UpdateStrategy{Type: types.UpdateStrategySurgeThenDrain,
+		RollingUpdate: &types.RollingUpdate{MaxSurge: intOrStringInt(1), MaxUnavailable: intOrStringInt(0)}}
+	recreate := types.UpdateStrategy{Type: types.UpdateStrategyRecreatePod,
+		RollingUpdate: &types.RollingUpdate{MaxSurge: intOrStringInt(0), MaxUnavailable: intOrStringInt(1)}}
+
+	t.Run("the selection reads both terms", func(t *testing.T) {
+		f := build(t, surge, false)
+		snapshot := workload.NewObservedSnapshot(f.deps, f.in, types.ComponentEngine, f.in.ObservedState.InstanceStatuses)
+		d, err := workload.Plan(context.Background(), f.in, f.plan, f.target, snapshot)
+		if err != nil {
+			t.Fatalf("Plan: %v", err)
+		}
+		ua := findAction(d, workload.ActionUpdate)
+		if ua == nil {
+			t.Fatalf("want an update action; actions = %v", actionKinds(d))
+		}
+		if got := ua.Update.NotServingOutsideRoll; len(got) != 1 || got[0] != replicas-1 {
+			t.Fatalf("NotServingOutsideRoll = %v, want the starting Instance %d alone", got, replicas-1)
+		}
+		if got := len(ua.Update.ExtraPodSurge.LiveSlotsByInstance); got != kept {
+			t.Fatalf("%d Instances hold a kept replacement as a surge slot, want %d", got, kept)
+		}
+	})
+
+	t.Run("SurgeThenDrain maxSurge 1 starts one holder of a kept pod", func(t *testing.T) {
+		f := build(t, surge, false)
+
+		f.pass()
+
+		var started []int32
+		for idx := int32(0); idx < replicas; idx++ {
+			row := f.in.ObservedState.Instance(idx)
+			if row != nil && row.Phase == types.InstancePhaseUpdating && row.Operation != nil && row.Operation.Step == types.UpdateStepSurge {
+				started = append(started, idx)
+			}
+		}
+		if len(started) != 1 || started[0] >= kept {
+			t.Fatalf("the fix must start exactly one Instance that keeps a failed replacement, started %v; hold %+v", started, f.holds)
+		}
+		if err := f.c.Get(context.Background(), client.ObjectKeyFromObject(liveEnginePod("llama-70b", "prod", started[0], 1, "crashrev", now)), &corev1.Pod{}); !apierrors.IsNotFound(err) {
+			t.Fatalf("the start must evict its own kept replacement, got %v", err)
+		}
+		for idx := int32(kept); idx < replicas-1; idx++ {
+			if row := f.in.ObservedState.Instance(idx); row == nil || row.Phase != types.InstancePhaseReady || row.Operation != nil {
+				t.Fatalf("Instance %d keeps no failed replacement and must wait, got %+v", idx, row)
+			}
+		}
+		if row := f.in.ObservedState.Instance(replicas - 1); row == nil || row.Phase != types.InstancePhaseCreating {
+			t.Fatalf("the starting Instance keeps starting, got %+v", row)
+		}
+		if got := f.surgePods(); len(got) != 0 {
+			t.Fatalf("no surge pod may be created before the eviction is observed, got %v", got)
+		}
+	})
+
+	t.Run("RecreatePod maxUnavailable 1 waits for the starting Instance", func(t *testing.T) {
+		f := build(t, recreate, false)
+
+		f.pass()
+
+		requireBudgetHoldOnServingInstance(t, f, 0)
+		for idx := int32(0); idx < replicas-1; idx++ {
+			if row := f.in.ObservedState.Instance(idx); row == nil || row.Operation != nil {
+				t.Fatalf("no serving Instance may start while Instance %d has never served, Instance %d got %+v", replicas-1, idx, row)
+			}
+		}
+	})
+
+	t.Run("RecreatePod maxUnavailable 1 starts once the scale-up serves", func(t *testing.T) {
+		f := build(t, recreate, true)
+
+		f.pass()
+
+		requireStartAdmitted(t, f, 0)
+	})
 }

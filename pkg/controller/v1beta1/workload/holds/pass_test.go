@@ -3,10 +3,11 @@ package holds
 import (
 	"context"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	fixture "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -19,7 +20,7 @@ func TestRun_ReleasesBeforeRecording(t *testing.T) {
 	// of the same attempt has no placement.
 	store, in := newStore(creatingRow(types.RejectionReasonQuotaExceeded))
 	pods := map[int32][]*corev1.Pod{
-		0: {unschedulablePod("svc-a-engine-0-default-0", schedulerMessage, metav1.Now())},
+		0: {fixture.UnschedulablePod("svc-a-engine-0-default-0", schedulerMessage, time.Now())},
 	}
 	apply(t, in, types.ComponentPlan{}, pods)
 	if got := store.waiting(0); got != types.WaitingReasonUnschedulable {
@@ -36,7 +37,7 @@ func TestRun_ReleasesBeforeRecording(t *testing.T) {
 // because it releases its own token wherever it left one.
 func TestRun_SkipsRowsNoFactMayTouch(t *testing.T) {
 	pods := map[int32][]*corev1.Pod{
-		0: {unschedulablePod("svc-a-engine-0-default-0", schedulerMessage, metav1.Now())},
+		0: {fixture.UnschedulablePod("svc-a-engine-0-default-0", schedulerMessage, time.Now())},
 	}
 	run := func(t *testing.T, row types.InstanceStatus, excluded bool) *rowStore {
 		t.Helper()

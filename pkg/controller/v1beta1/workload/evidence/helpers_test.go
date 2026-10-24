@@ -1,10 +1,128 @@
 package evidence
 
-// The readings the external tests pin under their own names. Exported
-// from the test build only: the readings are consumed inside the package
-// and have no caller outside it.
-var (
-	PodRunningNotReady    = podRunningNotReady
-	PodGateNotFolded      = podGateNotFolded
-	PodRuntimeImagesMatch = podRuntimeImagesMatch
+// Pod fixtures shared by the classifier tests in this package. Each one
+// builds a shape a classifier must recognize (or must refuse to), so a
+// test reads as "this shape, that reading" rather than as forty lines of
+// pod status. helpers_external_test.go declares the same shapes for the
+// tests written as a consumer of the package: Go lets neither test
+// package see the other's unexported names.
+
+import (
+	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 )
+
+// tNow is the fixed clock the classifier tests read against.
+var tNow = time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC)
+
+const probeMessage = "containers with unready status: [main]"
+
+// servingPod is the healthy shape: containers running and ready, and the
+// serving condition set, so no limbo classifier may claim it.
+func servingPod(name string) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              name,
+			CreationTimestamp: metav1.NewTime(time.Now().Add(-time.Hour)),
+		},
+		Status: corev1.PodStatus{
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
+				{Type: "ome.io/serving", Status: corev1.ConditionTrue},
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:  "main",
+				State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			}},
+		},
+	}
+}
+
+// runningNotReadyPod builds the readiness-limbo shape: phase Running,
+// every container started, ContainersReady=False with the kubelet's own
+// reason and message.
+func runningNotReadyPod(name string, since time.Time) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              name,
+			CreationTimestamp: metav1.NewTime(since.Add(-time.Minute)),
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{
+				Type:               corev1.ContainersReady,
+				Status:             corev1.ConditionFalse,
+				Reason:             ReasonContainersNotReady,
+				Message:            probeMessage,
+				LastTransitionTime: metav1.NewTime(since),
+			}},
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:  "main",
+				Ready: false,
+				State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			}},
+		},
+	}
+}
+
+// gateNotFoldedPod builds the gate-limbo shape: phase Running, the
+// container running and Ready, ContainersReady=True, and a declared
+// readiness gate whose condition nobody has satisfied, so Ready stays
+// False.
+func gateNotFoldedPod(name string, since time.Time) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              name,
+			CreationTimestamp: metav1.NewTime(since.Add(-time.Minute)),
+		},
+		Spec: corev1.PodSpec{
+			ReadinessGates: []corev1.PodReadinessGate{{ConditionType: podreadiness.ConditionType}},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{
+					Type:               corev1.ContainersReady,
+					Status:             corev1.ConditionTrue,
+					LastTransitionTime: metav1.NewTime(since),
+				},
+				{
+					Type:               corev1.PodReady,
+					Status:             corev1.ConditionFalse,
+					Reason:             "ReadinessGatesNotReady",
+					Message:            "corresponding condition of pod readiness gate \"ome.io/serving\" does not exist",
+					LastTransitionTime: metav1.NewTime(since),
+				},
+			},
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:  "main",
+				Ready: true,
+				State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			}},
+		},
+	}
+}
+
+// unreadyAfterServingPod builds the shape of a promoted pod whose
+// readiness probe stopped passing at since: phase Running, the container
+// still running, the serving gate the controller wrote at promotion still
+// True, and ContainersReady and Ready False since then.
+func unreadyAfterServingPod(name string, since time.Time) *corev1.Pod {
+	pod := servingPod(name)
+	pod.CreationTimestamp = metav1.NewTime(since.Add(-time.Hour))
+	pod.Status.Phase = corev1.PodRunning
+	pod.Status.ContainerStatuses[0].Ready = false
+	for i := range pod.Status.Conditions {
+		switch pod.Status.Conditions[i].Type {
+		case corev1.ContainersReady, corev1.PodReady:
+			pod.Status.Conditions[i].Status = corev1.ConditionFalse
+			pod.Status.Conditions[i].LastTransitionTime = metav1.NewTime(since)
+		}
+	}
+	return pod
+}

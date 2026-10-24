@@ -26,18 +26,29 @@ const (
 	EventReasonRatioSkewRejected = "RatioSkewRejected"
 
 	// EventReasonRatioGateBypassed fires when the OMENative ops
-	// dispatcher skips CheckRatioGate because the per-Instance update
-	// strategy is in-place (InPlaceIfPossible / InPlaceOnly). The
-	// gate's "-1" projection treats every drain as a permanent
-	// capacity loss, but an in-place drain is paired 1:1 with a
-	// same-pod return (mark-not-ready -> patch image -> mark-ready)
-	// so the net capacity change is ~0 and the gate's projection
-	// over-blocks the smaller Component of a ratio pair indefinitely.
-	// CheckUnavailabilityGate still governs concurrent disruption for
-	// the in-place case, so RatioBalanced safety is not lost --
-	// operators just see this event explaining why the gate did not
-	// fire.
+	// dispatcher admits an in-place start (InPlaceIfPossible /
+	// InPlaceOnly) past the RatioBalanced serving-capacity band without
+	// running it. The band's "-1" projection treats every drain as a
+	// permanent capacity loss, but an in-place drain is paired 1:1 with
+	// a same-pod return (mark-not-ready -> patch image -> mark-ready)
+	// so the net capacity change is ~0 and the projection would
+	// over-block the smaller Component of a ratio pair indefinitely.
+	// The new-revision lockstep half of the gate still runs for the
+	// start, and CheckUnavailabilityGate still governs concurrent
+	// disruption, so RatioBalanced safety is not lost -- operators just
+	// see this event explaining why the band did not fire.
 	EventReasonRatioGateBypassed = "RatioGateBypassed"
+
+	// EventReasonRatioStepOutsideTolerance fires when the RatioBalanced
+	// serving band admits a drain that leaves the serving ratio outside the
+	// tolerance, because no single step of that side can stay inside it at
+	// the group's shape (8 prefill beside 2 decode under tolerance 20: one
+	// decode pod out reads 8:1, 100 points off). The band admits one such
+	// step at a time from a fleet serving its reference in band, instead of
+	// holding the roll for good; the message carries the counts and the
+	// tolerance, so the operator can widen the tolerance or resize the
+	// group to a shape one step keeps inside it.
+	EventReasonRatioStepOutsideTolerance = "RatioStepOutsideTolerance"
 
 	// EventReasonMixedPairingObserved fires when a RollingUpdate
 	// group sees distinct (vN, vM) revision pairs in flight.

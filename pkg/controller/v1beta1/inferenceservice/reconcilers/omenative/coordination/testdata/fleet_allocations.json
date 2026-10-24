@@ -1,0 +1,14 @@
+{
+  "recordedOn": {
+    "commit": "unrecorded",
+    "date": "2026-10-20",
+    "machine": "linux/amd64, 30 cores, go1.26"
+  },
+  "reason": "First recording: one ask of the gate stack at 150:100 and 300:100 under surge and 12:8 under RecreatePod.",
+  "tolerancePercent": 10,
+  "budgets": {
+    "12:8/recreate10": 51,
+    "150:100/surge10": 69,
+    "300:100/surge10": 99
+  }
+}

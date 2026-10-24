@@ -2,18 +2,13 @@ package canary
 
 import (
 	"context"
-	"sort"
-	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/rollout"
-	"sigs.k8s.io/ome/pkg/rolloutpolicy"
 )
-
-const canaryTargetIDPrefix = "ct1:"
 
 // BindRun initializes the canary step state for a freshly opened run, or binds
 // legacy in-flight state to an adopted run without restarting it. The controller
@@ -86,24 +81,13 @@ func activeCanaryTargetID(isvc *v1beta1.InferenceService, group *v1beta1.Rollout
 	if group == nil {
 		return ""
 	}
-	parts := make([]string, 0, len(group.Components))
-	seen := make(map[v1beta1.ComponentType]struct{}, len(group.Components))
-	for _, comp := range group.Components {
-		if _, duplicate := seen[comp]; duplicate {
-			continue
-		}
-		seen[comp] = struct{}{}
+	return rollout.CanaryTargetID(group.Components, func(comp v1beta1.ComponentType) string {
 		target, ok := activeRunTarget(isvc, comp)
-		if !ok || target.Revision == "" {
+		if !ok {
 			return ""
 		}
-		parts = append(parts, string(comp)+"="+target.Revision)
-	}
-	if len(parts) == 0 {
-		return ""
-	}
-	sort.Strings(parts)
-	return canaryTargetIDPrefix + rolloutpolicy.ShortHash([]byte(strings.Join(parts, ";")))
+		return target.Revision
+	})
 }
 
 func activeRunTarget(isvc *v1beta1.InferenceService, comp v1beta1.ComponentType) (v1beta1.RolloutRunTarget, bool) {

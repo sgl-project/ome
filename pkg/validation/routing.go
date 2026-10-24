@@ -10,7 +10,13 @@ import (
 
 // ValidateRouting validates the per-InferenceService routing policy.
 func ValidateRouting(spec *v1beta1.InferenceServiceSpec) error {
-	if spec == nil || spec.Routing == nil {
+	if spec == nil {
+		return nil
+	}
+	if err := validateRouterCapacityEndpoint(spec); err != nil {
+		return err
+	}
+	if spec.Routing == nil {
 		return nil
 	}
 	for cluster, factor := range spec.Routing.CapacityFactors {
@@ -122,6 +128,9 @@ func validateRoutingCapacity(capacity *v1beta1.RoutingCapacitySpec) error {
 		}
 		return nil
 	}
+	if capacity.Mode != "" && capacity.Mode != v1beta1.RoutingCapacityModeCeiling && capacity.Mode != v1beta1.RoutingCapacityModeReported {
+		return fmt.Errorf("spec.routing.capacity.mode %q must be Ceiling or Reported", capacity.Mode)
+	}
 	if capacity.Path == "" {
 		return fmt.Errorf("spec.routing.capacity.path is required")
 	}
@@ -176,7 +185,7 @@ func validateRoutingCapacity(capacity *v1beta1.RoutingCapacitySpec) error {
 }
 
 func routingCapacityHasOperationalFields(capacity *v1beta1.RoutingCapacitySpec) bool {
-	return capacity.Path != "" ||
+	return capacity.Mode != "" || capacity.Path != "" ||
 		capacity.Method != "" ||
 		capacity.Format != "" ||
 		len(capacity.Options) != 0 ||
@@ -226,6 +235,53 @@ func validateRoutingPublisher(publisher *v1beta1.RoutingPublisherSpec) error {
 			return fmt.Errorf("spec.routing.publisher.options[%q] exceeds the %d-byte value limit",
 				key, v1beta1.MaxRoutingPublisherOptionValueBytes)
 		}
+	}
+	return nil
+}
+
+// validateRouterCapacityEndpoint checks the router path that serving clusters
+// expose for the capacity poll. The path must be one a Gateway API exact match
+// accepts, so a bad value fails admission instead of every route update. When
+// this InferenceService also sets the poll inline, both paths must agree, or
+// the poll would reach the serving port instead.
+func validateRouterCapacityEndpoint(spec *v1beta1.InferenceServiceSpec) error {
+	if spec.Router == nil || spec.Router.CapacityEndpoint == nil {
+		return nil
+	}
+	endpoint := spec.Router.CapacityEndpoint
+	if err := validateExactRoutePath(endpoint.Path); err != nil {
+		return fmt.Errorf("spec.router.capacityEndpoint.path %q %w", endpoint.Path, err)
+	}
+	if endpoint.Port < 1 || endpoint.Port > 65535 {
+		return fmt.Errorf("spec.router.capacityEndpoint.port %d must be from 1 through 65535", endpoint.Port)
+	}
+	if spec.Routing == nil || spec.Routing.Capacity == nil {
+		return nil
+	}
+	capacity := spec.Routing.Capacity
+	if !capacity.Disabled && capacity.Path != "" && capacity.Path != endpoint.Path {
+		return fmt.Errorf("spec.router.capacityEndpoint.path %q must equal spec.routing.capacity.path %q, which the control plane polls",
+			endpoint.Path, capacity.Path)
+	}
+	return nil
+}
+
+// validateExactRoutePath applies the Gateway API rules for an exact path match,
+// and rejects "/" because it would capture every request.
+func validateExactRoutePath(path string) error {
+	switch {
+	case !strings.HasPrefix(path, "/"):
+		return fmt.Errorf("must begin with %q", "/")
+	case path == "/":
+		return fmt.Errorf("must name a path below %q", "/")
+	case len(path) > 1024:
+		return fmt.Errorf("must be at most 1024 characters")
+	case strings.ContainsAny(path, "?#"):
+		return fmt.Errorf("must not contain a query or fragment")
+	case strings.Contains(path, "//"), strings.Contains(path, "/./"), strings.Contains(path, "/../"),
+		strings.Contains(strings.ToLower(path), "%2f"),
+		strings.HasSuffix(path, "/."), strings.HasSuffix(path, "/.."):
+		return fmt.Errorf("must not contain empty, %q or %q segments or an encoded %q", ".", "..", "/")
 	}
 	return nil
 }

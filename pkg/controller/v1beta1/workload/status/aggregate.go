@@ -60,25 +60,33 @@ func CountReadyPods(pods []*corev1.Pod) int32 {
 	return n
 }
 
-// CountServingPods counts pods in their Service's rotation: Ready by the
-// control plane, carrying the controller's serving gate
-// (podreadiness.ReadyAndServing), and not terminating. This is the count
-// MaxUnavailable budgets in coordination/ratio.go gate against; it drops
-// when the controller takes a pod out of rotation (in-place update drain,
-// recreate Phase A), when the node under a pod stops reporting, whatever
-// the stale container statuses say, and when a pod is deleted: a
-// terminating pod keeps its conditions until its containers stop, but the
-// EndpointSlice controller has already taken it out of every Service's
-// ready endpoints, so it serves nothing new.
+// CountServingPods counts an Instance's pods in their Service's rotation:
+// Ready by the control plane, carrying the controller's serving gate
+// (podreadiness.ReadyAndServing), and not terminating. An Instance with no
+// routable serving pod serves nothing, whatever its workers read, and
+// counts 0: a Service publishes the leader of a gang and never a worker
+// (query.RoutedRunner), so a gang whose leader is gone is out of rotation
+// however many workers keep the gate, while a gang whose leader serves
+// counts every serving member. This is the count MaxUnavailable budgets in
+// coordination/ratio.go gate against; it drops when the controller takes a
+// pod out of rotation (in-place update drain, recreate Phase A), when the
+// node under a pod stops reporting, whatever the stale container statuses
+// say, and when a pod is deleted: a terminating pod keeps its conditions
+// until its containers stop, but the EndpointSlice controller has already
+// taken it out of every Service's ready endpoints, so it serves nothing
+// new.
 func CountServingPods(pods []*corev1.Pod) int32 {
 	var n int32
+	routable := false
 	for _, p := range pods {
-		if p == nil || p.DeletionTimestamp != nil {
+		if p == nil || p.DeletionTimestamp != nil || !podreadiness.ReadyAndServing(p) {
 			continue
 		}
-		if podreadiness.ReadyAndServing(p) {
-			n++
-		}
+		n++
+		routable = routable || query.RoutedRunner(p)
+	}
+	if !routable {
+		return 0
 	}
 	return n
 }
@@ -256,30 +264,59 @@ func DemotableReady(row *types.InstanceStatus) bool {
 	return types.StateOf(row) == types.StateReady
 }
 
-// ReachedDesiredShape reports whether insts have converged to the desired
-// staged shape: exactly (replicas-partition) instances Ready on targetRev,
-// the remaining `partition` instances Ready on a prior revision, and no
-// missing/extra instances. partition=0 is full rollout, so RolloutComplete
-// is ReachedDesiredShape(insts, target, 0, len(insts)). Held instances must
-// be Ready too — a staged component is only "at rest" when every instance
-// (new and held) is healthy.
+// PodSetBacksRow reports whether any pod of a settled Ready row's set can
+// still back the row: a pod that is not in a terminal phase. A pod on its
+// way out backs the row until it is gone, since it leaves on its own. A
+// terminal pod never leaves on its own and holds only its name, so it is
+// absent here as it is for every other presence decision
+// (query.IsTerminalPod): a row whose pods are all terminal is written
+// Pending as a row with no pods is, and the pass that owns the rebuild
+// deletes the terminal pods and rebuilds the Instance.
+func PodSetBacksRow(pods []*corev1.Pod) bool {
+	return len(query.ExcludeTerminalPods(pods)) > 0
+}
+
+// ReachedDesiredShape reports whether insts rest at the shape a roll
+// converges to under a partition: no missing or extra Instance, every
+// Instance Ready, and every Instance off targetRev one the partition holds.
+// A partition holds the Instances still on a prior revision, so it holds
+// at most `partition` of them and, when fewer than that still run a prior
+// revision, every one of them: a member rests staged with between one and
+// `partition` Instances held, and a partition raised above the count still
+// on the old revision, or a count scaled below the partition, is met at
+// what it can hold. partition=0 is a full rollout, so RolloutComplete is
+// ReachedDesiredShape(insts, target, 0, len(insts)); a positive partition
+// with nothing left to hold reads false, because that member is complete,
+// not staged. Held Instances must be Ready too: a staged Component is at
+// rest only when every Instance, new and held, is healthy.
 func ReachedDesiredShape(insts []types.InstanceStatus, targetRevName string, partition, replicas int32) bool {
-	if replicas <= 0 || int32(len(insts)) != replicas || partition < 0 || partition > replicas {
+	if replicas <= 0 || int32(len(insts)) != replicas || partition < 0 {
 		return false
 	}
-	tgt := query.RevisionFromName(targetRevName)
-	var onTarget, held int32
 	for _, s := range insts {
 		if s.Phase != types.InstancePhaseReady {
 			return false
 		}
-		if query.RevisionFromName(s.RunningRevision).Same(tgt) {
-			onTarget++
-		} else {
+	}
+	held := HeldInstanceCount(insts, targetRevName)
+	if partition == 0 {
+		return held == 0
+	}
+	return held >= 1 && held <= partition
+}
+
+// HeldInstanceCount is the number of Instances whose running revision is
+// not targetRevName (an unset one included): the Instances a partition
+// holds once the member rests at its staged shape.
+func HeldInstanceCount(insts []types.InstanceStatus, targetRevName string) int32 {
+	tgt := query.RevisionFromName(targetRevName)
+	var held int32
+	for _, s := range insts {
+		if !query.RevisionFromName(s.RunningRevision).Same(tgt) {
 			held++
 		}
 	}
-	return onTarget == replicas-partition && held == partition
+	return held
 }
 
 // RolloutComplete is the CurrentRevision promotion gate: every Instance
@@ -292,40 +329,43 @@ func RolloutComplete(insts []types.InstanceStatus, targetRevName string) bool {
 }
 
 // CurrentRevisionFor is the component-level revision rollup: what
-// status.currentRevision should name given the Instance rows and the
-// Component's retry ladder. It is the update revision once every Instance
-// is Ready on it and no RetryBlock names it: a block records a failure
-// of the revision no later attempt has answered — a crash of a promoted
-// set included, whose row reads Ready between crashes — and is removed
-// once the rows outlive it, a corrective revision supersedes it or an
-// operator releases a Held one, so the push reads landed only when the
-// revision has proven itself rather than by attrition. It is withdrawn
-// (empty) when it already names the update revision while some Instance
-// is still off it, running another revision or pinned to one by its
-// update operation: a fleet rolled back onto its last promoted revision
-// is in flight until the last superseded Instance returns and the last
-// withdrawn replacement is gone, and current equal to update is what
-// every reader takes for "no rollout in flight". A withdrawn current is
-// restored to the update revision once no Instance is off it any more,
-// whatever the rows read and whatever the ladder holds: the Instances are
-// back where they were promoted, and a block on that revision gates the
-// next attempt, not the rollup. withdrawn names the revision the current
+// status.currentRevision should name given the Instance rows, the
+// revision their pods carry and the Component's retry ladder. It is the
+// update revision once every Instance is Ready on it and no RetryBlock
+// names it: a block records a failure of the revision no later attempt
+// has answered — a crash of a promoted set included, whose row reads
+// Ready between crashes — and is removed once the rows outlive it, a
+// corrective revision supersedes it or an operator releases a Held one,
+// so the push reads landed only when the revision has proven itself
+// rather than by attrition. It is withdrawn (empty) when it already names
+// the update revision while some Instance is still off it
+// (anyInstanceOffRevision): a fleet rolled back onto its last promoted
+// revision is in flight until the last superseded Instance returns and
+// the last withdrawn replacement is gone, and current equal to update is
+// what every reader takes for "no rollout in flight". A withdrawn current
+// is restored to the update revision once no Instance is off it any more,
+// whatever the ladder holds: the pods are back where they were promoted,
+// and a block on that revision gates the next attempt, not the rollup. An
+// attempt still in flight whose row records another revision keeps its
+// Instance off the update revision whatever its rebuilt pods carry, since
+// nothing has promoted the Instance onto it yet; a spent attempt leaves
+// the pods to decide. withdrawn names the revision the current
 // revision was withdrawn from while the status still records it, "" when
 // nothing was withdrawn or the update revision has moved on since, so the
 // restore reaches only that revision and a pushed revision whose attempts
 // failed stays unlanded. Any other row shape leaves current as recorded,
 // so a repair on the current revision never moves it.
-func CurrentRevisionFor(insts []types.InstanceStatus, current, update string, blocks []types.RetryBlock, withdrawn string) string {
+func CurrentRevisionFor(insts []types.InstanceStatus, current, update string, blocks []types.RetryBlock, withdrawn string, pods PodRevisions) string {
 	if update == "" {
 		return current
 	}
 	if RolloutComplete(insts, update) && types.FindRetryBlock(blocks, update) == nil {
 		return update
 	}
-	if current == update && anyInstanceOffRevision(insts, update) {
+	if current == update && anyInstanceOffRevision(insts, update, pods) {
 		return ""
 	}
-	if current == "" && withdrawn != "" && withdrawn == update && !anyInstanceOffRevision(insts, update) {
+	if current == "" && withdrawn != "" && withdrawn == update && !anyInstanceOffRevision(insts, update, pods) {
 		return update
 	}
 	return current
@@ -346,17 +386,60 @@ func WithdrawnRevisionAfter(before, oldCurrent, current, update string) string {
 	return ""
 }
 
-// anyInstanceOffRevision reports whether some Instance is off rev: it runs
-// another revision, or its update operation is pinned to another. A row
-// that has run nothing and pins nothing does not count.
-func anyInstanceOffRevision(insts []types.InstanceStatus, rev string) bool {
+// PodRevisions is the revision label of every live pod, keyed by the
+// Instance index the pod belongs to; a pod without the label is left out.
+type PodRevisions map[int32][]query.RevisionID
+
+// PodRevisionsByInstance reads PodRevisions off pods bucketed by Instance
+// index, leaving out pods in a terminal phase.
+func PodRevisionsByInstance(byInstance map[int32][]*corev1.Pod) PodRevisions {
+	revs := make(PodRevisions, len(byInstance))
+	for idx, pods := range byInstance {
+		for _, pod := range query.ExcludeTerminalPods(pods) {
+			if rev := query.RevisionFromPod(pod); !rev.IsZero() {
+				revs[idx] = append(revs[idx], rev)
+			}
+		}
+	}
+	return revs
+}
+
+// anyInstanceOffRevision reports whether some Instance is off rev: a live
+// pod of it carries another revision, its update operation is pinned to
+// another, an attempt still in flight has its row recorded on another, or,
+// with no labelled live pod, its row records another.
+func anyInstanceOffRevision(insts []types.InstanceStatus, rev string, pods PodRevisions) bool {
 	want := query.RevisionFromName(rev)
+	rows := make(map[int32]struct{}, len(insts))
 	for i := range insts {
 		inst := &insts[i]
-		if OperationPinnedOffRevision(inst, want) {
+		rows[inst.Index] = struct{}{}
+		if OperationPinnedOffRevision(inst, want) || attemptInFlightOffRevision(inst, want) {
 			return true
 		}
+		if running := pods[inst.Index]; len(running) > 0 {
+			if anyRevisionOff(running, want) {
+				return true
+			}
+			continue
+		}
 		if inst.RunningRevision != "" && !query.RevisionFromName(inst.RunningRevision).Same(want) {
+			return true
+		}
+	}
+	// A live pod of another revision under an index with no row is a
+	// replacement not gone yet.
+	for idx, running := range pods {
+		if _, ok := rows[idx]; !ok && anyRevisionOff(running, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func anyRevisionOff(revs []query.RevisionID, want query.RevisionID) bool {
+	for _, r := range revs {
+		if !r.Same(want) {
 			return true
 		}
 	}
@@ -382,6 +465,17 @@ func OperationPinnedOffRevision(row *types.InstanceStatus, rev query.RevisionID)
 		return false
 	}
 	return !query.RevisionFromName(op.TargetRevision).Same(rev)
+}
+
+// attemptInFlightOffRevision reports whether an update attempt a pass
+// still drives has the row recorded on a revision other than rev: the set
+// it rebuilt may already carry rev, but nothing has promoted the Instance
+// onto it. A spent attempt, parked or on a Failed row, decides nothing here.
+func attemptInFlightOffRevision(row *types.InstanceStatus, rev query.RevisionID) bool {
+	if row == nil || row.RunningRevision == "" || types.Owner(row) != types.OwnerUpdate {
+		return false
+	}
+	return !query.RevisionFromName(row.RunningRevision).Same(rev)
 }
 
 // CountersForInstance computes the per-Instance counter set from the

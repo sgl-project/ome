@@ -22,6 +22,16 @@ func ValidateSupportedModelFormats(formats []v1beta1.SupportedModelFormat) error
 	return nil
 }
 
+// ValidateRuntimeRouterCapacityEndpoint rejects a capacityEndpoint on a runtime
+// router config. Ingress reads it from the InferenceService only, so a runtime
+// value would never route anything.
+func ValidateRuntimeRouterCapacityEndpoint(spec *v1beta1.ServingRuntimeSpec) error {
+	if spec == nil || spec.RouterConfig == nil || spec.RouterConfig.CapacityEndpoint == nil {
+		return nil
+	}
+	return fmt.Errorf("routerConfig: capacityEndpoint is not supported on serving runtimes; set spec.router.capacityEndpoint on the InferenceService")
+}
+
 // ValidateRuntimeAutoscalerPolicyRefs rejects an AutoscalerPolicyRef on any
 // runtime component config. The embedded ComponentExtensionSpec admits the
 // field structurally, but no controller reads it off a runtime — policy refs

@@ -13,22 +13,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
-
-func scheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
-	s := runtime.NewScheme()
-	require.NoError(t, v1beta1.AddToScheme(s))
-	require.NoError(t, clientgoscheme.AddToScheme(s))
-	return s
-}
 
 func wcWithSecret(name string) *v1beta1.WorkloadCluster {
 	return &v1beta1.WorkloadCluster{
@@ -66,23 +60,10 @@ func kcSecret(data string) *corev1.Secret {
 	}
 }
 
-func newReconciler(s *runtime.Scheme, probe func(context.Context, []byte) error, objs ...client.Object) (*Reconciler, client.Client) {
-	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(objs...).WithStatusSubresource(&v1beta1.WorkloadCluster{}).Build()
+func newReconciler(t *testing.T, s *runtime.Scheme, probe func(context.Context, []byte) error, objs ...client.Object) (*Reconciler, client.Client) {
+	t.Helper()
+	c := fakeclient.New(t, fakeclient.WithScheme(s), fakeclient.WithObjects(objs...), fakeclient.WithStatusSubresource(&v1beta1.WorkloadCluster{}))
 	return &Reconciler{Client: c, Scheme: s, Log: log.Log, Probe: probe}, c
-}
-
-type secretReadErrorClient struct {
-	client.Client
-	fail bool
-}
-
-func (c *secretReadErrorClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-	if c.fail {
-		if _, ok := obj.(*corev1.Secret); ok {
-			return errors.New("local apiserver timeout")
-		}
-	}
-	return c.Client.Get(ctx, key, obj, opts...)
 }
 
 func readyCond(c client.Client, name string) *metav1.Condition {
@@ -92,11 +73,11 @@ func readyCond(c client.Client, name string) *metav1.Condition {
 }
 
 func TestReconcile_Reachable(t *testing.T) {
-	s := scheme(t)
+	s := fakeclient.Scheme(t)
 	wc := wcWithSecret("c1")
 	secret := kcSecret(validKubeconfig)
 	probe := func(context.Context, []byte) error { return nil }
-	r, c := newReconciler(s, probe, wc, secret)
+	r, c := newReconciler(t, s, probe, wc, secret)
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "c1"}})
 	require.NoError(t, err)
@@ -108,8 +89,8 @@ func TestReconcile_Reachable(t *testing.T) {
 }
 
 func TestReconcile_SecretNotFound(t *testing.T) {
-	s := scheme(t)
-	r, c := newReconciler(s, func(context.Context, []byte) error { return nil }, wcWithSecret("c1"))
+	s := fakeclient.Scheme(t)
+	r, c := newReconciler(t, s, func(context.Context, []byte) error { return nil }, wcWithSecret("c1"))
 	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "c1"}})
 	require.NoError(t, err)
 	cond := readyCond(c, "c1")
@@ -119,12 +100,14 @@ func TestReconcile_SecretNotFound(t *testing.T) {
 }
 
 func TestWorkloadClustersForSecretUsesReferenceIndex(t *testing.T) {
-	s := scheme(t)
+	s := fakeclient.Scheme(t)
 	match := wcWithSecret("match")
 	other := wcWithSecret("other")
 	other.Spec.ClusterSource.KubeConfig.SecretRef.Name = "different"
-	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(match, other).
-		WithIndex(&v1beta1.WorkloadCluster{}, kubeConfigSecretRefIndex, kubeConfigSecretRefValues).Build()
+	c := fakeclient.New(t,
+		fakeclient.WithScheme(s),
+		fakeclient.WithObjects(match, other),
+		fakeclient.WithIndex(&v1beta1.WorkloadCluster{}, kubeConfigSecretRefIndex, kubeConfigSecretRefValues))
 	r := &Reconciler{Client: c, Log: log.Log}
 	reqs := r.workloadClustersForSecret(context.Background(), kcSecret(validKubeconfig))
 	require.Len(t, reqs, 1)
@@ -132,11 +115,11 @@ func TestWorkloadClustersForSecretUsesReferenceIndex(t *testing.T) {
 }
 
 func TestReconcile_ConnectionFailed(t *testing.T) {
-	s := scheme(t)
+	s := fakeclient.Scheme(t)
 	wc := wcWithSecret("c1")
 	secret := kcSecret(validKubeconfig) // valid kubeconfig -> reaches the probe
 	probe := func(context.Context, []byte) error { return errors.New("dial tcp: timeout") }
-	r, c := newReconciler(s, probe, wc, secret)
+	r, c := newReconciler(t, s, probe, wc, secret)
 	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "c1"}})
 	require.NoError(t, err)
 	cond := readyCond(c, "c1")
@@ -149,12 +132,12 @@ func TestReconcile_ConnectionFailed(t *testing.T) {
 // probe runs (the probe here would say "Reachable" but must never be reached),
 // keeping BadKubeConfig distinct from ConnectionFailed.
 func TestReconcile_BadKubeConfig(t *testing.T) {
-	s := scheme(t)
+	s := fakeclient.Scheme(t)
 	wc := wcWithSecret("c1")
 	secret := kcSecret("this is not a kubeconfig")
 	probeReached := false
 	probe := func(context.Context, []byte) error { probeReached = true; return nil }
-	r, c := newReconciler(s, probe, wc, secret)
+	r, c := newReconciler(t, s, probe, wc, secret)
 	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "c1"}})
 	require.NoError(t, err)
 	cond := readyCond(c, "c1")
@@ -165,13 +148,13 @@ func TestReconcile_BadKubeConfig(t *testing.T) {
 }
 
 func TestReconcile_ClusterProfileUnsupported(t *testing.T) {
-	s := scheme(t)
+	s := fakeclient.Scheme(t)
 	wc := &v1beta1.WorkloadCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "c1"},
 		Spec: v1beta1.WorkloadClusterSpec{ClusterSource: v1beta1.ClusterConnectionSource{
 			ClusterProfileRef: &v1beta1.ClusterProfileRef{Name: "cp1"}}},
 	}
-	r, c := newReconciler(s, func(context.Context, []byte) error { return nil }, wc)
+	r, c := newReconciler(t, s, func(context.Context, []byte) error { return nil }, wc)
 	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "c1"}})
 	require.NoError(t, err)
 	cond := readyCond(c, "c1")
@@ -181,14 +164,14 @@ func TestReconcile_ClusterProfileUnsupported(t *testing.T) {
 }
 
 func TestReconcile_ConnectsManagerWhenReachable(t *testing.T) {
-	s := scheme(t)
+	s := fakeclient.Scheme(t)
 	wc := wcWithSecret("c1")
 	secret := kcSecret(validKubeconfig)
 	mgr := NewManager(s)
 	mgr.newClient = func(_ context.Context, raw []byte, _ *runtime.Scheme) (SelectivelyCachingClient, context.CancelFunc, error) {
 		return &stubClient{id: "c1"}, func() {}, nil
 	}
-	r, _ := newReconciler(s, func(context.Context, []byte) error { return nil }, wc, secret)
+	r, _ := newReconciler(t, s, func(context.Context, []byte) error { return nil }, wc, secret)
 	r.Manager = mgr
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "c1"}})
@@ -203,7 +186,7 @@ func TestReconcile_ConnectsManagerWhenReachable(t *testing.T) {
 // down — within the grace window the live client stays connected and Ready is
 // held True (reason ProbeFailedRetrying).
 func TestReconcile_BackoffHoldsConnectionOnTransientProbeFailure(t *testing.T) {
-	s := scheme(t)
+	s := fakeclient.Scheme(t)
 	wc := wcWithSecret("c1")
 	secret := kcSecret(validKubeconfig)
 	mgr := NewManager(s)
@@ -211,7 +194,7 @@ func TestReconcile_BackoffHoldsConnectionOnTransientProbeFailure(t *testing.T) {
 		return &stubClient{id: "c1"}, func() {}, nil
 	}
 	fail := false
-	r, c := newReconciler(s, func(context.Context, []byte) error {
+	r, c := newReconciler(t, s, func(context.Context, []byte) error {
 		if fail {
 			return errors.New("dial tcp: i/o timeout")
 		}
@@ -239,11 +222,21 @@ func TestReconcile_BackoffHoldsConnectionOnTransientProbeFailure(t *testing.T) {
 }
 
 func TestReconcile_BackoffHoldsConnectionOnTransientSecretReadFailure(t *testing.T) {
-	s := scheme(t)
+	s := fakeclient.Scheme(t)
 	wc := wcWithSecret("c1")
 	secret := kcSecret(validKubeconfig)
-	base := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(wc, secret).WithStatusSubresource(&v1beta1.WorkloadCluster{}).Build()
-	c := &secretReadErrorClient{Client: base}
+	base := fakeclient.New(t, fakeclient.WithScheme(s), fakeclient.WithObjects(wc, secret), fakeclient.WithStatusSubresource(&v1beta1.WorkloadCluster{}))
+	// The reconciler's view refuses Secret reads once the test says so; the
+	// status it writes is still read through base.
+	secretReadFails := false
+	c := fakeclient.Wrap(t, base, fakeclient.WithInterceptors(interceptor.Funcs{
+		Get: func(ctx context.Context, next client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			if _, ok := obj.(*corev1.Secret); ok && secretReadFails {
+				return errors.New("local apiserver timeout")
+			}
+			return next.Get(ctx, key, obj, opts...)
+		},
+	}))
 	mgr := NewManager(s)
 	mgr.newClient = func(_ context.Context, _ []byte, _ *runtime.Scheme) (SelectivelyCachingClient, context.CancelFunc, error) {
 		return &stubClient{id: "c1"}, func() {}, nil
@@ -259,7 +252,7 @@ func TestReconcile_BackoffHoldsConnectionOnTransientSecretReadFailure(t *testing
 	_, ok := mgr.ClientFor("c1")
 	require.True(t, ok)
 
-	c.fail = true
+	secretReadFails = true
 	_, err = r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "c1"}})
 	require.NoError(t, err)
 	_, ok = mgr.ClientFor("c1")
@@ -273,7 +266,7 @@ func TestReconcile_BackoffHoldsConnectionOnTransientSecretReadFailure(t *testing
 // TestReconcile_BackoffTearsDownAfterGrace: once the grace window elapses, a
 // persistent probe failure flips Ready=False and disconnects the client.
 func TestReconcile_BackoffTearsDownAfterGrace(t *testing.T) {
-	s := scheme(t)
+	s := fakeclient.Scheme(t)
 	wc := wcWithSecret("c1")
 	secret := kcSecret(validKubeconfig)
 	mgr := NewManager(s)
@@ -281,7 +274,7 @@ func TestReconcile_BackoffTearsDownAfterGrace(t *testing.T) {
 		return &stubClient{id: "c1"}, func() {}, nil
 	}
 	fail := false
-	r, c := newReconciler(s, func(context.Context, []byte) error {
+	r, c := newReconciler(t, s, func(context.Context, []byte) error {
 		if fail {
 			return errors.New("dial tcp: i/o timeout")
 		}
@@ -316,14 +309,14 @@ func TestReconcile_BackoffTearsDownAfterGrace(t *testing.T) {
 // (probe fails on the very first pass) must flip to Ready=False immediately —
 // there is no live connection to protect.
 func TestReconcile_NoGraceForNeverConnected(t *testing.T) {
-	s := scheme(t)
+	s := fakeclient.Scheme(t)
 	wc := wcWithSecret("c1")
 	secret := kcSecret(validKubeconfig)
 	mgr := NewManager(s)
 	mgr.newClient = func(_ context.Context, raw []byte, _ *runtime.Scheme) (SelectivelyCachingClient, context.CancelFunc, error) {
 		return &stubClient{id: "c1"}, func() {}, nil
 	}
-	r, c := newReconciler(s, func(context.Context, []byte) error { return errors.New("dial tcp: timeout") }, wc, secret)
+	r, c := newReconciler(t, s, func(context.Context, []byte) error { return errors.New("dial tcp: timeout") }, wc, secret)
 	r.Manager = mgr
 	r.ConnectionGracePeriod = time.Hour
 
@@ -340,7 +333,7 @@ func TestReconcile_NoGraceForNeverConnected(t *testing.T) {
 // TestReconcile_RecoversAfterTransientFailure: a blip held within grace, then a
 // recovered probe, clears the failure clock and reports Reachable again.
 func TestReconcile_RecoversAfterTransientFailure(t *testing.T) {
-	s := scheme(t)
+	s := fakeclient.Scheme(t)
 	wc := wcWithSecret("c1")
 	secret := kcSecret(validKubeconfig)
 	mgr := NewManager(s)
@@ -348,7 +341,7 @@ func TestReconcile_RecoversAfterTransientFailure(t *testing.T) {
 		return &stubClient{id: "c1"}, func() {}, nil
 	}
 	fail := false
-	r, c := newReconciler(s, func(context.Context, []byte) error {
+	r, c := newReconciler(t, s, func(context.Context, []byte) error {
 		if fail {
 			return errors.New("blip")
 		}
@@ -378,13 +371,13 @@ func TestReconcile_RecoversAfterTransientFailure(t *testing.T) {
 }
 
 func TestReconcile_DisconnectsManagerWhenDeleted(t *testing.T) {
-	s := scheme(t)
+	s := fakeclient.Scheme(t)
 	mgr := NewManager(s)
 	mgr.newClient = func(_ context.Context, raw []byte, _ *runtime.Scheme) (SelectivelyCachingClient, context.CancelFunc, error) {
 		return &stubClient{}, func() {}, nil
 	}
 	require.NoError(t, mgr.Connect(context.Background(), "gone", []byte("x")))
-	r, _ := newReconciler(s, func(context.Context, []byte) error { return nil }) // no objects -> NotFound
+	r, _ := newReconciler(t, s, func(context.Context, []byte) error { return nil }) // no objects -> NotFound
 	r.Manager = mgr
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "gone"}})
@@ -392,4 +385,44 @@ func TestReconcile_DisconnectsManagerWhenDeleted(t *testing.T) {
 
 	_, ok := mgr.ClientFor("gone")
 	assert.False(t, ok, "a deleted WorkloadCluster must be disconnected")
+}
+
+// TestReconcile_DecidesConnectionWhetherOrNotItConnects: once the controller
+// has reconciled a registration, a missing connection is its decision, whether
+// the cluster connected, failed to connect, or was removed.
+func TestReconcile_DecidesConnectionWhetherOrNotItConnects(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		probe     func(context.Context, []byte) error
+		objects   bool
+		connected bool
+	}{
+		{name: "reachable", probe: func(context.Context, []byte) error { return nil }, objects: true, connected: true},
+		{name: "connection failed", probe: func(context.Context, []byte) error { return errors.New("dial tcp: timeout") }, objects: true},
+		{name: "registration deleted", probe: func(context.Context, []byte) error { return nil }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			s := fakeclient.Scheme(t)
+			mgr := NewManager(s)
+			mgr.newClient = func(_ context.Context, raw []byte, _ *runtime.Scheme) (SelectivelyCachingClient, context.CancelFunc, error) {
+				return &stubClient{id: "c1"}, func() {}, nil
+			}
+			var objects []client.Object
+			if tt.objects {
+				objects = []client.Object{wcWithSecret("c1"), kcSecret(validKubeconfig)}
+			}
+			r, _ := newReconciler(t, s, tt.probe, objects...)
+			r.Manager = mgr
+			require.True(t, mgr.ConnectionPending("c1", ""))
+
+			_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "c1"}})
+			require.NoError(t, err)
+			_, ok := mgr.ClientFor("c1")
+			assert.Equal(t, tt.connected, ok)
+			assert.False(t, mgr.ConnectionPending("c1", ""))
+			if tt.objects {
+				assert.False(t, mgr.ConnectionPending("c1", "c1-uid"))
+			}
+		})
+	}
 }

@@ -11,7 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
-	"sigs.k8s.io/ome/pkg/client/clientset/versioned/fake"
 )
 
 func TestNemotronSuperVLMetadata(t *testing.T) {
@@ -34,8 +33,7 @@ func TestNemotronSuperVLMetadata(t *testing.T) {
 					cbm := &v1beta1.ClusterBaseModel{ObjectMeta: metav1.ObjectMeta{Name: "synthetic-super-vl"}}
 					bm.Spec.ModelCapabilities = append([]string(nil), initial.caps...)
 					cbm.Spec.ModelCapabilities = append([]string(nil), initial.caps...)
-					client := fake.NewSimpleClientset(bm, cbm)
-					parser := NewModelConfigParser(client, zap.NewNop().Sugar())
+					parser := NewModelConfigParser(zap.NewNop().Sugar())
 					if kind == "BaseModel" {
 						cbm = nil
 					} else {
@@ -53,15 +51,13 @@ func TestNemotronSuperVLMetadata(t *testing.T) {
 					require.NoError(t, err)
 					require.NotNil(t, metadata)
 					require.Equal(t, want, metadata.ModelCapabilities)
+					// The parser fills the unset fields of the model it was given, in
+					// memory; the caller that owns the object persists it.
 					var spec v1beta1.BaseModelSpec
 					if kind == "BaseModel" {
-						persisted, err := client.OmeV1beta1().BaseModels("test").Get(ctx, "synthetic-super-vl", metav1.GetOptions{})
-						require.NoError(t, err)
-						spec = persisted.Spec
+						spec = bm.Spec
 					} else {
-						persisted, err := client.OmeV1beta1().ClusterBaseModels().Get(ctx, "synthetic-super-vl", metav1.GetOptions{})
-						require.NoError(t, err)
-						spec = persisted.Spec
+						spec = cbm.Spec
 					}
 					expected := want
 					if len(initial.caps) > 0 {

@@ -43,9 +43,9 @@ func crashAnchor(isvc *v1beta1.InferenceService, cs *v1beta1.CanaryStatus, now t
 // gate waits out: the kubelet restarts the runner in place or the restart
 // policy rebuilds the Instance, and the step keeps its state meanwhile.
 // The Instance row anchors the reading, as the workload's own restart
-// trigger does: a Ready row speaks for its pods, a Restarting row only for
-// the pod set it is draining, and a row that is forming, rolling or
-// migrating has no serving run to lose.
+// trigger does: a Ready row speaks for its pods, a repair's Restarting row
+// only for the pod set it is draining, and a row that is forming, rolling
+// or migrating has no serving run to lose.
 //
 // A death is evidenced by the pod itself, a recorded termination or its
 // restart count, never by the Instance's readiness: a fresh pod with no
@@ -190,7 +190,10 @@ func laterOf(a, b time.Time) time.Time {
 // rebuilt set, whose boot restarts are the ordinary start of a fresh pod. A
 // row the workload escalated to Failed for its pod's crash loop still
 // speaks for that pod: the escalation is the workload's reading of the same
-// deaths, and the pod it left in place carries them.
+// deaths, and the pod it left in place carries them. A Restarting row with
+// no operation is the status publication's reading of a settled row whose
+// pod set serves nothing; no repair owns it, and it speaks for its pods as
+// Ready does.
 func servingAnchor(row *v1beta1.OMENativeInstanceStatus, pod *corev1.Pod, since time.Time) (time.Time, bool) {
 	if row == nil || row.ReadySince == nil || row.ReadySince.IsZero() {
 		return time.Time{}, false
@@ -198,6 +201,9 @@ func servingAnchor(row *v1beta1.OMENativeInstanceStatus, pod *corev1.Pod, since 
 	switch row.Phase {
 	case v1beta1.OMENativeInstanceReady, v1beta1.OMENativeInstanceFailed:
 	case v1beta1.OMENativeInstanceRestarting:
+		if row.Operation == nil {
+			break
+		}
 		if incarnation, ok := query.InstanceIncarnationFromLabels(pod); !ok || incarnation >= row.Incarnation {
 			return time.Time{}, false
 		}

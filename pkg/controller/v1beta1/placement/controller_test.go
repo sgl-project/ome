@@ -296,7 +296,7 @@ func TestWritePlacementProjectsSourceReady(t *testing.T) {
 			wantMessage: placementReadyMessageNotReady,
 		},
 		{
-			name: "placed with an unreadable home",
+			name: "placed with an unreadable member",
 			result: placementResult{
 				phase:            v1beta1.PlacementPhasePlaced,
 				candidates:       []v1beta1.CandidatePlacement{servingCandidate},
@@ -969,7 +969,7 @@ func TestReconcile_PublishesEndpointWhenAdmitted(t *testing.T) {
 	require.NotNil(t, u)
 	assert.Equal(t, "svc.prod.b.example", u.Host)
 
-	// The winner's per-candidate Endpoint is populated too (the per-home model
+	// The winner's per-candidate Endpoint is populated too (the per-member model
 	// All/Split build on; in Single the top-level Endpoint stays authoritative).
 	winner := candidatesByCluster(p.Candidates)["b"]
 	require.NotNil(t, winner.Allocation)
@@ -1691,7 +1691,7 @@ func TestReconcile_NoReadyClustersPreservesLastKnownPlacement(t *testing.T) {
 	assert.Equal(t, "svc.a.example", cpStatusURL(t, cp).Host)
 }
 
-func TestReconcile_NoReadyClustersRefreshesStandingHome(t *testing.T) {
+func TestReconcile_NoReadyClustersRefreshesStandingMember(t *testing.T) {
 	s := testScheme(t)
 	worker := workerWithReplicaCounts(t, s, "fresh.example.com", 4, 2)
 	isvc := srcISVC("gpu=gb300")
@@ -1722,7 +1722,7 @@ func TestReconcile_NoReadyClustersRefreshesStandingHome(t *testing.T) {
 	assert.Equal(t, "fresh.example.com", p.Endpoint.Host)
 }
 
-func TestReconcile_StandingHomeObservedWhenOnlyUnrelatedClusterIsReady(t *testing.T) {
+func TestReconcile_StandingMemberObservedWhenOnlyUnrelatedClusterIsReady(t *testing.T) {
 	s := testScheme(t)
 	worker := workerWithReplicaCounts(t, s, "fresh.example.com", 3, 2)
 	isvc := srcISVC("gpu=gb300")
@@ -1750,7 +1750,7 @@ func TestReconcile_StandingHomeObservedWhenOnlyUnrelatedClusterIsReady(t *testin
 	assert.Equal(t, "fresh.example.com", p.Candidates[0].Endpoint.Host)
 }
 
-func TestReconcile_MalformedSelectorHoldsActuationButRefreshesStandingHome(t *testing.T) {
+func TestReconcile_MalformedSelectorHoldsActuationButRefreshesStandingMember(t *testing.T) {
 	s := testScheme(t)
 	worker := workerWithReplicaCounts(t, s, "fresh.example.com", 3, 2)
 	isvc := srcISVC("!!!")
@@ -2019,7 +2019,7 @@ func placedAllISVC() *v1beta1.InferenceService {
 }
 
 // workerWithGatedDerived returns a worker whose derived ISVC exists but whose
-// engine IR reports no admitted instance — a home that fanned out but is still
+// engine IR reports no admitted instance — a member that fanned out but is still
 // gated behind Kueue admission.
 func workerWithGatedDerived(t *testing.T, s *runtime.Scheme) client.WithWatch {
 	t.Helper()
@@ -2040,10 +2040,10 @@ func candidatesByCluster(cs []v1beta1.CandidatePlacement) map[string]v1beta1.Can
 	return m
 }
 
-// TestReconcile_AllModeKeepsEveryAdmittedHome: mode All places on every candidate
+// TestReconcile_AllModeKeepsEveryAdmittedMember: mode All places on every candidate
 // that admits, keeps them all (no sweep, no single winner), and records each
-// home's own endpoint.
-func TestReconcile_AllModeKeepsEveryAdmittedHome(t *testing.T) {
+// member's own endpoint.
+func TestReconcile_AllModeKeepsEveryAdmittedMember(t *testing.T) {
 	s := testScheme(t)
 	wa := workerWithReadyURL(t, s, "svc.a.example", 2)
 	wb := workerWithReadyURL(t, s, "svc.b.example", 1)
@@ -2057,8 +2057,8 @@ func TestReconcile_AllModeKeepsEveryAdmittedHome(t *testing.T) {
 	_, err := r.Reconcile(context.Background(), req())
 	require.NoError(t, err)
 
-	assert.True(t, hasDerived(t, wa), "home a kept (no sweep)")
-	assert.True(t, hasDerived(t, wb), "home b kept (no sweep)")
+	assert.True(t, hasDerived(t, wa), "member a kept (no sweep)")
+	assert.True(t, hasDerived(t, wb), "member b kept (no sweep)")
 
 	p := cpPlacement(t, cp)
 	require.NotNil(t, p)
@@ -2080,11 +2080,11 @@ func TestReconcile_AllModeKeepsEveryAdmittedHome(t *testing.T) {
 	assert.Equal(t, "svc.b.example", by["b"].Endpoint.Host)
 }
 
-// All mode keeps its published homes while the remote-client registry is
+// All mode keeps its published members while the remote-client registry is
 // rebuilding. WorkloadCluster readiness survives a controller restart, but the
 // process-local clients do not, so an empty registry is not evidence that the
-// serving homes disappeared.
-func TestReconcile_AllModeDisconnectedStartupPreservesLastKnownHomes(t *testing.T) {
+// serving members disappeared.
+func TestReconcile_AllModeDisconnectedStartupPreservesLastKnownMembers(t *testing.T) {
 	s := testScheme(t)
 	isvc := placedAllISVC()
 	r, cp := newPlacer(s, fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{}}, isvc,
@@ -2139,10 +2139,10 @@ func TestReconcile_AllModeDisconnectedNewSourceRetriesFast(t *testing.T) {
 	assert.Empty(t, p.Candidates)
 }
 
-// A disconnected home remains published while connected homes continue to be
+// A disconnected member remains published while connected members continue to be
 // observed normally. One transport gap must not remove only that backend from
 // an otherwise healthy All placement.
-func TestReconcile_AllModePartialDisconnectPreservesLastKnownHome(t *testing.T) {
+func TestReconcile_AllModePartialDisconnectPreservesLastKnownMember(t *testing.T) {
 	s := testScheme(t)
 	wa := workerWithAdmittedURL(t, s, "svc.a.example")
 	isvc := placedAllISVC()
@@ -2168,7 +2168,7 @@ func TestReconcile_AllModePartialDisconnectPreservesLastKnownHome(t *testing.T) 
 	assert.Equal(t, "svc.b.example", by["b"].Endpoint.Host)
 }
 
-func TestReconcile_AllModeObservesStandingHomeAcrossReadinessGate(t *testing.T) {
+func TestReconcile_AllModeObservesStandingMemberAcrossReadinessGate(t *testing.T) {
 	s := testScheme(t)
 	wa := workerWithReadyURL(t, s, "fresh.a.example", 2)
 	wb := workerWithReadyURL(t, s, "fresh.b.example", 4)
@@ -2195,8 +2195,8 @@ func TestReconcile_AllModeObservesStandingHomeAcrossReadinessGate(t *testing.T) 
 
 // An aggregate Ready condition not written by this controller carries no
 // per-candidate ingress attribution, so it must not be assigned to an
-// unreadable home whose carried ReadyReplicas may have come from pods alone.
-func TestReconcile_AllModeUnreadableHomeDoesNotBorrowLegacyReady(t *testing.T) {
+// unreadable member whose carried ReadyReplicas may have come from pods alone.
+func TestReconcile_AllModeUnreadableMemberDoesNotBorrowLegacyReady(t *testing.T) {
 	s := testScheme(t)
 	wa := workerWithAdmittedURL(t, s, "svc.a.example")
 	isvc := placedAllISVC()
@@ -2228,7 +2228,7 @@ func TestReconcile_AllModeUnreadableHomeDoesNotBorrowLegacyReady(t *testing.T) {
 		"an unproven carried count must not become routing weight")
 }
 
-func TestReconcile_AllModeBackendHoldRetainsOutgoingHome(t *testing.T) {
+func TestReconcile_AllModeBackendHoldRetainsOutgoingMember(t *testing.T) {
 	s := testScheme(t)
 	isvc := placedAllISVC()
 	r, cp := newPlacer(s, fakeClusters{m: map[string]workloadcluster.SelectivelyCachingClient{}}, isvc,
@@ -2246,12 +2246,12 @@ func TestReconcile_AllModeBackendHoldRetainsOutgoingHome(t *testing.T) {
 		got[candidate.Cluster] = candidate.Endpoint.Host
 	}
 	if diff := cmp.Diff(map[string]string{"a": "svc.a.example", "b": "svc.b.example"}, got); diff != "" {
-		t.Fatalf("held homes (-want +got):\n%s", diff)
+		t.Fatalf("held members (-want +got):\n%s", diff)
 	}
 }
 
-// TestReconcile_AllModePartialAdmitStaysPlaced: one home admitted, one still
-// gated -> Placed (>=1 admitted), neither swept, gated home has no endpoint yet.
+// TestReconcile_AllModePartialAdmitStaysPlaced: one member admitted, one still
+// gated -> Placed (>=1 admitted), neither swept, gated member has no endpoint yet.
 func TestReconcile_AllModePartialAdmitStaysPlaced(t *testing.T) {
 	s := testScheme(t)
 	wa := workerWithAdmittedURL(t, s, "svc.a.example") // admitted
@@ -2267,10 +2267,10 @@ func TestReconcile_AllModePartialAdmitStaysPlaced(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, hasDerived(t, wa))
-	assert.True(t, hasDerived(t, wb), "gated home is NOT swept")
-	// A home still gated must keep the placement re-polling (not fall to the long
-	// steady-state backstop) so a home that admits later is observed promptly.
-	assert.Positive(t, res.RequeueAfter, "re-polls while a home is still gated")
+	assert.True(t, hasDerived(t, wb), "gated member is NOT swept")
+	// A member still gated must keep the placement re-polling (not fall to the long
+	// steady-state backstop) so a member that admits later is observed promptly.
+	assert.Positive(t, res.RequeueAfter, "re-polls while a member is still gated")
 
 	p := cpPlacement(t, cp)
 	require.NotNil(t, p)
@@ -2278,12 +2278,12 @@ func TestReconcile_AllModePartialAdmitStaysPlaced(t *testing.T) {
 	by := candidatesByCluster(p.Candidates)
 	assert.Equal(t, v1beta1.CandidatePhaseAdmitted, by["a"].Phase)
 	assert.Equal(t, v1beta1.CandidatePhaseAdmitting, by["b"].Phase)
-	assert.Nil(t, by["b"].Endpoint, "gated home has no endpoint yet")
+	assert.Nil(t, by["b"].Endpoint, "gated member has no endpoint yet")
 }
 
-// All mode keeps every home independent. A failed IR read retains identity and
+// All mode keeps every member independent. A failed IR read retains identity and
 // the freshly observed endpoint, but publishes zero ready capacity.
-func TestReconcile_AllModeRemoteIRFailureDoesNotHideHealthyHome(t *testing.T) {
+func TestReconcile_AllModeRemoteIRFailureDoesNotHideHealthyMember(t *testing.T) {
 	s := testScheme(t)
 	bad := irGetFailClient{WithWatch: workerWithAdmittedURL(t, s, "svc.a.example")}
 	good := workerWithAdmittedURL(t, s, "svc.b.example")
@@ -2348,7 +2348,7 @@ func TestReconcile_AllModeRepeatedIRFailureKeepsFreshObservation(t *testing.T) {
 	assert.Equal(t, PlacementReadyReasonUnknown, ready.Reason)
 }
 
-// TestReconcile_AllModeAdmittingWhileAllGated: no home admitted yet -> Admitting, both
+// TestReconcile_AllModeAdmittingWhileAllGated: no member admitted yet -> Admitting, both
 // kept, fast requeue.
 func TestReconcile_AllModeAdmittingWhileAllGated(t *testing.T) {
 	s := testScheme(t)
@@ -2407,7 +2407,7 @@ func srcISVCSplit(requirements string, replicas int32) *v1beta1.InferenceService
 
 // workerWithReplicas returns a worker whose derived engine IR reports `admitted`
 // admitted instances and `ready` ready replicas, with an addressable status.URL.
-// Models a home that Kueue admitted a fraction of the requested replicas.
+// Models a member that Kueue admitted a fraction of the requested replicas.
 func workerWithReplicas(t *testing.T, s *runtime.Scheme, host string, admitted, ready int32) client.WithWatch {
 	t.Helper()
 	derived := isvcWithInstances(v1beta1.EngineComponent)
@@ -2446,9 +2446,9 @@ func TestSplitDesiredReplicas(t *testing.T) {
 	assert.Equal(t, int32(0), splitDesiredReplicas(srcISVCMode(v1beta1.PlacementModeSplit, "gpu=gb300")))
 }
 
-// Split observes each home independently: one home's failed authoritative IR
-// read must not abort the pass and strand the healthy home unobserved.
-func TestReconcile_SplitRemoteIRFailureDoesNotAbortHealthyHome(t *testing.T) {
+// Split observes each member independently: one member's failed authoritative IR
+// read must not abort the pass and strand the healthy member unobserved.
+func TestReconcile_SplitRemoteIRFailureDoesNotAbortHealthyMember(t *testing.T) {
 	s := testScheme(t)
 	good := workerWithReplicas(t, s, "svc.a.example", 1, 1)
 	bad := irGetFailClient{WithWatch: workerWithReplicas(t, s, "svc.z.example", 1, 1)}
@@ -2468,12 +2468,12 @@ func TestReconcile_SplitRemoteIRFailureDoesNotAbortHealthyHome(t *testing.T) {
 	assert.Equal(t, v1beta1.CandidatePhaseAdmitted, by["a"].Phase)
 }
 
-// An unreadable home must not read as free capacity. Its last published
+// An unreadable member must not read as free capacity. Its last published
 // admitted count carries into apportionment, so a transient read error cannot
 // flip the pass out of its current regime and provision a duplicate elsewhere,
-// and the home keeps its published candidate entry so the endpoint publisher
+// and the member keeps its published candidate entry so the endpoint publisher
 // does not drop its backend.
-func TestReconcile_SplitUnreadableHomeKeepsItsShare(t *testing.T) {
+func TestReconcile_SplitUnreadableMemberKeepsItsShare(t *testing.T) {
 	s := testScheme(t)
 	good := workerWithReplicas(t, s, "svc.a.example", 1, 1)
 	bad := irGetFailClient{WithWatch: workerWithReplicas(t, s, "svc.z.example", 1, 1)}
@@ -2498,13 +2498,13 @@ func TestReconcile_SplitUnreadableHomeKeepsItsShare(t *testing.T) {
 	require.NotNil(t, p)
 	by := candidatesByCluster(p.Candidates)
 	zc, ok := by["z"]
-	require.True(t, ok, "unreadable home dropped from candidates; the publisher would delete its backend")
+	require.True(t, ok, "unreadable member dropped from candidates; the publisher would delete its backend")
 	assert.Equal(t, v1beta1.CandidatePhaseAdmitted, zc.Phase)
-	assert.Equal(t, int32(1), zc.AdmittedReplicas, "unreadable home lost its published replica count")
+	assert.Equal(t, int32(1), zc.AdmittedReplicas, "unreadable member lost its published replica count")
 	assert.Zero(t, zc.ReadyReplicas, "unknown health must not remain routable")
 }
 
-func TestReconcile_SplitTerminalHomeIsObservedWithoutReapply(t *testing.T) {
+func TestReconcile_SplitTerminalMemberIsObservedWithoutReapply(t *testing.T) {
 	s := testScheme(t)
 	derived := isvcWithPhases(v1beta1.EngineComponent, v1beta1.OMENativeInstanceFailed)
 	derived.Namespace, derived.Name = "prod", "svc"
@@ -2534,7 +2534,7 @@ func TestReconcile_SplitTerminalHomeIsObservedWithoutReapply(t *testing.T) {
 
 	_, err := r.Reconcile(context.Background(), req())
 	require.NoError(t, err)
-	assert.Zero(t, mutations, "a terminal home must not be applied or swept")
+	assert.Zero(t, mutations, "a terminal member must not be applied or swept")
 	p := cpPlacement(t, cp)
 	require.NotNil(t, p)
 	require.Len(t, p.Candidates, 1)

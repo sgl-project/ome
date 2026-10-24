@@ -2,13 +2,12 @@ package inferencereplica
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 
+	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	"github.com/onsi/gomega"
 	admissionv1 "k8s.io/api/admission/v1"
-	authenticationv1 "k8s.io/api/authentication/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -16,110 +15,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-
-	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
-
-func newDecoder(t *testing.T) admission.Decoder {
-	t.Helper()
-	s := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(s); err != nil {
-		t.Fatalf("v1beta1.AddToScheme: %v", err)
-	}
-	return admission.NewDecoder(s)
-}
-
-func encode(t *testing.T, obj *v1beta1.InferenceReplica) []byte {
-	t.Helper()
-	raw, err := json.Marshal(obj)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	return raw
-}
-
-// baselineIR returns a syntactically-valid projected InferenceReplica
-// (InferenceService controller owner reference plus parentRef) suitable
-// for cloning into Create / Update fixtures.
-func baselineIR(annotations map[string]string) *v1beta1.InferenceReplica {
-	return &v1beta1.InferenceReplica{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        "llama-engine",
-			Namespace:   "prod-models",
-			Annotations: annotations,
-			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: v1beta1.SchemeGroupVersion.String(), Kind: "InferenceService",
-				Name: "llama", UID: "isvc-uid", Controller: ptr.To(true),
-			}},
-		},
-		Spec: v1beta1.InferenceReplicaSpec{
-			ParentRef: &v1beta1.ParentReference{
-				Name: "llama",
-			},
-			Component: v1beta1.EngineComponent,
-			Runners: []v1beta1.Runner{
-				{
-					Name: v1beta1.RunnerNameDefault,
-					Size: 1,
-					Template: corev1.PodTemplateSpec{
-						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{{
-								Name:  "ome-container",
-								Image: "sgl:1.0",
-							}},
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-// withControllerWrite stamps the controller-write annotation, matching
-// what the ISVC controller's client does on every Create/Update.
-func withControllerWrite() map[string]string {
-	return map[string]string{
-		constants.InferenceReplicaControllerWriteAnnotationKey: constants.InferenceReplicaControllerWriteAnnotationVal,
-	}
-}
-
-func createReq(t *testing.T, obj *v1beta1.InferenceReplica) admission.Request {
-	t.Helper()
-	return admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
-		Operation: admissionv1.Create,
-		Namespace: obj.Namespace,
-		Name:      obj.Name,
-		UserInfo:  authenticationv1.UserInfo{Username: "alice"},
-		Object:    runtime.RawExtension{Raw: encode(t, obj)},
-	}}
-}
-
-func updateReq(t *testing.T, oldObj, newObj *v1beta1.InferenceReplica) admission.Request {
-	t.Helper()
-	return admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
-		Operation: admissionv1.Update,
-		Namespace: newObj.Namespace,
-		Name:      newObj.Name,
-		UserInfo:  authenticationv1.UserInfo{Username: "alice"},
-		OldObject: runtime.RawExtension{Raw: encode(t, oldObj)},
-		Object:    runtime.RawExtension{Raw: encode(t, newObj)},
-	}}
-}
-
-// withReplicas returns a clone of `ir` with Replicas set; convenience
-// for the Update-path table cases that need a spec diff.
-func withReplicas(ir *v1beta1.InferenceReplica, n int32) *v1beta1.InferenceReplica {
-	out := ir.DeepCopy()
-	out.Spec.Replicas = &n
-	return out
-}
 
 // withComponent returns a clone with the Component slot changed.
 func withComponent(ir *v1beta1.InferenceReplica, c v1beta1.ComponentType) *v1beta1.InferenceReplica {
@@ -135,23 +37,6 @@ func withParent(ir *v1beta1.InferenceReplica, name string) *v1beta1.InferenceRep
 	return out
 }
 
-// withFinalizers returns a clone with metadata.finalizers replaced.
-func withFinalizers(ir *v1beta1.InferenceReplica, finalizers ...string) *v1beta1.InferenceReplica {
-	out := ir.DeepCopy()
-	out.Finalizers = finalizers
-	return out
-}
-
-// withLabel returns a clone with one label added.
-func withLabel(ir *v1beta1.InferenceReplica, k, v string) *v1beta1.InferenceReplica {
-	out := ir.DeepCopy()
-	if out.Labels == nil {
-		out.Labels = map[string]string{}
-	}
-	out.Labels[k] = v
-	return out
-}
-
 // withOwnerRef returns a clone with one ownerReference added.
 func withOwnerRef(ir *v1beta1.InferenceReplica, name string) *v1beta1.InferenceReplica {
 	out := ir.DeepCopy()
@@ -164,17 +49,6 @@ func withOwnerRef(ir *v1beta1.InferenceReplica, name string) *v1beta1.InferenceR
 	return out
 }
 
-// withPacingPartition returns a clone with spec.pacing.partition set
-// (creating the Pacing block if nil).
-func withPacingPartition(ir *v1beta1.InferenceReplica, partition int32) *v1beta1.InferenceReplica {
-	out := ir.DeepCopy()
-	if out.Spec.Pacing == nil {
-		out.Spec.Pacing = &v1beta1.InferenceReplicaPacing{}
-	}
-	out.Spec.Pacing.Partition = &partition
-	return out
-}
-
 // withReplicasAndPacingPartition returns a clone with both spec.replicas
 // and spec.pacing.partition set. Used by the over-Partition table cases.
 func withReplicasAndPacingPartition(ir *v1beta1.InferenceReplica, replicas, partition int32) *v1beta1.InferenceReplica {
@@ -183,13 +57,6 @@ func withReplicasAndPacingPartition(ir *v1beta1.InferenceReplica, replicas, part
 		out.Spec.Pacing = &v1beta1.InferenceReplicaPacing{}
 	}
 	out.Spec.Pacing.Partition = &partition
-	return out
-}
-
-// withImage returns a clone whose first runner uses a different image.
-func withImage(ir *v1beta1.InferenceReplica, image string) *v1beta1.InferenceReplica {
-	out := ir.DeepCopy()
-	out.Spec.Runners[0].Template.Spec.Containers[0].Image = image
 	return out
 }
 
@@ -1090,9 +957,7 @@ func sliceNode(name string, labels map[string]string) *corev1.Node {
 func TestHandleTPUSliceDemand(t *testing.T) {
 	provisionOnly := sliceNode("provision-only", map[string]string{sliceAccelerator: "tpu-a", sliceProvisioning: sliceProvisionOnly})
 	static := sliceNode("static", map[string]string{sliceAccelerator: "tpu-a", sliceTopology: "4x4x4"})
-	failingList := interceptor.Funcs{List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
-		return errors.New("boom")
-	}}
+	failingList := fakeclient.FailingVerb(fakeclient.List, fakeclient.EveryCall, errors.New("boom"))
 	const invalid = "pods cannot be placed on a provisioned slice"
 
 	tests := []struct {
@@ -1100,7 +965,7 @@ func TestHandleTPUSliceDemand(t *testing.T) {
 		unconfigured bool
 		// nodes defaults to one provision-only node carrying tpu-a.
 		nodes        []client.Object
-		funcs        interceptor.Funcs
+		refusal      fakeclient.Option
 		req          func(t *testing.T) admission.Request
 		wantAllowed  bool
 		wantContains []string
@@ -1167,7 +1032,7 @@ func TestHandleTPUSliceDemand(t *testing.T) {
 		},
 		{
 			name:        "create whose nodes cannot be read → allowed",
-			funcs:       failingList,
+			refusal:     failingList,
 			req:         func(t *testing.T) admission.Request { return createReq(t, sliceIR(true, "2x2x1", 2, 0)) },
 			wantAllowed: true,
 		},
@@ -1217,10 +1082,14 @@ func TestHandleTPUSliceDemand(t *testing.T) {
 			if nodes == nil {
 				nodes = []client.Object{provisionOnly}
 			}
+			nodeOpts := []fakeclient.Option{fakeclient.WithObjects(nodes...)}
+			if tc.refusal != nil {
+				nodeOpts = append(nodeOpts, tc.refusal)
+			}
 			v := &Validator{
 				Decoder:              newDecoder(t),
 				TPUSliceProvisioning: sliceConfig(t),
-				Nodes:                fake.NewClientBuilder().WithObjects(nodes...).WithInterceptorFuncs(tc.funcs).Build(),
+				Nodes:                fakeclient.New(t, nodeOpts...),
 			}
 			if tc.unconfigured {
 				v.TPUSliceProvisioning, v.Nodes = nil, nil
@@ -1237,15 +1106,14 @@ func TestHandleTPUSliceDemand(t *testing.T) {
 // TestHandleTPUSliceDemandScaleReadsNoNodes pins that an update leaving
 // the runners alone, such as a scale, reads no nodes.
 func TestHandleTPUSliceDemandScaleReadsNoNodes(t *testing.T) {
-	nodes := fake.NewClientBuilder().WithInterceptorFuncs(interceptor.Funcs{
-		List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
-			t.Error("the nodes were read for an update that keeps the runners")
-			return nil
-		},
-	}).Build()
+	nodeReads := fakeclient.CountingVerb(fakeclient.List)
+	nodes := fakeclient.New(t, nodeReads)
 	v := &Validator{Decoder: newDecoder(t), TPUSliceProvisioning: sliceConfig(t), Nodes: nodes}
 	old := sliceIR(true, "2x2x1", 4, 0)
 	if resp := v.Handle(context.Background(), updateReq(t, old, withReplicas(old, 3))); !resp.Allowed {
 		t.Fatalf("scale update denied: %s", resp.Result.Message)
+	}
+	if nodeReads.Count() != 0 {
+		t.Error("the nodes were read for an update that keeps the runners")
 	}
 }

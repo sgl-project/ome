@@ -95,7 +95,11 @@ var (
 	// RolloutRollbackAnnotation is the operator verb for instant
 	// rollback. Value: "true" ("false" is identical to absence). Traffic
 	// shifts to 100% old, new revision drains after scaleDownDelaySeconds.
-	// Controller clears the annotation after consuming it.
+	// Every canary unit that can act on the request applies it and holds
+	// it: it stays on the InferenceService through that unit's hold, other
+	// units leave it alone, and the controller removes it when a new target
+	// starts the unit's next canary, or at once when no unit can act on it. To roll back
+	// another unit while one holds, remove the annotation and set it again.
 	RolloutRollbackAnnotation = OMEAPIGroupName + "/rollout-rollback"
 
 	// PausedRolloutAnnotation, set on the InferenceService, holds every

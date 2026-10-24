@@ -11,34 +11,28 @@ import (
 	"github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func newReconciler(t *testing.T, objs ...client.Object) (*InheritanceReconciler, client.Client) {
 	t.Helper()
-	scheme := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(scheme); err != nil {
-		t.Fatalf("AddToScheme: %v", err)
-	}
-	c := ctrlclientfake.NewClientBuilder().
-		WithScheme(scheme).
-		WithStatusSubresource(&v1beta1.ClusterServingRuntime{}, &v1beta1.ServingRuntime{}).
-		WithObjects(objs...).
-		Build()
+	c := fakeclient.New(t,
+		fakeclient.WithStatusSubresource(&v1beta1.ClusterServingRuntime{}, &v1beta1.ServingRuntime{}),
+		fakeclient.WithObjects(objs...),
+	)
 	return &InheritanceReconciler{
 		Client:   c,
 		Log:      testr.New(t),
-		Scheme:   scheme,
+		Scheme:   c.Scheme(),
 		Recorder: &record.FakeRecorder{},
 	}, c
 }

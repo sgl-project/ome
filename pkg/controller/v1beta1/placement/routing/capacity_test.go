@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/clock"
 	clocktesting "k8s.io/utils/clock/testing"
+	kptr "k8s.io/utils/ptr"
 )
 
 const testCapacityMaxResponseBytes int64 = 1 << 20
@@ -116,12 +117,12 @@ func capacityServer(t *testing.T, status int, body string) *httptest.Server {
 	return srv
 }
 
-func freshReport(servable int32) string {
-	b, _ := json.Marshal(CapacityReport{Servable: servable, ObservedAt: capacityTestNow})
+func freshReport(servable float64) string {
+	b, _ := json.Marshal(CapacityReport{Servable: kptr.To(int32(servable)), ObservedAt: capacityTestNow})
 	return string(b)
 }
 
-func TestNewCapacityPollerRequiresRuntimeDependenciesAndLimit(t *testing.T) {
+func TestNewCapacityPoller_NilDependencyOrNonPositiveBound_ReturnsError(t *testing.T) {
 	executor, err := NewObserverExecutor(1, 1)
 	if err != nil {
 		t.Fatalf("NewObserverExecutor() error = %v", err)
@@ -162,7 +163,7 @@ func TestCapacityPoller_AcceptsAFreshReport(t *testing.T) {
 		t.Fatalf("pollOne returned no report: %s", reason)
 	}
 	if *got != 3 {
-		t.Fatalf("servable = %d, want 3", *got)
+		t.Fatalf("servable = %v, want 3", *got)
 	}
 	if reason != "" {
 		t.Fatalf("reason = %q, want empty on an accepted report", reason)
@@ -171,7 +172,7 @@ func TestCapacityPoller_AcceptsAFreshReport(t *testing.T) {
 
 func TestCapacityPoller_AcceptsAReportOfZero(t *testing.T) {
 	// Zero is a real signal ("I can serve nothing"), not an absent report. The
-	// ceiling drives the home's weight to 0, which is the point.
+	// ceiling drives the cluster's weight to 0, which is the point.
 	srv := capacityServer(t, http.StatusOK, freshReport(0))
 	p := newTestPoller(t)
 
@@ -180,20 +181,38 @@ func TestCapacityPoller_AcceptsAReportOfZero(t *testing.T) {
 		t.Fatalf("a report of zero was discarded: %s", reason)
 	}
 	if *got != 0 {
-		t.Fatalf("servable = %d, want 0", *got)
+		t.Fatalf("servable = %v, want 0", *got)
+	}
+}
+
+func TestCapacityPoller_CeilingReadsOnlyTheServableField(t *testing.T) {
+	// The weight field belongs to Reported mode. A value of another type there
+	// must not cost a Ceiling consumer the count it reads.
+	body := fmt.Sprintf(`{"servable":3,"weight":"n/a","observedAt":%q}`, capacityTestNow.Format(time.RFC3339Nano))
+	srv := capacityServer(t, http.StatusOK, body)
+	p := newTestPoller(t)
+
+	got, reason := p.pollOne(context.Background(), testCapacityTarget("cluster-a", srv.URL), testCapacityConfig())
+	if got == nil {
+		t.Fatalf("report discarded: %s", reason)
+	}
+	if *got != 3 {
+		t.Fatalf("servable = %v, want 3", *got)
 	}
 }
 
 func TestCapacityPoller_FailsOpenOnEveryBadAnswer(t *testing.T) {
 	// Every one of these must leave the control-plane plan standing. Fail-closed
 	// would turn a control-plane-to-data-plane blip into a fleet-wide cutoff,
-	// and a malformed or stale number must never be able to black-hole a home.
-	stale, _ := json.Marshal(CapacityReport{Servable: 2, ObservedAt: capacityTestNow.Add(-time.Hour)})
-	future, _ := json.Marshal(CapacityReport{Servable: 2, ObservedAt: capacityTestNow.Add(time.Hour)})
-	negative, _ := json.Marshal(CapacityReport{Servable: -1, ObservedAt: capacityTestNow})
-	noStamp, _ := json.Marshal(CapacityReport{Servable: 2})
+	// and a malformed or stale number must never be able to black-hole a cluster.
+	stale, _ := json.Marshal(CapacityReport{Servable: kptr.To(int32(2)), ObservedAt: capacityTestNow.Add(-time.Hour)})
+	future, _ := json.Marshal(CapacityReport{Servable: kptr.To(int32(2)), ObservedAt: capacityTestNow.Add(time.Hour)})
+	negative, _ := json.Marshal(CapacityReport{Servable: kptr.To(int32(-1)), ObservedAt: capacityTestNow})
+	noStamp, _ := json.Marshal(CapacityReport{Servable: kptr.To(int32(2))})
 	missingServable := fmt.Sprintf(`{"observedAt":%q}`, capacityTestNow.Format(time.RFC3339Nano))
 	nullServable := fmt.Sprintf(`{"servable":null,"observedAt":%q}`, capacityTestNow.Format(time.RFC3339Nano))
+	weight := 2.5
+	reportedOnly, _ := json.Marshal(CapacityReport{Weight: &weight, ObservedAt: capacityTestNow})
 
 	tests := []struct {
 		name   string
@@ -208,6 +227,9 @@ func TestCapacityPoller_FailsOpenOnEveryBadAnswer(t *testing.T) {
 		{"report with no observedAt stamp", http.StatusOK, string(noStamp)},
 		{"report with missing servable", http.StatusOK, missingServable},
 		{"report with null servable", http.StatusOK, nullServable},
+		// A report built for Reported mode carries no count, so it cannot read
+		// as a ceiling of zero.
+		{"report written for Reported mode", http.StatusOK, string(reportedOnly)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -215,7 +237,7 @@ func TestCapacityPoller_FailsOpenOnEveryBadAnswer(t *testing.T) {
 			p := newTestPoller(t)
 			got, reason := p.pollOne(context.Background(), testCapacityTarget("cluster-a", srv.URL), testCapacityConfig())
 			if got != nil {
-				t.Fatalf("report = %d, want nil (fail open to the plan)", *got)
+				t.Fatalf("report = %v, want nil (fail open to the plan)", *got)
 			}
 			if reason == "" {
 				t.Fatal("fell open with no reason; an operator cannot tell this from agreement with the plan")
@@ -268,7 +290,7 @@ func TestCapacityPoller_ResponseCompletingAfterDeadlineFallsOpen(t *testing.T) {
 	defer cancel()
 	reported, reason := poller.pollOne(ctx, testCapacityTarget("cluster-a", "https://cluster-a.example"), testCapacityConfig())
 	if reported != nil {
-		t.Fatalf("late response produced report %d, want nil", *reported)
+		t.Fatalf("late response produced report %v, want nil", *reported)
 	}
 	if !strings.Contains(reason, context.DeadlineExceeded.Error()) {
 		t.Fatalf("late response reason = %q, want deadline error", reason)
@@ -283,7 +305,7 @@ func TestCapacityPoller_UnreachableEndpointFallsOpen(t *testing.T) {
 	p := newTestPoller(t)
 	got, reason := p.pollOne(context.Background(), testCapacityTarget("cluster-a", url), testCapacityConfig())
 	if got != nil {
-		t.Fatalf("report = %d from an unreachable endpoint, want nil", *got)
+		t.Fatalf("report = %v from an unreachable endpoint, want nil", *got)
 	}
 	if reason == "" {
 		t.Fatal("unreachable endpoint produced no reason")
@@ -295,14 +317,14 @@ func TestCapacityPoller_ReportedIsNilWhenPollingIsOff(t *testing.T) {
 	tgt := testCapacityTarget("cluster-a", "https://cluster-a.example")
 	disabled := ResolvedCapacityPolicy{}
 	if r := off.Reported(tgt, disabled); r != nil {
-		t.Fatalf("Reported with polling off = %d, want nil", *r)
+		t.Fatalf("Reported with polling off = %v, want nil", *r)
 	}
 	if reason := off.FellOpen(tgt, disabled); reason != "" {
 		t.Fatalf("FellOpen with polling off = %q, want empty", reason)
 	}
 	var nilPoller *CapacityPoller
 	if r := nilPoller.Reported(tgt, testCapacityPolicy(t, testCapacityConfig())); r != nil {
-		t.Fatalf("Reported on nil poller = %d, want nil", *r)
+		t.Fatalf("Reported on nil poller = %v, want nil", *r)
 	}
 }
 
@@ -310,7 +332,7 @@ func TestCapacityPoller_RecordDetectsCeilingOrFallbackReasonChanges(t *testing.T
 	p := newTestPoller(t)
 	tgt := testCapacityTarget("cluster-a", "https://cluster-a.example")
 	policy := testCapacityPolicy(t, singleSampleConfig())
-	two, three := int32(2), int32(3)
+	two, three := float64(2), float64(3)
 
 	if !p.record(tgt, policy, &two, "") {
 		t.Fatal("first report should count as a change")
@@ -321,7 +343,7 @@ func TestCapacityPoller_RecordDetectsCeilingOrFallbackReasonChanges(t *testing.T
 	if !p.record(tgt, policy, &three, "") {
 		t.Fatal("a changed report was not marked as a state change")
 	}
-	// A home that stops reporting releases its ceiling, which changes the
+	// A cluster that stops reporting releases its ceiling, which changes the
 	// projected weights.
 	if !p.record(tgt, policy, nil, "capacity endpoint unreachable") {
 		t.Fatal("losing a report was not marked as a state change")
@@ -341,13 +363,13 @@ func TestCapacityPoller_FirstAcceptedSampleExplainsPendingQuorum(t *testing.T) {
 	p := newTestPoller(t)
 	tgt := testCapacityTarget("cluster-a", "https://cluster-a.example")
 	policy := testCapacityPolicy(t, testCapacityConfig())
-	two := int32(2)
+	two := float64(2)
 
 	if !p.record(tgt, policy, &two, "") {
 		t.Fatal("first below-quorum sample did not report its new fallback reason")
 	}
 	if got := p.Reported(tgt, policy); got != nil {
-		t.Fatalf("Reported() = %d, want nil before quorum", *got)
+		t.Fatalf("Reported() = %v, want nil before quorum", *got)
 	}
 	if reason := p.FellOpen(tgt, policy); !strings.Contains(reason, "awaiting quorum (1/2 accepted samples)") {
 		t.Fatalf("FellOpen() = %q, want a nonempty pending-quorum reason", reason)
@@ -358,7 +380,7 @@ func TestCapacityPoller_StateIdentityIncludesOwnerMapClusterURLAndPolicy(t *test
 	p := newTestPoller(t)
 	tgt := testCapacityTarget("cluster-a", "https://cluster-a.example/base")
 	policy := testCapacityPolicy(t, singleSampleConfig())
-	two := int32(2)
+	two := float64(2)
 	p.record(tgt, policy, &two, "")
 
 	tests := []struct {
@@ -376,7 +398,7 @@ func TestCapacityPoller_StateIdentityIncludesOwnerMapClusterURLAndPolicy(t *test
 			other := tgt
 			tt.mutate(&other)
 			if got := p.Reported(other, policy); got != nil {
-				t.Fatalf("Reported() for different %s = %d, want nil", tt.name, *got)
+				t.Fatalf("Reported() for different %s = %v, want nil", tt.name, *got)
 			}
 		})
 	}
@@ -395,7 +417,7 @@ func TestCapacityPoller_StateIdentityIncludesOwnerMapClusterURLAndPolicy(t *test
 	changedConfig.Period *= 2
 	changedPolicy := testCapacityPolicy(t, changedConfig)
 	if got := p.Reported(tgt, changedPolicy); got != nil {
-		t.Fatalf("Reported() for different policy = %d, want nil", *got)
+		t.Fatalf("Reported() for different policy = %v, want nil", *got)
 	}
 }
 
@@ -408,10 +430,10 @@ func TestCapacityPoller_LateGenerationAndForgetCannotRecreateState(t *testing.T)
 	p.Forget(tgt.Map)
 	second := p.prepare(request, []Target{tgt})
 	if len(first) != 1 || len(second) != 1 {
-		t.Fatalf("prepared work lengths = %d, %d; want 1, 1", len(first), len(second))
+		t.Fatalf("prepared work lengths = %v, %v; want 1, 1", len(first), len(second))
 	}
 
-	two, nine := int32(2), int32(9)
+	two, nine := float64(2), float64(9)
 	if !p.recordCurrent(second[0].key, second[0].generation, policy.Capacity, &nine, capacityTestNow, "") {
 		t.Fatal("current generation was not recorded")
 	}
@@ -426,7 +448,7 @@ func TestCapacityPoller_LateGenerationAndForgetCannotRecreateState(t *testing.T)
 		t.Fatal("completion after Forget recreated state")
 	}
 	if got := p.Reported(tgt, policy); got != nil {
-		t.Fatalf("Reported() after Forget = %d, want nil", *got)
+		t.Fatalf("Reported() after Forget = %v, want nil", *got)
 	}
 }
 
@@ -436,18 +458,18 @@ func TestCapacityPoller_ForgetRemovesOnlyOneTrafficMap(t *testing.T) {
 	first := testCapacityTarget("cluster-a", "https://cluster-a.example")
 	second := testCapacityTarget("cluster-b", "https://cluster-b.example")
 	second.Map = types.NamespacedName{Namespace: "other", Name: "service"}
-	one := int32(1)
-	two := int32(2)
+	one := float64(1)
+	two := float64(2)
 	p.record(first, policy, &one, "")
 	p.record(second, policy, &two, "")
 
 	p.Forget(first.Map)
 
 	if got := p.Reported(first, policy); got != nil {
-		t.Fatalf("first Reported after Forget = %d, want nil", *got)
+		t.Fatalf("first Reported after Forget = %v, want nil", *got)
 	}
 	if got := p.Reported(second, policy); got == nil || *got != two {
-		t.Fatalf("second Reported after Forget = %v, want %d", got, two)
+		t.Fatalf("second Reported after Forget = %v, want %v", got, two)
 	}
 }
 
@@ -577,24 +599,24 @@ func TestConfig_ValidateHonorsInstallationGate(t *testing.T) {
 	}
 }
 
-func TestAllocationSource(t *testing.T) {
+func TestAllocationSource_ReportBelowPlanOrNot_EndpointOrControlPlane(t *testing.T) {
 	// Endpoint is claimed only when a report actually lowered the plan.
-	// Attributing a control-plane number to the home would send an operator
+	// Attributing a control-plane number to the cluster would send an operator
 	// looking at the wrong side of the system.
 	two, nine := int32(2), int32(9)
 	tests := []struct {
-		name string
-		home Home
-		want string
+		name    string
+		cluster ClusterCapacity
+		want    string
 	}{
-		{"no report is control plane", Home{Allocated: 7}, "ControlPlane"},
-		{"report above plan is control plane", Home{Allocated: 7, Reported: &nine}, "ControlPlane"},
-		{"report equal to plan is control plane", Home{Allocated: 2, Reported: &two}, "ControlPlane"},
-		{"report below plan is endpoint", Home{Allocated: 7, Reported: &two}, "Endpoint"},
+		{"no report is control plane", ClusterCapacity{Allocated: 7}, "ControlPlane"},
+		{"report above plan is control plane", ClusterCapacity{Allocated: 7, Reported: &nine}, "ControlPlane"},
+		{"report equal to plan is control plane", ClusterCapacity{Allocated: 2, Reported: &two}, "ControlPlane"},
+		{"report below plan is endpoint", ClusterCapacity{Allocated: 7, Reported: &two}, "Endpoint"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := string(allocationSource(tt.home)); got != tt.want {
+			if got := string(allocationSource(tt.cluster)); got != tt.want {
 				t.Fatalf("allocationSource() = %q, want %q", got, tt.want)
 			}
 		})
@@ -602,7 +624,7 @@ func TestAllocationSource(t *testing.T) {
 }
 
 func TestCapacityPoller_BodyIsBounded(t *testing.T) {
-	// A home streaming an unbounded body must not be able to exhaust
+	// A cluster streaming an unbounded body must not be able to exhaust
 	// control-plane memory, and truncation must not be mistaken for decoding.
 	body := freshReport(2)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -627,7 +649,7 @@ func TestCapacityPoller_BodyIsBounded(t *testing.T) {
 	}
 	got, reason := p.pollOne(context.Background(), testCapacityTarget("cluster-a", srv.URL), testCapacityConfig())
 	if got != nil {
-		t.Fatalf("oversized body produced a report %d, want nil", *got)
+		t.Fatalf("oversized body produced a report %v, want nil", *got)
 	}
 	if !strings.Contains(reason, "exceeds configured limit") {
 		t.Fatalf("oversized body reason = %q, want configured-limit error", reason)
@@ -658,7 +680,7 @@ func TestCapacityPoller_AcceptsBodyAtConfiguredLimit(t *testing.T) {
 	}
 }
 
-func TestCapacityPollerReconcileUsesAbsoluteDeadlines(t *testing.T) {
+func TestCapacityPollerReconcile_CalledEarlyLateOrOverdue_PollsOnlyWhenDue(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
@@ -678,7 +700,7 @@ func TestCapacityPollerReconcileUsesAbsoluteDeadlines(t *testing.T) {
 		t.Fatalf("first Reconcile() error = %v", err)
 	}
 	if delay != policy.Capacity.Period || requests.Load() != 1 {
-		t.Fatalf("first delay/requests = %s/%d, want %s/1", delay, requests.Load(), policy.Capacity.Period)
+		t.Fatalf("first delay/requests = %s/%v, want %s/1", delay, requests.Load(), policy.Capacity.Period)
 	}
 
 	delay, err = poller.Reconcile(context.Background(), request)
@@ -686,7 +708,7 @@ func TestCapacityPollerReconcileUsesAbsoluteDeadlines(t *testing.T) {
 		t.Fatalf("early Reconcile() error = %v", err)
 	}
 	if delay != policy.Capacity.Period || requests.Load() != 1 {
-		t.Fatalf("early delay/requests = %s/%d, want %s/1", delay, requests.Load(), policy.Capacity.Period)
+		t.Fatalf("early delay/requests = %s/%v, want %s/1", delay, requests.Load(), policy.Capacity.Period)
 	}
 
 	clk.Step(policy.Capacity.Period - time.Millisecond)
@@ -695,7 +717,7 @@ func TestCapacityPollerReconcileUsesAbsoluteDeadlines(t *testing.T) {
 		t.Fatalf("near-deadline Reconcile() error = %v", err)
 	}
 	if delay != time.Millisecond || requests.Load() != 1 {
-		t.Fatalf("near-deadline delay/requests = %s/%d, want %s/1", delay, requests.Load(), time.Millisecond)
+		t.Fatalf("near-deadline delay/requests = %s/%v, want %s/1", delay, requests.Load(), time.Millisecond)
 	}
 
 	clk.Step(time.Millisecond)
@@ -704,7 +726,7 @@ func TestCapacityPollerReconcileUsesAbsoluteDeadlines(t *testing.T) {
 		t.Fatalf("due Reconcile() error = %v", err)
 	}
 	if delay != policy.Capacity.Period || requests.Load() != 2 {
-		t.Fatalf("due delay/requests = %s/%d, want %s/2", delay, requests.Load(), policy.Capacity.Period)
+		t.Fatalf("due delay/requests = %s/%v, want %s/2", delay, requests.Load(), policy.Capacity.Period)
 	}
 
 	clk.Step(5 * policy.Capacity.Period / 2)
@@ -713,14 +735,14 @@ func TestCapacityPollerReconcileUsesAbsoluteDeadlines(t *testing.T) {
 		t.Fatalf("overdue Reconcile() error = %v", err)
 	}
 	if delay != policy.Capacity.Period/2 || requests.Load() != 3 {
-		t.Fatalf("overdue delay/requests = %s/%d, want %s/3", delay, requests.Load(), policy.Capacity.Period/2)
+		t.Fatalf("overdue delay/requests = %s/%v, want %s/3", delay, requests.Load(), policy.Capacity.Period/2)
 	}
 }
 
-func TestCapacityPollerReconcileExpiresAReportBeforeTheNextPoll(t *testing.T) {
+func TestCapacityPollerReconcile_ReportAgesOutBeforeNextPoll_DropsItAsStale(t *testing.T) {
 	var requests atomic.Int32
 	observedAt := capacityTestNow.Add(-25 * time.Second)
-	body, err := json.Marshal(CapacityReport{Servable: 3, ObservedAt: observedAt})
+	body, err := json.Marshal(CapacityReport{Servable: kptr.To(int32(3)), ObservedAt: observedAt})
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
@@ -746,7 +768,7 @@ func TestCapacityPollerReconcileExpiresAReportBeforeTheNextPoll(t *testing.T) {
 		t.Fatalf("first Reconcile() error = %v", err)
 	}
 	if delay != 5*time.Second || requests.Load() != 1 {
-		t.Fatalf("first delay/requests = %s/%d, want 5s/1", delay, requests.Load())
+		t.Fatalf("first delay/requests = %s/%v, want 5s/1", delay, requests.Load())
 	}
 	if got := poller.Reported(target, policy); got == nil || *got != 3 {
 		t.Fatalf("Reported() before expiry = %v, want 3", got)
@@ -758,17 +780,17 @@ func TestCapacityPollerReconcileExpiresAReportBeforeTheNextPoll(t *testing.T) {
 		t.Fatalf("expiry Reconcile() error = %v", err)
 	}
 	if delay != 5*time.Second || requests.Load() != 1 {
-		t.Fatalf("expiry delay/requests = %s/%d, want 5s/1", delay, requests.Load())
+		t.Fatalf("expiry delay/requests = %s/%v, want 5s/1", delay, requests.Load())
 	}
 	if got := poller.Reported(target, policy); got != nil {
-		t.Fatalf("Reported() at expiry = %d, want nil", *got)
+		t.Fatalf("Reported() at expiry = %v, want nil", *got)
 	}
 	if reason := poller.FellOpen(target, policy); !strings.Contains(reason, "stale") {
 		t.Fatalf("FellOpen() at expiry = %q, want stale-report reason", reason)
 	}
 }
 
-func TestCapacityPollerExpiresSamplesIndividually(t *testing.T) {
+func TestCapacityPoller_OneSampleOfThreeAgesOut_KeepsQuorumFromTheRest(t *testing.T) {
 	config := testCapacityConfig()
 	config.Period = 10 * time.Second
 	config.Timeout = time.Second
@@ -779,7 +801,7 @@ func TestCapacityPollerExpiresSamplesIndividually(t *testing.T) {
 	poller := newTestPoller(t)
 	target := testCapacityTarget("cluster-a", "https://cluster-a.example")
 
-	one, two, nine := int32(1), int32(2), int32(9)
+	one, two, nine := float64(1), float64(2), float64(9)
 	poller.recordAt(target, policy, &one, capacityTestNow.Add(-29*time.Second), "")
 	poller.recordAt(target, policy, &two, capacityTestNow, "")
 	poller.recordAt(target, policy, &nine, capacityTestNow, "")
@@ -796,7 +818,7 @@ func TestCapacityPollerExpiresSamplesIndividually(t *testing.T) {
 	}
 }
 
-func TestCapacityPollerReconcileKeepsServicesIndependent(t *testing.T) {
+func TestCapacityPollerReconcile_TwoServicesPolled_KeepsSchedulesAndQuorumsApart(t *testing.T) {
 	var firstRequests, secondRequests atomic.Int32
 	firstServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		firstRequests.Add(1)
@@ -843,7 +865,7 @@ func TestCapacityPollerReconcileKeepsServicesIndependent(t *testing.T) {
 		t.Fatalf("first service Reported() = %v, want 8", got)
 	}
 	if got := poller.Reported(secondTarget, secondPolicy); got != nil {
-		t.Fatalf("second service Reported() = %d before quorum, want nil", *got)
+		t.Fatalf("second service Reported() = %v before quorum, want nil", *got)
 	}
 	if reason := poller.FellOpen(secondTarget, secondPolicy); !strings.Contains(reason, "awaiting quorum (1/2") {
 		t.Fatalf("second service FellOpen() = %q, want pending quorum", reason)
@@ -858,7 +880,7 @@ func TestCapacityPollerReconcileKeepsServicesIndependent(t *testing.T) {
 		t.Fatalf("early second service Reconcile() error = %v", err)
 	}
 	if firstRequests.Load() != 2 || secondRequests.Load() != 1 || delay != 2*time.Second {
-		t.Fatalf("independent requests/delay = %d/%d/%s, want 2/1/%s",
+		t.Fatalf("independent requests/delay = %v/%v/%s, want 2/1/%s",
 			firstRequests.Load(), secondRequests.Load(), delay, 2*time.Second)
 	}
 
@@ -870,15 +892,15 @@ func TestCapacityPollerReconcileKeepsServicesIndependent(t *testing.T) {
 		t.Fatalf("second service Reported() after quorum = %v, want 1", got)
 	}
 	if firstRequests.Load() != 2 || secondRequests.Load() != 2 {
-		t.Fatalf("independent final requests = %d/%d, want 2/2", firstRequests.Load(), secondRequests.Load())
+		t.Fatalf("independent final requests = %v/%v, want 2/2", firstRequests.Load(), secondRequests.Load())
 	}
 }
 
-func TestCapacityPollerReconcilePolicyChangeResetsState(t *testing.T) {
+func TestCapacityPollerReconcile_PolicyChanges_DropsOldSamplesAndRebuildsQuorum(t *testing.T) {
 	var servable atomic.Int32
 	servable.Store(2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(freshReport(servable.Load())))
+		_, _ = w.Write([]byte(freshReport(float64(servable.Load()))))
 	}))
 	defer server.Close()
 
@@ -892,7 +914,7 @@ func TestCapacityPollerReconcilePolicyChangeResetsState(t *testing.T) {
 		t.Fatalf("initial Reconcile() error = %v", err)
 	}
 	if got := poller.Reported(target, oldPolicy); got != nil {
-		t.Fatalf("first old-policy Reported() = %d before quorum, want nil", *got)
+		t.Fatalf("first old-policy Reported() = %v before quorum, want nil", *got)
 	}
 	clk.Step(oldPolicy.Capacity.Period)
 	if _, err := poller.Reconcile(context.Background(), request); err != nil {
@@ -914,10 +936,10 @@ func TestCapacityPollerReconcilePolicyChangeResetsState(t *testing.T) {
 		t.Fatalf("changed-policy Reconcile() error = %v", err)
 	}
 	if got := poller.Reported(target, oldPolicy); got != nil {
-		t.Fatalf("old-policy Reported() = %d after reset, want nil", *got)
+		t.Fatalf("old-policy Reported() = %v after reset, want nil", *got)
 	}
 	if got := poller.Reported(target, changedPolicy); got != nil {
-		t.Fatalf("changed-policy Reported() = %d before new quorum, want nil", *got)
+		t.Fatalf("changed-policy Reported() = %v before new quorum, want nil", *got)
 	}
 	if reason := poller.FellOpen(target, changedPolicy); !strings.Contains(reason, "awaiting quorum (1/2") {
 		t.Fatalf("changed-policy FellOpen() = %q, want pending new-policy quorum", reason)
@@ -931,7 +953,7 @@ func TestCapacityPollerReconcilePolicyChangeResetsState(t *testing.T) {
 	}
 }
 
-func TestCapacityPollerReconcilePrunesOnlyRequestedMap(t *testing.T) {
+func TestCapacityPollerReconcile_NoTargetsOrDisabledPolicy_PrunesOnlyThatMap(t *testing.T) {
 	policy := testCapacityPolicy(t, singleSampleConfig())
 	first := testCapacityTarget("cluster-a", "https://cluster-a.example")
 	second := Target{
@@ -950,7 +972,7 @@ func TestCapacityPollerReconcilePrunesOnlyRequestedMap(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			poller := newTestPoller(t)
-			one, two := int32(1), int32(2)
+			one, two := float64(1), float64(2)
 			poller.record(first, policy, &one, "")
 			poller.record(second, policy, &two, "")
 
@@ -959,7 +981,7 @@ func TestCapacityPollerReconcilePrunesOnlyRequestedMap(t *testing.T) {
 				t.Fatalf("Reconcile() delay/error = %s/%v, want 0/nil", delay, err)
 			}
 			if got := poller.Reported(first, policy); got != nil {
-				t.Fatalf("requested-map Reported() = %d after pruning, want nil", *got)
+				t.Fatalf("requested-map Reported() = %v after pruning, want nil", *got)
 			}
 			if got := poller.Reported(second, policy); got == nil || *got != 2 {
 				t.Fatalf("independent-map Reported() = %v after pruning, want 2", got)
@@ -968,7 +990,7 @@ func TestCapacityPollerReconcilePrunesOnlyRequestedMap(t *testing.T) {
 	}
 }
 
-func TestCapacityPollerReconcileRejectsAmbiguousRequests(t *testing.T) {
+func TestCapacityPollerReconcile_NilOrInconsistentRequest_ReturnsError(t *testing.T) {
 	policy := testCapacityPolicy(t, singleSampleConfig())
 	validTarget := testCapacityTarget("cluster-a", "https://cluster-a.example")
 	poller := newTestPoller(t)
@@ -1017,7 +1039,7 @@ func TestCapacityPollerReconcileRejectsAmbiguousRequests(t *testing.T) {
 	}
 }
 
-func TestCapacityPollerReconcileFailedPollFallsOpen(t *testing.T) {
+func TestCapacityPollerReconcile_PollReturnsHTTP503_DropsReportWithReason(t *testing.T) {
 	var status atomic.Int32
 	status.Store(http.StatusOK)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -1046,14 +1068,14 @@ func TestCapacityPollerReconcileFailedPollFallsOpen(t *testing.T) {
 		t.Fatalf("failed-poll Reconcile() error = %v", err)
 	}
 	if got := poller.Reported(target, policy); got != nil {
-		t.Fatalf("Reported() after failed poll = %d, want nil", *got)
+		t.Fatalf("Reported() after failed poll = %v, want nil", *got)
 	}
 	if reason := poller.FellOpen(target, policy); !strings.Contains(reason, "HTTP 503") {
 		t.Fatalf("FellOpen() = %q, want HTTP failure", reason)
 	}
 }
 
-func TestCapacityPollerReconcileMalformedCapacityPathFallsOpenOnCadence(t *testing.T) {
+func TestCapacityPollerReconcile_MalformedCapacityPath_NoReportRetriesOnPeriod(t *testing.T) {
 	config := singleSampleConfig()
 	config.Path = "/%zz"
 	policy := testCapacityPolicy(t, config)
@@ -1070,14 +1092,14 @@ func TestCapacityPollerReconcileMalformedCapacityPathFallsOpenOnCadence(t *testi
 		t.Fatalf("Reconcile() delay = %s, want %s", delay, config.Period)
 	}
 	if got := poller.Reported(target, policy); got != nil {
-		t.Fatalf("Reported() for malformed path = %d, want nil", *got)
+		t.Fatalf("Reported() for malformed path = %v, want nil", *got)
 	}
 	if reason := poller.FellOpen(target, policy); !strings.Contains(reason, "request URL is invalid") {
 		t.Fatalf("FellOpen() = %q, want invalid request URL", reason)
 	}
 }
 
-func TestCapacityPollerReconcileSubmitsThroughExecutor(t *testing.T) {
+func TestCapacityPollerReconcile_ExecutorNotRunning_NoRequestAndReasonRecorded(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
@@ -1106,10 +1128,10 @@ func TestCapacityPollerReconcileSubmitsThroughExecutor(t *testing.T) {
 		t.Fatalf("Reconcile() delay = %s, want %s", delay, policy.Capacity.Period)
 	}
 	if requests.Load() != 0 {
-		t.Fatalf("HTTP requests without a running executor = %d, want 0", requests.Load())
+		t.Fatalf("HTTP requests without a running executor = %v, want 0", requests.Load())
 	}
 	if got := poller.Reported(target, policy); got != nil {
-		t.Fatalf("Reported() without a running executor = %d, want nil", *got)
+		t.Fatalf("Reported() without a running executor = %v, want nil", *got)
 	}
 	if reason := poller.FellOpen(target, policy); !strings.Contains(reason, ErrObserverExecutorNotRunning.Error()) {
 		t.Fatalf("FellOpen() = %q, want executor submission failure", reason)
@@ -1175,7 +1197,7 @@ func TestRegisterCapacityFormat_RejectsDuplicatesAndIncompletePlugins(t *testing
 
 // feed pushes readings through the poller and returns the applied ceiling, or
 // nil when the plan still stands.
-func feed(t *testing.T, cfg CapacityConfig, readings ...int32) *int32 {
+func feed(t *testing.T, cfg CapacityConfig, readings ...float64) *float64 {
 	t.Helper()
 	// This helper exercises aggregation directly; scheduling is covered by the
 	// reconcile tests above.
@@ -1193,7 +1215,7 @@ func feed(t *testing.T, cfg CapacityConfig, readings ...int32) *int32 {
 }
 
 func TestCapacityPoller_QuorumToleratesAMisbehavingReporter(t *testing.T) {
-	// The control plane polls one address per home, so consecutive readings may
+	// The control plane polls one address per cluster, so consecutive readings may
 	// come from different reporters behind a balancer. A strict minimum would
 	// let whichever reporter is broken set the ceiling alone -- and with a
 	// round-robin balancer and a window at least as long as the replica count,
@@ -1202,55 +1224,55 @@ func TestCapacityPoller_QuorumToleratesAMisbehavingReporter(t *testing.T) {
 	cfg := testCapacityConfig() // Samples 10, Quorum 2.
 	tests := []struct {
 		name     string
-		readings []int32
-		want     *int32
+		readings []float64
+		want     *float64
 	}{
 		{
 			// One reporter returning zero while the rest are healthy must not
 			// set the ceiling.
 			name:     "a single zero among healthy readings is ignored",
-			readings: []int32{0, 7, 7, 7, 7},
-			want:     ptr(int32(7)),
+			readings: []float64{0, 7, 7, 7, 7},
+			want:     ptr(float64(7)),
 		},
 		{
 			// Filtering only zeros would miss this: a partially-synced reporter
 			// returns a small non-zero figure, not nothing.
 			name:     "a single low non-zero reading is ignored",
-			readings: []int32{2, 7, 7, 7, 7},
-			want:     ptr(int32(7)),
+			readings: []float64{2, 7, 7, 7, 7},
+			want:     ptr(float64(7)),
 		},
 		{
 			// Corroborated, so believed -- the pessimist knows something.
 			name:     "two agreeing low readings are believed",
-			readings: []int32{3, 3, 7, 7, 7},
-			want:     ptr(int32(3)),
+			readings: []float64{3, 3, 7, 7, 7},
+			want:     ptr(float64(3)),
 		},
 		{
 			// One broken reporter plus one genuine pessimist: drop the outlier,
 			// keep the pessimist.
 			name:     "a broken reporter does not mask a real pessimist",
-			readings: []int32{0, 3, 7, 7, 7},
-			want:     ptr(int32(3)),
+			readings: []float64{0, 3, 7, 7, 7},
+			want:     ptr(float64(3)),
 		},
 		{
-			// A home that really can serve nothing must still be able to say so.
+			// A cluster that really can serve nothing must still be able to say so.
 			name:     "a unanimous zero is believed",
-			readings: []int32{0, 0, 0, 0},
-			want:     ptr(int32(0)),
+			readings: []float64{0, 0, 0, 0},
+			want:     ptr(float64(0)),
 		},
 		{
 			// Believing a drop takes exactly Quorum readings -- stated, so the
 			// lag is predictable rather than emergent.
 			name:     "a sustained drop is applied once corroborated",
-			readings: []int32{9, 9, 4, 4},
-			want:     ptr(int32(4)),
+			readings: []float64{9, 9, 4, 4},
+			want:     ptr(float64(4)),
 		},
 		{
 			// Anti-any-responder: a lucky high reading must not undo a ceiling
 			// that corroborated readings already lowered.
 			name:     "one high reading cannot raise a corroborated ceiling",
-			readings: []int32{4, 4, 9},
-			want:     ptr(int32(4)),
+			readings: []float64{4, 4, 9},
+			want:     ptr(float64(4)),
 		},
 	}
 	for _, tt := range tests {
@@ -1261,7 +1283,7 @@ func TestCapacityPoller_QuorumToleratesAMisbehavingReporter(t *testing.T) {
 				if got != nil {
 					g = fmt.Sprint(*got)
 				}
-				t.Fatalf("readings %v -> ceiling %s, want %d", tt.readings, g, *tt.want)
+				t.Fatalf("readings %v -> ceiling %s, want %v", tt.readings, g, *tt.want)
 			}
 		})
 	}
@@ -1273,15 +1295,15 @@ func TestCapacityPoller_NoCeilingUntilCorroborated(t *testing.T) {
 	// first reading after startup could be the broken reporter's.
 	cfg := testCapacityConfig()
 	if got := feed(t, cfg, 0); got != nil {
-		t.Fatalf("a lone reading set a ceiling of %d; the plan should still stand", *got)
+		t.Fatalf("a lone reading set a ceiling of %v; the plan should still stand", *got)
 	}
 	if got := feed(t, cfg, 3); got != nil {
-		t.Fatalf("a lone reading set a ceiling of %d; the plan should still stand", *got)
+		t.Fatalf("a lone reading set a ceiling of %v; the plan should still stand", *got)
 	}
 }
 
 func TestCapacityPoller_WindowAgesOutAStaleLow(t *testing.T) {
-	// Bounded so a home recovers. An all-time minimum would pin it at its worst
+	// Bounded so a cluster recovers. An all-time minimum would pin it at its worst
 	// reading forever.
 	cfg := testCapacityConfig()
 	cfg.Samples, cfg.Quorum = 3, 2
@@ -1292,13 +1314,13 @@ func TestCapacityPoller_WindowAgesOutAStaleLow(t *testing.T) {
 
 func TestCapacityPoller_FailedPollReleasesTheWindow(t *testing.T) {
 	// Fail-open means the ceiling is released, so the window cannot survive --
-	// retaining readings would keep constraining a home we can no longer see.
+	// retaining readings would keep constraining a cluster we can no longer see.
 	cfg := testCapacityConfig()
 	cfg.Samples, cfg.Quorum = 4, 2
 	p := newTestPoller(t)
 	tgt := testCapacityTarget("cluster-a", "https://cluster-a.example")
 	policy := testCapacityPolicy(t, cfg)
-	for _, v := range []int32{2, 2} {
+	for _, v := range []float64{2, 2} {
 		x := v
 		p.record(tgt, policy, &x, "")
 	}
@@ -1307,13 +1329,13 @@ func TestCapacityPoller_FailedPollReleasesTheWindow(t *testing.T) {
 	}
 	p.record(tgt, policy, nil, "capacity endpoint unreachable")
 	if got := p.Reported(tgt, policy); got != nil {
-		t.Fatalf("ceiling = %d after a failed poll, want nil (fail open)", *got)
+		t.Fatalf("ceiling = %v after a failed poll, want nil (fail open)", *got)
 	}
 	// And the old low readings must not come back with the next success.
-	nine := int32(9)
+	nine := float64(9)
 	p.record(tgt, policy, &nine, "")
 	if got := p.Reported(tgt, policy); got != nil {
-		t.Fatalf("ceiling = %d from one reading after recovery, want nil until corroborated", *got)
+		t.Fatalf("ceiling = %v from one reading after recovery, want nil until corroborated", *got)
 	}
 	p.record(tgt, policy, &nine, "")
 	if got := p.Reported(tgt, policy); got == nil || *got != 9 {
@@ -1342,7 +1364,7 @@ func TestCapacityConfig_QuorumAndSamplesValidation(t *testing.T) {
 			tt.mutate(&cfg)
 			err := cfg.Validate()
 			if tt.wantErr && err == nil {
-				t.Fatalf("Validate() = nil, want error for samples=%d quorum=%d", cfg.Samples, cfg.Quorum)
+				t.Fatalf("Validate() = nil, want error for samples=%v quorum=%v", cfg.Samples, cfg.Quorum)
 			}
 			if !tt.wantErr && err != nil {
 				t.Fatalf("Validate() = %v, want nil", err)

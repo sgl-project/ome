@@ -23952,10 +23952,32 @@ spec:
                             format: int32
                             minimum: 1
                             type: integer
+                          weights:
+                            minProperties: 1
+                            properties:
+                              decoder:
+                                format: int32
+                                minimum: 1
+                                type: integer
+                              default:
+                                format: int32
+                                minimum: 1
+                                type: integer
+                              engine:
+                                format: int32
+                                minimum: 1
+                                type: integer
+                              router:
+                                format: int32
+                                minimum: 1
+                                type: integer
+                            type: object
                         type: object
                         x-kubernetes-validations:
                           - message: a cluster affinity term must contain a requirement
                             rule: (has(self.matchExpressions) && size(self.matchExpressions) > 0) || (has(self.matchFields) && size(self.matchFields) > 0)
+                          - message: weight means weights.default; it may sit beside weights.decoder and weights.router, but not beside weights.default or weights.engine
+                            rule: '!has(self.weight) || !has(self.weights) || (!has(self.weights.default) && !has(self.weights.engine))'
                       maxItems: 64
                       minItems: 1
                       nullable: true
@@ -23997,7 +24019,7 @@ spec:
                     - policy
                   type: object
                   x-kubernetes-validations:
-                    - message: replacementTimeout requires ClusterAffinity Single placement
+                    - message: replacementTimeout requires Single placement
                       rule: '!has(self.replacementTimeout) || (has(self.policy) && self.policy == ''ClusterAffinity'' && has(self.mode) && self.mode == ''Single'')'
                 replicaRefs:
                   properties:
@@ -25193,6 +25215,19 @@ spec:
                         name:
                           minLength: 1
                           type: string
+                      type: object
+                    capacityEndpoint:
+                      properties:
+                        path:
+                          maxLength: 1024
+                          minLength: 2
+                          pattern: ^/[^/?#]
+                          type: string
+                        port:
+                          format: int32
+                          maximum: 65535
+                          minimum: 1
+                          type: integer
                       type: object
                     config:
                       additionalProperties:
@@ -28590,6 +28625,11 @@ spec:
                             - HEAD
                             - POST
                           type: string
+                        mode:
+                          enum:
+                            - Ceiling
+                            - Reported
+                          type: string
                         options:
                           additionalProperties:
                             type: string
@@ -28613,7 +28653,7 @@ spec:
                       type: object
                       x-kubernetes-validations:
                         - message: disabled must not be combined with capacity configuration fields
-                          rule: '!(has(self.disabled) && self.disabled) || (!has(self.path) && !has(self.method) && !has(self.format) && !has(self.options) && !has(self.period) && !has(self.timeout) && !has(self.samples) && !has(self.quorum) && !has(self.maxAge))'
+                          rule: '!(has(self.disabled) && self.disabled) || (!has(self.path) && !has(self.method) && !has(self.format) && !has(self.mode) && !has(self.options) && !has(self.period) && !has(self.timeout) && !has(self.samples) && !has(self.quorum) && !has(self.maxAge))'
                         - message: an enabled capacity poll must specify path, method, format, period, timeout, samples, quorum, and maxAge
                           rule: (has(self.disabled) && self.disabled) || (has(self.path) && has(self.method) && has(self.format) && has(self.period) && has(self.timeout) && has(self.samples) && has(self.quorum) && has(self.maxAge))
                         - message: period must be positive
@@ -28832,8 +28872,8 @@ spec:
                   type: integer
               type: object
               x-kubernetes-validations:
-                - message: ClusterAffinity placement policy cannot be removed; drain and recreate the service to change placement ownership
-                  rule: '!has(oldSelf.placement) || !has(oldSelf.placement.policy) || oldSelf.placement.policy != ''ClusterAffinity'' || (has(self.placement) && has(self.placement.policy) && self.placement.policy == ''ClusterAffinity'')'
+                - message: the placement policy cannot be removed; drain and recreate the service to change placement ownership
+                  rule: '!has(oldSelf.placement) || !has(oldSelf.placement.policy) || (has(self.placement) && has(self.placement.policy))'
             status:
               properties:
                 address:
@@ -28931,6 +28971,8 @@ spec:
                       type: boolean
                     promotedThrough:
                       type: string
+                    rollbackRequested:
+                      type: boolean
                     rolledBackRevisionHash:
                       type: string
                     stableRevisionHash:
@@ -29120,6 +29162,8 @@ spec:
                             type: boolean
                           promotedThrough:
                             type: string
+                          rollbackRequested:
+                            type: boolean
                           rolledBackRevisionHash:
                             type: string
                           stableRevisionHash:
@@ -29601,6 +29645,27 @@ spec:
                                 type: object
                               clusterUID:
                                 type: string
+                              componentMatches:
+                                items:
+                                  properties:
+                                    component:
+                                      enum:
+                                        - engine
+                                        - decoder
+                                        - router
+                                      type: string
+                                    weight:
+                                      format: int64
+                                      minimum: 0
+                                      type: integer
+                                  required:
+                                    - component
+                                  type: object
+                                maxItems: 2
+                                type: array
+                                x-kubernetes-list-map-keys:
+                                  - component
+                                x-kubernetes-list-type: map
                               currentHome:
                                 properties:
                                   inputDigest:
@@ -29736,7 +29801,37 @@ spec:
                             type: object
                           cluster:
                             type: string
+                          componentFloors:
+                            items:
+                              properties:
+                                component:
+                                  enum:
+                                    - engine
+                                    - decoder
+                                    - router
+                                  type: string
+                                current:
+                                  format: int32
+                                  minimum: 0
+                                  type: integer
+                                desired:
+                                  format: int32
+                                  minimum: 0
+                                  type: integer
+                              required:
+                                - component
+                                - current
+                                - desired
+                              type: object
+                            maxItems: 3
+                            type: array
+                            x-kubernetes-list-map-keys:
+                              - component
+                            x-kubernetes-list-type: map
                           endpoint:
+                            type: string
+                          observationFailingSince:
+                            format: date-time
                             type: string
                           observationKnown:
                             type: boolean
@@ -30320,6 +30415,89 @@ spec:
                       x-kubernetes-list-map-keys:
                         - name
                       x-kubernetes-list-type: map
+                  type: object
+                scalingPolicy:
+                  properties:
+                    anchor:
+                      type: string
+                    anchorDesired:
+                      format: int32
+                      type: integer
+                    conditions:
+                      items:
+                        properties:
+                          lastTransitionTime:
+                            format: date-time
+                            type: string
+                          message:
+                            maxLength: 32768
+                            type: string
+                          observedGeneration:
+                            format: int64
+                            minimum: 0
+                            type: integer
+                          reason:
+                            maxLength: 1024
+                            minLength: 1
+                            pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                            type: string
+                          status:
+                            enum:
+                              - "True"
+                              - "False"
+                              - Unknown
+                            type: string
+                          type:
+                            maxLength: 316
+                            pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                            type: string
+                        required:
+                          - lastTransitionTime
+                          - message
+                          - reason
+                          - status
+                          - type
+                        type: object
+                      type: array
+                      x-kubernetes-list-map-keys:
+                        - type
+                      x-kubernetes-list-type: map
+                    followers:
+                      items:
+                        properties:
+                          clamped:
+                            type: boolean
+                          component:
+                            type: string
+                          current:
+                            format: int32
+                            type: integer
+                          ratio:
+                            anyOf:
+                              - type: integer
+                              - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          target:
+                            format: int32
+                            type: integer
+                        required:
+                          - component
+                          - ratio
+                          - target
+                        type: object
+                      type: array
+                      x-kubernetes-list-map-keys:
+                        - component
+                      x-kubernetes-list-type: map
+                    mode:
+                      enum:
+                        - Independent
+                        - Proportional
+                        - Pinned
+                      type: string
+                    source:
+                      type: string
                   type: object
                 traffic:
                   properties:

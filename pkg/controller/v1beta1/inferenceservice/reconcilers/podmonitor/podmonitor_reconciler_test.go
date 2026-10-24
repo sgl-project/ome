@@ -13,50 +13,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
-type countingClient struct {
-	client.Client
-	createCalls int
-	updateCalls int
-	getCalls    int
-
-	failGet    error
-	failCreate error
-	failUpdate error
-}
-
-func (c *countingClient) Get(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
-	c.getCalls++
-	if c.failGet != nil {
-		return c.failGet
-	}
-	return c.Client.Get(ctx, key, obj, opts...)
-}
-
-func (c *countingClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-	c.createCalls++
-	if c.failCreate != nil {
-		return c.failCreate
-	}
-	return c.Client.Create(ctx, obj, opts...)
-}
-
-func (c *countingClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-	c.updateCalls++
-	if c.failUpdate != nil {
-		return c.failUpdate
-	}
-	return c.Client.Update(ctx, obj, opts...)
-}
-
-func buildScheme(t *testing.T) *runtime.Scheme {
-	scheme := runtime.NewScheme()
-	require.NoError(t, monitoringv1.AddToScheme(scheme))
-	return scheme
+// countedClient builds a client on scheme from the options and counts the
+// creates and updates the reconciler makes.
+func countedClient(t *testing.T, scheme *runtime.Scheme, opts ...fakeclient.Option) (client.Client, *fakeclient.Calls, *fakeclient.Calls) {
+	t.Helper()
+	creates := fakeclient.CountingVerb(fakeclient.Create)
+	updates := fakeclient.CountingVerb(fakeclient.Update)
+	opts = append([]fakeclient.Option{fakeclient.WithScheme(scheme), creates, updates}, opts...)
+	return fakeclient.New(t, opts...), creates, updates
 }
 
 func TestMetricsPortName(t *testing.T) {
@@ -142,9 +111,8 @@ func TestMetricsPortName(t *testing.T) {
 }
 
 func TestPodMonitorReconciler_Create(t *testing.T) {
-	scheme := buildScheme(t)
-	baseClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	cc := &countingClient{Client: baseClient}
+	scheme := fakeclient.Scheme(t, monitoringv1.AddToScheme)
+	c, creates, updates := countedClient(t, scheme)
 
 	meta := metav1.ObjectMeta{Name: "my-isvc-engine", Namespace: "prod"}
 	podSpec := &corev1.PodSpec{
@@ -156,13 +124,13 @@ func TestPodMonitorReconciler_Create(t *testing.T) {
 		}},
 	}
 
-	r := NewPodMonitorReconciler(cc, scheme, meta, podSpec)
+	r := NewPodMonitorReconciler(c, scheme, meta, podSpec)
 	obj, err := r.Reconcile()
 	require.NoError(t, err)
 	require.NotNil(t, obj)
 
 	got := &monitoringv1.PodMonitor{}
-	err = baseClient.Get(context.Background(), types.NamespacedName{Name: meta.Name, Namespace: meta.Namespace}, got)
+	err = c.Get(context.Background(), types.NamespacedName{Name: meta.Name, Namespace: meta.Namespace}, got)
 	require.NoError(t, err)
 
 	assert.Equal(t, meta.Name, got.Name)
@@ -174,14 +142,13 @@ func TestPodMonitorReconciler_Create(t *testing.T) {
 	assert.Equal(t, "http", *got.Spec.PodMetricsEndpoints[0].Port)
 	assert.Equal(t, "/metrics", got.Spec.PodMetricsEndpoints[0].Path)
 	assert.Equal(t, monitoringv1.Duration("10s"), got.Spec.PodMetricsEndpoints[0].Interval)
-	assert.Equal(t, 1, cc.createCalls)
-	assert.Equal(t, 0, cc.updateCalls)
+	assert.Equal(t, 1, creates.Count())
+	assert.Equal(t, 0, updates.Count())
 }
 
 func TestPodMonitorReconciler_Create_RouterWithMetricsPort(t *testing.T) {
-	scheme := buildScheme(t)
-	baseClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	cc := &countingClient{Client: baseClient}
+	scheme := fakeclient.Scheme(t, monitoringv1.AddToScheme)
+	c, creates, _ := countedClient(t, scheme)
 
 	meta := metav1.ObjectMeta{Name: "my-isvc-router", Namespace: "prod"}
 	podSpec := &corev1.PodSpec{
@@ -194,18 +161,18 @@ func TestPodMonitorReconciler_Create_RouterWithMetricsPort(t *testing.T) {
 		}},
 	}
 
-	r := NewPodMonitorReconciler(cc, scheme, meta, podSpec)
+	r := NewPodMonitorReconciler(c, scheme, meta, podSpec)
 	obj, err := r.Reconcile()
 	require.NoError(t, err)
 	require.NotNil(t, obj)
 
 	got := &monitoringv1.PodMonitor{}
-	err = baseClient.Get(context.Background(), types.NamespacedName{Name: meta.Name, Namespace: meta.Namespace}, got)
+	err = c.Get(context.Background(), types.NamespacedName{Name: meta.Name, Namespace: meta.Namespace}, got)
 	require.NoError(t, err)
 
 	require.Len(t, got.Spec.PodMetricsEndpoints, 1)
 	assert.Equal(t, "metrics", *got.Spec.PodMetricsEndpoints[0].Port)
-	assert.Equal(t, 1, cc.createCalls)
+	assert.Equal(t, 1, creates.Count())
 }
 
 // TestPodMonitorReconciler_Create_ExtraEndpoints mirrors an HTTP-router
@@ -213,9 +180,8 @@ func TestPodMonitorReconciler_Create_RouterWithMetricsPort(t *testing.T) {
 // /engine_metrics surface is declared via the extra-endpoints annotation. The
 // built PodMonitor must carry the default endpoint first, then the extra.
 func TestPodMonitorReconciler_Create_ExtraEndpoints(t *testing.T) {
-	scheme := buildScheme(t)
-	baseClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	cc := &countingClient{Client: baseClient}
+	scheme := fakeclient.Scheme(t, monitoringv1.AddToScheme)
+	c, creates, _ := countedClient(t, scheme)
 
 	meta := metav1.ObjectMeta{
 		Name:      "my-isvc-router",
@@ -234,13 +200,13 @@ func TestPodMonitorReconciler_Create_ExtraEndpoints(t *testing.T) {
 		}},
 	}
 
-	r := NewPodMonitorReconciler(cc, scheme, meta, podSpec)
+	r := NewPodMonitorReconciler(c, scheme, meta, podSpec)
 	obj, err := r.Reconcile()
 	require.NoError(t, err)
 	require.NotNil(t, obj)
 
 	got := &monitoringv1.PodMonitor{}
-	err = baseClient.Get(context.Background(), types.NamespacedName{Name: meta.Name, Namespace: meta.Namespace}, got)
+	err = c.Get(context.Background(), types.NamespacedName{Name: meta.Name, Namespace: meta.Namespace}, got)
 	require.NoError(t, err)
 
 	require.Len(t, got.Spec.PodMetricsEndpoints, 2)
@@ -252,11 +218,11 @@ func TestPodMonitorReconciler_Create_ExtraEndpoints(t *testing.T) {
 	assert.Equal(t, "http", *got.Spec.PodMetricsEndpoints[1].Port)
 	assert.Equal(t, "/engine_metrics", got.Spec.PodMetricsEndpoints[1].Path)
 	assert.Equal(t, monitoringv1.Duration("10s"), got.Spec.PodMetricsEndpoints[1].Interval)
-	assert.Equal(t, 1, cc.createCalls)
+	assert.Equal(t, 1, creates.Count())
 }
 
 func TestPodMonitorReconciler_Update_WhenSpecDiffers(t *testing.T) {
-	scheme := buildScheme(t)
+	scheme := fakeclient.Scheme(t, monitoringv1.AddToScheme)
 	meta := metav1.ObjectMeta{Name: "svc-update", Namespace: "ns-update"}
 
 	oldPort := "old-port"
@@ -279,8 +245,7 @@ func TestPodMonitorReconciler_Update_WhenSpecDiffers(t *testing.T) {
 		},
 	}
 
-	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	cc := &countingClient{Client: baseClient}
+	c, _, updates := countedClient(t, scheme, fakeclient.WithObjects(existing))
 
 	podSpec := &corev1.PodSpec{
 		Containers: []corev1.Container{{
@@ -288,21 +253,21 @@ func TestPodMonitorReconciler_Update_WhenSpecDiffers(t *testing.T) {
 			Ports: []corev1.ContainerPort{{ContainerPort: 30000, Name: "http"}},
 		}},
 	}
-	r := NewPodMonitorReconciler(cc, scheme, meta, podSpec)
+	r := NewPodMonitorReconciler(c, scheme, meta, podSpec)
 	obj, err := r.Reconcile()
 	require.NoError(t, err)
 	require.NotNil(t, obj)
 
 	got := &monitoringv1.PodMonitor{}
-	err = baseClient.Get(context.Background(), types.NamespacedName{Name: meta.Name, Namespace: meta.Namespace}, got)
+	err = c.Get(context.Background(), types.NamespacedName{Name: meta.Name, Namespace: meta.Namespace}, got)
 	require.NoError(t, err)
 	assert.Equal(t, "http", *got.Spec.PodMetricsEndpoints[0].Port)
 	assert.Equal(t, monitoringv1.Duration("10s"), got.Spec.PodMetricsEndpoints[0].Interval)
-	assert.Equal(t, 1, cc.updateCalls)
+	assert.Equal(t, 1, updates.Count())
 }
 
 func TestPodMonitorReconciler_NoOp_WhenEqual(t *testing.T) {
-	scheme := buildScheme(t)
+	scheme := fakeclient.Scheme(t, monitoringv1.AddToScheme)
 	meta := metav1.ObjectMeta{Name: "svc-eq", Namespace: "ns-eq"}
 
 	httpPort := "http"
@@ -325,8 +290,7 @@ func TestPodMonitorReconciler_NoOp_WhenEqual(t *testing.T) {
 		},
 	}
 
-	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	cc := &countingClient{Client: baseClient}
+	c, creates, updates := countedClient(t, scheme, fakeclient.WithObjects(existing))
 
 	podSpec := &corev1.PodSpec{
 		Containers: []corev1.Container{{
@@ -334,17 +298,17 @@ func TestPodMonitorReconciler_NoOp_WhenEqual(t *testing.T) {
 			Ports: []corev1.ContainerPort{{ContainerPort: 30000, Name: "http"}},
 		}},
 	}
-	r := NewPodMonitorReconciler(cc, scheme, meta, podSpec)
+	r := NewPodMonitorReconciler(c, scheme, meta, podSpec)
 	obj, err := r.Reconcile()
 	require.NoError(t, err)
 	require.NotNil(t, obj)
 
-	assert.Equal(t, 0, cc.updateCalls)
-	assert.Equal(t, 0, cc.createCalls)
+	assert.Equal(t, 0, updates.Count())
+	assert.Equal(t, 0, creates.Count())
 }
 
 func TestPodMonitorReconciler_NoOp_WhenOperatorDefaulted(t *testing.T) {
-	scheme := buildScheme(t)
+	scheme := fakeclient.Scheme(t, monitoringv1.AddToScheme)
 	meta := metav1.ObjectMeta{Name: "svc-defaulted", Namespace: "ns-defaulted"}
 
 	httpPort := "http"
@@ -374,8 +338,7 @@ func TestPodMonitorReconciler_NoOp_WhenOperatorDefaulted(t *testing.T) {
 		},
 	}
 
-	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	cc := &countingClient{Client: baseClient}
+	c, creates, updates := countedClient(t, scheme, fakeclient.WithObjects(existing))
 
 	podSpec := &corev1.PodSpec{
 		Containers: []corev1.Container{{
@@ -383,18 +346,18 @@ func TestPodMonitorReconciler_NoOp_WhenOperatorDefaulted(t *testing.T) {
 			Ports: []corev1.ContainerPort{{ContainerPort: 30000, Name: "http"}},
 		}},
 	}
-	r := NewPodMonitorReconciler(cc, scheme, meta, podSpec)
+	r := NewPodMonitorReconciler(c, scheme, meta, podSpec)
 	obj, err := r.Reconcile()
 	require.NoError(t, err)
 	require.NotNil(t, obj)
 
 	// Steady state: no PUT despite the operator-defaulted endpoint fields.
-	assert.Equal(t, 0, cc.updateCalls)
-	assert.Equal(t, 0, cc.createCalls)
+	assert.Equal(t, 0, updates.Count())
+	assert.Equal(t, 0, creates.Count())
 }
 
 func TestPodMonitorReconciler_ErrorPaths(t *testing.T) {
-	scheme := buildScheme(t)
+	scheme := fakeclient.Scheme(t, monitoringv1.AddToScheme)
 	meta := metav1.ObjectMeta{Name: "svc-err", Namespace: "ns-err"}
 	podSpec := &corev1.PodSpec{
 		Containers: []corev1.Container{{
@@ -404,22 +367,20 @@ func TestPodMonitorReconciler_ErrorPaths(t *testing.T) {
 	}
 
 	t.Run("get error", func(t *testing.T) {
-		baseClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-		cc := &countingClient{Client: baseClient, failGet: errors.New("get failure")}
-		r := NewPodMonitorReconciler(cc, scheme, meta, podSpec)
+		c, _, _ := countedClient(t, scheme, fakeclient.FailingVerb(fakeclient.Get, fakeclient.EveryCall, errors.New("get failure")))
+		r := NewPodMonitorReconciler(c, scheme, meta, podSpec)
 		obj, err := r.Reconcile()
 		assert.Error(t, err)
 		assert.Nil(t, obj)
 	})
 
 	t.Run("create error", func(t *testing.T) {
-		baseClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-		cc := &countingClient{Client: baseClient, failCreate: errors.New("create failure")}
-		r := NewPodMonitorReconciler(cc, scheme, meta, podSpec)
+		c, creates, _ := countedClient(t, scheme, fakeclient.FailingVerb(fakeclient.Create, fakeclient.EveryCall, errors.New("create failure")))
+		r := NewPodMonitorReconciler(c, scheme, meta, podSpec)
 		obj, err := r.Reconcile()
 		assert.Error(t, err)
 		assert.Nil(t, obj)
-		assert.Equal(t, 1, cc.createCalls)
+		assert.Equal(t, 1, creates.Count())
 	})
 
 	t.Run("update error", func(t *testing.T) {
@@ -432,13 +393,12 @@ func TestPodMonitorReconciler_ErrorPaths(t *testing.T) {
 				PodMetricsEndpoints: []monitoringv1.PodMetricsEndpoint{{Port: &oldPort, Path: "/old", Interval: "30s"}},
 			},
 		}
-		baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-		cc := &countingClient{Client: baseClient, failUpdate: errors.New("update failure")}
-		r := NewPodMonitorReconciler(cc, scheme, meta, podSpec)
+		c, _, updates := countedClient(t, scheme, fakeclient.WithObjects(existing), fakeclient.FailingVerb(fakeclient.Update, fakeclient.EveryCall, errors.New("update failure")))
+		r := NewPodMonitorReconciler(c, scheme, meta, podSpec)
 		obj, err := r.Reconcile()
 		assert.Error(t, err)
 		assert.Nil(t, obj)
-		assert.Equal(t, 1, cc.updateCalls)
+		assert.Equal(t, 1, updates.Count())
 	})
 }
 

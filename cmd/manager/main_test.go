@@ -4,8 +4,13 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -103,6 +108,7 @@ func TestDefaultOptions(t *testing.T) {
 	assert.False(t, opts.enableLeaderElection)
 	assert.False(t, opts.enableWebhook)
 	assert.Equal(t, ":8081", opts.probeAddr)
+	assert.Empty(t, opts.pprofAddr, "profiling stays off unless the chart asks for it")
 	assert.Equal(t, LeaderElectionNamespace, opts.leaderElectionNamespace)
 	// Multi-cluster topology/identity/security flag defaults (the tunables moved
 	// to the ConfigMap; these five stay flags).
@@ -154,6 +160,20 @@ func TestGetOptionsKubeAPIRateLimits(t *testing.T) {
 	o := GetOptions()
 	assert.Equal(t, 50.0, o.kubeAPIQPS)
 	assert.Equal(t, 100, o.kubeAPIBurst)
+}
+
+func TestGetOptionsPprofBindAddress(t *testing.T) {
+	oldArgs := os.Args
+	defer func() {
+		os.Args = oldArgs
+		flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	}()
+
+	flag.CommandLine = flag.NewFlagSet("cmd", flag.ExitOnError)
+	os.Args = []string{"cmd", "--pprof-bind-address=127.0.0.1:6060"}
+
+	o := GetOptions()
+	assert.Equal(t, "127.0.0.1:6060", o.pprofAddr)
 }
 
 func TestApplyKubeAPIRateLimits(t *testing.T) {
@@ -307,6 +327,65 @@ func TestWebhookConfiguration(t *testing.T) {
 	}
 	assert.Equal(t, 8443, customOpts.webhookPort, "Custom webhook port should be set correctly")
 	assert.True(t, customOpts.enableWebhook, "Webhook should be enabled")
+}
+
+func TestDeclaredWebhooksAreRegistered(t *testing.T) {
+	file, err := parser.ParseFile(token.NewFileSet(), "main.go", nil, parser.SkipObjectResolution)
+	require.NoError(t, err)
+	registered := map[string]bool{}
+	ast.Inspect(file, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok || len(call.Args) == 0 {
+			return true
+		}
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		if path, isLit := call.Args[0].(*ast.BasicLit); isLit && selector.Sel.Name == "Register" && isWebhookServer(selector.X) {
+			registered[strings.Trim(path.Value, `"`)] = true
+		}
+		if selector.Sel.Name == "NewWebhookManagedBy" && len(call.Args) == 2 {
+			// controller-runtime derives the validator path from the registered v1beta1 type.
+			if object, ok := call.Args[1].(*ast.UnaryExpr); ok {
+				if literal, ok := object.X.(*ast.CompositeLit); ok {
+					if kind, ok := literal.Type.(*ast.SelectorExpr); ok {
+						registered["/validate-ome-io-v1beta1-"+strings.ToLower(kind.Sel.Name)] = true
+					}
+				}
+			}
+		}
+		return true
+	})
+
+	manifests, err := filepath.Glob(filepath.Join("..", "..", "charts", "ome-resources", "templates", "ome-controller", "webhooks", "*.yaml"))
+	require.NoError(t, err)
+	manifests = append(manifests, filepath.Join("..", "..", "config", "webhook", "manifests.yaml"))
+	declared := 0
+	for _, manifest := range manifests {
+		data, err := os.ReadFile(manifest)
+		require.NoError(t, err)
+		for _, line := range strings.Split(string(data), "\n") {
+			if path, ok := strings.CutPrefix(strings.TrimSpace(line), "path: "); ok {
+				declared++
+				assert.True(t, registered[path], "%s declares %s but cmd/manager/main.go does not register it", manifest, path)
+			}
+		}
+	}
+	require.NotZero(t, declared, "no webhook paths found in the manifests")
+}
+
+// isWebhookServer reports whether expr is the webhook server a registration
+// goes to: the hookServer variable or the manager's GetWebhookServer call.
+func isWebhookServer(expr ast.Expr) bool {
+	switch x := expr.(type) {
+	case *ast.Ident:
+		return x.Name == "hookServer"
+	case *ast.CallExpr:
+		selector, ok := x.Fun.(*ast.SelectorExpr)
+		return ok && selector.Sel.Name == "GetWebhookServer"
+	}
+	return false
 }
 
 func TestMetricsConfiguration(t *testing.T) {
@@ -730,5 +809,37 @@ func TestCRDSetup(t *testing.T) {
 				assert.NoError(t, err)
 			}
 		})
+	}
+}
+
+func TestRunStartupSteps_StopsAtTheFirstStepThatDoesNotGoOn(t *testing.T) {
+	var ran []string
+	step := func(name string, next bool) startupStep {
+		return func() bool {
+			ran = append(ran, name)
+			return next
+		}
+	}
+	run := func(steps ...startupStep) (bool, string) {
+		ran = nil
+		return runStartupSteps(steps), strings.Join(ran, ",")
+	}
+
+	if next, order := run(step("first", true), step("second", true)); !next || order != "first,second" {
+		t.Fatalf("every step went on: next=%v ran=%q, want next=true ran=first,second", next, order)
+	}
+	if next, order := run(step("first", true), step("stops", false), step("never", true)); next || order != "first,stops" {
+		t.Fatalf("a step stopped start-up: next=%v ran=%q, want next=false ran=first,stops", next, order)
+	}
+	if next, order := run(); !next || order != "" {
+		t.Fatalf("no steps: next=%v ran=%q, want next=true and nothing run", next, order)
+	}
+
+	stops := func() bool {
+		ran = append(ran, "stops")
+		return stop(errors.New("the apiserver refused the connection"), "Failed to create Kubernetes client set")
+	}
+	if next, order := run(step("first", true), stops, step("never", true)); next || order != "first,stops" {
+		t.Fatalf("a step stopped start-up through stop: next=%v ran=%q, want next=false ran=first,stops", next, order)
 	}
 }

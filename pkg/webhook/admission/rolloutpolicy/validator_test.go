@@ -10,37 +10,24 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 	"sigs.k8s.io/ome/pkg/validation"
 )
 
 const testNamespace = "llm-serving"
 
-func testScheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
-	s := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(s); err != nil {
-		t.Fatalf("scheme: %v", err)
-	}
-	if err := corev1.AddToScheme(s); err != nil {
-		t.Fatalf("scheme: %v", err)
-	}
-	return s
-}
-
 func newValidator(t *testing.T, live ...client.Object) *Validator {
 	t.Helper()
-	s := testScheme(t)
+	c := fakeclient.New(t, fakeclient.WithObjects(live...))
 	return &Validator{
-		Client:  fake.NewClientBuilder().WithScheme(s).WithObjects(live...).Build(),
-		Decoder: admission.NewDecoder(s),
+		Client:  c,
+		Decoder: admission.NewDecoder(c.Scheme()),
 	}
 }
 

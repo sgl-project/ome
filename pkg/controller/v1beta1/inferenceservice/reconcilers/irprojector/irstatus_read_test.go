@@ -8,10 +8,10 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/irstatus"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestComponentIRStatus_ReturnsAuthoritativeStatus(t *testing.T) {
@@ -22,7 +22,7 @@ func TestComponentIRStatus_ReturnsAuthoritativeStatus(t *testing.T) {
 			InstanceStatuses: []v1beta1.OMENativeInstanceStatus{{Index: 0, Phase: v1beta1.OMENativeInstanceReady}},
 		},
 	}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(ir).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(ir))
 
 	got, err := ComponentIRStatus(context.Background(), c, "ns", "svc", v1beta1.EngineComponent)
 	if err != nil {
@@ -34,7 +34,7 @@ func TestComponentIRStatus_ReturnsAuthoritativeStatus(t *testing.T) {
 }
 
 func TestComponentIRStatus_MissingIRReturnsNil(t *testing.T) {
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	got, err := ComponentIRStatus(context.Background(), c, "ns", "svc", v1beta1.EngineComponent)
 	if err != nil {
 		t.Fatalf("missing IR must not error; got %v", err)
@@ -54,19 +54,15 @@ func TestComponentIRStatus_NilReaderReturnsNil(t *testing.T) {
 }
 
 // erroringReader fails every Get with a non-NotFound error.
-type erroringReader struct {
-	client.Reader
-}
-
-func (erroringReader) Get(_ context.Context, _ client.ObjectKey, _ client.Object, _ ...client.GetOption) error {
-	return errors.New("simulated apiserver failure")
+func erroringReader(t *testing.T) client.Reader {
+	return fakeclient.New(t, fakeclient.FailingVerb(fakeclient.Get, fakeclient.EveryCall, errors.New("simulated apiserver failure")))
 }
 
 func TestComponentIRStatus_ReadErrorPropagatesWrapped(t *testing.T) {
 	// Only NotFound maps to (nil, nil). Any other read failure must
 	// surface as a wrapped error so gate callers can fail closed instead
 	// of mistaking a flaky read for "no observation yet".
-	got, err := ComponentIRStatus(context.Background(), erroringReader{}, "ns", "svc", v1beta1.EngineComponent)
+	got, err := ComponentIRStatus(context.Background(), erroringReader(t), "ns", "svc", v1beta1.EngineComponent)
 	if err == nil || got != nil {
 		t.Fatalf("read error must propagate with nil status; got (%+v, %v)", got, err)
 	}
@@ -90,7 +86,7 @@ func TestComponentIRPartition_ReadsProjectedSpec(t *testing.T) {
 			},
 		},
 	}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(ir).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(ir))
 
 	got, err := ComponentIRPartition(context.Background(), c, "ns", "svc", v1beta1.EngineComponent)
 	if err != nil {
@@ -114,7 +110,7 @@ func TestComponentIRPartition_UnsetLifecycleIsZero(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: InferenceReplicaName("svc", v1beta1.EngineComponent)},
 			Spec:       v1beta1.InferenceReplicaSpec{Lifecycle: lc},
 		}
-		c := fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(ir).Build()
+		c := fakeclient.New(t, fakeclient.WithObjects(ir))
 		got, err := ComponentIRPartition(context.Background(), c, "ns", "svc", v1beta1.EngineComponent)
 		if err != nil || got != 0 {
 			t.Errorf("%s: got (%d, %v) want (0, nil)", name, got, err)
@@ -123,7 +119,7 @@ func TestComponentIRPartition_UnsetLifecycleIsZero(t *testing.T) {
 }
 
 func TestComponentIRPartition_MissingIRIsZero(t *testing.T) {
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	c := fakeclient.New(t)
 	got, err := ComponentIRPartition(context.Background(), c, "ns", "svc", v1beta1.EngineComponent)
 	if err != nil || got != 0 {
 		t.Fatalf("missing IR must return (0, nil); got (%d, %v)", got, err)
@@ -140,7 +136,7 @@ func TestComponentIRPartition_NilReaderIsZero(t *testing.T) {
 func TestComponentIRPartition_ReadErrorPropagatesWrapped(t *testing.T) {
 	// A transient read failure must not read as "no partition" — the
 	// coordination callers fail closed on it.
-	got, err := ComponentIRPartition(context.Background(), erroringReader{}, "ns", "svc", v1beta1.EngineComponent)
+	got, err := ComponentIRPartition(context.Background(), erroringReader(t), "ns", "svc", v1beta1.EngineComponent)
 	if err == nil {
 		t.Fatalf("read error must propagate; got (%d, nil)", got)
 	}
@@ -194,7 +190,7 @@ func TestComponentIRPartition_ReadsPacingFirst(t *testing.T) {
 			Pacing: &v1beta1.InferenceReplicaPacing{Partition: &canary},
 		},
 	}
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(ir).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(ir))
 	got, err := ComponentIRPartition(context.Background(), c, "ns", "svc", v1beta1.EngineComponent)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -227,7 +223,7 @@ func TestReadersFor_ResolveThroughRoleReplica(t *testing.T) {
 		Status:     v1beta1.InferenceReplicaStatus{Replicas: 3},
 	}
 	ctx := context.Background()
-	c := fake.NewClientBuilder().WithScheme(testScheme(t)).WithObjects(referenced, projected).Build()
+	c := fakeclient.New(t, fakeclient.WithObjects(referenced, projected))
 	reads := irstatus.NewReader(c, irstatus.NewDecoder(4))
 
 	decoder, err := ComponentIRFor(ctx, reads, isvc, v1beta1.DecoderComponent)
@@ -271,7 +267,7 @@ func TestReadersFor_ResolveThroughRoleReplica(t *testing.T) {
 	if ir, enc, err := DecodedComponentIRFor(ctx, reads, nil, v1beta1.EngineComponent); err != nil || ir != nil || enc != "" {
 		t.Fatalf("nil service (decoded): got (%v, %q, %v), want (nil, \"\", nil)", ir, enc, err)
 	}
-	if _, err := ComponentIRStatusFor(ctx, erroringReader{}, isvc, v1beta1.DecoderComponent); err == nil || !strings.Contains(err.Error(), "get InferenceReplica team-a/pool-d") {
+	if _, err := ComponentIRStatusFor(ctx, erroringReader(t), isvc, v1beta1.DecoderComponent); err == nil || !strings.Contains(err.Error(), "get InferenceReplica team-a/pool-d") {
 		t.Fatalf("read error must wrap the referenced replica's key; got %v", err)
 	}
 }

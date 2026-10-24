@@ -3,7 +3,6 @@ package utils
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,32 +11,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
-
-// MockClient is a mock implementation of client.Client for testing
-type MockClient struct {
-	client.Client
-	getFunc  func(key client.ObjectKey, obj client.Object) error
-	listFunc func(list client.ObjectList, opts ...client.ListOption) error
-}
-
-func (m *MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-	if m.getFunc != nil {
-		return m.getFunc(key, obj)
-	}
-	return fmt.Errorf("not found")
-}
-
-func (m *MockClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-	if m.listFunc != nil {
-		return m.listFunc(list, opts...)
-	}
-	return fmt.Errorf("not found")
-}
 
 func TestIsMergedFineTunedWeight(t *testing.T) {
 	tests := []struct {
@@ -405,6 +383,24 @@ func TestUpdateEnvVars(t *testing.T) {
 					Name:  "TEST_VAR",
 					Value: "new-value",
 				},
+			},
+		},
+		{
+			name: "replace sourced env var",
+			container: &v1.Container{
+				Env: []v1.EnvVar{{
+					Name: "TEST_VAR",
+					ValueFrom: &v1.EnvVarSource{
+						ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+							LocalObjectReference: v1.LocalObjectReference{Name: "settings"},
+							Key:                  "value",
+						},
+					},
+				}},
+			},
+			envVar: &v1.EnvVar{Name: "TEST_VAR", Value: "new-value"},
+			expectedEnv: []v1.EnvVar{
+				{Name: "TEST_VAR", Value: "new-value"},
 			},
 		},
 		{
@@ -1853,10 +1849,6 @@ func TestMergedRunnerPorts_InvalidMultiPodShapeUsesTopLevelTemplate(t *testing.T
 }
 
 func TestGetTargetServicePort(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = v1.AddToScheme(scheme)
-	_ = v1beta1.AddToScheme(scheme)
-
 	tests := []struct {
 		name         string
 		isvc         *v1beta1.InferenceService
@@ -1964,14 +1956,11 @@ func TestGetTargetServicePort(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Build fake client with services
-			objs := make([]runtime.Object, 0, len(tt.services))
+			objs := make([]client.Object, 0, len(tt.services))
 			for i := range tt.services {
 				objs = append(objs, &tt.services[i])
 			}
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithRuntimeObjects(objs...).
-				Build()
+			fakeClient := fakeclient.New(t, fakeclient.WithObjects(objs...))
 
 			port, err := GetTargetServicePort(context.Background(), fakeClient, tt.isvc)
 
@@ -1986,10 +1975,6 @@ func TestGetTargetServicePort(t *testing.T) {
 }
 
 func TestGetTargetServicePort_ServiceNameResolution(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = v1.AddToScheme(scheme)
-	_ = v1beta1.AddToScheme(scheme)
-
 	// Test that the correct service names are used based on mode and router presence
 	tests := []struct {
 		name                string
@@ -2040,10 +2025,7 @@ func TestGetTargetServicePort_ServiceNameResolution(t *testing.T) {
 				},
 			}
 
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithRuntimeObjects(svc).
-				Build()
+			fakeClient := fakeclient.New(t, fakeclient.WithObjects(svc))
 
 			port, err := GetTargetServicePort(context.Background(), fakeClient, tt.isvc)
 

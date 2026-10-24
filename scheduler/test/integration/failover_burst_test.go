@@ -14,14 +14,14 @@ import (
 // TestFailoverMidBurstConverges probes the one factor a single-scheduler burst
 // test cannot: a leader failover WHILE a burst is still forming. Three replicas
 // with leader election means the active scheduler can change mid-flight; the new
-// leader starts with an empty in-memory pin store and must rebuild from the
+// leader starts with an empty in-memory assignment store and must rebuild from the
 // cluster. Members that were assumed but not yet bound by the old leader are lost
 // (assume is in-memory), so their gangs re-plan on the new leader. This asserts the
 // whole fleet still converges — no gang stranded, no domain over-committed — after
-// the pin store is reset under contention.
+// the assignment store is reset under contention.
 //
 // Reproduced by starting one scheduler, firing the burst, then cancelling it and
-// starting a fresh one (empty pins) while binds are still in flight.
+// starting a fresh one (empty assignments) while binds are still in flight.
 func TestFailoverMidBurstConverges(t *testing.T) {
 	const (
 		domains        = 16
@@ -67,9 +67,9 @@ func TestFailoverMidBurstConverges(t *testing.T) {
 	wg.Wait()
 
 	// Failover mid-burst: let a little progress happen, then kill the leader and
-	// start a fresh scheduler (empty pin store) to finish the job.
+	// start a fresh scheduler (empty assignment store) to finish the job.
 	time.Sleep(400 * time.Millisecond)
-	tc0.CancelFn()
+	tc0.stop(t)
 	tc := startScheduler(t, globalKubeConfig, gangPackOptions(t)...)
 	defer tc.teardown(t)
 
@@ -102,7 +102,7 @@ func TestFailoverMidBurstConverges(t *testing.T) {
 	}
 
 	// No node may hold more than one gang pod (over-commit the failover could cause
-	// if the rebuilt pin store lost a reservation and two gangs raced one domain).
+	// if the rebuilt assignment store lost a reservation and two gangs raced one domain).
 	perNode := map[string]int{}
 	for _, n := range results {
 		perNode[n]++

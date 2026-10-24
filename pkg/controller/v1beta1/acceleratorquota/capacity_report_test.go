@@ -11,15 +11,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/quota/tree"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
-func TestCapacityReportRefreshBoundary(t *testing.T) {
+func TestCapacityReportDue_ObservedAgeVsInterval_DueWhenOldMissingOrFuture(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	stamp := func(offset time.Duration) *metav1.Time { t := metav1.NewTime(now.Add(offset)); return &t }
 	for _, tt := range []struct {
@@ -43,23 +44,24 @@ func TestCapacityReportRefreshBoundary(t *testing.T) {
 	require.False(t, capacityReportDue(nil, now, time.Minute))
 }
 
-func TestCapacityHeartbeatResamplesWithoutStatusLoop(t *testing.T) {
+func TestReconcileCapacity_IdleHardwareOnCadence_ResamplesWithoutRewritingStatus(t *testing.T) {
 	ctx := context.Background()
-	scheme := capacityScheme(t)
+	scheme := fakeclient.Scheme(t, kueuev1beta2.AddToScheme)
 	var failNodes bool
-	c := fake.NewClientBuilder().WithScheme(scheme).
-		WithStatusSubresource(&v1beta1.AcceleratorQuota{}).
-		WithObjects(
-			resourceFlavor("example-gpu", map[string]string{"accelerator": "example-gpu"}),
-			workerNode("node-a", withLabels(map[string]string{"accelerator": "example-gpu"}), withAllocatable(map[string]string{"example.com/gpu": "8"})),
-		).WithInterceptorFuncs(interceptor.Funcs{
-		List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
-			if _, nodes := list.(*corev1.NodeList); nodes && failNodes {
-				return errors.New("node read unavailable")
-			}
-			return c.List(ctx, list, opts...)
-		},
-	}).Build()
+	c := fakeclient.New(t,
+		fakeclient.WithScheme(scheme),
+		fakeclient.WithStatusSubresource(&v1beta1.AcceleratorQuota{}),
+		fakeclient.WithObjects(resourceFlavor("example-gpu", map[string]string{"accelerator": "example-gpu"}),
+			workerNode("node-a", withLabels(map[string]string{"accelerator": "example-gpu"}), withAllocatable(map[string]string{"example.com/gpu": "8"}))),
+		fakeclient.WithInterceptors(interceptor.Funcs{
+			List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+				if _, nodes := list.(*corev1.NodeList); nodes && failNodes {
+					return errors.New("node read unavailable")
+				}
+				return c.List(ctx, list, opts...)
+			},
+		}),
+	)
 	r := &Reconciler{
 		Client: c, APIReader: c, Scheme: scheme, Log: logf.Log,
 		Options: tree.Options{RootName: rootName}, ResyncInterval: time.Hour,
@@ -95,7 +97,7 @@ func TestCapacityHeartbeatResamplesWithoutStatusLoop(t *testing.T) {
 	require.Equal(t, fresh.ResourceVersion, root.ResourceVersion, "a heartbeat watch event must not cause another status write")
 }
 
-func TestCapacityHeartbeatCadenceIsConfigured(t *testing.T) {
+func TestNextResync_ResyncAndReportIntervals_PicksEarlierAndRejectsNegative(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
 		resync      time.Duration

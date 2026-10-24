@@ -20,14 +20,58 @@ const (
 
 // placementSelector is shared by actuation, standing observations, and cluster
 // event filtering. Health and admission capability never alter its matched set.
+// Its matches carry the primary component's weight.
 func placementSelector(isvc *v1beta1.InferenceService) (*affinity.Selector, error) {
+	selectors, err := componentSelectors(isvc)
+	if err != nil || selectors == nil {
+		return nil, err
+	}
+	components := placedComponents(isvc)
+	if len(components) == 0 {
+		return affinity.Compile(isvc.Spec.Placement.ClusterAffinity, isvc.Spec.Placement.Mode == v1beta1.PlacementModeSplit)
+	}
+	return selectors[components[0]], nil
+}
+
+// componentSelectors compiles the affinity once per placed component. Every
+// component matches the same clusters, so the primary component's clusters
+// are every component's; each selector's matches carry that component's
+// weight. A nil map means the source declares no placement.
+func componentSelectors(isvc *v1beta1.InferenceService) (map[v1beta1.ComponentType]*affinity.Selector, error) {
 	if err := validation.ValidatePlacementIntent(isvc); err != nil {
 		return nil, err
 	}
 	if isvc == nil || isvc.Spec.Placement == nil {
 		return nil, nil
 	}
-	return affinity.Compile(isvc.Spec.Placement.ClusterAffinity, isvc.Spec.Placement.Mode == v1beta1.PlacementModeSplit)
+	p := isvc.Spec.Placement
+	components := placedComponents(isvc)
+	out := make(map[v1beta1.ComponentType]*affinity.Selector, len(components))
+	for _, component := range components {
+		selector, err := affinity.CompileFor(p.ClusterAffinity, p.Mode == v1beta1.PlacementModeSplit, component)
+		if err != nil {
+			return nil, err
+		}
+		out[component] = selector
+	}
+	return out, nil
+}
+
+// placedComponents lists the declared components in placement order: the
+// primary component (Engine, or Decoder without an Engine) first, then the
+// Decoder and the Router.
+func placedComponents(isvc *v1beta1.InferenceService) []v1beta1.ComponentType {
+	var out []v1beta1.ComponentType
+	if isvc.Spec.Engine != nil {
+		out = append(out, v1beta1.EngineComponent)
+	}
+	if isvc.Spec.Decoder != nil {
+		out = append(out, v1beta1.DecoderComponent)
+	}
+	if len(out) > 0 && isvc.Spec.Router != nil {
+		out = append(out, v1beta1.RouterComponent)
+	}
+	return out
 }
 
 // MatchCandidates returns sorted Ready members of the matched set. Replica

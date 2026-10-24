@@ -7,7 +7,7 @@ import (
 
 // Resource strings come from the inferenceservice-config ConfigMap, so a bad
 // or missing value must surface as an admission error rather than a panic.
-func TestContainerBuildersRejectBadResourceValues(t *testing.T) {
+func TestContainerBuilders_BadOrMissingResourceValue_ErrorNamesTheField(t *testing.T) {
 	tests := map[string]struct {
 		cpuLimit, memoryLimit  string
 		cpuRequest, memRequest string
@@ -56,7 +56,7 @@ func TestContainerBuildersRejectBadResourceValues(t *testing.T) {
 	}
 }
 
-func TestContainerBuildersAcceptValidResourceValues(t *testing.T) {
+func TestContainerBuilders_ValidResourceValues_SetsLimitsAndRequests(t *testing.T) {
 	c, err := (&FineTunedAdapterInjector{
 		CpuLimit: "1", MemoryLimit: "1Gi", CpuRequest: "100m", MemoryRequest: "100Mi",
 	}).createInitContainer(nil, nil, nil)
@@ -68,5 +68,36 @@ func TestContainerBuildersAcceptValidResourceValues(t *testing.T) {
 	}
 	if got := c.Resources.Requests.Memory().String(); got != "100Mi" {
 		t.Fatalf("memory request = %s, want 100Mi", got)
+	}
+}
+
+func TestInjectorContainerBuilders_UnparsableCPULimit_ReturnError(t *testing.T) {
+	tests := map[string]func() error{
+		"fine-tuned adapter": func() error {
+			_, err := (&FineTunedAdapterInjector{
+				CpuLimit:      "bad-cpu",
+				MemoryLimit:   "1Gi",
+				CpuRequest:    "1",
+				MemoryRequest: "1Gi",
+			}).createInitContainer(nil, nil, nil)
+			return err
+		},
+		"serving sidecar": func() error {
+			_, err := (&ServingSidecarInjector{
+				CpuLimit:      "bad-cpu",
+				MemoryLimit:   "1Gi",
+				CpuRequest:    "1",
+				MemoryRequest: "1Gi",
+			}).createServingSidecarContainer(nil, nil, nil)
+			return err
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			if err := test(); err == nil {
+				t.Fatalf("expected invalid resource quantity error")
+			}
+		})
 	}
 }

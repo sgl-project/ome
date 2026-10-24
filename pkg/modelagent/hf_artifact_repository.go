@@ -183,7 +183,7 @@ func (r *HfArtifactRepository) tryAcquireLock(ctx context.Context, expected HfAr
 			return false, err
 		}
 
-		if stored.Status == HfArtifactStatusUpdating {
+		if stored.blocksNewOperation() {
 			if stored.LocalPath != "" && stored.LocalPath != expected.LocalPath {
 				return false, fmt.Errorf("Hugging Face artifact %s is Updating and uses noncanonical path %s", stored.Key, stored.LocalPath)
 			}
@@ -198,7 +198,7 @@ func (r *HfArtifactRepository) tryAcquireLock(ctx context.Context, expected HfAr
 			result = stored
 			return false, nil
 		}
-		if stored.Status != HfArtifactStatusReady && stored.Status != HfArtifactStatusFailed {
+		if !isValidHfArtifactStatus(stored.Status) {
 			return false, fmt.Errorf("Hugging Face artifact %s has invalid status %q", stored.Key, stored.Status)
 		}
 
@@ -225,8 +225,14 @@ func (r *HfArtifactRepository) MarkFailed(ctx context.Context, expected HfArtifa
 	return r.setStatus(ctx, expected, HfArtifactStatusFailed)
 }
 
-// setStatus performs the lock-fenced terminal transition for an artifact
-// currently in Updating state.
+// MarkInterrupted releases an unfinished owner's lock without declaring a
+// download failure. Updating with no owner can be retried or claimed for deletion.
+func (r *HfArtifactRepository) MarkInterrupted(ctx context.Context, expected HfArtifactEntry) error {
+	return r.setStatus(ctx, expected, HfArtifactStatusUpdating)
+}
+
+// setStatus releases an Updating artifact's lock, fencing stale owners. Updating
+// as the target status records an interrupted operation rather than a failure.
 func (r *HfArtifactRepository) setStatus(ctx context.Context, expected HfArtifactEntry, status HfArtifactStatus) error {
 	if err := validateHfArtifactIdentityAndPath(expected); err != nil {
 		return err
@@ -236,7 +242,7 @@ func (r *HfArtifactRepository) setStatus(ctx context.Context, expected HfArtifac
 		if err != nil {
 			return false, err
 		}
-		if stored.Status == status {
+		if stored.Status == status && stored.LockID == "" {
 			if expected.LockID != "" && stored.LastCompletedLockID == expected.LockID {
 				return false, nil
 			}
@@ -307,6 +313,10 @@ func (r *HfArtifactRepository) AddModelReference(ctx context.Context, expected H
 		if model.HfArtifactPendingDeletion != nil {
 			return false, fmt.Errorf("model %s has unfinished shared artifact deletion", modelKey)
 		}
+		if pending := model.HfArtifactPendingDownload; pending != nil &&
+			*pending != (HfArtifactPendingDownload{Identity: stored.Identity, ParentPath: stored.LocalPath, ChildPath: modelPath, ModelUID: modelUID}) {
+			return false, fmt.Errorf("model %s has another pending shared download", modelKey)
+		}
 		if model.HfArtifactKey != "" && model.HfArtifactKey != stored.Key {
 			return false, fmt.Errorf("model %s already references Hugging Face artifact %s", modelKey, model.HfArtifactKey)
 		}
@@ -327,6 +337,7 @@ func (r *HfArtifactRepository) AddModelReference(ctx context.Context, expected H
 		}
 		stored.Children[modelKey] = modelPath
 		model.HfArtifactKey = stored.Key
+		model.HfArtifactPendingDownload = nil
 
 		artifactChanged, err := writeHfArtifactEntry(configMap.Data, stored)
 		if err != nil {
@@ -395,7 +406,7 @@ func (r *HfArtifactRepository) removeModelReference(
 		if err != nil {
 			return false, err
 		}
-		if stored.Status == HfArtifactStatusUpdating {
+		if stored.blocksNewOperation() {
 			return false, fmt.Errorf("Hugging Face artifact %s is Updating", stored.Key)
 		}
 
@@ -435,7 +446,7 @@ func (r *HfArtifactRepository) removeModelReference(
 			)
 		}
 
-		wasReady := stored.Status == HfArtifactStatusReady
+		previousStatus := stored.Status
 		delete(stored.Children, modelKey)
 		delete(stored.ChildStatusesBeforeRepair, modelKey)
 		model.HfArtifactKey = ""
@@ -451,8 +462,9 @@ func (r *HfArtifactRepository) removeModelReference(
 			model.HfArtifactPendingDeletion = &HfArtifactPendingDeletion{
 				Identity: stored.Identity, ParentPath: stored.LocalPath,
 				ChildPath: storedModelPath, ModelUID: modelUID,
-				ParentLockID:   stored.LockID,
-				ParentWasReady: wasReady,
+				ParentLockID:               stored.LockID,
+				ParentWasReady:             previousStatus == HfArtifactStatusReady,
+				ParentStatusBeforeDeletion: previousStatus,
 			}
 		}
 

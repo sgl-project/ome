@@ -17,34 +17,45 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/irstatus"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/placement/allocation"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workloadcluster"
 	"sigs.k8s.io/ome/pkg/placement/protocol"
 )
 
-type plannedHomeObservation struct {
+type plannedMemberObservation struct {
 	Candidate         v1beta1.CandidatePlacement
 	Member            *v1beta1.InferenceService
-	Home              allocation.Home
+	MemberState       allocation.MemberState
 	RolloutReserved   int32
 	PauseAcknowledged bool
-	FullHomeReady     bool
+	FullPolicyReady   bool
 	IdleZeroFloor     bool
 	ScalingToZero     bool
 	Terminal          bool
+	// ComponentReady counts each scaled component's ready instances while the
+	// member can serve; it is empty otherwise.
+	ComponentReady map[v1beta1.ComponentType]int32
 }
 
-// observePlannedHome reads a direct, identity-checked member inventory. Component
+// observePlannedMember combines the observed ISVC with a direct workload inventory,
+// re-reading it after a transient failure as MemberReadRetry allows. Component
 // requirements include every declared component, even before its IR exists.
-func (r *Reconciler) observePlannedHome(ctx context.Context, source *v1beta1.InferenceService, previous v1beta1.CandidatePlacement, components []v1beta1.ComponentType) (plannedHomeObservation, error) {
+func (r *Reconciler) observePlannedMember(ctx context.Context, source *v1beta1.InferenceService, previous v1beta1.CandidatePlacement, components []v1beta1.ComponentType) (plannedMemberObservation, error) {
+	return retryMemberRead(ctx, r, previous.Cluster, func(attemptCtx context.Context) (plannedMemberObservation, error) {
+		return r.observePlannedMemberOnce(attemptCtx, source, previous, components)
+	})
+}
+
+func (r *Reconciler) observePlannedMemberOnce(ctx context.Context, source *v1beta1.InferenceService, previous v1beta1.CandidatePlacement, components []v1beta1.ComponentType) (plannedMemberObservation, error) {
 	// An unreadable member keeps the plan it last acknowledged behind an unknown
-	// observation; unverified ready capacity is withheld because it routes traffic.
-	out := plannedHomeObservation{Candidate: retainedUnknownCandidate(source, previous)}
+	// observation; its ready count, which routes traffic, follows the grace.
+	out := plannedMemberObservation{Candidate: r.unknownCandidate(source, previous)}
 	if previous.Allocation == nil || source.Status.Placement == nil || source.Status.Placement.Plan == nil || len(components) == 0 {
 		return out, fmt.Errorf("planned observation requires allocation authority and resolved components")
 	}
 	if source.UID == "" || source.Status.Placement.Plan.SourceUID != source.UID {
 		return out, fmt.Errorf("planned observation requires verified source identity")
 	}
-	cl, err := r.plannedClient(ctx, previous.Cluster, previous.Allocation.ClusterUID)
+	cl, transport, err := r.plannedTransport(ctx, previous.Cluster, previous.Allocation.ClusterUID)
 	if err != nil {
 		return out, err
 	}
@@ -60,6 +71,11 @@ func (r *Reconciler) observePlannedHome(ctx context.Context, source *v1beta1.Inf
 	}
 	if memberExists {
 		out.Candidate.Endpoint = member.Status.URL.DeepCopy()
+		// The member's own status was read: an ingress it reports not ready
+		// means the member cannot serve, even if a later read fails.
+		if !member.Status.IsConditionReady(v1beta1.IngressReady) {
+			out.Candidate.ReadyReplicas = 0
+		}
 	}
 	irs := &v1beta1.InferenceReplicaList{}
 	selector := client.MatchingLabels{constants.InferenceServicePodLabelKey: source.Name}
@@ -67,7 +83,7 @@ func (r *Reconciler) observePlannedHome(ctx context.Context, source *v1beta1.Inf
 		return out, err
 	}
 	policy := executionPolicy(source, previous.Allocation)
-	floors, err := plannedHomeFloors(source, previous, policy)
+	floors, err := plannedMemberFloors(source, previous, policy)
 	if err != nil {
 		return out, err
 	}
@@ -151,7 +167,7 @@ func (r *Reconciler) observePlannedHome(ctx context.Context, source *v1beta1.Inf
 		zeroRequests[ir.Spec.Component] = *ir.Spec.Replicas == 0 && protocol.HasZeroReplicaFloor(policy, ir.Spec.Component)
 		idleComponents[ir.Spec.Component] = zeroRequests[ir.Spec.Component] && count.Occupied == 0 && count.Reserved == 0
 		// Engine and Decoder occupancy is counted in primary units through each
-		// component's floor. Router stays shared within each home, with its own
+		// component's floor. Router stays shared within each member, with its own
 		// replica policy and readiness gate.
 		floor, primaryFloor := componentFloor(floors, ir.Spec.Component, previous.Allocation.CurrentReplicas), floors[primaryScaleComponent(components)]
 		if ir.Spec.Component != v1beta1.RouterComponent {
@@ -161,7 +177,7 @@ func (r *Reconciler) observePlannedHome(ctx context.Context, source *v1beta1.Inf
 			if ir.Spec.PlacementExecution != nil && ir.Spec.PlacementExecution.PauseSurge && ir.Spec.PlacementReplicaLimit != nil {
 				committed = *ir.Spec.PlacementReplicaLimit
 			}
-			out.Home.Occupied = max(out.Home.Occupied, occupiedUnits(max(count.Occupied, committed), floor, primaryFloor))
+			out.MemberState.Occupied = max(out.MemberState.Occupied, occupiedUnits(max(count.Occupied, committed), floor, primaryFloor))
 			out.RolloutReserved = max(out.RolloutReserved, occupiedUnits(count.Reserved, floor, primaryFloor))
 		}
 		if policy.PauseSurge {
@@ -180,6 +196,17 @@ func (r *Reconciler) observePlannedHome(ctx context.Context, source *v1beta1.Inf
 	}
 	if len(byOwner) > 0 {
 		return out, fmt.Errorf("member pods remain without identified live components")
+	}
+	if !memberExists && len(irs.Items) == 0 && len(pods.Items) == 0 {
+		// Absence can release allocation authority. A newly created service may
+		// still be missing from the cache before it creates any components.
+		direct, _ := workloadcluster.DirectClient(transport)
+		if err := direct.Get(ctx, client.ObjectKeyFromObject(source), &v1beta1.InferenceService{}); !apierrors.IsNotFound(err) {
+			if err != nil {
+				return out, err
+			}
+			return out, fmt.Errorf("%w: member service exists beyond the cached observation", workloadcluster.ErrMemberCacheUnavailable)
+		}
 	}
 	if memberExists {
 		out.Member = member
@@ -217,23 +244,23 @@ func (r *Reconciler) observePlannedHome(ctx context.Context, source *v1beta1.Inf
 	if !routerReady {
 		ready = 0
 	}
-	out.Home.Known = true
-	out.Home.Absent = !memberExists && len(irs.Items) == 0 && len(pods.Items) == 0
-	out.Home.Applied = applied
-	out.Home.Ready = ready
+	out.MemberState.Known = true
+	out.MemberState.Absent = !memberExists && len(irs.Items) == 0 && len(pods.Items) == 0
+	out.MemberState.Applied = applied
+	out.MemberState.Ready = ready
 	out.PauseAcknowledged = applied && policy.PauseSurge
-	out.FullHomeReady = applied && len(policy.ReplicaFloors) > 0
+	out.FullPolicyReady = applied && len(policy.ReplicaFloors) > 0
 	for _, floor := range policy.ReplicaFloors {
-		out.FullHomeReady = out.FullHomeReady && counts[floor.Component].Ready >= floor.Replicas
+		out.FullPolicyReady = out.FullPolicyReady && counts[floor.Component].Ready >= floor.Replicas
 	}
 	if memberExists {
 		out.Terminal = IsTerminallyFailed(member, statuses)
 	}
-	// Zero demand preserves home identity without inventing admission. Pending
-	// cleanup is distinct from an idle home and cannot establish convergence.
+	// Zero demand preserves member identity without inventing admission. Pending
+	// cleanup is distinct from an idle member and cannot establish convergence.
 	out.IdleZeroFloor = applied && memberExists && !out.Terminal && !allAdmitted && idleZeroFloor
 	out.ScalingToZero = applied && memberExists && !out.Terminal && !allAdmitted && zeroRequested && !idleZeroFloor
-	out.FullHomeReady = out.FullHomeReady && !out.Terminal
+	out.FullPolicyReady = out.FullPolicyReady && !out.Terminal
 	out.Candidate = v1beta1.CandidatePlacement{Cluster: previous.Cluster, Allocation: previous.Allocation.DeepCopy(), ObservationKnown: true, Phase: v1beta1.CandidatePhaseAdmitting}
 	if applied {
 		out.Candidate.AppliedPlanID = policy.PlanID
@@ -247,29 +274,33 @@ func (r *Reconciler) observePlannedHome(ctx context.Context, source *v1beta1.Inf
 			out.Candidate.Endpoint = endpointFor(member).DeepCopy()
 		}
 		if member.Status.IsConditionReady(v1beta1.IngressReady) && allAdmitted && allServing {
-			out.Candidate.ReadyReplicas = placementReadyReplicas(scaled, statuses, floors)
+			out.Candidate.ReadyReplicas = placementReadyReplicas(scaled, statuses, servingFloors(source, floors))
+			out.ComponentReady = readyCounts
+			if count, divided := counts[v1beta1.RouterComponent]; divided && routerDivided(source) {
+				out.ComponentReady[v1beta1.RouterComponent] = count.Ready
+			}
 		} else {
-			out.Home.Ready = 0
+			out.MemberState.Ready = 0
 		}
 	} else {
-		out.Home.Ready = 0
+		out.MemberState.Ready = 0
 	}
-	out.FullHomeReady = out.FullHomeReady && out.Candidate.ReadyReplicas > 0
+	out.FullPolicyReady = out.FullPolicyReady && out.Candidate.ReadyReplicas > 0
 	return out, nil
 }
 
-// plannedHomeFloors returns the per-component floors a planned home is held
-// to: the accepted full-home policy when the plan carries one, the split
+// plannedMemberFloors returns the per-component floors a planned member is held
+// to: the accepted full policy when the plan carries one, the split
 // apportionment over the plan's current targets otherwise. Without either,
-// every scaled component is held to the home's primary target.
-func plannedHomeFloors(source *v1beta1.InferenceService, previous v1beta1.CandidatePlacement, policy *v1beta1.PlacementExecutionPolicy) (map[v1beta1.ComponentType]int32, error) {
+// every scaled component is held to the member's primary target.
+func plannedMemberFloors(source *v1beta1.InferenceService, previous v1beta1.CandidatePlacement, policy *v1beta1.PlacementExecutionPolicy) (map[v1beta1.ComponentType]int32, error) {
 	if len(policy.ReplicaFloors) > 0 {
 		return floorMap(policy.ReplicaFloors), nil
 	}
 	if mode := placementMode(source); mode != v1beta1.PlacementModeSplit && mode != v1beta1.PlacementModeSplitByCapacity {
 		return nil, nil
 	}
-	floors, err := splitHomeFloors(source, source.Status.Placement.Candidates, previous)
+	floors, err := splitMemberFloors(source, source.Status.Placement.Candidates, previous)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +308,7 @@ func plannedHomeFloors(source *v1beta1.InferenceService, previous v1beta1.Candid
 }
 
 // componentFloor is the floor a component is held to; a component outside the
-// accepted floors is held to the home's primary target.
+// accepted floors is held to the member's primary target.
 func componentFloor(floors map[v1beta1.ComponentType]int32, component v1beta1.ComponentType, primary int32) int32 {
 	if floor, known := floors[component]; known {
 		return floor
@@ -285,7 +316,7 @@ func componentFloor(floors map[v1beta1.ComponentType]int32, component v1beta1.Co
 	return primary
 }
 
-// primaryScaleComponent is the component whose instance count is the home's
+// primaryScaleComponent is the component whose instance count is the member's
 // replica unit: the engine when declared, otherwise the decoder.
 func primaryScaleComponent(components []v1beta1.ComponentType) v1beta1.ComponentType {
 	for _, component := range []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent} {

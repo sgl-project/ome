@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	fixture "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -30,7 +31,7 @@ func creatingRow(waiting string) types.InstanceStatus {
 // does that, in the escalation pass.
 func TestScheduler_RecordsAndReleasesTheHold(t *testing.T) {
 	since := metav1.NewTime(time.Now().Add(-5 * time.Minute))
-	pod := unschedulablePod("svc-a-engine-0-default-0", schedulerMessage, since)
+	pod := fixture.UnschedulablePod("svc-a-engine-0-default-0", schedulerMessage, since.Time)
 
 	t.Run("records the hold with the scheduler's message", func(t *testing.T) {
 		store, in := newStore(creatingRow(""))
@@ -110,7 +111,7 @@ func TestScheduler_RecordsAndReleasesTheHold(t *testing.T) {
 // scheduler's message in the pass that observes the pod.
 func TestScheduler_HoldsTheRecreateWhoseReplacementHasNoPlacement(t *testing.T) {
 	since := metav1.NewTime(time.Now().Add(-time.Minute))
-	pod := unschedulablePod("svc-a-engine-1-default-0", schedulerMessage, since)
+	pod := fixture.UnschedulablePod("svc-a-engine-1-default-0", schedulerMessage, since.Time)
 	row := types.InstanceStatus{
 		Index:           1,
 		Phase:           types.InstancePhaseUpdating,

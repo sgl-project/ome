@@ -8,6 +8,7 @@ import (
 	"math"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -62,7 +63,7 @@ const (
 
 	placementReadyReasonPending = "PlacementPending"
 	// PlacementReadyReasonLost identifies an authoritative loss of every current
-	// home without treating an unreadable member as absent.
+	// member without treating an unreadable member as absent.
 	PlacementReadyReasonLost = "PlacementLost"
 	// PlacementReadyReasonUnknown identifies an incomplete placement observation
 	// that cannot prove either serving readiness or authoritative placement loss.
@@ -89,9 +90,9 @@ type placementResult struct {
 	phase            v1beta1.PlacementPhase
 	candidates       []v1beta1.CandidatePlacement
 	url              *apis.URL // published endpoint; mirrored to BOTH status.placement.endpoint and status.url
-	ready            bool      // at least one observed admitted home has ready replicas and a ready ingress
+	ready            bool      // at least one observed admitted member has ready replicas and a ready ingress
 	readinessUnknown bool      // one or more candidates lacked a current serving-readiness observation
-	placementLost    bool      // every relevant standing home was conclusively absent
+	placementLost    bool      // every relevant standing member was conclusively absent
 }
 
 // ClusterClients is the subset of *workloadcluster.Manager the placer needs.
@@ -167,6 +168,23 @@ type Reconciler struct {
 	// once the window elapses. Config-driven
 	// (manager flag / chart); zero (unset) falls back to DefaultWinnerLostGrace.
 	WinnerLostGracePeriod time.Duration
+	// ObservationGrace is how long a member whose reads fail keeps the ready count
+	// from its last successful read, counted from the first failed read that the
+	// member's candidate status records. Config-driven (chart); zero withdraws the
+	// count at the first failed read.
+	ObservationGrace time.Duration
+	// MemberReadRetry re-reads a member within one reconcile after a transient
+	// failure. Config-driven (chart); the zero value reads each member once.
+	MemberReadRetry MemberReadRetry
+	// ObservationClock dates failed reads and their grace; nil uses the system clock.
+	ObservationClock clock.PassiveClock
+	// RoutingDisabled reports that this installation routes no traffic, so no
+	// source has a TrafficMap. Placement then decides from pod readiness alone,
+	// as it does for a source that sets spec.routing.enabled to false.
+	RoutingDisabled bool
+	// failingSinceDropped records that the last status write carrying a failure
+	// start came back without it, so the stored CRD lacks the field.
+	failingSinceDropped atomic.Bool
 
 	// DispatcherMode selects the fan-out BREADTH policy: AllAtOnce clones onto
 	// every matched candidate at once (the historical behavior); Incremental
@@ -211,7 +229,7 @@ type Reconciler struct {
 	converge *convergeConfig
 
 	// policy is the AutoscalerPolicy preflight/skew state: the config-driven
-	// preflight tunables plus the in-memory per-(source,home) bookkeeping the
+	// preflight tunables plus the in-memory per-(source,member) bookkeeping the
 	// multi-cluster policy detectors need (the API carries no such state).
 	// SetupWithManager resolves it from the autoscalerPolicy config block; a
 	// Reconciler built directly (unit tests) gets the package defaults lazily
@@ -227,7 +245,7 @@ type Reconciler struct {
 
 	// rollout is the RolloutPolicy preflight state: the staged condition, the
 	// per-source resolved policies the derive-time inflation consumes, and the
-	// per-(source,home) lifted run provenance. Built lazily via rolloutState;
+	// per-(source,member) lifted run provenance. Built lazily via rolloutState;
 	// inert for sources without rollout policy refs.
 	rollout     *rolloutPreflight
 	rolloutOnce sync.Once
@@ -245,12 +263,17 @@ type Reconciler struct {
 // InferenceService — this placer writes status and its finalizer, the endpoint
 // publisher writes its own finalizer — so a write can lose a resourceVersion
 // race. That is benign and self-corrects on the requeue, so it must not surface
-// as an error-level "Reconciler error" (misleading log noise). All other results
-// pass through unchanged.
+// as an error-level "Reconciler error" (misleading log noise). Every other
+// result passes through, except that the requeue is shortened to the end of
+// the earliest observation grace so the drain after it is not late.
 func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
-	res, err := r.reconcile(ctx, request)
+	wake := &graceWake{}
+	res, err := r.reconcile(context.WithValue(ctx, graceWakeKey{}, wake), request)
 	if apierrors.IsConflict(err) {
 		res, err = ctrl.Result{Requeue: true}, nil
+	}
+	if err == nil {
+		res = r.wakeForGrace(res, wake)
 	}
 	return normalizeRetryPriority(res, err), err
 }
@@ -281,6 +304,7 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	if err := r.Get(ctx, request.NamespacedName, isvc); err != nil {
 		if apierrors.IsNotFound(err) {
 			r.forgetCapacity(request.NamespacedName)
+			DeleteForISVC(request.Namespace, request.Name)
 			// Source already gone. The winner-lost grace marker is keyed by UID
 			// (unknown here) and is cleared in reconcileDelete once the finalizer
 			// runs; the worst case if that never ran is one stale map entry that
@@ -297,6 +321,7 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	// Only placement sources may acquire placement state or remote allocations.
 	if !IsPlacementEligible(isvc) {
 		r.forgetCapacity(request.NamespacedName)
+		DeleteForISVC(request.Namespace, request.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -307,6 +332,9 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	}
 	current := &v1beta1.InferenceService{}
 	if err := r.APIReader.Get(ctx, request.NamespacedName, current); err != nil {
+		if apierrors.IsNotFound(err) {
+			DeleteForISVC(request.Namespace, request.Name)
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	if !current.DeletionTimestamp.IsZero() {
@@ -314,6 +342,7 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	}
 	if !IsPlacementEligible(current) {
 		r.forgetCapacity(request.NamespacedName)
+		DeleteForISVC(request.Namespace, request.Name)
 		return ctrl.Result{}, nil
 	}
 	isvc = current
@@ -326,10 +355,10 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 	ctx = withPlacementInputCondition(ctx, isvc, clusters.Items)
-	// Member observation is independent from placement eligibility. Status homes
-	// are read before any readiness or policy gate so those gates can stop
-	// actuation without freezing the source's view of serving health.
-	observations := r.observeStandingHomes(ctx, isvc, clusters.Items)
+	// Member observation is independent from placement eligibility. The members
+	// the status records are read before any readiness or policy gate, so those
+	// gates can stop actuation without freezing the source's view of serving health.
+	observations := r.observeStandingMembers(ctx, isvc, clusters.Items)
 	if err := validation.ValidatePlacementIntent(isvc); err != nil {
 		return r.writeObservedPlacement(ctx, isvc, observations)
 	}
@@ -347,7 +376,7 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	candidates, reason, err := MatchCandidates(isvc, clusters.Items)
 	split := placementMode(isvc) == v1beta1.PlacementModeSplit || placementMode(isvc) == v1beta1.PlacementModeSplitByCapacity
 	if split || placementMode(isvc) == v1beta1.PlacementModeAll {
-		// Outgoing homes still serve during a move. Unreadable peers cannot
+		// Outgoing members still serve during a move. Unreadable peers cannot
 		// prevent discovery of health on the remaining matched members.
 		observations.projectAll = true
 		for _, cluster := range clusters.Items {
@@ -420,7 +449,7 @@ func (r *Reconciler) reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		}
 		backendEligible := verifiedBackendCandidates(ctx, candidates)
 		// Branch on placement mode. Each mode owns its own reconcile: Single keeps one
-		// winner, All keeps every home that admits, and Split apportions the requested
+		// winner, All keeps every member that admits, and Split apportions the requested
 		// replicas across its candidate set.
 		switch mode := placementMode(isvc); mode {
 		case v1beta1.PlacementModeSingle:
@@ -470,7 +499,7 @@ func splitDesiredReplicas(isvc *v1beta1.InferenceService) int32 {
 }
 
 // placementScaleComponents are the replica-scaled components whose
-// admitted/ready counts define a home's replica count: Engine and, for a PD
+// admitted/ready counts define a member's replica count: Engine and, for a PD
 // service, the Decoder — a replica is the coordinated pair. Router is excluded
 // (a shared front-end, not per-replica). Falls back to the first declared
 // component when neither Engine nor Decoder is present.
@@ -490,11 +519,11 @@ func placementScaleComponents(isvc *v1beta1.InferenceService) []v1beta1.Componen
 	return cs
 }
 
-// placementAdmittedReplicas is a home's admitted count in primary units: each
-// scaled component covers admitted/floor of its share and the home has the
+// placementAdmittedReplicas is a member's admitted count in primary units: each
+// scaled component covers admitted/floor of its share and the member has the
 // smallest coverage. Equal floors make this the minimum admitted count, so a
 // PD replica is admitted only when both its engine and decoder instances are;
-// an engine-only home is just the engine count. Zero without scaled components.
+// an engine-only member is just the engine count. Zero without scaled components.
 func placementAdmittedReplicas(comps []v1beta1.ComponentType, statuses map[v1beta1.ComponentType]*v1beta1.InferenceReplicaStatus, floors map[v1beta1.ComponentType]int32) int32 {
 	counts := make(map[v1beta1.ComponentType]int32, len(comps))
 	for _, c := range comps {
@@ -503,8 +532,11 @@ func placementAdmittedReplicas(comps []v1beta1.ComponentType, statuses map[v1bet
 	return primaryUnits(comps, counts, floors)
 }
 
-// placementReadyReplicas is a home's ready count (the endpoint weight) in
-// primary units, with the same per-component coverage as admission.
+// placementReadyReplicas is a member's ready count (the endpoint weight) in
+// primary units, with the same per-component coverage as admission. A member
+// that has admitted a full unit and has a ready instance of every required
+// component can still serve, so it counts at least one unit while a component
+// is below its share. The count never exceeds the admitted count.
 func placementReadyReplicas(comps []v1beta1.ComponentType, statuses map[v1beta1.ComponentType]*v1beta1.InferenceReplicaStatus, floors map[v1beta1.ComponentType]int32) int32 {
 	counts := make(map[v1beta1.ComponentType]int32, len(comps))
 	for _, c := range comps {
@@ -512,7 +544,11 @@ func placementReadyReplicas(comps []v1beta1.ComponentType, statuses map[v1beta1.
 			counts[c] = st.ReadyReplicas
 		}
 	}
-	return primaryUnits(comps, counts, floors)
+	units := primaryUnits(comps, counts, floors)
+	if units == 0 && everyRequiredComponentPresent(comps, counts, floors) && placementAdmittedReplicas(comps, statuses, floors) > 0 {
+		return 1
+	}
+	return units
 }
 
 func (r *Reconciler) deleteDerivedOnBounded(ctx context.Context, cluster string, isvc *v1beta1.InferenceService) error {
@@ -594,23 +630,21 @@ func (r *Reconciler) derivedFor(src *v1beta1.InferenceService) (*v1beta1.Inferen
 	return d, nil
 }
 
-// applyDerived create-or-updates the derived ISVC `desired` on the target
-// cluster through direct, the member's uncached client. The remote input checks
-// run once, before the write window; the write itself re-reads the member and
-// repeats its ownership checks on every conflict.
-func (r *Reconciler) applyDerived(ctx context.Context, cluster string, direct client.Client, src, desired *v1beta1.InferenceService, existingOnly bool) error {
+// applyDerived validates observed member inputs before a conditional write.
+// Conflicts return to reconciliation so the member informer can catch up.
+func (r *Reconciler) applyDerived(ctx context.Context, cluster string, member client.Client, src, desired *v1beta1.InferenceService, existingOnly bool) error {
 	policy, err := protocol.FromDerived(desired)
 	if err != nil {
 		return err
 	}
-	standing, err := getMemberService(ctx, direct, client.ObjectKeyFromObject(desired))
+	standing, err := getMemberService(ctx, member, client.ObjectKeyFromObject(desired))
 	if err != nil {
 		return err
 	}
 	if err := r.authorizeMemberWrite(src, standing, policy, existingOnly); err != nil {
 		return err
 	}
-	backend, err := r.resolveStandingBackend(ctx, direct, desired, standing)
+	backend, err := r.resolveStandingBackend(ctx, member, desired, standing)
 	if err != nil {
 		return err
 	}
@@ -628,48 +662,45 @@ func (r *Reconciler) applyDerived(ctx context.Context, cluster string, direct cl
 	if err := r.checkBackendTransport(ctx, cluster); err != nil {
 		return err
 	}
-	// Before the wholesale re-stamp overwrites it, the live remote spec is the
-	// evidence for the FieldPruned detector: a member apiserver that pruned a
-	// stamped autoscalerPolicyRef reverts it here every pass.
-	if standing != nil {
-		r.observePolicyRefStamp(src, cluster, standing, desired)
+	applied, err := r.writeDerived(ctx, member, src, desired, standing, policy, existingOnly)
+	if err == nil {
+		r.observePolicyRefStamp(src, cluster, applied, desired)
 	}
-	return retry.OnError(retry.DefaultRetry, isMemberWriteRace, func() error {
-		return r.writeDerived(ctx, direct, src, desired, standing, policy, existingOnly)
-	})
+	return err
 }
 
-// writeDerived is one live read-check-write of the member service. The write's
-// resourceVersion precondition binds the ownership decision to the exact object
-// it replaces; verified is the instance the backend checks resolved against.
-func (r *Reconciler) writeDerived(ctx context.Context, direct client.Client, src, desired, verified *v1beta1.InferenceService, policy *v1beta1.PlacementExecutionPolicy, existingOnly bool) error {
+// writeDerived binds the ownership decision to the object's resourceVersion.
+// A stale cache cannot overwrite a member that changed after it was observed.
+func (r *Reconciler) writeDerived(ctx context.Context, member client.Client, src, desired, verified *v1beta1.InferenceService, policy *v1beta1.PlacementExecutionPolicy, existingOnly bool) (*v1beta1.InferenceService, error) {
 	key := client.ObjectKeyFromObject(desired)
-	target, err := getMemberService(ctx, direct, key)
+	target, err := getMemberService(ctx, member, key)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := r.authorizeMemberWrite(src, target, policy, existingOnly); err != nil {
-		return err
+		return nil, err
 	}
 	if (target == nil) != (verified == nil) || (target != nil && target.UID != verified.UID) {
-		return fmt.Errorf("member InferenceService %s was replaced after backend verification", key)
+		return nil, fmt.Errorf("member InferenceService %s was replaced after backend verification", key)
 	}
 	if target == nil {
 		if policy != nil {
-			if err := requireEmptyMemberInventory(ctx, direct, src); err != nil {
-				return err
+			if err := requireEmptyMemberInventory(ctx, member, src); err != nil {
+				return nil, err
 			}
 		}
 		target = &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace}}
 		stampDerived(target, desired)
-		return direct.Create(ctx, target)
+		err := member.Create(ctx, target)
+		return target, err
 	}
 	live := target.DeepCopy()
 	stampDerived(target, desired)
 	if equality.Semantic.DeepEqual(live, target) {
-		return nil
+		return target, nil
 	}
-	return direct.Update(ctx, target)
+	err = member.Update(ctx, target)
+	return target, err
 }
 
 // authorizeMemberWrite gates a write on the member service read just before it;
@@ -695,11 +726,10 @@ func (r *Reconciler) authorizeMemberWrite(src, target *v1beta1.InferenceService,
 func stampDerived(target, desired *v1beta1.InferenceService) {
 	target.Labels = mergeOwnedKeys(target.Labels, desired.Labels)
 	target.Annotations = mergeOwnedKeys(target.Annotations, desired.Annotations)
-	target.Spec = desired.Spec
+	target.Spec = *desired.Spec.DeepCopy()
 }
 
-// isMemberWriteRace reports a write that lost to a concurrent member change and
-// is retried from a fresh read.
+// isMemberWriteRace identifies concurrent writes that need another observation.
 func isMemberWriteRace(err error) bool {
 	return apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err)
 }
@@ -822,7 +852,7 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, isvc *v1beta1.Inferenc
 	r.clearGrace(isvc.UID)
 	r.forgetCapacity(client.ObjectKeyFromObject(isvc))
 	// Likewise drop the AutoscalerPolicy preflight/skew bookkeeping for this
-	// source (staged condition, home observations, prune counters).
+	// source (staged condition, member observations, prune counters).
 	r.policyState().forget(isvc.UID)
 	// Likewise the RolloutPolicy preflight bookkeeping (staged condition,
 	// resolved plans, lifted run provenance).
@@ -887,7 +917,7 @@ func (r *Reconciler) derivedRemainingOnConnected(ctx context.Context, isvc *v1be
 // this source when a derived's status changes), so this is only the backstop
 // re-read for a missed event, not the former fixed status poll.
 func (r *Reconciler) writePlacement(ctx context.Context, isvc *v1beta1.InferenceService, res placementResult) (ctrl.Result, error) {
-	// For a policy-referencing source, attach the lifted per-home autoscaling
+	// For a policy-referencing source, attach the lifted per-member autoscaling
 	// and rollout state to the candidates and collect the policy conditions to
 	// write in the same status update. Both preflights stage the shared
 	// PlacementPolicyPreflight type; the merge keeps the operative verdict.
@@ -903,6 +933,7 @@ func (r *Reconciler) writePlacement(ctx context.Context, isvc *v1beta1.Inference
 		policyConds = append(policyConds, capacityFreshCondition("Unknown", "CapacityNotObserved", "Capacity inputs have not been verified in this reconcile"))
 	}
 	key := client.ObjectKeyFromObject(isvc)
+	var written, stored []v1beta1.CandidatePlacement
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		cur := &v1beta1.InferenceService{}
 		if err := r.APIReader.Get(ctx, key, cur); err != nil {
@@ -934,7 +965,19 @@ func (r *Reconciler) writePlacement(ctx context.Context, isvc *v1beta1.Inference
 		// for conflict-safe status persistence. A concurrent spec update must not
 		// be reported as observed until its own reconcile computes placement.
 		cur.Status.ObservedGeneration = isvc.Generation
-		return r.Status().Update(ctx, cur)
+		written = make([]v1beta1.CandidatePlacement, len(cur.Status.Placement.Candidates))
+		for i := range cur.Status.Placement.Candidates {
+			written[i] = *cur.Status.Placement.Candidates[i].DeepCopy()
+		}
+		if err := r.Status().Update(ctx, cur); err != nil {
+			return err
+		}
+		stored = nil
+		if cur.Status.Placement != nil {
+			stored = cur.Status.Placement.Candidates
+			r.noteFailingSinceStored(written, stored)
+		}
+		return nil
 	})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -947,13 +990,15 @@ func (r *Reconciler) writePlacement(ctx context.Context, isvc *v1beta1.Inference
 	}
 	// Publish only after the status write landed, so the gauges never advertise
 	// a placement the API server rejected.
+	res.candidates = stored
 	recordPlacement(isvc, res)
+	r.noteGraceEnds(ctx, written)
 	return ctrl.Result{RequeueAfter: r.safetyRequeue()}, nil
 }
 
 // setSourcePlacementReady reports whether the control-plane InferenceService is
 // usable. Placement admission and serving readiness are separate: a Placed
-// service is Ready only after an admitted home has both ready replicas and an
+// service is Ready only after an admitted member has both ready replicas and an
 // addressable endpoint.
 func setSourcePlacementReady(status *v1beta1.InferenceServiceStatus, res placementResult, previous *apis.Condition) {
 	manager := sourcePlacementConditionSet.Manage(status)
@@ -1154,24 +1199,31 @@ func (r *Reconciler) validateWiring() error {
 	return nil
 }
 
-// statusEventHandler enqueues the funnel-resolved local key with the configured
-// batch debounce. The event Object's namespace/name is the source ISVC key (the
-// funnel resolved it from the remote derived), so no remote/label work happens
-// here on the hot path.
+// statusEventHandler debounces member status and shared-runtime events. Runtime
+// events name a member; affected sources are resolved here from the hub cache.
 func (r *Reconciler) statusEventHandler(batchPeriod time.Duration) handler.EventHandler {
 	return handler.Funcs{
-		GenericFunc: func(_ context.Context, e event.GenericEvent, q workqueue.TypedRateLimitingInterface[ctrl.Request]) {
+		GenericFunc: func(ctx context.Context, e event.GenericEvent, q workqueue.TypedRateLimitingInterface[ctrl.Request]) {
 			if e.Object == nil {
 				return
 			}
-			req := ctrl.Request{NamespacedName: types.NamespacedName{
-				Namespace: e.Object.GetNamespace(),
-				Name:      e.Object.GetName(),
-			}}
-			if batchPeriod > 0 {
-				q.AddAfter(req, batchPeriod)
-			} else {
-				q.Add(req)
+			requests := []ctrl.Request{{NamespacedName: client.ObjectKeyFromObject(e.Object)}}
+			if _, sharedRuntime := e.Object.(*v1beta1.WorkloadCluster); sharedRuntime {
+				member := &v1beta1.WorkloadCluster{}
+				if err := r.Get(ctx, client.ObjectKeyFromObject(e.Object), member); err != nil {
+					if !apierrors.IsNotFound(err) {
+						r.Log.Error(err, "member runtime event: read cluster registration failed", "cluster", e.Object.GetName())
+					}
+					return
+				}
+				requests = r.isvcsForClusterChange(ctx, member)
+			}
+			for _, req := range requests {
+				if batchPeriod > 0 {
+					q.AddAfter(req, batchPeriod)
+				} else {
+					q.Add(req)
+				}
 			}
 		},
 	}
@@ -1301,11 +1353,12 @@ func (r *Reconciler) isvcsForClusterChange(ctx context.Context, obj client.Objec
 }
 
 // clusterAffectsISVC reports whether a change to the named cluster can affect
-// this ISVC's placement: either the ISVC's selector matches the cluster's
-// selector set (it is/becomes a candidate), or the ISVC's status already
-// references the cluster (it is/was placed there and must re-evaluate if the
-// cluster is leaving the candidate set). A malformed selector is treated as
-// "affects" so reconcile can surface the malformed-selector status.
+// this ISVC's placement: either any of the ISVC's component selectors matches
+// the cluster's selector set (it is/becomes a candidate, or its components
+// now match differently), or the ISVC's status already references the cluster
+// (it is/was placed there and must re-evaluate if the cluster is leaving the
+// candidate set). A malformed selector is treated as "affects" so reconcile can
+// surface the malformed-selector status.
 func clusterAffectsISVC(isvc *v1beta1.InferenceService, clusterName string, clusterSelectorSet labels.Set) bool {
 	if isvcStatusReferencesCluster(isvc, clusterName) {
 		return true

@@ -83,7 +83,7 @@ ome:
         clientQPS: 0             # steady-state QPS to each remote apiserver (0 => client-go default)
         clientBurst: 0           # burst over clientQPS (0 => client-go default)
         perCallTimeout: ""       # per-request timeout ("" => none)
-        cacheEnabled: false      # serve cross-cluster reads from an informer cache; prerequisite for the funnel
+        cacheEnabled: false      # cache member ISVCs and both runtime kinds, including objects without placement labels
         healthInterval: ""       # re-probe cadence for an otherwise-idle WorkloadCluster
         connectionGrace: ""      # transient-failure grace before a reachable cluster is disconnected
         eventsBatchPeriod: ""    # debounce for a rotated-kubeconfig Secret's key-update burst
@@ -105,6 +105,11 @@ ome:
         maxConcurrentReconciles: 0  # parallel placement reconciles (0 => single worker)
         fanoutTimeout: ""           # per-cluster placement read/apply/delete deadline
         winnerLostGrace: ""         # grace for transient absence, membership removal, or admission loss of the sticky winner
+        observationGrace: ""        # how long a home whose reads fail keeps its last ready count ("" => withdrawn at the first failed read)
+        memberReadRetry:            # re-reads of a member after a transient failure, within one reconcile
+          maxAttempts: 0            # reads per member, the first included (0 => one read, no retry)
+          initialBackoff: ""        # wait before the first re-read, doubling per re-read; required when maxAttempts > 1
+          maxBackoff: ""            # cap on that wait; required when maxAttempts > 1
         statusBatchPeriod: ""       # debounce for a burst of cross-cluster status events
         statusSafetyRequeue: ""     # steady-state re-read backstop when the funnel is on
         dispatcherMode: ""          # "AllAtOnce" (default) or "Incremental"
@@ -165,8 +170,9 @@ ome:
         #   allFailedPolicy: PreserveTraffic # set Drain to preserve all-zero weights
         capacity: {}
         # capacity polls each TrafficMap entry's client-facing endpoint for a
-        # reported servable count, applied only as a ceiling on planned capacity.
+        # replica ceiling or, in Reported mode, the home's capacity in replicas.
         # capacity:
+        #   mode: Ceiling # Reported uses the report uncapped; a home without one keeps its replica count
         #   path: /capacity
         #   method: GET
         #   format: Report
@@ -351,6 +357,11 @@ ome:
     # the controller log.
     kubeAPIQPS: 100
     kubeAPIBurst: 200
+    # Address the manager serves net/http/pprof on, for profiling a live
+    # controller. Empty disables it. Bind to loopback (for example
+    # 127.0.0.1:6060) so the profiles are reachable only through
+    # kubectl port-forward, never through a Service.
+    pprofBindAddress: ""
     # Timing of the leader election loop. Source of truth for these values (the
     # OME binary has NO built-in default; omitting any one of the three falls
     # back to controller-runtime's 15s/10s/2s). The three are rendered only as a
@@ -707,6 +718,29 @@ ome:
       # holds strictly until clean, NO deadline.
       teardown:
         deadline: 30m
+      # prefillDecodeRoll paces a rollout group that lists both the engine
+      # (prefill) and the decoder. keepRatio sizes every batch of such a roll
+      # so that the share of each side already moving to the new version
+      # stays within the group's maintainRatio tolerance of the other side's
+      # share (coordination.defaultRatioTolerancePercent when the group names
+      # none; a tolerance of 100 opts a group out), on the drain-first and
+      # the surge path alike. The gap it keeps is the tolerance: at the
+      # default of 5 above, 12 prefill beside 8 decode at 10 percent move
+      # 2:1, 3:2, 5:3, 6:4, 8:5, 9:6, 11:7, 12:8 instead of running 10:5; a
+      # group naming 20 moves 2:1, 4:2, 6:3, 8:4, 9:5, 11:6, 12:7, 12:8, up
+      # to 1.33 decode Instances off 3:2. A batch that cannot fit shrinks,
+      # and at least one Instance moves per batch, so a tight tolerance
+      # slows the roll and never stops it. firstSide names the side that
+      # moves first inside every batch,
+      # engine or decoder: the other side's moves of the batch are admitted
+      # once the named side's new Instances serve. Name the side that takes
+      # longer to come back, so one side is down at a time and both return
+      # close together; any other value is rejected. The OME binary has NO
+      # built-in rules: removing a field, or the block, turns that rule off
+      # and each side rolls on its own budget.
+      prefillDecodeRoll:
+        keepRatio: true
+        firstSide: decoder
     ingressGateway:
       disableIstioVirtualHost: false
       domain: svc.cluster.local

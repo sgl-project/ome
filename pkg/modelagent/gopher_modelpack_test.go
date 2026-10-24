@@ -306,7 +306,7 @@ func TestProcessTaskModelPackPublishesReady(t *testing.T) {
 	pulled := fakeLlmman(t, src)
 
 	g, task := newCancellationCoverageGopher(t, "modelpack://ghcr.io/org/model:tag")
-	g.modelConfigParser = modelparser.NewModelConfigParser(nil, g.logger)
+	g.modelConfigParser = modelparser.NewModelConfigParser(g.logger)
 	dest := *task.BaseModel.Spec.Storage.Path
 
 	require.NoError(t, g.processTask(task))

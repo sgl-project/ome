@@ -16,6 +16,13 @@ data:
     kind: KubeSchedulerConfiguration
     leaderElection:
       leaderElect: {{ .Values.scheduler.leaderElect }}
+      {{- with .Values.scheduler.leaderElection }}
+      {{- if and .leaseDuration .renewDeadline .retryPeriod }}
+      leaseDuration: {{ .leaseDuration }}
+      renewDeadline: {{ .renewDeadline }}
+      retryPeriod: {{ .retryPeriod }}
+      {{- end }}
+      {{- end }}
       resourceName: {{ .Values.scheduler.name }}
       resourceNamespace: {{ .Release.Namespace }}
     profiles:

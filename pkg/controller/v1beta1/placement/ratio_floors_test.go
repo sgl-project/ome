@@ -13,7 +13,7 @@ import (
 )
 
 // ratioSplitSource declares a static Split source whose engine and decoder
-// minimums set the per-home ratio.
+// minimums set the per-member ratio.
 func ratioSplitSource(engine int, decoder *int) *v1beta1.InferenceService {
 	source := srcISVCSplit("accelerator=gpu-a", 0)
 	source.Spec.Placement.Split = nil
@@ -31,7 +31,7 @@ func weightedAffinity(weights map[string]int32) []v1beta1.ClusterAffinityTerm {
 }
 
 // settledCandidates turns a proposal into the accepted plan's candidates with
-// every home at its desired share.
+// every member at its desired share.
 func settledCandidates(assignments map[string]v1beta1.CandidateAllocationStatus) []v1beta1.CandidatePlacement {
 	var out []v1beta1.CandidatePlacement
 	for _, name := range []string{"member-a", "member-b"} {
@@ -42,36 +42,36 @@ func settledCandidates(assignments map[string]v1beta1.CandidateAllocationStatus)
 	return out
 }
 
-func TestSplitHomeFloorsFollowTheRatio(t *testing.T) {
-	type home struct{ Engine, Decoder int32 }
+func TestSplitMemberFloorsFollowTheRatio(t *testing.T) {
+	type member struct{ Engine, Decoder int32 }
 	for _, tt := range []struct {
 		name    string
 		source  func() *v1beta1.InferenceService
-		want    map[string]home
+		want    map[string]member
 		wantErr string
 	}{
 		{name: "equal weights split both components", source: func() *v1beta1.InferenceService { return ratioSplitSource(60, ptr.To(40)) },
-			want: map[string]home{"member-a": {30, 20}, "member-b": {30, 20}}},
+			want: map[string]member{"member-a": {30, 20}, "member-b": {30, 20}}},
 		{name: "weighted shares keep the decoder sum exact", source: func() *v1beta1.InferenceService {
 			source := ratioSplitSource(60, ptr.To(40))
 			source.Spec.Placement.ClusterAffinity = weightedAffinity(map[string]int32{"member-a": 2, "member-b": 1})
 			return source
-		}, want: map[string]home{"member-a": {40, 27}, "member-b": {20, 13}}},
+		}, want: map[string]member{"member-a": {40, 27}, "member-b": {20, 13}}},
 		{name: "zero decoder minimum places no decoder", source: func() *v1beta1.InferenceService { return ratioSplitSource(60, ptr.To(0)) },
-			want: map[string]home{"member-a": {30, 0}, "member-b": {30, 0}}},
+			want: map[string]member{"member-a": {30, 0}, "member-b": {30, 0}}},
 		{name: "undeclared decoder minimum pairs one decoder per engine", source: func() *v1beta1.InferenceService { return ratioSplitSource(60, nil) },
-			want: map[string]home{"member-a": {30, 30}, "member-b": {30, 30}}},
+			want: map[string]member{"member-a": {30, 30}, "member-b": {30, 30}}},
 		{name: "split replicas size the fleet in the declared ratio", source: func() *v1beta1.InferenceService {
 			source := ratioSplitSource(60, ptr.To(40))
 			source.Spec.Placement.Split = &v1beta1.SplitSpec{Replicas: ptr.To[int32](30)}
 			return source
-		}, want: map[string]home{"member-a": {15, 10}, "member-b": {15, 10}}},
+		}, want: map[string]member{"member-a": {15, 10}, "member-b": {15, 10}}},
 		{name: "split replicas without an engine minimum keep the declared decoder minimum", source: func() *v1beta1.InferenceService {
 			source := ratioSplitSource(60, ptr.To(40))
 			source.Spec.Engine.MinReplicas = nil
 			source.Spec.Placement.Split = &v1beta1.SplitSpec{Replicas: ptr.To[int32](30)}
 			return source
-		}, want: map[string]home{"member-a": {15, 20}, "member-b": {15, 20}}},
+		}, want: map[string]member{"member-a": {15, 20}, "member-b": {15, 20}}},
 		{name: "decoder minimum below the positive share count holds the plan", source: func() *v1beta1.InferenceService { return ratioSplitSource(60, ptr.To(1)) },
 			wantErr: "decoder minimum 1 cannot give each of the 2 homes with a positive engine share at least one replica"},
 	} {
@@ -89,13 +89,13 @@ func TestSplitHomeFloorsFollowTheRatio(t *testing.T) {
 				t.Fatal(err)
 			}
 			candidates := settledCandidates(proposal.Assignments)
-			got := map[string]home{}
+			got := map[string]member{}
 			for _, candidate := range candidates {
-				floors, err := splitHomeFloors(source, candidates, candidate)
+				floors, err := splitMemberFloors(source, candidates, candidate)
 				if err != nil {
 					t.Fatalf("%s: %v", candidate.Cluster, err)
 				}
-				var h home
+				var h member
 				for _, floor := range floors {
 					switch floor.Component {
 					case v1beta1.EngineComponent:
@@ -115,14 +115,14 @@ func TestSplitHomeFloorsFollowTheRatio(t *testing.T) {
 	}
 }
 
-func TestSplitHomeFloorsFollowCurrentShares(t *testing.T) {
+func TestSplitMemberFloorsFollowCurrentShares(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		source  func() *v1beta1.InferenceService
 		current map[string]int32
 		want    map[string]int32
 	}{
-		// A growing home and an outgoing home: the decoder follows each home's
+		// A growing member and an outgoing member: the decoder follows each member's
 		// current engine target, not the plan it is moving toward.
 		{name: "move within the fleet floor", source: func() *v1beta1.InferenceService { return ratioSplitSource(60, ptr.To(40)) },
 			current: map[string]int32{"member-a": 45, "member-b": 15}, want: map[string]int32{"member-a": 30, "member-b": 10}},
@@ -143,7 +143,7 @@ func TestSplitHomeFloorsFollowCurrentShares(t *testing.T) {
 				}
 			}
 			for _, candidate := range candidates {
-				floors, err := splitHomeFloors(source, candidates, candidate)
+				floors, err := splitMemberFloors(source, candidates, candidate)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -246,6 +246,16 @@ func TestPrimaryUnitsFollowRatioFloors(t *testing.T) {
 			engineAdmitted: 7, engineReady: 5, wantAdmitted: 7, wantRdy: 5},
 		{name: "unknown floors are the minimum count", comps: pd, floors: nil,
 			engineAdmitted: 3, engineReady: 3, decoderAdmitted: 2, decoderReady: 1, wantAdmitted: 2, wantRdy: 1},
+		{name: "a decoder below its share leaves one ready unit", comps: pd, floors: map[v1beta1.ComponentType]int32{v1beta1.EngineComponent: 1, v1beta1.DecoderComponent: 3},
+			engineAdmitted: 1, engineReady: 1, decoderAdmitted: 3, decoderReady: 2, wantAdmitted: 1, wantRdy: 1},
+		{name: "a component with no ready instance leaves no ready unit", comps: pd, floors: map[v1beta1.ComponentType]int32{v1beta1.EngineComponent: 1, v1beta1.DecoderComponent: 3},
+			engineAdmitted: 1, engineReady: 1, decoderAdmitted: 3, decoderReady: 0, wantAdmitted: 1, wantRdy: 0},
+		{name: "a member short of a full admitted unit counts nothing ready", comps: pd, floors: map[v1beta1.ComponentType]int32{v1beta1.EngineComponent: 1, v1beta1.DecoderComponent: 3},
+			engineAdmitted: 1, engineReady: 1, decoderAdmitted: 2, decoderReady: 2, wantAdmitted: 0, wantRdy: 0},
+		{name: "readiness above one unit still rounds down", comps: pd, floors: map[v1beta1.ComponentType]int32{v1beta1.EngineComponent: 3, v1beta1.DecoderComponent: 9},
+			engineAdmitted: 3, engineReady: 3, decoderAdmitted: 9, decoderReady: 8, wantAdmitted: 3, wantRdy: 2},
+		{name: "a member without an engine instance is not lifted", comps: pd, floors: map[v1beta1.ComponentType]int32{v1beta1.EngineComponent: 0, v1beta1.DecoderComponent: 3},
+			engineAdmitted: 0, engineReady: 0, decoderAdmitted: 3, decoderReady: 3, wantAdmitted: 0, wantRdy: 0},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			statuses := map[v1beta1.ComponentType]*v1beta1.InferenceReplicaStatus{v1beta1.EngineComponent: status(v1beta1.EngineComponent, tt.engineAdmitted, tt.engineReady)}

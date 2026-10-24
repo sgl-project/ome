@@ -10,6 +10,7 @@ import (
 	netv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -43,7 +44,7 @@ func TestKubernetesIngressStrategy_Reconcile(t *testing.T) {
 			ingressConfig: &controllerconfig.IngressConfig{
 				EnableGatewayAPI:       false,
 				IngressDomain:          "example.com",
-				IngressClassName:       stringPtr("nginx"),
+				IngressClassName:       ptr.To("nginx"),
 				DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 				UrlScheme:              "https",
 				DisableIngressCreation: false,
@@ -58,7 +59,7 @@ func TestKubernetesIngressStrategy_Reconcile(t *testing.T) {
 			ingressConfig: &controllerconfig.IngressConfig{
 				EnableGatewayAPI:       false,
 				IngressDomain:          "example.com",
-				IngressClassName:       stringPtr("nginx"),
+				IngressClassName:       ptr.To("nginx"),
 				DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 				UrlScheme:              "https",
 				DisableIngressCreation: false,
@@ -73,7 +74,7 @@ func TestKubernetesIngressStrategy_Reconcile(t *testing.T) {
 			ingressConfig: &controllerconfig.IngressConfig{
 				EnableGatewayAPI:       false,
 				IngressDomain:          "example.com",
-				IngressClassName:       stringPtr("nginx"),
+				IngressClassName:       ptr.To("nginx"),
 				DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 				UrlScheme:              "https",
 				DisableIngressCreation: false,
@@ -88,7 +89,7 @@ func TestKubernetesIngressStrategy_Reconcile(t *testing.T) {
 			ingressConfig: &controllerconfig.IngressConfig{
 				EnableGatewayAPI:       false,
 				IngressDomain:          "example.com",
-				IngressClassName:       stringPtr("nginx"),
+				IngressClassName:       ptr.To("nginx"),
 				DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 				UrlScheme:              "https",
 				DisableIngressCreation: true,
@@ -103,7 +104,7 @@ func TestKubernetesIngressStrategy_Reconcile(t *testing.T) {
 			ingressConfig: &controllerconfig.IngressConfig{
 				EnableGatewayAPI:       false,
 				IngressDomain:          "example.com",
-				IngressClassName:       stringPtr("nginx"),
+				IngressClassName:       ptr.To("nginx"),
 				DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 				UrlScheme:              "https",
 				DisableIngressCreation: false,
@@ -118,7 +119,7 @@ func TestKubernetesIngressStrategy_Reconcile(t *testing.T) {
 			ingressConfig: &controllerconfig.IngressConfig{
 				EnableGatewayAPI:       false,
 				IngressDomain:          constants.ClusterLocalDomain,
-				IngressClassName:       stringPtr("nginx"),
+				IngressClassName:       ptr.To("nginx"),
 				DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 				UrlScheme:              "https",
 				DisableIngressCreation: false,
@@ -133,7 +134,7 @@ func TestKubernetesIngressStrategy_Reconcile(t *testing.T) {
 			ingressConfig: &controllerconfig.IngressConfig{
 				EnableGatewayAPI:       false,
 				IngressDomain:          "example.com",
-				IngressClassName:       stringPtr("nginx"),
+				IngressClassName:       ptr.To("nginx"),
 				DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 				UrlScheme:              "https",
 				DisableIngressCreation: false,
@@ -342,7 +343,7 @@ func createKubernetesIngressStrategy(t *testing.T) interfaces.IngressStrategy {
 		IngressConfig: &controllerconfig.IngressConfig{
 			EnableGatewayAPI: false,
 			IngressDomain:    "example.com",
-			IngressClassName: stringPtr("nginx"),
+			IngressClassName: ptr.To("nginx"),
 			DomainTemplate:   "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 			UrlScheme:        "https",
 		},
@@ -425,7 +426,7 @@ func TestKubernetesIngressStrategy_URLWithPort(t *testing.T) {
 			ingressConfig: &controllerconfig.IngressConfig{
 				EnableGatewayAPI:       false,
 				IngressDomain:          "example.com",
-				IngressClassName:       stringPtr("nginx"),
+				IngressClassName:       ptr.To("nginx"),
 				DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 				UrlScheme:              "https",
 				DisableIngressCreation: true, // Skip ingress creation to focus on URL
@@ -454,7 +455,7 @@ func TestKubernetesIngressStrategy_URLWithPort(t *testing.T) {
 			ingressConfig: &controllerconfig.IngressConfig{
 				EnableGatewayAPI:       false,
 				IngressDomain:          "example.com",
-				IngressClassName:       stringPtr("nginx"),
+				IngressClassName:       ptr.To("nginx"),
 				DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 				UrlScheme:              "https",
 				DisableIngressCreation: true,
@@ -481,7 +482,7 @@ func TestKubernetesIngressStrategy_URLWithPort(t *testing.T) {
 			ingressConfig: &controllerconfig.IngressConfig{
 				EnableGatewayAPI:       false,
 				IngressDomain:          "example.com",
-				IngressClassName:       stringPtr("nginx"),
+				IngressClassName:       ptr.To("nginx"),
 				DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
 				UrlScheme:              "https",
 				DisableIngressCreation: true,
@@ -528,9 +529,4 @@ func TestKubernetesIngressStrategy_URLWithPort(t *testing.T) {
 			assert.Equal(t, tt.expectedAddressHost, tt.isvc.Status.Address.URL.Host)
 		})
 	}
-}
-
-// stringPtr returns a pointer to the given string.
-func stringPtr(s string) *string {
-	return &s
 }

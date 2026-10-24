@@ -10,8 +10,8 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/specdefaults"
 	"sigs.k8s.io/ome/pkg/placement/protocol"
+	"sigs.k8s.io/ome/pkg/specdefaults"
 )
 
 // ResolveHome resolves the complete per-home floor using member precedence.

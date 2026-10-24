@@ -95,11 +95,11 @@ func TestBuildSampleRequest_PlanHash(t *testing.T) {
 	}
 	build := func(t *testing.T, in ReconcileInputs, a *v1beta1.RolloutAnalysis) SampleRequest {
 		t.Helper()
-		req, err := buildSampleRequest(context.Background(), in, a, 2)
+		src, err := resolveSampleSource(context.Background(), in)
 		if err != nil {
-			t.Fatalf("buildSampleRequest: %v", err)
+			t.Fatalf("resolveSampleSource: %v", err)
 		}
-		return req
+		return buildSampleRequest(in, src, primaryMember(in), a, 2)
 	}
 
 	base := build(t, newInputs(tokenValue), newAnalysis())
@@ -198,10 +198,11 @@ func TestBuildSampleRequest_ReadsSecretViaReader(t *testing.T) {
 			},
 		},
 	}
-	req, err := buildSampleRequest(context.Background(), in, &v1beta1.RolloutAnalysis{}, 0)
+	src, err := resolveSampleSource(context.Background(), in)
 	if err != nil {
-		t.Fatalf("buildSampleRequest: %v", err)
+		t.Fatalf("resolveSampleSource: %v", err)
 	}
+	req := buildSampleRequest(in, src, primaryMember(in), &v1beta1.RolloutAnalysis{}, 0)
 	if req.BearerToken != "s3cr3t" {
 		t.Fatalf("token should resolve via Reader, got %q", req.BearerToken)
 	}
@@ -219,10 +220,11 @@ func TestBuildSampleRequest_ServicesCarryTheReplicaPrefix(t *testing.T) {
 		CanaryRevisionHash: "new1",
 		StableRevisionHash: "old1",
 	}
-	req, err := buildSampleRequest(context.Background(), in, &v1beta1.RolloutAnalysis{}, 0)
+	src, err := resolveSampleSource(context.Background(), in)
 	if err != nil {
-		t.Fatalf("buildSampleRequest: %v", err)
+		t.Fatalf("resolveSampleSource: %v", err)
 	}
+	req := buildSampleRequest(in, src, primaryMember(in), &v1beta1.RolloutAnalysis{}, 0)
 	if req.TemplateContext.CanaryService != "pool-a-engine-rev-new1" || req.TemplateContext.StableService != "pool-a-engine-rev-old1" {
 		t.Fatalf("services must carry the replica prefix: canary=%q stable=%q", req.TemplateContext.CanaryService, req.TemplateContext.StableService)
 	}

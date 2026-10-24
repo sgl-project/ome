@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
@@ -82,7 +81,7 @@ func TestPlanIdentity(t *testing.T) {
 				t.Fatalf("input aliased output:\n%s", diff)
 			}
 			if tt.unchanged && tt.name == "heartbeat" {
-				store := storeFixture(t, source, interceptor.Funcs{})
+				store := storeFixture(t, source)
 				// The committed evidence remains the accepted snapshot, even as reports refresh.
 				stored := mustPersist(t, store, source, proposal)
 				proposal.Assignments["member-a"].Capacity.Pools[0].ReportResourceVersion = "3"

@@ -1197,3 +1197,102 @@ func setDecoderReady(isvc *v1beta1.InferenceService) {
 		Status: corev1.ConditionTrue,
 	})
 }
+
+// ----- router capacity endpoint -----
+
+func routerServiceWithMetricsPort(name, namespace string, serving, metrics int32) *corev1.Service {
+	svc := newServicePort(name, namespace, serving)
+	svc.Spec.Ports = append(svc.Spec.Ports, corev1.ServicePort{
+		Name:       "metrics",
+		Port:       metrics,
+		TargetPort: intstr.FromInt32(metrics),
+		Protocol:   corev1.ProtocolTCP,
+	})
+	return svc
+}
+
+func capacityEndpointISVC() *v1beta1.InferenceService {
+	isvc := createTestInferenceServiceWithRouterAndDecoderHTTPRoute("test-isvc", "default")
+	isvc.Spec.Router.CapacityEndpoint = &v1beta1.RouterCapacityEndpoint{Path: "/capacity", Port: 9090}
+	setEngineReady(isvc)
+	setRouterReady(isvc)
+	setDecoderReady(isvc)
+	return isvc
+}
+
+func TestHTTPRouteBuilder_CapacityEndpointRoutesExactPathToRouterPort(t *testing.T) {
+	c := fakeClientWithServices(t, routerServiceWithMetricsPort("test-isvc-router", "default", 30080, 9090))
+	for _, tc := range []struct {
+		name        string
+		perISVC     bool
+		wantMatch   string
+		wantRewrite bool
+	}{
+		{name: "per-ISVC subdomain", perISVC: true, wantMatch: "/capacity"},
+		{name: "shared host strips the service prefix", wantMatch: "/default/test-isvc/capacity", wantRewrite: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			builder := createHTTPRouteBuilderWithClient(c)
+			builder.ingressConfig.PerISVCSubdomain = tc.perISVC
+			result, err := builder.BuildHTTPRoute(context.Background(), capacityEndpointISVC(), TopLevelComponent)
+			require.NoError(t, err)
+			route := result.(*gatewayapiv1.HTTPRoute)
+			require.Len(t, route.Spec.Rules, 2, "the serving rule plus the capacity rule")
+
+			serving := route.Spec.Rules[0]
+			assert.Equal(t, gatewayapiv1.PathMatchPathPrefix, *serving.Matches[0].Path.Type)
+			assert.Equal(t, int32(30080), int32(*serving.BackendRefs[0].Port), "every other path still reaches the serving port")
+
+			capacity := route.Spec.Rules[1]
+			require.Len(t, capacity.Matches, 1)
+			assert.Equal(t, gatewayapiv1.PathMatchExact, *capacity.Matches[0].Path.Type)
+			assert.Equal(t, tc.wantMatch, *capacity.Matches[0].Path.Value)
+			require.Len(t, capacity.BackendRefs, 1)
+			assert.Equal(t, gatewayapiv1.ObjectName("test-isvc-router"), capacity.BackendRefs[0].Name)
+			assert.Equal(t, int32(9090), int32(*capacity.BackendRefs[0].Port))
+			assert.Equal(t, tc.wantRewrite, hasURLRewriteFilter(capacity))
+			if tc.wantRewrite {
+				for _, f := range capacity.Filters {
+					if f.Type == gatewayapiv1.HTTPRouteFilterURLRewrite {
+						assert.Equal(t, gatewayapiv1.FullPathHTTPPathModifier, f.URLRewrite.Path.Type)
+						assert.Equal(t, "/capacity", *f.URLRewrite.Path.ReplaceFullPath, "the router sees the path it serves")
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestHTTPRouteBuilder_CapacityEndpointNeedsTheRouterServicePort(t *testing.T) {
+	// A backend on a port the Service lacks would leave the whole route
+	// unresolved, so the rule waits until the port exists.
+	for name, c := range map[string]client.Client{
+		"port missing":    fakeClientWithServices(t, newServicePort("test-isvc-router", "default", 30080)),
+		"service missing": fakeClientWithServices(t),
+	} {
+		t.Run(name, func(t *testing.T) {
+			builder := createHTTPRouteBuilderWithClient(c)
+			builder.ingressConfig.PerISVCSubdomain = true
+			result, err := builder.BuildHTTPRoute(context.Background(), capacityEndpointISVC(), TopLevelComponent)
+			require.NoError(t, err)
+			route := result.(*gatewayapiv1.HTTPRoute)
+			require.Len(t, route.Spec.Rules, 1)
+			assert.Equal(t, gatewayapiv1.PathMatchPathPrefix, *route.Spec.Rules[0].Matches[0].Path.Type)
+		})
+	}
+}
+
+func TestHTTPRouteBuilder_CapacityEndpointOnlyOnTheTopLevelRoute(t *testing.T) {
+	c := fakeClientWithServices(t,
+		routerServiceWithMetricsPort("test-isvc-router", "default", 30080, 9090),
+		newServicePort("test-isvc-engine", "default", 30000),
+		newServicePort("test-isvc-decoder", "default", 30000),
+	)
+	builder := createHTTPRouteBuilderWithClient(c)
+	builder.ingressConfig.PerISVCSubdomain = true
+	for _, component := range []string{EngineComponent, RouterComponent, DecoderComponent} {
+		result, err := builder.BuildHTTPRoute(context.Background(), capacityEndpointISVC(), component)
+		require.NoError(t, err)
+		require.Len(t, result.(*gatewayapiv1.HTTPRoute).Spec.Rules, 1, component)
+	}
+}

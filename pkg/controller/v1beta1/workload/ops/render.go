@@ -183,7 +183,7 @@ func RenderWithRevision(
 
 	// Adapter-supplied hook: peer-env injection. The IR reconciler
 	// (the sole workload.Reconcile caller) wires it via
-	// core.ISVCRenderHook; nil skips injection.
+	// inferencereplica.ISVCRenderHook; nil skips injection.
 	if hook != nil {
 		hook(pod, runner.Name, ordinal, revisionHash)
 	}

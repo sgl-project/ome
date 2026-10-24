@@ -32,7 +32,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/watch"
 	toolscache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -81,12 +80,13 @@ type FunnelConfig struct {
 	// NewObject creates the local event stub. In cached mode it also identifies
 	// the watched kind when registering the informer handler.
 	NewObject func() client.Object
-	// Resolve maps a remote object to the local key to re-reconcile. Required.
+	// Resolve maps a remote object to a local key unless ResolveCluster is set.
 	Resolve LocalKeyResolver
-	// WatchSelector scopes the establish-watch (and is expected to match the
-	// cache's DefaultSelector) to this control plane's derived objects. Nil
-	// watches unfiltered — but the caller should pass the origin selector so the
-	// remote apiserver only streams objects this control plane owns.
+	// ResolveCluster emits a cluster-scoped event for shared dependencies whose
+	// consumers must be resolved by the receiving controller, outside the informer.
+	ResolveCluster func(cluster string, remote client.Object) (client.Object, bool)
+	// WatchSelector scopes metadata LIST/WATCH requests. Cached informer
+	// events are filtered by the resolver. Nil watches all objects.
 	WatchSelector labels.Selector
 	// ResyncInterval overrides how often the watch set is reconciled against the
 	// connected clusters. Zero falls back to DefaultFunnelResyncInterval.
@@ -97,9 +97,9 @@ type FunnelConfig struct {
 }
 
 // StatusFunnel turns scoped member events into local reconcile triggers.
-// Cached kinds use informer handlers; metadata-only kinds use a direct
-// LIST/WATCH and retain no resource payloads. Both paths reconnect with the
-// manager's configured backoff and send bounded, nonblocking wakeups.
+// Cached kinds share informer watches; metadata-only kinds use a direct
+// LIST/WATCH and retain no resource payloads. Both send bounded, nonblocking
+// wakeups and follow member connection replacement.
 type StatusFunnel struct {
 	mgr *Manager
 	cfg FunnelConfig
@@ -150,7 +150,7 @@ func (f *StatusFunnel) Start(ctx context.Context) error {
 	// The funnel cannot operate without a resolver or kind constructors; rather
 	// than push a nil-laden event, no-op gracefully (degrade to the consumer's
 	// safety requeue) so a partially-wired manager still starts.
-	if f.cfg.Resolve == nil || f.cfg.NewList == nil || f.cfg.NewObject == nil {
+	if (f.cfg.Resolve == nil && f.cfg.ResolveCluster == nil) || f.cfg.NewList == nil || f.cfg.NewObject == nil {
 		ctrl.LoggerFrom(ctx).Info("status funnel not fully configured; cross-cluster status will rely on the safety requeue")
 		<-ctx.Done()
 		return nil
@@ -209,74 +209,30 @@ func (f *StatusFunnel) stopAll() {
 	}
 }
 
-// watchCluster maintains the watch for one cluster until ctx is cancelled: it
-// establishes the origin-scoped remote watch (bounded by the establish timeout,
-// retry-backoff-spaced on failure), registers the cache event handler once, then
-// blocks on the established watch as a liveness signal, re-establishing when it
-// ends. The cache handler registration is idempotent across re-establishment.
+// watchCluster registers one handler for each member connection. The shared
+// informer owns its network watch; connection polling only detects replacement.
 func (f *StatusFunnel) watchCluster(ctx context.Context, cluster string) {
 	if f.cfg.MetadataOnly {
 		f.watchMetadataCluster(ctx, cluster)
 		return
 	}
-	log := ctrl.LoggerFrom(ctx).WithValues("cluster", cluster)
-	backoff := f.mgr.ReconnectBackoff()
-
-	var failed uint
+	ticker := time.NewTicker(f.resyncInterval())
+	defer ticker.Stop()
 	var handlerGeneration uint64
-	for {
-		if ctx.Err() != nil {
-			return
-		}
-		// Space retries after a failure with the configured retry backoff so a
-		// persistently-unwatchable cluster is not hammered.
-		if d := backoff.retryAfter(failed); d > 0 {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(d):
-			}
-		}
-
-		w, generation, connected, err := f.mgr.EstablishWatch(ctx, cluster, f.cfg.NewList(), int(failed)+1, f.watchListOpts()...)
-		if !connected {
-			// A disconnect can race with an immediate reconnect. Keep this watch
-			// slot alive and retry until the resync loop cancels it, so a reconnect
-			// before the next resync cannot leave a stale f.watched entry.
-			failed++
-			continue
-		}
-		if err != nil {
-			failed++
-			log.V(2).Info("status funnel: establish watch failed; backing off", "failedAttempts", failed, "err", err.Error())
-			continue
-		}
-		failed = 0
-
-		// Register the cache event handler once the watch is confirmed
-		// establishable. This is the steady-state event source; the established
-		// watch below is held only as a liveness signal.
-		if handlerGeneration != generation {
+	for ctx.Err() == nil {
+		_, generation, connected := f.mgr.clientForGeneration(cluster)
+		if connected && handlerGeneration != generation {
 			if err := f.registerCacheHandler(ctx, cluster, generation); err != nil {
-				// The handler could not be registered (kind not cached / cache not
-				// ready). Abandon the established watch and retry with backoff.
-				w.Stop()
-				failed++
-				log.V(2).Info("status funnel: register cache handler failed; backing off", "failedAttempts", failed, "err", err.Error())
-				continue
+				ctrl.LoggerFrom(ctx).V(2).Info("member cache handler registration failed; retrying", "cluster", cluster, "error", err.Error())
+			} else {
+				handlerGeneration = generation
 			}
-			handlerGeneration = generation
-			log.V(2).Info("status funnel: cache event handler registered", "generation", generation)
 		}
-
-		// Block on the established watch as a liveness probe. Its events are not
-		// pushed (the cache handler already covers them); when the stream ends and
-		// the context is still live, loop back to re-establish.
-		f.drainUntilEnd(ctx, w)
-		if ctx.Err() != nil {
+		select {
+		case <-ctx.Done():
 			return
+		case <-ticker.C:
 		}
-		log.V(2).Info("status funnel: watch ended; re-establishing")
 	}
 }
 
@@ -287,25 +243,6 @@ func (f *StatusFunnel) watchListOpts() []client.ListOption {
 		return nil
 	}
 	return []client.ListOption{client.MatchingLabelsSelector{Selector: f.cfg.WatchSelector}}
-}
-
-// drainUntilEnd reads (and discards) the liveness watch's result channel until
-// it closes or the context is cancelled. Discarding is intentional: the cache
-// event handler is the event source, and draining here prevents the watch's
-// buffer from filling while it serves purely as an end-of-stream signal.
-func (f *StatusFunnel) drainUntilEnd(ctx context.Context, w watch.Interface) {
-	defer w.Stop()
-	results := w.ResultChan()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case _, ok := <-results:
-			if !ok {
-				return
-			}
-		}
-	}
 }
 
 // registerCacheHandler installs the resolve-and-push event handler on the
@@ -321,12 +258,32 @@ func (f *StatusFunnel) registerCacheHandler(ctx context.Context, cluster string,
 		return fmt.Errorf("cluster %q client changed from generation %d to %d", cluster, generation, currentGeneration)
 	}
 	h := toolscache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj any) { f.push(ctx, obj) },
-		UpdateFunc: func(_, newObj any) { f.push(ctx, newObj) },
-		DeleteFunc: func(obj any) { f.push(ctx, deletedObject(obj)) },
+		AddFunc:    func(obj any) { f.pushFromCluster(ctx, cluster, obj) },
+		UpdateFunc: func(_, newObj any) { f.pushFromCluster(ctx, cluster, newObj) },
+		DeleteFunc: func(obj any) { f.pushFromCluster(ctx, cluster, deletedObject(obj)) },
 	}
 	_, err := cl.AddCacheEventHandler(ctx, f.cfg.NewObject(), h)
 	return err
+}
+
+func (f *StatusFunnel) pushFromCluster(ctx context.Context, cluster string, obj any) {
+	if f.cfg.ResolveCluster == nil {
+		f.push(ctx, obj)
+		return
+	}
+	remote, ok := obj.(client.Object)
+	if !ok || remote == nil {
+		return
+	}
+	object, ok := f.cfg.ResolveCluster(cluster, remote)
+	if !ok || object == nil {
+		return
+	}
+	select {
+	case f.events <- event.GenericEvent{Object: object}:
+	default:
+		ctrl.LoggerFrom(ctx).V(4).Info("member dependency event channel full; safety requeue will recover", "cluster", cluster)
+	}
 }
 
 // push resolves a remote object to its local key and, if it is one of this

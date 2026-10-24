@@ -181,22 +181,22 @@ func podGroupLabels(isvcName string, component workload.ComponentType, instanceI
 // (defeating the gang). Callers wire this before the per-Instance
 // Create / Restart op.
 func EnsurePodGroup(ctx context.Context, c client.Client, owner client.Object, ownerGVK schema.GroupVersionKind, ownerName string, plan workload.ComponentPlan, inst workload.InstancePlan) error {
-	_, err := EnsurePodGroupForPods(ctx, c, owner, ownerGVK, ownerName, plan, inst, nil)
+	_, err := ensurePodGroupForPods(ctx, c, owner, ownerGVK, ownerName, plan, inst, nil)
 	return err
 }
 
-// EnsurePodGroupForPods is EnsurePodGroup with the currently-live pods that
+// ensurePodGroupForPods is EnsurePodGroup with the currently-live pods that
 // reference this PodGroup. Pod affinity is immutable, so while those pods are
 // present the PodGroup topology annotation must describe their rendered
 // topology rather than a newer Component spec. This prevents a topology-only
 // edit or rollback from changing the scheduler contract underneath an
 // in-flight gang. Once the group is empty, desired topology may advance before
 // replacement pods are created.
-func EnsurePodGroupForPods(ctx context.Context, c client.Client, owner client.Object, ownerGVK schema.GroupVersionKind, ownerName string, plan workload.ComponentPlan, inst workload.InstancePlan, pods []*corev1.Pod) (string, error) {
+func ensurePodGroupForPods(ctx context.Context, c client.Client, owner client.Object, ownerGVK schema.GroupVersionKind, ownerName string, plan workload.ComponentPlan, inst workload.InstancePlan, pods []*corev1.Pod) (string, error) {
 	return EnsurePodGroupForPodsWithReader(ctx, c, c, owner, ownerGVK, ownerName, plan, inst, pods)
 }
 
-// EnsurePodGroupForPodsWithReader is EnsurePodGroupForPods with a separate
+// EnsurePodGroupForPodsWithReader is ensurePodGroupForPods with a separate
 // reader for topology-safety observations. Controllers should pass their live
 // APIReader here: cached pod or PodGroup state must not advance the topology
 // contract while immutable pods from the previous revision still exist.
@@ -506,7 +506,7 @@ func topologyKeyAnnotationMatches(existing, desired *schedulingv1alpha1.PodGroup
 // Complete means an authoritative operation proved the object absent.
 func FinalizeObservedPodGroup(ctx context.Context, c client.Client, ownerUID types.UID, pg *schedulingv1alpha1.PodGroup) (bool, error) {
 	if c == nil {
-		return false, fmt.Errorf("DeletePodGroup: nil client")
+		return false, fmt.Errorf("FinalizeObservedPodGroup: nil client")
 	}
 	if pg == nil {
 		return true, nil
@@ -526,7 +526,7 @@ func FinalizeObservedPodGroup(ctx context.Context, c client.Client, ownerUID typ
 		if apierrors.IsNotFound(err) || apimeta.IsNoMatchError(err) || runtime.IsNotRegisteredError(err) {
 			return true, nil
 		}
-		return false, fmt.Errorf("DeletePodGroup: delete %s/%s: %w", pg.Namespace, pg.Name, err)
+		return false, fmt.Errorf("FinalizeObservedPodGroup: delete %s/%s: %w", pg.Namespace, pg.Name, err)
 	}
 	return false, nil
 }
@@ -539,19 +539,19 @@ func DeleteObservedPodGroup(ctx context.Context, c client.Client, ownerUID types
 	return err
 }
 
-// DeletePodGroup removes the PodGroup for an Instance that has been drained.
+// deletePodGroup removes the PodGroup for an Instance that has been drained.
 // Safe to call when the PodGroup doesn't exist. Inventory-backed callers
 // should use DeleteObservedPodGroup to avoid this compatibility helper's GET.
 //
 // owner is abstract because the same primitive serves every OMENative owner
 // shape. The controller UID is the authorization check; ownerName only derives
 // the deterministic resource name.
-func DeletePodGroup(ctx context.Context, c client.Client, owner client.Object, ownerName string, component workload.ComponentType, instanceIdx int32) error {
+func deletePodGroup(ctx context.Context, c client.Client, owner client.Object, ownerName string, component workload.ComponentType, instanceIdx int32) error {
 	if c == nil {
-		return fmt.Errorf("DeletePodGroup: nil client")
+		return fmt.Errorf("deletePodGroup: nil client")
 	}
 	if owner == nil {
-		return fmt.Errorf("DeletePodGroup: nil owner")
+		return fmt.Errorf("deletePodGroup: nil owner")
 	}
 	key := client.ObjectKey{
 		Name:      query.PodGroupName(ownerName, component, instanceIdx),
@@ -562,7 +562,7 @@ func DeletePodGroup(ctx context.Context, c client.Client, owner client.Object, o
 		if apierrors.IsNotFound(err) || apimeta.IsNoMatchError(err) || runtime.IsNotRegisteredError(err) {
 			return nil
 		}
-		return fmt.Errorf("DeletePodGroup: get %s: %w", key, err)
+		return fmt.Errorf("deletePodGroup: get %s: %w", key, err)
 	}
 	return DeleteObservedPodGroup(ctx, c, owner.GetUID(), pg)
 }
@@ -571,13 +571,13 @@ func DeletePodGroup(ctx context.Context, c client.Client, owner client.Object, o
 // only after an authoritative GET or NotFound response proves it absent.
 func FinalizePodGroup(ctx context.Context, c client.Client, reader client.Reader, owner client.Object, ownerName string, component workload.ComponentType, instanceIdx int32) (bool, error) {
 	if c == nil {
-		return false, fmt.Errorf("DeletePodGroup: nil client")
+		return false, fmt.Errorf("FinalizePodGroup: nil client")
 	}
 	if reader == nil {
 		reader = c
 	}
 	if owner == nil {
-		return false, fmt.Errorf("DeletePodGroup: nil owner")
+		return false, fmt.Errorf("FinalizePodGroup: nil owner")
 	}
 	key := client.ObjectKey{
 		Name:      query.PodGroupName(ownerName, component, instanceIdx),
@@ -588,7 +588,7 @@ func FinalizePodGroup(ctx context.Context, c client.Client, reader client.Reader
 		if apierrors.IsNotFound(err) || apimeta.IsNoMatchError(err) || runtime.IsNotRegisteredError(err) {
 			return true, nil
 		}
-		return false, fmt.Errorf("DeletePodGroup: get %s: %w", key, err)
+		return false, fmt.Errorf("FinalizePodGroup: get %s: %w", key, err)
 	}
 	if !ControlledByUID(pg, owner.GetUID()) {
 		return true, nil

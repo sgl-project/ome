@@ -38,9 +38,9 @@ const (
 )
 
 // PlacementSpec declares explicit multi-cluster matching and allocation intent.
-// +kubebuilder:validation:XValidation:rule="!has(self.replacementTimeout) || (has(self.policy) && self.policy == 'ClusterAffinity' && has(self.mode) && self.mode == 'Single')",message="replacementTimeout requires ClusterAffinity Single placement"
+// +kubebuilder:validation:XValidation:rule="!has(self.replacementTimeout) || (has(self.policy) && self.policy == 'ClusterAffinity' && has(self.mode) && self.mode == 'Single')",message="replacementTimeout requires Single placement"
 type PlacementSpec struct {
-	// Policy selects ClusterAffinity matching and persisted allocation plans.
+	// Policy selects affinity matching and persisted allocation plans.
 	// +required
 	Policy PlacementPolicy `json:"policy"`
 
@@ -48,8 +48,9 @@ type PlacementSpec struct {
 	// +required
 	Mode PlacementMode `json:"mode"`
 
-	// ClusterAffinity ORs terms whose requirements are ANDed. Requires the
-	// ClusterAffinity policy; omission then matches every registration.
+	// ClusterAffinity ORs terms whose requirements are ANDed. The engine's
+	// clusters are every component's clusters; in Split, each term's weights
+	// set the components' shares. Omission matches every registration.
 	// An explicit empty or null list is invalid.
 	// +optional
 	// +nullable

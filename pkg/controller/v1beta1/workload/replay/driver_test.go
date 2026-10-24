@@ -261,3 +261,119 @@ timeline:
 		t.Fatalf("pod must read Terminating behind the finalizer: deletion=%v finalizers=%v", pod.DeletionTimestamp, pod.Finalizers)
 	}
 }
+
+// gangWithWindows is a one-Instance gang of a leader and two workers with
+// an availability window and a stuck-pod grace, so the view has every
+// value the reading needs to carry.
+const gangWithWindows = `
+scenario: gang-with-windows
+arrows: [T-empty-create]
+initial:
+  spec:
+    replicas: 1
+    workers: 2
+    minReadySeconds: 5
+    topologyKey: topology.example.com/fabric-domain
+    gangScheduling: true
+    schedulerName: gang-scheduler
+    image: registry.example.com/runtime:v1
+    instanceReadyTimeout: 30m
+  config:
+    requeueOperation: 5s
+    requeueGate: 3s
+    stuckPodGrace: 90s
+timeline:
+  - tick: 1
+`
+
+// publishedCreate is a cold create under a half-minute availability
+// window whose pod turns Ready a tick after it is made, enters rotation a
+// tick later and then ages past the window, so each counter the
+// publication writes can be read on consecutive passes.
+const publishedCreate = `
+scenario: published-create
+arrows: [T-empty-create]
+initial:
+  spec:
+    replicas: 1
+    image: registry.example.com/runtime:v1
+    minReadySeconds: 30
+    instanceReadyTimeout: 30m
+timeline:
+  - tick: 1
+  - tick: 2
+    events:
+      - pod.ready: {pod: {index: 0}}
+  - tick: 3
+    events:
+      - endpoint.rotationIn: {pod: {index: 0}}
+  - tick: 4
+    events:
+      - clock.advance: 30s
+`
+
+// TestObserverViewRowsCarryThePublishedCounters proves the rows the
+// observer sees carry the counters the status publication wrote from the
+// pod set each pass started from: no pod before the create lands, one pod
+// that does not serve yet in the pass that writes its gate, one serving
+// pod once the gate is in place, a pass behind the pods, and one
+// available pod only once it is in the headless Service's rotation and
+// has been Ready for the whole minReadySeconds window.
+func TestObserverViewRowsCarryThePublishedCounters(t *testing.T) {
+	scenario, err := Parse([]byte(publishedCreate), Vocabulary{})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	var views []TickView
+	opts := DefaultOptions()
+	opts.Observer = func(view TickView) { views = append(views, view) }
+	if trace, err := Run(context.Background(), scenario, opts); err != nil {
+		t.Fatalf("run: %v\ntrace:\n%s", err, trace)
+	}
+	if len(views) != 4 {
+		t.Fatalf("observed %d ticks, want 4", len(views))
+	}
+	want := []publishedCounters{
+		{},
+		{podCount: 1},
+		{podCount: 1, servingPodCount: 1},
+		{podCount: 1, servingPodCount: 1, availablePodCount: 1},
+	}
+	for i, view := range views {
+		if len(view.Rows) != 1 {
+			t.Fatalf("tick %d: %d rows, want 1", view.Tick, len(view.Rows))
+		}
+		got := publishedCounters{
+			podCount:          view.Rows[0].PodCount,
+			servingPodCount:   view.Rows[0].ServingPodCount,
+			availablePodCount: view.Rows[0].AvailablePodCount,
+		}
+		if got != want[i] {
+			t.Fatalf("tick %d: row publishes %+v, want %+v", view.Tick, got, want[i])
+		}
+	}
+}
+
+// TestObserverViewCarriesTheReadingsWindows proves the driver hands the
+// observer the pods per Instance, the availability window and the
+// stuck-pod grace the scenario configured.
+func TestObserverViewCarriesTheReadingsWindows(t *testing.T) {
+	scenario, err := Parse([]byte(gangWithWindows), Vocabulary{})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	var views []TickView
+	opts := DefaultOptions()
+	opts.Observer = func(view TickView) { views = append(views, view) }
+	if trace, err := Run(context.Background(), scenario, opts); err != nil {
+		t.Fatalf("run: %v\ntrace:\n%s", err, trace)
+	}
+	if len(views) != 1 {
+		t.Fatalf("observed %d ticks, want 1", len(views))
+	}
+	view := views[0]
+	if view.Spec.PodsPerInstance != 3 || view.Spec.MinReadySeconds != 5 || view.StuckPodGrace != 90*time.Second {
+		t.Fatalf("view carries podsPerInstance=%d minReadySeconds=%d stuckPodGrace=%s; want 3, 5, 90s",
+			view.Spec.PodsPerInstance, view.Spec.MinReadySeconds, view.StuckPodGrace)
+	}
+}

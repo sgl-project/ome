@@ -3,6 +3,7 @@ package revision
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -56,8 +57,7 @@ const (
 )
 
 // testISVCGVK is the GroupVersionKind every ISVC-shaped OwnerReference
-// stamps. Hard-coded here rather than importing the omenative/core
-// package because that package depends on workload (cyclic).
+// stamps.
 var testISVCGVK = v1beta1.SchemeGroupVersion.WithKind("InferenceService")
 
 // testKey builds the revision.Key for an ISVC: Namespace =
@@ -1849,5 +1849,340 @@ func TestPlacementPolicyDoesNotChangePodRevision(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestRevisionHash_WorkerSizeAffectsHash pins the width as a revision field:
+// the same templates at a different worker count are a different revision,
+// and the payload records the count beside the worker template.
+func TestRevisionHash_WorkerSizeAffectsHash(t *testing.T) {
+	leader := basicPodSpecForRevision()
+	worker := &corev1.PodSpec{Containers: []corev1.Container{{Name: "worker", Image: "llama-worker:v1"}}}
+	at := func(size int32) (string, []byte) {
+		h, raw, err := HashTemplate(Template{PodSpec: leader, WorkerPodSpec: worker, WorkerSize: size}, nil, "")
+		if err != nil {
+			t.Fatalf("HashTemplate(size=%d): %v", size, err)
+		}
+		return h, raw
+	}
+	hOne, rawOne := at(1)
+	hTwo, _ := at(2)
+	if hOne == hTwo {
+		t.Fatalf("a width edit must change the hash: one and two workers both hash to %q", hOne)
+	}
+	if again, _ := at(1); again != hOne {
+		t.Fatalf("the same width must hash the same: %q then %q", hOne, again)
+	}
+	var p DataPayload
+	if err := json.Unmarshal(rawOne, &p); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if p.WorkerSize == nil || *p.WorkerSize != 1 {
+		t.Fatalf("the payload must record the width it was hashed at, got %v", p.WorkerSize)
+	}
+}
+
+// TestRevisionHash_WorkerSizeIgnoredWithoutWorker pins that a Component
+// without a worker template has no width: a count passed beside a nil
+// worker neither moves the single-pod hash nor enters the payload, so
+// single-pod revisions keep their names.
+func TestRevisionHash_WorkerSizeIgnoredWithoutWorker(t *testing.T) {
+	leader := basicPodSpecForRevision()
+	legacyHash, legacyRaw, err := Hash(leader, nil, nil, "")
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
+	}
+	sizedHash, sizedRaw, err := HashTemplate(Template{PodSpec: leader, WorkerSize: 3}, nil, "")
+	if err != nil {
+		t.Fatalf("HashTemplate: %v", err)
+	}
+	if legacyHash != sizedHash || !bytes.Equal(legacyRaw, sizedRaw) {
+		t.Fatalf("a single-pod width must not change the revision: hash %q/%q raw %s/%s",
+			legacyHash, sizedHash, legacyRaw, sizedRaw)
+	}
+}
+
+// TestRevisionHash_WrappersRecordNoWidth pins the wrapper constructors: a
+// multi-pod hash minted without a width is the width-free payload, so a
+// caller that cannot name the width does not forge one.
+func TestRevisionHash_WrappersRecordNoWidth(t *testing.T) {
+	leader := basicPodSpecForRevision()
+	worker := &corev1.PodSpec{Containers: []corev1.Container{{Name: "worker", Image: "llama-worker:v1"}}}
+	wrapped, wrappedRaw, err := HashWithWorker(leader, worker, nil, nil, "")
+	if err != nil {
+		t.Fatalf("HashWithWorker: %v", err)
+	}
+	direct, directRaw, err := HashTemplate(Template{PodSpec: leader, WorkerPodSpec: worker}, nil, "")
+	if err != nil {
+		t.Fatalf("HashTemplate: %v", err)
+	}
+	if wrapped != direct || !bytes.Equal(wrappedRaw, directRaw) {
+		t.Fatalf("the wrapper and a width-free Template must agree: %q/%q", wrapped, direct)
+	}
+	if bytes.Contains(wrappedRaw, []byte("workerSize")) {
+		t.Fatalf("a width-free payload must not carry the field: %s", wrappedRaw)
+	}
+}
+
+// TestWorkerSizeFromRevision pins the two reads of a revision's width: the
+// annotation stamped at create, and the payload for a revision minted
+// without the annotation; a revision recording no width reports none.
+func TestWorkerSizeFromRevision(t *testing.T) {
+	leader := basicPodSpecForRevision()
+	worker := &corev1.PodSpec{Containers: []corev1.Container{{Name: "worker", Image: "llama-worker:v1"}}}
+	_, raw, err := HashTemplate(Template{PodSpec: leader, WorkerPodSpec: worker, WorkerSize: 4}, nil, "")
+	if err != nil {
+		t.Fatalf("HashTemplate: %v", err)
+	}
+	stamped := &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Annotations: revisionAnnotations(raw)}}
+	if size, ok := WorkerSizeFromRevision(stamped); !ok || size != 4 {
+		t.Fatalf("annotation read: got (%d, %v) want (4, true); annotations %v", size, ok, stamped.Annotations)
+	}
+	unstamped := &appsv1.ControllerRevision{Data: runtime.RawExtension{Raw: raw}}
+	if size, ok := WorkerSizeFromRevision(unstamped); !ok || size != 4 {
+		t.Fatalf("payload read: got (%d, %v) want (4, true)", size, ok)
+	}
+	_, legacyRaw, err := HashWithWorker(leader, worker, nil, nil, "")
+	if err != nil {
+		t.Fatalf("HashWithWorker: %v", err)
+	}
+	legacy := &appsv1.ControllerRevision{Data: runtime.RawExtension{Raw: legacyRaw}}
+	if size, ok := WorkerSizeFromRevision(legacy); ok || size != 0 {
+		t.Fatalf("a revision minted without a width records none: got (%d, %v)", size, ok)
+	}
+	if size, ok := WorkerSizeFromRevision(nil); ok || size != 0 {
+		t.Fatalf("nil revision: got (%d, %v)", size, ok)
+	}
+}
+
+// TestReferencedRevisionNames pins which revisions the rows reference: the
+// one each runs, converges to, or its attempt pinned, without the roll
+// target, each once and in order.
+func TestReferencedRevisionNames(t *testing.T) {
+	rows := []workload.InstanceStatus{
+		{Index: 0, RunningRevision: "svc-engine-aaaa0000"},
+		{Index: 1, RunningRevision: "svc-engine-aaaa0000", TargetRevision: "svc-engine-cccc0000",
+			Operation: &workload.InstanceOperation{TargetRevision: "svc-engine-cccc0000"}},
+		{Index: 2, Operation: &workload.InstanceOperation{TargetRevision: "svc-engine-bbbb0000"}},
+		{Index: 3},
+	}
+	got := ReferencedRevisionNames(rows, "svc-engine-cccc0000")
+	want := []string{"svc-engine-aaaa0000", "svc-engine-bbbb0000"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("ReferencedRevisionNames = %v, want %v", got, want)
+	}
+	if got := ReferencedRevisionNames(nil, ""); len(got) != 0 {
+		t.Fatalf("no rows reference nothing, got %v", got)
+	}
+}
+
+// adoptionFixture mints the width-free revision of a two-worker template (no
+// worker count recorded) and returns the client holding it beside the
+// Template the adapter hashes.
+func adoptionFixture(t *testing.T) (client.Client, client.Object, Key, Template) {
+	t.Helper()
+	isvc := minimalISVC("llama-70b", "prod", 1)
+	key := testKey(isvc, workload.ComponentEngine)
+	tmpl := Template{
+		PodSpec:       basicPodSpecForRevision(),
+		WorkerPodSpec: &corev1.PodSpec{Containers: []corev1.Container{{Name: "worker", Image: "llama-worker:v1"}}},
+		TopologyKey:   "topology.example.com/domain",
+		WorkerSize:    2,
+	}
+	free := tmpl
+	free.WorkerSize = 0
+	hashFree, rawFree, err := HashTemplate(free, nil, isvc.UID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := newFakeClientWithApps(t, isvc)
+	if _, collision, err := EnsureControllerRevisionFromHash(context.Background(), c, c, isvc, testISVCGVK, key, hashFree, rawFree); err != nil || collision {
+		t.Fatalf("mint the width-free revision: err=%v collision=%v", err, collision)
+	}
+	return c, isvc, key, tmpl
+}
+
+// countingReader counts the ControllerRevision reads that reach the live
+// reader, so a test can tell a cached decision from one that went to the
+// apiserver.
+type countingReader struct {
+	client.Reader
+	gets int
+}
+
+func (c *countingReader) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if _, ok := obj.(*appsv1.ControllerRevision); ok {
+		c.gets++
+	}
+	return c.Reader.Get(ctx, key, obj, opts...)
+}
+
+// TestAdoptRevisionWithoutWidth pins when a revision minted without a width
+// stands in for the hashed target: the hashed name has no revision, the
+// width-free twin is the owner's and records the same templates, and the
+// gangs on it run the desired width or none is observed. A width the gangs
+// do not run, a payload that differs, a foreign owner, an existing hashed
+// revision or a single-pod template all mint as usual.
+func TestAdoptRevisionWithoutWidth(t *testing.T) {
+	ctx := context.Background()
+	c, owner, key, tmpl := adoptionFixture(t)
+	hash, raw, err := HashTemplate(tmpl, nil, owner.GetUID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	twin, ok, err := WidthFreeTwinOf(tmpl, nil, owner.GetUID())
+	if err != nil || !ok {
+		t.Fatalf("a two-worker template has a width-free twin: ok=%v err=%v", ok, err)
+	}
+	freeName := Name(key, twin.Hash)
+	observed := func(width int32, known bool) func(string) (int32, bool) {
+		return func(name string) (int32, bool) {
+			if name != freeName {
+				t.Fatalf("the width is observed on the width-free revision %s, asked for %s", freeName, name)
+			}
+			return width, known
+		}
+	}
+	adopt := func(target string, obs func(string) (int32, bool)) (*appsv1.ControllerRevision, error) {
+		return AdoptRevisionWithoutWidth(ctx, c, c, owner, key, hash, twin, tmpl.WorkerSize, target, obs)
+	}
+
+	if got, err := adopt("", observed(0, false)); err != nil || got == nil || got.Name != freeName {
+		t.Fatalf("nothing observed adopts the width-free revision: got %v err %v", got, err)
+	}
+	if got, err := adopt("", observed(2, true)); err != nil || got == nil || got.Name != freeName {
+		t.Fatalf("gangs running the desired width adopt the width-free revision: got %v err %v", got, err)
+	}
+	if got, err := adopt("", observed(3, true)); err != nil || got != nil {
+		t.Fatalf("gangs running another width mint: got %v err %v", got, err)
+	}
+	if got, err := adopt(freeName, observed(3, true)); err != nil || got != nil {
+		t.Fatalf("gangs running another width mint even when the status names the twin: got %v err %v", got, err)
+	}
+	if _, ok, err := WidthFreeTwinOf(Template{PodSpec: tmpl.PodSpec}, nil, owner.GetUID()); err != nil || ok {
+		t.Fatalf("a single-pod template has no width-free twin: ok=%v err=%v", ok, err)
+	}
+	moved := tmpl
+	moved.PodSpec = &corev1.PodSpec{Containers: []corev1.Container{{Name: "main", Image: "llama:v2"}}}
+	movedHash, _, _ := HashTemplate(moved, nil, owner.GetUID())
+	movedTwin, _, _ := WidthFreeTwinOf(moved, nil, owner.GetUID())
+	if got, err := AdoptRevisionWithoutWidth(ctx, c, c, owner, key, movedHash, movedTwin, moved.WorkerSize, "", observed(0, false)); err != nil || got != nil {
+		t.Fatalf("a template change has no width-free twin to adopt: got %v err %v", got, err)
+	}
+	other := minimalISVC("other", "prod", 1)
+	if got, err := AdoptRevisionWithoutWidth(ctx, c, c, other, key, hash, twin, tmpl.WorkerSize, "", observed(0, false)); err != nil || got != nil {
+		t.Fatalf("a revision owned by another object is not adopted: got %v err %v", got, err)
+	}
+	if _, collision, err := EnsureControllerRevisionFromHash(ctx, c, c, owner, testISVCGVK, key, hash, raw); err != nil || collision {
+		t.Fatalf("mint the hashed revision: err=%v collision=%v", err, collision)
+	}
+	if got, err := adopt("", observed(0, false)); err != nil || got != nil {
+		t.Fatalf("once the hashed revision exists nothing is adopted: got %v err %v", got, err)
+	}
+}
+
+// TestAdoptRevisionWithoutWidth_ReadsLiveOnlyUntilTheStatusNamesTheTwin
+// pins the cost of keeping a width-free revision: the first adoption, while
+// the owner's status names another revision, confirms the hashed name's
+// absence and the twin live; once the status names the twin, every later
+// adoption decides from the cache and reads nothing live.
+func TestAdoptRevisionWithoutWidth_ReadsLiveOnlyUntilTheStatusNamesTheTwin(t *testing.T) {
+	ctx := context.Background()
+	c, owner, key, tmpl := adoptionFixture(t)
+	hash, _, err := HashTemplate(tmpl, nil, owner.GetUID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	twin, _, err := WidthFreeTwinOf(tmpl, nil, owner.GetUID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	freeName := Name(key, twin.Hash)
+	live := &countingReader{Reader: c}
+	matching := func(string) (int32, bool) { return 2, true }
+
+	got, err := AdoptRevisionWithoutWidth(ctx, c, live, owner, key, hash, twin, tmpl.WorkerSize, "", matching)
+	if err != nil || got == nil || got.Name != freeName {
+		t.Fatalf("first adoption: got %v err %v", got, err)
+	}
+	if live.gets != 2 {
+		t.Fatalf("the first adoption confirms the hashed name and the twin live, once each: %d live reads", live.gets)
+	}
+	for pass := 0; pass < 3; pass++ {
+		got, err := AdoptRevisionWithoutWidth(ctx, c, live, owner, key, hash, twin, tmpl.WorkerSize, freeName, matching)
+		if err != nil || got == nil || got.Name != freeName {
+			t.Fatalf("pass %d: got %v err %v", pass, got, err)
+		}
+	}
+	if live.gets != 2 {
+		t.Fatalf("once the status names the twin, adoption reads nothing live: %d live reads after three passes", live.gets)
+	}
+	if got, err := AdoptRevisionWithoutWidth(ctx, c, live, owner, key, hash, twin, tmpl.WorkerSize, freeName, func(string) (int32, bool) { return 3, true }); err != nil || got != nil {
+		t.Fatalf("a width the gangs do not run mints from the cached decision: got %v err %v", got, err)
+	}
+	if live.gets != 2 {
+		t.Fatalf("the width check costs no live read: %d live reads", live.gets)
+	}
+}
+
+// TestHasReadyRowOn pins the pre-check that spares the pod list: a width
+// can be observed only on a revision some Instance is Ready on.
+func TestHasReadyRowOn(t *testing.T) {
+	rows := []workload.InstanceStatus{
+		{Index: 0, Phase: workload.InstancePhaseReady, RunningRevision: "engine-aaaa1111"},
+		{Index: 1, Phase: workload.InstancePhaseCreating, RunningRevision: "engine-bbbb2222"},
+	}
+	if !HasReadyRowOn(rows, "engine-aaaa1111") {
+		t.Fatal("a Ready row on the revision can be observed")
+	}
+	if HasReadyRowOn(rows, "engine-bbbb2222") {
+		t.Fatal("a row that is not Ready observes nothing")
+	}
+	if HasReadyRowOn(nil, "engine-aaaa1111") {
+		t.Fatal("no rows observe nothing")
+	}
+}
+
+// TestObservedWorkerWidth pins the width read off a revision's gangs: the
+// most worker pods a Ready Instance on it holds, from live pods carrying
+// its hash; a revision no Ready Instance holds a worker pod on reports
+// nothing.
+func TestObservedWorkerWidth(t *testing.T) {
+	const name = "svc-engine-aaaa0000"
+	hash := query.RevisionFromName(name).Hash()
+	pod := func(idx, runner, rev string, terminal bool) *corev1.Pod {
+		p := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: idx + runner, Labels: map[string]string{
+			query.LabelInstanceIdx: idx, query.LabelRunner: runner, query.LabelRevisionHash: rev}}}
+		if terminal {
+			p.Status.Phase = corev1.PodFailed
+		}
+		return p
+	}
+	rows := []workload.InstanceStatus{
+		{Index: 0, Phase: workload.InstancePhaseReady, RunningRevision: name},
+		{Index: 1, Phase: workload.InstancePhaseReady, RunningRevision: name},
+		{Index: 2, Phase: workload.InstancePhaseUpdating, RunningRevision: name},
+	}
+	pods := []*corev1.Pod{
+		pod("0", workload.RunnerLeader, hash, false), pod("0", workload.RunnerWorker, hash, false),
+		pod("1", workload.RunnerLeader, hash, false), pod("1", workload.RunnerWorker, hash, false), pod("1", workload.RunnerWorker+"b", hash, false),
+		pod("2", workload.RunnerWorker, hash, false), pod("2", workload.RunnerWorker+"b", hash, false), pod("2", workload.RunnerWorker+"c", hash, false),
+	}
+	pods[4].Labels[query.LabelRunner] = workload.RunnerWorker
+	for i := 5; i < 8; i++ {
+		pods[i].Labels[query.LabelRunner] = workload.RunnerWorker
+	}
+	if width, known := ObservedWorkerWidth(rows, pods, name); !known || width != 2 {
+		t.Fatalf("the widest Ready gang sets the width: got (%d, %v) want (2, true); an Updating row is not read", width, known)
+	}
+	pods[4].Status.Phase = corev1.PodFailed
+	if width, known := ObservedWorkerWidth(rows, pods, name); !known || width != 1 {
+		t.Fatalf("a terminal member is not counted: got (%d, %v) want (1, true)", width, known)
+	}
+	if width, known := ObservedWorkerWidth(rows, pods, "svc-engine-bbbb0000"); known || width != 0 {
+		t.Fatalf("a revision no Ready row runs reports nothing: got (%d, %v)", width, known)
+	}
+	if width, known := ObservedWorkerWidth(rows, nil, name); known || width != 0 {
+		t.Fatalf("Ready rows without pods report nothing: got (%d, %v)", width, known)
 	}
 }

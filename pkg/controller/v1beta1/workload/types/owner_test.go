@@ -312,23 +312,23 @@ func TestUpdateContinuation_PhaseUpdatingOrFailedWithAnUpdateClaim(t *testing.T)
 
 // Only a fresh start of a Failed row serving nothing, on a strategy that
 // recreates in place, skips the coordination gate.
-func TestRecreateOfDarkRow_OnlyANonSurgeFreshStartServingNothing(t *testing.T) {
-	dark := &InstanceStatus{Phase: InstancePhaseFailed, ServingPodCount: 0}
-	if !RecreateOfDarkRow(dark, UpdateStrategyRecreatePod) {
-		t.Error("a dark Failed row recreated in place skips the gate")
+func TestRecreateOfUnservingRow_OnlyANonSurgeFreshStartServingNothing(t *testing.T) {
+	unserving := &InstanceStatus{Phase: InstancePhaseFailed, ServingPodCount: 0}
+	if !RecreateOfUnservingRow(unserving, UpdateStrategyRecreatePod) {
+		t.Error("an unserving Failed row recreated in place skips the gate")
 	}
-	if RecreateOfDarkRow(dark, UpdateStrategySurgeThenDrain) {
+	if RecreateOfUnservingRow(unserving, UpdateStrategySurgeThenDrain) {
 		t.Error("a surge strategy keeps the consult: its gate counts surge pods")
 	}
 	serving := &InstanceStatus{Phase: InstancePhaseFailed, ServingPodCount: 1}
-	if RecreateOfDarkRow(serving, UpdateStrategyRecreatePod) {
+	if RecreateOfUnservingRow(serving, UpdateStrategyRecreatePod) {
 		t.Error("a row still serving takes capacity offline and is gated")
 	}
 	continuation := &InstanceStatus{Phase: InstancePhaseFailed, Operation: &InstanceOperation{Type: InstanceOperationUpdate}}
-	if RecreateOfDarkRow(continuation, UpdateStrategyRecreatePod) {
+	if RecreateOfUnservingRow(continuation, UpdateStrategyRecreatePod) {
 		t.Error("a continuation is not a fresh start")
 	}
-	if RecreateOfDarkRow(nil, UpdateStrategyRecreatePod) {
+	if RecreateOfUnservingRow(nil, UpdateStrategyRecreatePod) {
 		t.Error("no row, no start")
 	}
 }
@@ -422,6 +422,95 @@ func TestEndedByOwnershipVerdict_FailedRowKeepingTheEndedAttempt(t *testing.T) {
 	for _, tc := range cases {
 		if got := EndedByOwnershipVerdict(tc.row); got != tc.want {
 			t.Errorf("%s: EndedByOwnershipVerdict = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// The two readings of a settled row off the revision it runs: Failed is
+// the engine's shape after a replacement's attempt was disposed beside a
+// source that still runs, and Ready over that shape is the status
+// publication's alone. A row with an operation, one that never ran a
+// revision, one whose attempt was at the revision it runs, and one with no
+// target recorded are neither.
+func TestOffRunningRevision_TheEnginesFailedAndThePublicationsReady(t *testing.T) {
+	cases := []struct {
+		name          string
+		row           *InstanceStatus
+		failed, ready bool
+	}{
+		{"nil row", nil, false, false},
+		{"disposed attempt beside a running revision",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-b"}, true, false},
+		{"the publication's Ready over it",
+			&InstanceStatus{Phase: InstancePhaseReady, RunningRevision: "rev-a", TargetRevision: "rev-b"}, false, true},
+		{"a promoted row carries no target",
+			&InstanceStatus{Phase: InstancePhaseReady, RunningRevision: "rev-b"}, false, false},
+		{"a failure at the revision the row runs",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-a"}, false, false},
+		{"a row that never ran a revision",
+			&InstanceStatus{Phase: InstancePhaseFailed, TargetRevision: "rev-b"}, false, false},
+		{"a crash-loop park records no target",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a"}, false, false},
+		{"an attempt still on the row",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-b",
+				Operation: &InstanceOperation{Type: InstanceOperationUpdate, Step: UpdateStepSurge}}, false, false},
+		{"a roll in flight",
+			&InstanceStatus{Phase: InstancePhaseUpdating, RunningRevision: "rev-a", TargetRevision: "rev-b",
+				Operation: &InstanceOperation{Type: InstanceOperationUpdate, Step: UpdateStepSurge}}, false, false},
+	}
+	for _, tc := range cases {
+		if got := FailedOffRunningRevision(tc.row); got != tc.failed {
+			t.Errorf("%s: FailedOffRunningRevision = %v, want %v", tc.name, got, tc.failed)
+		}
+		if got := PublishedReadyOffRunningRevision(tc.row); got != tc.ready {
+			t.Errorf("%s: PublishedReadyOffRunningRevision = %v, want %v", tc.name, got, tc.ready)
+		}
+	}
+}
+
+// The two readings of a row that keeps the surge attempt it failed at
+// beside the revision it runs: Failed is the engine's shape while the
+// replacement of a surge is retired, and Ready over that shape is the
+// status publication's alone. A row whose surge is past its drain
+// hand-over, the replacement's own row, a settled row, a roll in flight
+// and a recreate attempt are neither.
+func TestOffRunningRevisionKeepingSurge_TheEnginesFailedAndThePublicationsReady(t *testing.T) {
+	slot := int32(3)
+	surge := func(step string, surgeIdx *int32) *InstanceOperation {
+		return &InstanceOperation{Type: InstanceOperationUpdate, Step: step, TargetRevision: "rev-b", SurgeIndex: surgeIdx}
+	}
+	cases := []struct {
+		name          string
+		row           *InstanceStatus
+		failed, ready bool
+	}{
+		{"nil row", nil, false, false},
+		{"a gang source whose replacement crashed",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-b", Operation: surge(UpdateStepSurge, &slot)}, true, false},
+		{"a single-pod source whose replacement crashed",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-b", Operation: surge(UpdateStepSurge, nil)}, true, false},
+		{"the publication's Ready over it",
+			&InstanceStatus{Phase: InstancePhaseReady, RunningRevision: "rev-a", TargetRevision: "rev-b", Operation: surge(UpdateStepSurge, &slot)}, false, true},
+		{"a source past the drain hand-over",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-b", Operation: surge(UpdateStepSurgeDrain, &slot)}, false, false},
+		{"the replacement's own row never ran a revision",
+			&InstanceStatus{Phase: InstancePhaseFailed, TargetRevision: "rev-b", Operation: surge(UpdateStepGangSurgeTarget, nil)}, false, false},
+		{"a disposed attempt keeps no operation",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-b"}, false, false},
+		{"a roll in flight",
+			&InstanceStatus{Phase: InstancePhaseUpdating, RunningRevision: "rev-a", TargetRevision: "rev-b", Operation: surge(UpdateStepSurge, &slot)}, false, false},
+		{"a recreate attempt replaces the pods it runs",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-b",
+				Operation: &InstanceOperation{Type: InstanceOperationUpdate, Step: UpdateStepDrain, TargetRevision: "rev-b"}}, false, false},
+		{"a surge at the revision the row runs",
+			&InstanceStatus{Phase: InstancePhaseFailed, RunningRevision: "rev-a", TargetRevision: "rev-a", Operation: surge(UpdateStepSurge, nil)}, false, false},
+	}
+	for _, tc := range cases {
+		if got := FailedKeepingSurgeOffRunningRevision(tc.row); got != tc.failed {
+			t.Errorf("%s: FailedKeepingSurgeOffRunningRevision = %v, want %v", tc.name, got, tc.failed)
+		}
+		if got := PublishedReadyKeepingSurgeOffRunningRevision(tc.row); got != tc.ready {
+			t.Errorf("%s: PublishedReadyKeepingSurgeOffRunningRevision = %v, want %v", tc.name, got, tc.ready)
 		}
 	}
 }

@@ -3,15 +3,27 @@ package placement
 import (
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workloadcluster"
 )
+
+// MemberCacheOptions includes shared runtimes and foreign same-name services.
+// Ownership filters would hide objects that placement must inspect before writing.
+func MemberCacheOptions() workloadcluster.CacheOptions {
+	return workloadcluster.CacheOptions{CachedKinds: sets.New(
+		v1beta1.SchemeGroupVersion.WithKind("InferenceService").GroupKind(),
+		v1beta1.SchemeGroupVersion.WithKind("ServingRuntime").GroupKind(),
+		v1beta1.SchemeGroupVersion.WithKind("ClusterServingRuntime").GroupKind(),
+	)}
+}
 
 // DefaultStatusSafetyRequeue is the fallback steady-state re-read backstop. It
 // is NOT the convergence latency (the funnel re-reconciles on events) — only the
@@ -169,4 +181,19 @@ func FunnelConfigFor(controlPlaneID string) workloadcluster.FunnelConfig {
 		},
 		WatchSelector: originWatchSelector(controlPlaneID),
 	}
+}
+
+// RuntimeFunnelConfigs emits member identities when shared runtime inputs
+// change. The placement controller resolves affected sources from its hub cache.
+func RuntimeFunnelConfigs() []workloadcluster.FunnelConfig {
+	configs := []workloadcluster.FunnelConfig{
+		{NewList: func() client.ObjectList { return &v1beta1.ServingRuntimeList{} }, NewObject: func() client.Object { return &v1beta1.ServingRuntime{} }},
+		{NewList: func() client.ObjectList { return &v1beta1.ClusterServingRuntimeList{} }, NewObject: func() client.Object { return &v1beta1.ClusterServingRuntime{} }},
+	}
+	for i := range configs {
+		configs[i].ResolveCluster = func(cluster string, _ client.Object) (client.Object, bool) {
+			return &v1beta1.WorkloadCluster{ObjectMeta: metav1.ObjectMeta{Name: cluster}}, cluster != ""
+		}
+	}
+	return configs
 }

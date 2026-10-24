@@ -2,14 +2,21 @@ package inferenceservice
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 
+	"github.com/go-logr/logr"
+	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -17,8 +24,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
@@ -358,38 +368,99 @@ func TestIsOwnedBy(t *testing.T) {
 	}
 }
 
-func TestGetAvailableResourceTypes(t *testing.T) {
-	r := &InferenceServiceReconciler{
-		ClientConfig: nil, // No config means only core resources
+// sweptKindsScheme knows every kind the sweep can list.
+func sweptKindsScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	for _, add := range []func(*runtime.Scheme) error{
+		v1beta1.AddToScheme, appsv1.AddToScheme, corev1.AddToScheme, autoscalingv2.AddToScheme,
+		networkingv1.AddToScheme, policyv1.AddToScheme, rbacv1.AddToScheme,
+		lws.AddToScheme, kedav1.AddToScheme, monitoringv1.AddToScheme,
+	} {
+		require.NoError(t, add(scheme))
+	}
+	return scheme
+}
+
+// A reconciler without a client config sweeps the core kinds, in this
+// order, and none of the optional ones.
+func TestSweptKindsWithoutAClientConfigAreTheCoreKinds(t *testing.T) {
+	r := &InferenceServiceReconciler{ClientConfig: nil}
+
+	var gvks []schema.GroupVersionKind
+	for _, kind := range r.sweptKinds() {
+		gvks = append(gvks, kind.gvk)
 	}
 
-	gvks, err := r.getAvailableResourceTypes()
-	require.NoError(t, err)
-
-	// Should contain at least the core resource types
-	expectedCoreTypes := []schema.GroupVersionKind{
+	assert.Equal(t, []schema.GroupVersionKind{
 		{Group: "apps", Version: "v1", Kind: "Deployment"},
 		{Group: "", Version: "v1", Kind: "Service"},
 		{Group: "autoscaling", Version: "v2", Kind: "HorizontalPodAutoscaler"},
+		{Group: "policy", Version: "v1", Kind: "PodDisruptionBudget"},
 		{Group: "networking.k8s.io", Version: "v1", Kind: "Ingress"},
 		{Group: "", Version: "v1", Kind: "ConfigMap"},
 		{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
 		{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
 		{Group: "", Version: "v1", Kind: "ServiceAccount"},
 		{Group: "", Version: "v1", Kind: "PersistentVolumeClaim"},
-		v1beta1.SchemeGroupVersion.WithKind("InferenceReplica"),
-	}
+		{Group: "ome.io", Version: "v1beta1", Kind: "InferenceReplica"},
+	}, gvks)
+}
 
-	for _, expected := range expectedCoreTypes {
-		found := false
-		for _, gvk := range gvks {
-			if gvk == expected {
-				found = true
-				break
-			}
-		}
-		assert.True(t, found, "Expected GVK %v not found in available types", expected)
+// Every kind the sweep can list, core or optional, carries a typed list of
+// that kind, which the informer cache serves; an unstructured list would go
+// to the apiserver on every pass.
+func TestSweptKindsCarryATypedListOfTheirKind(t *testing.T) {
+	scheme := sweptKindsScheme(t)
+	core, optional := coreSweptKinds(), optionalSweptKinds()
+	require.Len(t, core, 11)
+	require.Len(t, optional, 3)
+
+	for _, kind := range append(core, optional...) {
+		_, unstructuredList := kind.list.(*unstructured.UnstructuredList)
+		require.False(t, unstructuredList, "%s is listed as an unstructured list", kind.gvk)
+		listGVK, err := apiutil.GVKForObject(kind.list, scheme)
+		require.NoError(t, err, "%s", kind.gvk)
+		assert.Equal(t, kind.gvk.GroupVersion(), listGVK.GroupVersion(), "%s", kind.gvk)
+		assert.Equal(t, kind.gvk.Kind+"List", listGVK.Kind, "%s", kind.gvk)
 	}
+}
+
+// The sweep over a removed Component reads one typed list per core kind,
+// deletes the removed Component's objects and keeps the active one's.
+func TestRemovedComponentSweepReadsTypedLists(t *testing.T) {
+	ctx := log.IntoContext(context.Background(), log.Log)
+	isvc := &v1beta1.InferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-isvc", Namespace: "default", UID: "test-uid"},
+	}
+	var listed []string
+	fakeClient := fakeclient.NewClientBuilder().
+		WithScheme(sweptKindsScheme(t)).
+		WithObjects(isvc,
+			createDeployment("test-isvc-engine", "default", "test-isvc", "test-uid", v1beta1.EngineComponent),
+			createDeployment("test-isvc-decoder", "default", "test-isvc", "test-uid", v1beta1.DecoderComponent),
+			createService("test-isvc-decoder", "default", "test-isvc", "test-uid", v1beta1.DecoderComponent),
+			createConfigMap("test-isvc-decoder-config", "default", "test-isvc", "test-uid", v1beta1.DecoderComponent),
+		).
+		WithInterceptorFuncs(interceptor.Funcs{
+			List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+				listed = append(listed, fmt.Sprintf("%T", list))
+				return c.List(ctx, list, opts...)
+			},
+		}).
+		Build()
+	r := &InferenceServiceReconciler{Client: fakeClient, Clientset: fake.NewSimpleClientset()}
+
+	require.NoError(t, r.cleanupRemovedComponents(ctx, isvc, &v1beta1.EngineSpec{}, nil, nil))
+
+	var typedLists []string
+	for _, kind := range coreSweptKinds() {
+		typedLists = append(typedLists, fmt.Sprintf("%T", kind.list))
+	}
+	assert.Equal(t, typedLists, listed, "one typed list per core kind, in table order")
+	checkResourceDeleted(t, ctx, fakeClient, "test-isvc-decoder", "default")
+	checkResourceDeleted(t, ctx, fakeClient, "test-isvc-decoder-config", "default")
+	checkResourceExists(t, ctx, fakeClient, "test-isvc-engine", "default")
 }
 
 func TestContains(t *testing.T) {
@@ -856,4 +927,47 @@ func TestCleanupExternalServiceWithoutAnnotation(t *testing.T) {
 	service := &corev1.Service{}
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-isvc", Namespace: "default"}, service)
 	assert.Error(t, err, "External service should be deleted when annotation is not set")
+}
+
+// TestOrphanSweepOfAPassTheShutdownCutShort pins how the sweep of a removed
+// component's objects logs a read the manager's own shutdown stopped. The
+// next manager re-queues the service and sweeps again, so the sweep logs
+// such a read below error level. The same read error under a live context is
+// still an error-level line. The sweep itself ends without error either way.
+func TestOrphanSweepOfAPassTheShutdownCutShort(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		canceled      bool
+		wantErrorLogs bool
+	}{
+		{name: "read error under a live context is logged as an error", wantErrorLogs: true},
+		{name: "read error after the shutdown is logged below error level", canceled: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			require.NoError(t, v1beta1.AddToScheme(scheme))
+			isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "service", Namespace: "team-a", UID: "service-uid"}}
+			readError := errors.New(shutdownCutMessage)
+			fakeClient := fakeclient.NewClientBuilder().WithScheme(scheme).WithObjects(isvc).WithInterceptorFuncs(interceptor.Funcs{
+				List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
+					return readError
+				},
+			}).Build()
+			r := &InferenceServiceReconciler{Client: fakeClient, Clientset: fake.NewSimpleClientset()}
+			sink := &messageSink{}
+			ctx := log.IntoContext(t.Context(), logr.New(sink))
+			if tt.canceled {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel()
+			}
+			require.NoError(t, r.cleanupRemovedComponents(ctx, isvc, &v1beta1.EngineSpec{}, nil, nil))
+			errorLogs := sink.errorLines("Failed to cleanup resources of type")
+			if tt.wantErrorLogs {
+				assert.Positive(t, errorLogs, "a live pass logs the failed read as an error")
+			} else {
+				assert.Zero(t, errorLogs, "a pass the shutdown cut short logs no error (all error lines: %q)", sink.errors)
+			}
+		})
+	}
 }

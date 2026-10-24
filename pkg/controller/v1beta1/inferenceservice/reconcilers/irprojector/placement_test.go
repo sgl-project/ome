@@ -8,12 +8,12 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/placement/protocol"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestPlacementExecutionProjection(t *testing.T) {
@@ -47,7 +47,7 @@ func TestPlacementExecutionProjection(t *testing.T) {
 			if tt.derived {
 				service.Labels = map[string]string{constants.PlacementOrigin: "source-a"}
 			}
-			c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+			c := fakeclient.New(t)
 			p := minimalParams(t, service, c)
 			created, err := EnsureInferenceReplica(ctx, p)
 			if err != nil {
@@ -98,7 +98,7 @@ func TestPlacementProjectionCannotOverwriteRacingAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	service.Annotations = map[string]string{constants.PlacementExecution: raw}
-	base := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+	base := fakeclient.New(t)
 	created, err := EnsureInferenceReplica(ctx, minimalParams(t, service, base))
 	if err != nil {
 		t.Fatal(err)
@@ -112,7 +112,7 @@ func TestPlacementProjectionCannotOverwriteRacingAuthority(t *testing.T) {
 	newer := policy.DeepCopy()
 	newer.PlanID, newer.Revision = "plan-c", 3
 	injected := false
-	c := interceptor.NewClient(base, interceptor.Funcs{Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	c := fakeclient.Wrap(t, base, fakeclient.WithInterceptors(interceptor.Funcs{Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 		if !injected {
 			injected = true
 			live := &v1beta1.InferenceReplica{}
@@ -125,7 +125,7 @@ func TestPlacementProjectionCannotOverwriteRacingAuthority(t *testing.T) {
 			}
 		}
 		return c.Patch(ctx, obj, patch, opts...)
-	}})
+	}}))
 	if _, err := EnsureInferenceReplica(ctx, minimalParams(t, service, c)); err == nil {
 		t.Fatal("expected racing authority rejection")
 	}
@@ -165,7 +165,7 @@ func TestPlacementReplicaLimitPreservesScaleRequests(t *testing.T) {
 				service.Annotations = map[string]string{constants.PlacementExecution: raw}
 			}
 			stamp()
-			c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+			c := fakeclient.New(t)
 			p := minimalParams(t, service, c)
 			p.ResolvedAutoscaler = &v1beta1.ComponentAutoscaler{Class: v1beta1.AutoscalerExternal}
 			ir, err := EnsureInferenceReplica(t.Context(), p)
@@ -226,7 +226,7 @@ func TestPlacementPauseRequiresResolvedFloor(t *testing.T) {
 				t.Fatal(err)
 			}
 			service.Annotations = map[string]string{constants.PlacementExecution: raw}
-			c := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+			c := fakeclient.New(t)
 			p := minimalParams(t, service, c)
 			p.ComponentExt.MinReplicas = floor
 			if _, err := EnsureInferenceReplica(t.Context(), p); err == nil {

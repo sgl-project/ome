@@ -8,12 +8,14 @@ import (
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/keda"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
 )
 
@@ -61,10 +63,15 @@ import (
 // tests that exercise the mapping logic without a live client.
 //
 // prev is the previously-written ComponentAutoscalerStatus (nil on first
-// reconcile). It is used only to preserve KEDA condition LastTransitionTime
-// across reconciles (KEDA conditions carry no timestamp), keeping the
-// mirrored status byte-stable so the writer's DeepEqual diff doesn't storm
-// status updates.
+// reconcile). It preserves condition LastTransitionTime across reconciles
+// (KEDA conditions carry no timestamp), keeping the mirrored status
+// byte-stable so the writer's DeepEqual diff doesn't storm status updates.
+// It also tells the writer that a switch back to an HPA was under way, so
+// AutoscalerSwitched can report it finished.
+//
+// The writer adds AutoscalerSwitched while the Component moves between an
+// OME HPA and a KEDA ScaledObject, from the same live objects the dispatch
+// reads. See v1beta1.AutoscalerSwitchedCondition.
 //
 // Alpha API. The signature may change without notice.
 func WriteAutoscalerStatus(
@@ -87,15 +94,24 @@ func WriteAutoscalerStatus(
 	}
 
 	if managedBy == v1beta1.AutoscalerManagedByOME && cli != nil {
+		var switched *metav1.Condition
 		switch class {
 		case v1beta1.AutoscalerHPA:
-			if err := mirrorHPAStatus(ctx, cli, namespace, objectName, status); err != nil {
+			cond, err := mirrorHPAStatus(ctx, cli, namespace, objectName, status, prev)
+			if err != nil {
 				return nil, nil, fmt.Errorf("mirror HPA status (ns=%s, name=%s): %w", namespace, objectName, err)
 			}
+			switched = cond
 		case v1beta1.AutoscalerKEDA:
-			if err := mirrorScaledObjectStatus(ctx, cli, namespace, objectName, status, prevConditions(prev)); err != nil {
+			cond, err := mirrorScaledObjectStatus(ctx, cli, namespace, objectName, scaleTargetRef, status, prevConditions(prev))
+			if err != nil {
 				return nil, nil, fmt.Errorf("mirror ScaledObject status (ns=%s, name=%s): %w", namespace, objectName, err)
 			}
+			switched = cond
+		}
+		if switched != nil {
+			switched.LastTransitionTime = conditionTransitionTime(*switched, prevConditions(prev))
+			meta.SetStatusCondition(&status.Conditions, *switched)
 		}
 	}
 
@@ -156,24 +172,82 @@ func managedByForClass(class v1beta1.AutoscalerClass) v1beta1.AutoscalerManagedB
 // up, or no dispatch has wired this Component. Counters stay zero in those
 // cases and operators can observe "scaler just spun up" by reading status
 // again on the next reconcile pass.
-func mirrorHPAStatus(ctx context.Context, cli client.Client, namespace, name string, status *v1beta1.ComponentAutoscalerStatus) error {
+//
+// An HPA that a ScaledObject controls is KEDA's, waiting to be deleted while
+// the Component switches back to OME's HPA; it is not mirrored. The returned
+// condition is the AutoscalerSwitched state of that switch, or nil when no
+// switch is under way or recorded in prev.
+func mirrorHPAStatus(ctx context.Context, cli client.Client, namespace, name string, status *v1beta1.ComponentAutoscalerStatus, prev *v1beta1.ComponentAutoscalerStatus) (*metav1.Condition, error) {
 	obj := &autoscalingv2.HorizontalPodAutoscaler{}
-	err := cli.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, obj)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil
+	if err := cli.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, obj); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return nil, err
 		}
-		return err
+		obj = nil
+	}
+	if obj != nil && componentScaledObjectController(obj, name) == nil {
+		status.CurrentReplicas = obj.Status.CurrentReplicas
+		status.DesiredReplicas = obj.Status.DesiredReplicas
+		if obj.Status.LastScaleTime != nil {
+			t := *obj.Status.LastScaleTime
+			status.LastScaleTime = &t
+		}
+		status.Conditions = hpaConditionsToMetav1(obj.Status.Conditions)
+	}
+	return hpaSwitchCondition(ctx, cli, namespace, name, obj, prev)
+}
+
+// hpaSwitchCondition reports a switch back from KEDA to OME's HPA. It is
+// False while the ScaledObject or an HPA KEDA created for it remains, True
+// once both are gone after such a switch was observed, and nil otherwise.
+func hpaSwitchCondition(ctx context.Context, cli client.Client, namespace, name string, componentHPA *autoscalingv2.HorizontalPodAutoscaler, prev *v1beta1.ComponentAutoscalerStatus) (*metav1.Condition, error) {
+	soName := utils.GetScaledObjectName(name)
+	cond := &metav1.Condition{Type: v1beta1.AutoscalerSwitchedCondition, Status: metav1.ConditionFalse}
+
+	so := &kedav1.ScaledObject{}
+	if err := cli.Get(ctx, types.NamespacedName{Namespace: namespace, Name: soName}, so); err == nil {
+		cond.Reason = v1beta1.AutoscalerSwitchedReasonWaitingForScaledObjectDeletion
+		cond.Message = fmt.Sprintf("OME creates HPA %s after KEDA deletes ScaledObject %s", name, soName)
+		return cond, nil
+	} else if !ignorableScaledObjectReadError(err) {
+		return nil, err
 	}
 
-	status.CurrentReplicas = obj.Status.CurrentReplicas
-	status.DesiredReplicas = obj.Status.DesiredReplicas
-	if obj.Status.LastScaleTime != nil {
-		t := *obj.Status.LastScaleTime
-		status.LastScaleTime = &t
+	leftover := ""
+	if componentHPA != nil && componentScaledObjectController(componentHPA, name) != nil {
+		leftover = componentHPA.Name
 	}
-	status.Conditions = hpaConditionsToMetav1(obj.Status.Conditions)
-	return nil
+	var recordedCond *metav1.Condition
+	if prev != nil {
+		recordedCond = meta.FindStatusCondition(prev.Conditions, v1beta1.AutoscalerSwitchedCondition)
+	}
+	recorded := recordedCond != nil
+	// A switch that already reported ScaledObjectRemoved left nothing behind,
+	// so the namespace-wide HPA list runs only while a switch settles.
+	settled := recorded && recordedCond.Status == metav1.ConditionTrue &&
+		recordedCond.Reason == v1beta1.AutoscalerSwitchedReasonScaledObjectRemoved
+	if leftover == "" && recorded && !settled {
+		owned, err := listScaledObjectHPAs(ctx, cli, namespace, soName)
+		if err != nil {
+			return nil, err
+		}
+		if len(owned) > 0 {
+			leftover = owned[0].Name
+		}
+	}
+	switch {
+	case leftover != "":
+		cond.Reason = v1beta1.AutoscalerSwitchedReasonWaitingForHPADeletion
+		cond.Message = fmt.Sprintf("OME creates HPA %s after HPA %s, which KEDA created for ScaledObject %s, is deleted", name, leftover, soName)
+		return cond, nil
+	case recorded:
+		cond.Status = metav1.ConditionTrue
+		cond.Reason = v1beta1.AutoscalerSwitchedReasonScaledObjectRemoved
+		cond.Message = fmt.Sprintf("ScaledObject %s and the HPAs KEDA created for it are gone; OME controls HPA %s", soName, name)
+		return cond, nil
+	default:
+		return nil, nil
+	}
 }
 
 // mirrorScaledObjectStatus reads the live KEDA ScaledObject (looked up by
@@ -181,27 +255,29 @@ func mirrorHPAStatus(ctx context.Context, cli client.Client, namespace, name str
 // onto status. CurrentReplicas / DesiredReplicas come from the HPA the
 // ScaledObject derives — KEDA writes them onto its own embedded HPA, not
 // the ScaledObject status — so we additionally Get that HPA (named by
-// SO.Status.HpaName, falling back to the SO name) and read counters from
-// there. Both lookups tolerate NotFound (transient or unwired state).
+// SO.Status.HpaName, falling back to the name the ScaledObject configures)
+// and read counters from there. Both lookups tolerate NotFound (transient
+// or unwired state).
 //
 // NotRegistered errors on the SO Get are swallowed too: if the cluster
 // hasn't installed KEDA but somebody resolved class=keda upstream
 // (shouldn't happen at steady state because dispatch validates earlier),
 // we still want the parent reconcile to make forward progress.
-func mirrorScaledObjectStatus(ctx context.Context, cli client.Client, namespace, name string, status *v1beta1.ComponentAutoscalerStatus, prevConds []metav1.Condition) error {
+//
+// The returned condition is the AutoscalerSwitched state when the
+// ScaledObject names the Component's HPA, which it does after taking over
+// the HPA OME ran before; nil otherwise.
+func mirrorScaledObjectStatus(ctx context.Context, cli client.Client, namespace, name string, scaleTargetRef v1beta1.ScaleTargetRef, status *v1beta1.ComponentAutoscalerStatus, prevConds []metav1.Condition) (*metav1.Condition, error) {
 	soName := utils.GetScaledObjectName(name)
 	obj := &kedav1.ScaledObject{}
 	err := cli.Get(ctx, types.NamespacedName{Namespace: namespace, Name: soName}, obj)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil
+		// KEDA is registered unconditionally at manager startup; the
+		// NotRegistered case is defensive against a rolling-uninstall race.
+		if ignorableScaledObjectReadError(err) {
+			return nil, nil
 		}
-		// KEDA is registered unconditionally at manager startup; this
-		// branch is defensive against a rolling-uninstall race.
-		if runtime.IsNotRegisteredError(err) {
-			return nil
-		}
-		return err
+		return nil, err
 	}
 
 	status.Conditions = kedaConditionsToMetav1(obj.Status.Conditions, prevConds)
@@ -211,22 +287,81 @@ func mirrorScaledObjectStatus(ctx context.Context, cli client.Client, namespace,
 	}
 
 	// CurrentReplicas / DesiredReplicas live on the derived HPA. SO.Status
-	// .HpaName is the canonical handle for the derived HPA; if empty (older
-	// KEDA versions stamp it lazily) fall back to a name-based lookup.
+	// .HpaName is the canonical handle for the derived HPA; KEDA records it
+	// after its first reconcile, so fall back to the configured name.
 	hpaName := obj.Status.HpaName
 	if hpaName == "" {
-		hpaName = soName
+		hpaName = keda.ConfiguredHPAName(obj.Spec.Advanced)
 	}
-	hpaObj := &autoscalingv2.HorizontalPodAutoscaler{}
-	if err := cli.Get(ctx, types.NamespacedName{Namespace: namespace, Name: hpaName}, hpaObj); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil
+	var hpaObj *autoscalingv2.HorizontalPodAutoscaler
+	if hpaName != "" {
+		hpaObj = &autoscalingv2.HorizontalPodAutoscaler{}
+		if err := cli.Get(ctx, types.NamespacedName{Namespace: namespace, Name: hpaName}, hpaObj); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return nil, err
+			}
+			hpaObj = nil
 		}
-		return err
 	}
-	status.CurrentReplicas = hpaObj.Status.CurrentReplicas
-	status.DesiredReplicas = hpaObj.Status.DesiredReplicas
-	return nil
+	if hpaObj != nil {
+		status.CurrentReplicas = hpaObj.Status.CurrentReplicas
+		status.DesiredReplicas = hpaObj.Status.DesiredReplicas
+	}
+
+	if keda.ConfiguredHPAName(obj.Spec.Advanced) != name {
+		return nil, nil
+	}
+	if hpaName != name {
+		hpaObj = nil
+		componentHPA := &autoscalingv2.HorizontalPodAutoscaler{}
+		if err := cli.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, componentHPA); err == nil {
+			hpaObj = componentHPA
+		} else if !apierrors.IsNotFound(err) {
+			return nil, err
+		}
+	}
+	return kedaSwitchCondition(obj, hpaObj, name, scaleTargetRef), nil
+}
+
+// kedaSwitchCondition reports a switch to KEDA in which the ScaledObject took
+// over the HPA named after the Component. It is True once the ScaledObject
+// controls that HPA, the HPA scales the Component's target, and KEDA reports
+// the ScaledObject Ready.
+func kedaSwitchCondition(so *kedav1.ScaledObject, hpaObj *autoscalingv2.HorizontalPodAutoscaler, name string, scaleTargetRef v1beta1.ScaleTargetRef) *metav1.Condition {
+	cond := &metav1.Condition{Type: v1beta1.AutoscalerSwitchedCondition, Status: metav1.ConditionFalse}
+	target := autoscalingv2.CrossVersionObjectReference{APIVersion: scaleTargetRef.APIVersion, Kind: scaleTargetRef.Kind, Name: scaleTargetRef.Name}
+	if hpaObj == nil {
+		cond.Reason = v1beta1.AutoscalerSwitchedReasonWaitingForKEDA
+		cond.Message = fmt.Sprintf("waiting for KEDA to take over HPA %s through ScaledObject %s", name, so.Name)
+		return cond
+	}
+	controller := metav1.GetControllerOf(hpaObj)
+	ready := so.Status.Conditions.GetReadyCondition()
+	switch {
+	case controller == nil || controller.UID != so.UID || componentScaledObjectController(hpaObj, name) == nil:
+		cond.Reason = v1beta1.AutoscalerSwitchedReasonWaitingForKEDA
+		cond.Message = fmt.Sprintf("waiting for KEDA to take over HPA %s through ScaledObject %s", name, so.Name)
+		if controller != nil {
+			cond.Message = fmt.Sprintf("waiting for KEDA to take over HPA %s from %s %s through ScaledObject %s", name, controller.Kind, controller.Name, so.Name)
+		}
+	case !sameScaleTarget(hpaObj.Spec.ScaleTargetRef, target):
+		cond.Reason = v1beta1.AutoscalerSwitchedReasonWaitingForKEDA
+		cond.Message = fmt.Sprintf("KEDA controls HPA %s but has not pointed it at %s %s yet", name, target.Kind, target.Name)
+	case !ready.IsTrue():
+		cond.Reason = v1beta1.AutoscalerSwitchedReasonScaledObjectNotReady
+		cond.Message = fmt.Sprintf("KEDA controls HPA %s but does not report ScaledObject %s Ready", name, so.Name)
+	default:
+		cond.Status = metav1.ConditionTrue
+		cond.Reason = v1beta1.AutoscalerSwitchedReasonHPAControlledByKEDA
+		cond.Message = fmt.Sprintf("ScaledObject %s controls HPA %s and KEDA reports it Ready", so.Name, name)
+	}
+	return cond
+}
+
+// ignorableScaledObjectReadError reports a ScaledObject read error that means
+// "there is no ScaledObject": the object is gone, or KEDA is not installed.
+func ignorableScaledObjectReadError(err error) bool {
+	return apierrors.IsNotFound(err) || meta.IsNoMatchError(err) || runtime.IsNotRegisteredError(err)
 }
 
 // podNameRefRe matches the volatile "of Pod <name>" tail the HPA metrics
@@ -310,7 +445,7 @@ func kedaConditionsToMetav1(in kedav1.Conditions, prev []metav1.Condition) []met
 			Reason:  kedaConditionReason(c),
 			Message: normalizeAutoscalerMessage(c.Message),
 		}
-		cond.LastTransitionTime = kedaConditionTransitionTime(cond, prev)
+		cond.LastTransitionTime = conditionTransitionTime(cond, prev)
 		out = append(out, cond)
 	}
 	return out
@@ -331,12 +466,13 @@ func kedaConditionReason(c kedav1.Condition) string {
 	return "Unknown"
 }
 
-// kedaConditionTransitionTime returns a stable LastTransitionTime for a
-// synthesized KEDA condition: the prior recorded time when a same-typed
+// conditionTransitionTime returns a stable LastTransitionTime for a
+// condition OME synthesizes (mirrored KEDA conditions and
+// AutoscalerSwitched): the prior recorded time when a same-typed
 // condition existed with the same Status (no real transition), otherwise
 // now (first observation or an actual Status flip). This keeps the
 // mirrored status byte-stable across reconciles.
-func kedaConditionTransitionTime(cond metav1.Condition, prev []metav1.Condition) metav1.Time {
+func conditionTransitionTime(cond metav1.Condition, prev []metav1.Condition) metav1.Time {
 	for i := range prev {
 		p := prev[i]
 		if p.Type != cond.Type {

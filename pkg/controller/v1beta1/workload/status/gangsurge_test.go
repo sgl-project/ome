@@ -9,11 +9,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
+	fixture "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
 func TestRestoreGangSurgeTargetMarker_StrongOwnershipGuard(t *testing.T) {
-	source := terminalStatusFixture(3)
+	source := fixture.UpdatingRowAtSurge(3)
 	surgeIndex := *source.Operation.SurgeIndex
 	targetRevision := source.Operation.TargetRevision
 	tests := []struct {

@@ -63,8 +63,8 @@ func UpdateEnvVars(container *v1.Container, envVar *v1.EnvVar) {
 	var updated bool
 	for i, existingEnvVar := range container.Env {
 		if existingEnvVar.Name == envVar.Name {
-			// If it exists, update its value.
-			container.Env[i].Value = envVar.Value
+			// If it exists, replace it.
+			container.Env[i] = *envVar
 			updated = true
 			break
 		}

@@ -6,11 +6,11 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/placement/protocol"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func TestPlacementFloorProjection(t *testing.T) {
@@ -33,7 +33,7 @@ func TestPlacementFloorProjection(t *testing.T) {
 					if !tt.local {
 						service.Labels = map[string]string{constants.PlacementOrigin: "source-a"}
 					}
-					cl := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+					cl := fakeclient.New(t)
 					p := minimalParams(t, service, cl)
 					var before *v1beta1.InferenceReplica
 					if existing {
@@ -120,7 +120,7 @@ func TestZeroFloorProjectionScope(t *testing.T) {
 					if derived {
 						service.Labels = map[string]string{constants.PlacementOrigin: string(service.UID)}
 					}
-					cl := fake.NewClientBuilder().WithScheme(testScheme(t)).Build()
+					cl := fakeclient.New(t)
 					p := minimalParams(t, service, cl)
 					p.ComponentExt.MinReplicas = ptr.To(0)
 					p.ResolvedAutoscaler = &v1beta1.ComponentAutoscaler{Class: v1beta1.AutoscalerExternal}

@@ -10,7 +10,6 @@ import (
 	reportv1alpha1 "sigs.k8s.io/ome/pkg/cli/report/v1alpha1"
 	"sigs.k8s.io/ome/pkg/cli/rolloutprojection"
 	"sigs.k8s.io/ome/pkg/constants"
-	workloadops "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/ops"
 	omevalidation "sigs.k8s.io/ome/pkg/validation"
 )
 
@@ -128,11 +127,21 @@ func scalePartitionAllows(replica *v1beta1.InferenceReplica, replicas int32) boo
 		}
 	}
 	for _, partition := range partitions {
-		if partition != nil && (*partition < 0 || workloadops.HeldByPartition(partition, replicas)) {
+		if partition != nil && (*partition < 0 || heldByPartition(partition, replicas)) {
 			return false
 		}
 	}
 	return true
+}
+
+// heldByPartition reports whether the hold candidate at rank is held by the
+// partition: the first partition candidates are held, and a nil partition or
+// one of zero or less holds nothing.
+func heldByPartition(partition *int32, rank int32) bool {
+	if partition == nil || *partition <= 0 {
+		return false
+	}
+	return rank < *partition
 }
 
 func requireScaleStable(parent *v1beta1.InferenceService, evidence ScaleEvidence, component v1beta1.ComponentType, clock reportv1alpha1.Clock) error {

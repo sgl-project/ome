@@ -78,6 +78,9 @@ func prepare(source *v1beta1.InferenceService, proposal Proposal) (*v1beta1.Plac
 		if len(assignment.MatchingTerms) == 0 {
 			assignment.MatchingTerms = nil
 		}
+		if err := normalizeComponentMatches(assignment); err != nil {
+			return nil, fmt.Errorf("cluster %q: %w", name, err)
+		}
 		if assignment.Capacity != nil {
 			if err := normalizeCapacity(assignment.Capacity); err != nil {
 				return nil, fmt.Errorf("cluster %q: %w", name, err)
@@ -138,6 +141,28 @@ func prepare(source *v1beta1.InferenceService, proposal Proposal) (*v1beta1.Plac
 	digest := sha256.Sum256(encoded)
 	out.Plan.ID = hex.EncodeToString(digest[:])
 	return out, nil
+}
+
+// normalizeComponentMatches orders per-component matches canonically, so the
+// same match always persists the same plan.
+func normalizeComponentMatches(assignment *v1beta1.CandidateAllocationStatus) error {
+	slices.SortFunc(assignment.ComponentMatches, func(a, b v1beta1.ComponentAffinityMatch) int { return cmp.Compare(a.Component, b.Component) })
+	for i := range assignment.ComponentMatches {
+		match := &assignment.ComponentMatches[i]
+		if match.Component != v1beta1.EngineComponent && match.Component != v1beta1.DecoderComponent && match.Component != v1beta1.RouterComponent {
+			return fmt.Errorf("component match names unsupported component %q", match.Component)
+		}
+		if i > 0 && match.Component == assignment.ComponentMatches[i-1].Component {
+			return fmt.Errorf("component %q has more than one match", match.Component)
+		}
+		if match.Weight != nil && (*match.Weight < 0 || assignment.Capacity != nil) {
+			return fmt.Errorf("component %q requires a nonnegative static weight, and none beside capacity", match.Component)
+		}
+	}
+	if len(assignment.ComponentMatches) == 0 {
+		assignment.ComponentMatches = nil
+	}
+	return nil
 }
 
 func normalizeCapacity(sample *v1beta1.PlacementCapacitySample) error {

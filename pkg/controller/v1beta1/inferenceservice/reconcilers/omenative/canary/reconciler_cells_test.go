@@ -27,6 +27,31 @@ type cell struct {
 	want    cellWant
 }
 
+// cellAlso is an extra reading of a row's pass beside the state, keyed by
+// the row's id, for a row whose point is what the pass wrote on another
+// member of the unit.
+var cellAlso = map[string]func(t *testing.T, isvc *v1beta1.InferenceService){
+	"canary/Staging[pd]/capacityReached":             splitKeeps,
+	"canary/Serving[pd]/capacityDropped":             splitKeeps,
+	"canary/Serving[pd]/capacityDropped[allLost]":    splitRestsOnStable,
+	"canary/Serving[pd]/capacityReached":             splitKeeps,
+	"canary/Serving[pd]/canaryCrashed":               splitRestsOnStable,
+	"canary/Serving[short]/promote":                  waitClocked,
+	"canary/Serving[short]/replicasDown[met]":        waitCleared,
+	"canary/Serving[short]/unpause":                  waitClocked,
+	"canary/Serving[T,short]/pauseElapsed":           waitClocked,
+	"canary/Serving[A,short]/sample[failAtLimit]":    failedChecks(3),
+	"canary/Draining[M,short]/promote":               waitClocked,
+	"canary/Draining[M,short]/promote[thenCapacity]": waitCleared,
+	"canary/Draining[M,short]/promoteForce":          waitCleared,
+	"canary/Draining[T,short]/pauseElapsed":          waitClocked,
+	"canary/Draining[A,short]/sample[passBaked]":     waitClocked,
+
+	// A breach that lands while a canary pod is being rebuilt is counted.
+	"canary/Serving[A,short]/sample[fail]":                failedChecks(1),
+	"canary/Serving[A,onlyPod,short]/sample[failAtLimit]": failedChecks(3),
+}
+
 type cellWant struct {
 	state    rollout.CanaryState
 	phase    v1beta1.RolloutPhase // empty: not asserted
@@ -154,8 +179,14 @@ func withSampler(outcome analysis.Outcome) func(*ReconcileInputs) {
 // servingAnalysis is the analysis-gated split serving inside its bake window
 // with one passing sample consumed.
 func servingAnalysis(t *testing.T, policy *v1beta1.OnInconclusive) (*v1beta1.InferenceService, ReconcileInputs) {
-	isvc := pinActiveRun(canaryISVC(twoStepAnalysis(policy), nil))
-	in := baseInputs(isvc, map[string]int32{"new": 2, "old": 2})
+	return servingAnalysisOf(t, twoStepAnalysis(policy), map[string]int32{"new": 2, "old": 2})
+}
+
+// servingAnalysisOf serves the analysis-gated first step of steps over the
+// given pods per revision, with one passing sample consumed.
+func servingAnalysisOf(t *testing.T, steps []v1beta1.RolloutGroupStep, pods map[string]int32) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc := pinActiveRun(canaryISVC(steps, nil))
+	in := baseInputs(isvc, pods)
 	in.TargetID = "t1"
 	withSampler(analysis.Pass)(&in)
 	mustReconcile(t, isvc, in)
@@ -343,7 +374,7 @@ func fixtureFailedApplied(t *testing.T) (*v1beta1.InferenceService, ReconcileInp
 // still carries an applied promote from the step before the rollback.
 func fixtureFailedStableMissingApplied(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
 	isvc, in := fixtureRollingBackApplied(t)
-	parkFailed(isvc, v1beta1.EngineComponent, rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent), v1beta1.CanaryFailureStableRevisionMissing, in.Now)
+	parkFailed(in, rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent), v1beta1.CanaryFailureStableRevisionMissing)
 	delete(isvc.Annotations, constants.RolloutRollbackAnnotation)
 	return isvc, in
 }
@@ -368,6 +399,20 @@ func fixtureServingManual(t *testing.T) (*v1beta1.InferenceService, ReconcileInp
 	isvc, in := fixtureStaging(t)
 	in.PerRevisionPods = map[string]int32{"new": 2, "old": 2}
 	mustReconcile(t, isvc, in) // gate met, split serving, manual hold
+	return isvc, in
+}
+
+// fixtureServingSecond is the second split of a three-step manual ladder
+// serving under its hold: the first step's promote was applied and removed.
+func fixtureServingSecond(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc := pinActiveRun(canaryISVC(threeStep(), nil))
+	in := baseInputs(isvc, map[string]int32{"new": 2, "old": 2})
+	in.TargetID = "t1"
+	mustReconcile(t, isvc, in) // the first split serves under its manual hold
+	isvc.Annotations = map[string]string{constants.RolloutPromoteAnnotation: "new"}
+	mustReconcile(t, isvc, in) // the promote advances to step 1
+	delete(isvc.Annotations, constants.RolloutPromoteAnnotation)
+	mustReconcile(t, isvc, in) // the record clears; the second split serves
 	return isvc, in
 }
 
@@ -425,11 +470,22 @@ func fixtureDrainingHeld(t *testing.T) (*v1beta1.InferenceService, ReconcileInpu
 // capacity before it ever served: the first step's canary pods are gone by
 // the time the final step stages, so no canary pod serves while it waits.
 func fixtureStagingFinal(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	return stagingFinal(t, nil)
+}
+
+// fixtureStagingFinalWindowed is fixtureStagingFinal under a drain window of
+// an hour, so a release read inside the window can be told from one read
+// with none.
+func fixtureStagingFinalWindowed(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	return stagingFinal(t, i32(3600))
+}
+
+func stagingFinal(t *testing.T, scaleDownDelay *int32) (*v1beta1.InferenceService, ReconcileInputs) {
 	steps := []v1beta1.RolloutGroupStep{
 		{Capacity: intstr.FromString("50%"), Traffic: 50, Pause: &v1beta1.RolloutPause{}},
 		{Capacity: intstr.FromString("100%"), Traffic: 100, Pause: &v1beta1.RolloutPause{}},
 	}
-	isvc := pinActiveRun(canaryISVC(steps, nil))
+	isvc := pinActiveRun(canaryISVC(steps, scaleDownDelay))
 	in := baseInputs(isvc, map[string]int32{"new": 2, "old": 2})
 	in.TargetID = "t1"
 	mustReconcile(t, isvc, in) // arms, gate met, split serving, manual hold
@@ -461,6 +517,49 @@ func fixtureDrainingShortInWindow(t *testing.T) (*v1beta1.InferenceService, Reco
 	in.Now = in.Now.Add(time.Minute)
 	in.PerRevisionPods = map[string]int32{"new": 2, "old": 1}
 	mustReconcile(t, isvc, in)
+	return isvc, in
+}
+
+// threeStepWidening is a manual ladder whose second step stages more canary
+// capacity than its first: 2 of 4 Instances at 25 percent traffic, then 3 at
+// 50, then the final step.
+func threeStepWidening() []v1beta1.RolloutGroupStep {
+	return []v1beta1.RolloutGroupStep{
+		{Capacity: intstr.FromString("50%"), Traffic: 25, Pause: &v1beta1.RolloutPause{}},
+		{Capacity: intstr.FromString("75%"), Traffic: 50, Pause: &v1beta1.RolloutPause{}},
+		{Capacity: intstr.FromString("100%"), Traffic: 100},
+	}
+}
+
+// fixtureStagingServing is an intermediate step short of its capacity while
+// the canary pods of the step before still serve the held split: the first
+// step served on two pods, the promote advanced to a step that stages three,
+// and the capacity wait is clocked.
+func fixtureStagingServing(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc := pinActiveRun(canaryISVC(threeStepWidening(), nil))
+	in := baseInputs(isvc, map[string]int32{"new": 2, "old": 2})
+	in.TargetID = "t1"
+	mustReconcile(t, isvc, in) // the first split serves under its manual hold
+	isvc.Annotations = map[string]string{constants.RolloutPromoteAnnotation: "new"}
+	mustReconcile(t, isvc, in) // the promote advances to the wider step
+	delete(isvc.Annotations, constants.RolloutPromoteAnnotation)
+	mustReconcile(t, isvc, in) // the record clears; the wider step clocks its wait on two of three
+	return isvc, in
+}
+
+// fixtureStagingFinalServing is the final step short of its capacity while
+// the first step's canary pods still serve: the final step stages every
+// Instance but the held stable one, two of those three serve, and the
+// capacity wait is clocked.
+func fixtureStagingFinalServing(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc := pinActiveRun(canaryISVC(twoStep(), nil))
+	in := baseInputs(isvc, map[string]int32{"new": 2, "old": 2})
+	in.TargetID = "t1"
+	mustReconcile(t, isvc, in) // arms, gate met, split serving, manual hold
+	isvc.Annotations = map[string]string{constants.RolloutPromoteAnnotation: "new"}
+	mustReconcile(t, isvc, in) // the promote advances to the final step
+	delete(isvc.Annotations, constants.RolloutPromoteAnnotation)
+	mustReconcile(t, isvc, in) // the record clears; the final step clocks its wait on two of three
 	return isvc, in
 }
 
@@ -507,6 +606,16 @@ func fixtureRolledBack(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs
 	return isvc, in
 }
 
+// fixtureRollingBackFromCutover is a revert begun at the done sentinel: the
+// released stable instance was still rolling when the operator rolled back,
+// so the record keeps the sentinel beside the rejection.
+func fixtureRollingBackFromCutover(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureDoneRolling(t)
+	isvc.Annotations = map[string]string{constants.RolloutRollbackAnnotation: "true"}
+	mustReconcile(t, isvc, in)
+	return isvc, in
+}
+
 func fixtureFailed(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
 	isvc, in := fixtureStaging(t)
 	in.Now = in.Now.Add(cellReadyTimeout + time.Second)
@@ -520,7 +629,7 @@ func fixtureFailed(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
 // gone the way the controller's removal after the park's flush leaves it.
 func fixtureFailedStableMissing(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
 	isvc, in := fixtureRollingBack(t)
-	parkFailed(isvc, v1beta1.EngineComponent, rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent), v1beta1.CanaryFailureStableRevisionMissing, in.Now)
+	parkFailed(in, rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent), v1beta1.CanaryFailureStableRevisionMissing)
 	delete(isvc.Annotations, constants.RolloutRollbackAnnotation)
 	return isvc, in
 }
@@ -544,6 +653,464 @@ func fixtureRollingBackPD(t *testing.T) (*v1beta1.InferenceService, ReconcileInp
 	isvc.Annotations = map[string]string{constants.RolloutRollbackAnnotation: "true"}
 	mustReconcile(t, isvc, in)
 	return isvc, in
+}
+
+// pdUnit is an [engine, decoder] canary unit, engine primary, 4 Instances a
+// side, the run recorded toward new/decnew over old/decold under a pairing
+// protocol change, before its first pass: the engine's pods as given, the
+// decoder on its stable revision alone. The decoder's capacity is what the
+// dispatch hands the pass: its serving canary Instances and whether they
+// meet its step (decoderServes).
+func pdUnit(steps []v1beta1.RolloutGroupStep, scaleDownDelay *int32, enginePods map[string]int32) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc := canaryISVC(steps, scaleDownDelay)
+	isvc.Spec.Rollout.Groups[0].Components = []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent}
+	runWithTargets(isvc,
+		v1beta1.RolloutRunTarget{Component: v1beta1.EngineComponent, Revision: "new", StableRevision: "old"},
+		v1beta1.RolloutRunTarget{Component: v1beta1.DecoderComponent, Revision: "decnew", StableRevision: "decold"},
+	)
+	in := baseInputs(isvc, enginePods)
+	in.TargetID = "t1"
+	in.CanaryPairingProtocol, in.StablePairingProtocol = pdCanaryProtocol, pdStableProtocol
+	in.Secondaries = map[v1beta1.ComponentType]MemberRevisions{v1beta1.DecoderComponent: bumpedDecoder()}
+	in.GroupStableRevisionHashes = map[v1beta1.ComponentType]string{v1beta1.EngineComponent: "old", v1beta1.DecoderComponent: "decold"}
+	decoderServes(&in, 0, 4, false)
+	return isvc, in
+}
+
+// decoderServes is the decoder's capacity as the dispatch reads it off the
+// decoder's replica: canary Instances serving decnew beside stable ones
+// serving decold, and whether the serving canary Instances meet the step's
+// staged count. The decoder is scaled to 4.
+func decoderServes(in *ReconcileInputs, canary, stable int32, met bool) {
+	pods := map[string]int32{"decnew": canary, "decold": stable}
+	in.GroupReadyPerRevisionPods = map[v1beta1.ComponentType]map[string]int32{v1beta1.DecoderComponent: pods}
+	in.GroupTotalPerRevisionPods = map[v1beta1.ComponentType]map[string]int32{v1beta1.EngineComponent: in.PerRevisionPods, v1beta1.DecoderComponent: pods}
+	m := in.Secondaries[v1beta1.DecoderComponent]
+	m.ReadyCanaryCapacity, m.DesiredReplicas = canary, 4
+	in.Secondaries[v1beta1.DecoderComponent] = m
+	in.SecondaryCapacityReady = met
+}
+
+// fixtureIdlePD is a prefill/decode unit with no record: the run names both
+// members at their own revisions, so nothing starts.
+func fixtureIdlePD(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := pdUnit(twoStep(), nil, map[string]int32{"old": 4})
+	runWithTargets(isvc,
+		v1beta1.RolloutRunTarget{Component: v1beta1.EngineComponent, Revision: "old", StableRevision: "old"},
+		v1beta1.RolloutRunTarget{Component: v1beta1.DecoderComponent, Revision: "decold", StableRevision: "decold"},
+	)
+	in.CanaryRevisionHash, in.StableRevisionHash, in.TargetID = "old", "old", "t-idle"
+	in.Secondaries[v1beta1.DecoderComponent] = MemberRevisions{CanaryRevisionHash: "decold", StableRevisionHash: "decold", CanaryPairingProtocol: pdStableProtocol, StablePairingProtocol: pdStableProtocol}
+	return isvc, in
+}
+
+// fixtureStagingPD is the first step with the engine's two canary Instances
+// serving and the decoder short: one of its two staged canary Instances
+// serves, so the step waits on the decoder alone and the wait is clocked.
+func fixtureStagingPD(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := pdUnit(twoStep(), nil, map[string]int32{"new": 2, "old": 2})
+	decoderServes(&in, 1, 3, false)
+	mustReconcile(t, isvc, in)
+	return isvc, in
+}
+
+// servingPD walks a prefill/decode unit to its first split serving on both
+// members under the first step's gate.
+func servingPD(t *testing.T, steps []v1beta1.RolloutGroupStep, scaleDownDelay *int32, prep func(*ReconcileInputs)) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := pdUnit(steps, scaleDownDelay, map[string]int32{"new": 2, "old": 2})
+	decoderServes(&in, 2, 2, true)
+	if prep != nil {
+		prep(&in)
+	}
+	mustReconcile(t, isvc, in)
+	return isvc, in
+}
+
+func fixtureServingManualPD(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	return servingPD(t, twoStep(), nil, nil)
+}
+
+func fixtureServingTimedPD(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	return servingPD(t, twoStepTimed(time.Hour), nil, nil)
+}
+
+func fixtureServingAnalysisPD(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	return servingPD(t, twoStepAnalysis(nil), nil, withSampler(analysis.Pass))
+}
+
+func fixturePreHoldPD(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureServingManualPD(t)
+	rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent).PreStepHold = true
+	mustReconcile(t, isvc, in)
+	return isvc, in
+}
+
+// fixtureStagingFinalPD is the final step short on the decoder alone: the
+// promote advanced the step, three engine Instances serve the canary
+// revision, and two of the decoder's three staged Instances do.
+func fixtureStagingFinalPD(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureServingManualPD(t)
+	isvc.Annotations = map[string]string{constants.RolloutPromoteAnnotation: "new"}
+	mustReconcile(t, isvc, in) // the promote advances to the final step
+	delete(isvc.Annotations, constants.RolloutPromoteAnnotation)
+	in.PerRevisionPods = map[string]int32{"new": 3, "old": 1}
+	decoderServes(&in, 2, 2, false)
+	mustReconcile(t, isvc, in) // the record clears; the final step waits on the decoder
+	return isvc, in
+}
+
+// drainingPD walks a prefill/decode unit into its final step at 100 percent
+// under the given final step, both members staged whole.
+func drainingPD(t *testing.T, steps []v1beta1.RolloutGroupStep, scaleDownDelay *int32) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := servingPD(t, steps, scaleDownDelay, nil)
+	isvc.Annotations = map[string]string{constants.RolloutPromoteAnnotation: "new"}
+	mustReconcile(t, isvc, in) // the promote advances to the final step
+	delete(isvc.Annotations, constants.RolloutPromoteAnnotation)
+	in.PerRevisionPods = map[string]int32{"new": 3, "old": 1}
+	decoderServes(&in, 3, 1, true)
+	mustReconcile(t, isvc, in) // 100% traffic on both members
+	return isvc, in
+}
+
+func fixtureDrainingPD(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	return drainingPD(t, twoStep(), i32(3600))
+}
+
+func fixtureDrainingHeldPD(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	return drainingPD(t, twoStepHeldFinal(), nil)
+}
+
+// drainingShortPD is fixtureDrainingPD with a decoder canary Instance lost
+// after d: the release waits on the decoder.
+func drainingShortPD(t *testing.T, d time.Duration) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureDrainingPD(t)
+	in.Now = in.Now.Add(d)
+	decoderServes(&in, 2, 1, false)
+	mustReconcile(t, isvc, in)
+	return isvc, in
+}
+
+func fixtureDrainingShortInWindowPD(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	return drainingShortPD(t, time.Minute)
+}
+
+func fixtureDrainingShortPD(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	return drainingShortPD(t, 2*time.Hour)
+}
+
+func fixtureDoneRollingPD(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureDrainingPD(t)
+	in.Now = in.Now.Add(2 * time.Hour)
+	mustReconcile(t, isvc, in) // the window elapsed: the released Instances roll
+	return isvc, in
+}
+
+func fixtureDonePD(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureDoneRollingPD(t)
+	in.PerRevisionPods = map[string]int32{"new": 4}
+	decoderServes(&in, 4, 0, true)
+	mustReconcile(t, isvc, in)
+	return isvc, in
+}
+
+func fixtureFailedPD(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureStagingPD(t)
+	in.Now = in.Now.Add(cellReadyTimeout + time.Second)
+	mustReconcile(t, isvc, in)
+	return isvc, in
+}
+
+// fixtureFailedStableMissingPD is the stable-missing hold on the two-member
+// unit, recorded the way Dispatch records it.
+func fixtureFailedStableMissingPD(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureRollingBackPD(t)
+	parkFailed(in, rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent), v1beta1.CanaryFailureStableRevisionMissing)
+	delete(isvc.Annotations, constants.RolloutRollbackAnnotation)
+	in.Secondaries = map[v1beta1.ComponentType]MemberRevisions{v1beta1.DecoderComponent: {CanaryRevisionHash: "dec-new", StableRevisionHash: "dec-old"}}
+	return isvc, in
+}
+
+// The decoder's capacity events, as the dispatch reads them off the
+// decoder's replica. A dip leaves one canary Instance serving, so the unit's
+// canary path still serves; a loss leaves none, and the whole unit's split
+// rests on the stable revisions until a decoder canary pod serves again.
+func evDecoderCapacityDropped(_ *v1beta1.InferenceService, in *ReconcileInputs) {
+	decoderServes(in, 1, 2, false)
+}
+func evDecoderCapacityLost(_ *v1beta1.InferenceService, in *ReconcileInputs) {
+	decoderServes(in, 0, 2, false)
+}
+func evDecoderCapacityReached(_ *v1beta1.InferenceService, in *ReconcileInputs) {
+	decoderServes(in, 2, 2, true)
+}
+
+// evDecoderDipThenBack: a decoder canary pod was lost for a pass and every
+// staged decoder Instance serves again.
+func evDecoderDipThenBack(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evDecoderCapacityDropped(isvc, in)
+	reconcileOnce(isvc, in)
+	evDecoderCapacityReached(isvc, in)
+}
+
+// evDecoderDipThenReadyTimeout: a decoder canary pod is lost and stays lost
+// past the ready timeout, clocked from the dip.
+func evDecoderDipThenReadyTimeout(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evDecoderCapacityDropped(isvc, in)
+	reconcileOnce(isvc, in)
+	in.Now = in.Now.Add(cellReadyTimeout + time.Second)
+}
+
+// The decoder's capacity at the final step, which stages three of its four
+// Instances.
+func evDecoderDrainCapacityDropped(_ *v1beta1.InferenceService, in *ReconcileInputs) {
+	decoderServes(in, 2, 1, false)
+}
+func evDecoderDrainCapacityDeeper(_ *v1beta1.InferenceService, in *ReconcileInputs) {
+	decoderServes(in, 1, 1, false)
+}
+func evDecoderDrainCapacityReached(_ *v1beta1.InferenceService, in *ReconcileInputs) {
+	decoderServes(in, 3, 1, true)
+}
+func evDecoderDrainDipThenBack(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evDecoderDrainCapacityDropped(isvc, in)
+	reconcileOnce(isvc, in)
+	evDecoderDrainCapacityReached(isvc, in)
+}
+func evDecoderDrainDipThenReadyTimeout(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evDecoderDrainCapacityDropped(isvc, in)
+	reconcileOnce(isvc, in)
+	in.Now = in.Now.Add(cellReadyTimeout + time.Second)
+}
+
+// evDecoderPodLostAfterCutover: a decoder pod is lost once the cutover
+// landed on both members.
+func evDecoderPodLostAfterCutover(_ *v1beta1.InferenceService, in *ReconcileInputs) {
+	decoderServes(in, 3, 0, true)
+}
+
+// splitRestsOnStable reads both members' splits resting on the stable
+// revisions: the decoder's canary revision has no serving pod, so the whole
+// unit's canary path is broken and the engine's canary carries no weight.
+func splitRestsOnStable(t *testing.T, isvc *v1beta1.InferenceService) {
+	t.Helper()
+	expectTargets(t, isvc, v1beta1.EngineComponent, map[string]trafficWant{"old": {percent: 100, protocol: pdStableProtocol}})
+	expectTargets(t, isvc, v1beta1.DecoderComponent, map[string]trafficWant{"decold": {percent: 100, protocol: pdStableProtocol}})
+}
+
+// splitKeeps reads the step's split standing on both members.
+func splitKeeps(t *testing.T, isvc *v1beta1.InferenceService) {
+	t.Helper()
+	expectTargets(t, isvc, v1beta1.EngineComponent, map[string]trafficWant{
+		"new": {percent: 50, protocol: pdCanaryProtocol, latest: true},
+		"old": {percent: 50, protocol: pdStableProtocol},
+	})
+	expectTargets(t, isvc, v1beta1.DecoderComponent, map[string]trafficWant{
+		"decnew": {percent: 50, protocol: pdCanaryProtocol, latest: true},
+		"decold": {percent: 50, protocol: pdStableProtocol},
+	})
+}
+
+// A step's split short again: a canary pod of the step is lost and being
+// rebuilt while the split serves on the pods that are left. The capacity
+// gate stands in front of the step's gate, so the operator's promote, an
+// elapsed timed pause and a sample move nothing until the pod serves again;
+// the drain behind a held final gate is exempt from that hold.
+
+// dipped runs one pass over the fixture with a canary pod of the step lost,
+// so the capacity wait is clocked and the split keeps its recorded weight.
+func dipped(t *testing.T, isvc *v1beta1.InferenceService, in ReconcileInputs) (*v1beta1.InferenceService, ReconcileInputs) {
+	t.Helper()
+	evCapacityDropped(isvc, &in)
+	mustReconcile(t, isvc, in)
+	return isvc, in
+}
+
+func fixtureServingManualShort(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureServingManual(t)
+	return dipped(t, isvc, in)
+}
+
+func fixtureServingTimedShort(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureServingTimed(t)
+	return dipped(t, isvc, in)
+}
+
+// firstPauseShortened rewrites the first step's timed pause to d in the spec
+// and in the run's recorded copy of the plan, as a plan written with that
+// pause would read; the step's clocks are left as they are.
+func firstPauseShortened(isvc *v1beta1.InferenceService, d time.Duration) {
+	isvc.Spec.Rollout.Groups[0].Canary.Steps[0].Pause.Duration = &metav1.Duration{Duration: d}
+	isvc.Status.Rollout.ActiveRun.Plan.Groups[0].Group.Canary.Steps[0].Pause.Duration = &metav1.Duration{Duration: d}
+}
+
+// fixtureServingTimedBriefShort pauses five minutes, shorter than the ready
+// timeout, so the pause can elapse under the loss before the wait stops the
+// unit.
+func fixtureServingTimedBriefShort(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureServingTimed(t)
+	firstPauseShortened(isvc, 5*time.Minute)
+	return dipped(t, isvc, in)
+}
+
+func fixtureServingAnalysisShort(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureServingAnalysis(t)
+	return dipped(t, isvc, in)
+}
+
+// fixtureServingAnalysisBriefShort bakes five minutes, shorter than the
+// ready timeout, so a passing sample past the bake can land under the loss.
+func fixtureServingAnalysisBriefShort(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureServingAnalysis(t)
+	firstPauseShortened(isvc, 5*time.Minute)
+	return dipped(t, isvc, in)
+}
+
+// fixtureServingAnalysisOnlyPodShort is an analysis-gated 25 percent step
+// of four engines whose one canary pod is lost and being rebuilt: no canary
+// pod serves, the split rests on the stable revision, and the unit's pod
+// view still carries the pod the rebuild replaces.
+func fixtureServingAnalysisOnlyPodShort(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	steps := twoStepAnalysis(nil)
+	steps[0].Capacity = intstr.FromString("25%")
+	steps[0].Traffic = 25
+	isvc, in := servingAnalysisOf(t, steps, map[string]int32{"new": 1, "old": 3})
+	in.PerRevisionPods = map[string]int32{"new": 0, "old": 3}
+	in.GroupTotalPerRevisionPods = map[v1beta1.ComponentType]map[string]int32{v1beta1.EngineComponent: {"new": 1, "old": 3}}
+	mustReconcile(t, isvc, in) // the loss clocks the capacity wait
+	return isvc, in
+}
+
+// fixtureServingAnalysisShortLate loses a canary pod five minutes after the
+// gate's last conclusive sample, so the stall timeout elapses before the
+// ready timeout of the loss.
+func fixtureServingAnalysisShortLate(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureServingAnalysis(t)
+	in.Now = in.Now.Add(5 * time.Minute)
+	return dipped(t, isvc, in)
+}
+
+func fixtureServingAnalysisRollbackOnStallShortLate(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureServingAnalysisRollbackOnStall(t)
+	in.Now = in.Now.Add(5 * time.Minute)
+	return dipped(t, isvc, in)
+}
+
+func fixturePreHoldShort(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixturePreHold(t)
+	return dipped(t, isvc, in)
+}
+
+// heldFinalShort walks a step list whose final step carries the given gate to
+// 100% traffic behind that gate inside a three-hour window, then loses a
+// canary pod behind the gate.
+func heldFinalShort(t *testing.T, gate v1beta1.RolloutGroupStep, prep func(*ReconcileInputs)) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := heldFinal(t, gate, prep)
+	evDrainingCapacityDropped(isvc, &in)
+	mustReconcile(t, isvc, in)
+	return isvc, in
+}
+
+func fixtureDrainingHeldShort(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	return heldFinalShort(t, v1beta1.RolloutGroupStep{Capacity: intstr.FromString("100%"), Traffic: 100, Pause: &v1beta1.RolloutPause{}}, nil)
+}
+
+func fixtureDrainingHeldTimedBriefShort(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	return heldFinalShort(t, v1beta1.RolloutGroupStep{Capacity: intstr.FromString("100%"), Traffic: 100, Pause: &v1beta1.RolloutPause{Duration: &metav1.Duration{Duration: 5 * time.Minute}}}, nil)
+}
+
+func fixtureDrainingHeldAnalysisBriefShort(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	gate := v1beta1.RolloutGroupStep{Capacity: intstr.FromString("100%"), Traffic: 100, Pause: &v1beta1.RolloutPause{Duration: &metav1.Duration{Duration: 5 * time.Minute}}, Analysis: analysisGate(nil)}
+	return heldFinalShort(t, gate, withSampler(analysis.Pass))
+}
+
+// fixtureServingManualPDShort is the prefill/decode split serving under its
+// manual hold with a decoder canary pod lost.
+func fixtureServingManualPDShort(t *testing.T) (*v1beta1.InferenceService, ReconcileInputs) {
+	isvc, in := fixtureServingManualPD(t)
+	evDecoderCapacityDropped(isvc, &in)
+	mustReconcile(t, isvc, in)
+	return isvc, in
+}
+
+// evPromoteThenCapacityBack: the promote lands while the step's capacity is
+// short, a pass holds it, and the lost pod serves again.
+func evPromoteThenCapacityBack(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evPromoteMatch(isvc, in)
+	reconcileOnce(isvc, in)
+	evCapacityReached(isvc, in)
+}
+
+func evDecoderPromoteThenCapacityBack(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evPromoteMatch(isvc, in)
+	reconcileOnce(isvc, in)
+	evDecoderCapacityReached(isvc, in)
+}
+
+func evDrainingPromoteThenCapacityBack(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evPromoteMatch(isvc, in)
+	reconcileOnce(isvc, in)
+	evDrainingCapacityReached(isvc, in)
+}
+
+// evPauseElapsedBrief: six minutes pass, past a five-minute timed pause and
+// inside the ready timeout.
+func evPauseElapsedBrief(_ *v1beta1.InferenceService, in *ReconcileInputs) {
+	in.Now = in.Now.Add(6 * time.Minute)
+}
+
+func evPauseElapsedBriefThenCapacityBack(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evPauseElapsedBrief(isvc, in)
+	reconcileOnce(isvc, in)
+	evCapacityReached(isvc, in)
+}
+
+// evPauseElapsedBriefThenRestartedPodBack: the timed pause elapsed under the
+// loss, and the pod that died came back Ready two minutes before the pass,
+// which moves the pause's anchor onto its readiness.
+func evPauseElapsedBriefThenRestartedPodBack(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evPauseElapsedBrief(isvc, in)
+	reconcileOnce(isvc, in)
+	in.CanaryRestartedAt = in.Now.Add(-2 * time.Minute)
+	evCapacityReached(isvc, in)
+}
+
+// evSampleBakedBriefThenCapacityBack: a passing sample past the five-minute
+// bake lands under the loss, a pass holds it, the lost pod serves again and
+// the gate reads a passing sample on the next interval.
+func evSampleBakedBriefThenCapacityBack(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evSample(analysis.Pass, 6*time.Minute)(isvc, in)
+	reconcileOnce(isvc, in)
+	evCapacityReached(isvc, in)
+	withSampler(analysis.Pass)(in)
+	in.Now = in.Now.Add(2 * time.Minute)
+}
+
+// waitClocked reads the capacity wait still open after the pass; waitCleared
+// reads it closed.
+func waitClocked(t *testing.T, isvc *v1beta1.InferenceService) {
+	t.Helper()
+	if rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent).CapacityWaitSince == nil {
+		t.Error("the capacity wait must stay clocked")
+	}
+}
+
+func waitCleared(t *testing.T, isvc *v1beta1.InferenceService) {
+	t.Helper()
+	if rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent).CapacityWaitSince != nil {
+		t.Error("the capacity wait must be cleared")
+	}
+}
+
+// failedChecks reads the step's failing checks at want: a breach that lands
+// while a canary pod is being rebuilt is counted, since the metric gate is
+// read for a retreat under the loss.
+func failedChecks(want int32) func(t *testing.T, isvc *v1beta1.InferenceService) {
+	return func(t *testing.T, isvc *v1beta1.InferenceService) {
+		t.Helper()
+		if got := rollout.CanaryStatusFor(&isvc.Status, v1beta1.EngineComponent).AnalysisFailedChecks; got != want {
+			t.Errorf("failed checks %d, want %d: a breach under the loss must be counted", got, want)
+		}
+	}
 }
 
 // setGroupPods writes the engine's ready pods (the primary view) and every
@@ -589,6 +1156,14 @@ func evForcePastReadyTimeout(isvc *v1beta1.InferenceService, in *ReconcileInputs
 	evForceMatch(isvc, in)
 	in.Now = in.Now.Add(cellReadyTimeout + time.Second)
 }
+
+// evForceThenCapacity: the force opens the final step into its drain while
+// the capacity is short, and the pass after counts the staged capacity up.
+func evForceThenCapacity(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evForceMatch(isvc, in)
+	reconcileOnce(isvc, in)
+	in.PerRevisionPods = map[string]int32{"new": 3, "old": 1}
+}
 func evRollback(isvc *v1beta1.InferenceService, _ *ReconcileInputs) {
 	annotate(isvc, constants.RolloutRollbackAnnotation, "true")
 }
@@ -600,6 +1175,19 @@ func evResumeOwn(isvc *v1beta1.InferenceService, _ *ReconcileInputs) {
 }
 func evResumeStale(isvc *v1beta1.InferenceService, _ *ReconcileInputs) {
 	annotate(isvc, constants.RolloutResumeAnnotation, "old")
+}
+
+// evResumeOwnUntargeted names the unit's own parked revision after the spec
+// went back to the stable revision: the primary's replica reports the stable
+// revision as its target again. evResumeOwnUntargetedRunClosed is the same
+// value on a settled rollback, whose run has closed.
+func evResumeOwnUntargeted(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evResumeOwn(isvc, in)
+	in.CanaryRevisionHash = "old"
+}
+func evResumeOwnUntargetedRunClosed(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evRunLost(isvc, in)
+	evResumeOwnUntargeted(isvc, in)
 }
 func evNewTarget(_ *v1beta1.InferenceService, in *ReconcileInputs) {
 	in.CanaryRevisionHash, in.TargetID = "newer", "t2"
@@ -662,6 +1250,28 @@ func evDrainingCapacityReached(_ *v1beta1.InferenceService, in *ReconcileInputs)
 	in.PerRevisionPods = map[string]int32{"new": 3, "old": 1}
 }
 
+// evDrainingCapacityDroppedDeeper: a second canary pod is lost from a drain
+// already short of one.
+func evDrainingCapacityDroppedDeeper(_ *v1beta1.InferenceService, in *ReconcileInputs) {
+	in.PerRevisionPods = map[string]int32{"new": 1, "old": 1}
+}
+
+// evDrainingCapacityBack: a canary pod of the drain was lost for a pass and
+// every staged canary instance serves again.
+func evDrainingCapacityBack(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evDrainingCapacityDropped(isvc, in)
+	reconcileOnce(isvc, in)
+	evDrainingCapacityReached(isvc, in)
+}
+
+// evDrainingDipThenReadyTimeout: a canary pod of the drain is lost and stays
+// lost past the ready timeout, clocked from the dip.
+func evDrainingDipThenReadyTimeout(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evDrainingCapacityDropped(isvc, in)
+	reconcileOnce(isvc, in)
+	in.Now = in.Now.Add(cellReadyTimeout + time.Second)
+}
+
 // evReplacementReady: the released instance's replacement is Ready on the
 // canary revision while the stable instance it replaces still serves.
 func evReplacementReady(_ *v1beta1.InferenceService, in *ReconcileInputs) {
@@ -671,6 +1281,27 @@ func evReplacementReady(_ *v1beta1.InferenceService, in *ReconcileInputs) {
 // evLastInstanceRolled: nothing serves the stable revision any more.
 func evLastInstanceRolled(_ *v1beta1.InferenceService, in *ReconcileInputs) {
 	in.PerRevisionPods = map[string]int32{"new": 4}
+}
+
+// evLastInstanceLeftShort: the released Instance's old pod left before its
+// replacement serves, as RecreatePod rolls it; nothing serves the stable
+// revision and the target is one Instance short.
+func evLastInstanceLeftShort(_ *v1beta1.InferenceService, in *ReconcileInputs) {
+	in.PerRevisionPods = map[string]int32{"new": 3}
+}
+
+// evDecoderLastInstanceLeftShort: the engine's cutover landed and the
+// decoder's released Instance is between its old pod and its replacement.
+func evDecoderLastInstanceLeftShort(_ *v1beta1.InferenceService, in *ReconcileInputs) {
+	in.PerRevisionPods = map[string]int32{"new": 4}
+	decoderServes(in, 3, 0, true)
+}
+
+// evDecoderLastInstanceRolled: every Instance of both members serves its
+// target revision.
+func evDecoderLastInstanceRolled(_ *v1beta1.InferenceService, in *ReconcileInputs) {
+	in.PerRevisionPods = map[string]int32{"new": 4}
+	decoderServes(in, 4, 0, true)
 }
 
 // evCanaryPodLost: a canary pod is lost after the cutover completed.
@@ -746,6 +1377,13 @@ func evMemberStableUnknown(isvc *v1beta1.InferenceService, in *ReconcileInputs) 
 // are unchanged.
 func evCanaryCrashed(_ *v1beta1.InferenceService, in *ReconcileInputs) {
 	in.Crash = &CanaryCrash{Component: v1beta1.EngineComponent, PodName: "svc-engine-3-default-0", Detail: "Error (exit 1)"}
+}
+
+// evDecoderCanaryCrashed: the decoder's canary pod is in a crash loop after
+// its Instance served; the dispatch hands the first crash it found on any
+// member to the pass.
+func evDecoderCanaryCrashed(_ *v1beta1.InferenceService, in *ReconcileInputs) {
+	in.Crash = &CanaryCrash{Component: v1beta1.DecoderComponent, PodName: "svc-decoder-1-default-0", Detail: "Error (exit 1)"}
 }
 
 // evCanaryPodDeleted: a canary pod is deleted by hand a minute into the
@@ -826,6 +1464,21 @@ func evRollbackStableEmpty(isvc *v1beta1.InferenceService, in *ReconcileInputs) 
 	evRollback(isvc, in)
 }
 
+// evDoneRollingRollbackStableEmpty: the request lands at the sentinel while
+// the released instance restarts in place, so no pod of the stable revision
+// serves and the instance's replacement is not up yet.
+func evDoneRollingRollbackStableEmpty(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	in.PerRevisionPods = map[string]int32{"new": 3}
+	evRollback(isvc, in)
+}
+
+// evRollbackAfterRestart: a canary pod died once and came back a minute
+// before the operator rolls back; the kubelet has it serving again.
+func evRollbackAfterRestart(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evCanaryRestarted(isvc, in)
+	evRollback(isvc, in)
+}
+
 // evDrainingRollbackStableEmpty: the request lands in the drain while the
 // held stable instance is gone.
 func evDrainingRollbackStableEmpty(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
@@ -887,6 +1540,15 @@ func evDipThenReadyTimeout(isvc *v1beta1.InferenceService, in *ReconcileInputs) 
 func evUnpauseAfterSoak(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
 	evPause(isvc, in)
 	in.Now = in.Now.Add(2 * time.Hour)
+	reconcileOnce(isvc, in)
+	delete(isvc.Annotations, constants.PausedRolloutAnnotation)
+}
+
+// evUnpausePastReadyTimeout: the pause outlasted the ready timeout of a
+// capacity wait that began before it.
+func evUnpausePastReadyTimeout(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	evPause(isvc, in)
+	in.Now = in.Now.Add(cellReadyTimeout + time.Second)
 	reconcileOnce(isvc, in)
 	delete(isvc.Annotations, constants.PausedRolloutAnnotation)
 }
@@ -954,6 +1616,17 @@ func evRetargetObserved(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
 func evRetargetWithoutRun(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
 	evRetargetObserved(isvc, in)
 	in.RunActive = false
+}
+
+// evTargetReverted: the run closed with nothing to roll because the spec
+// returned to the stable revision, which every Instance already runs; the
+// pass under test is the executor's on that close.
+func evTargetReverted(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	isvc.Status.Rollout.ActiveRun = nil
+	in.RunActive = false
+	in.TargetID = ""
+	in.CanaryRevisionHash = "old"
+	in.PerRevisionPods = map[string]int32{"old": 4}
 }
 
 // The verbs that reach a park with no run pinned.
@@ -1037,6 +1710,26 @@ func evRepinRaise(isvc *v1beta1.InferenceService, _ *ReconcileInputs) {
 	repinLadder(isvc, []v1beta1.RolloutGroupStep{{Capacity: intstr.FromString("100%"), Traffic: 100}})
 }
 
+// evRepinLongerTimed: evRepinLonger with a timed wait on the clamped step,
+// so a timed step clamps onto a timed step at no more traffic.
+func evRepinLongerTimed(isvc *v1beta1.InferenceService, _ *ReconcileInputs) {
+	repinLadder(isvc, []v1beta1.RolloutGroupStep{
+		{Capacity: intstr.FromString("25%"), Traffic: 25, Pause: &v1beta1.RolloutPause{Duration: &metav1.Duration{Duration: time.Hour}}},
+		{Capacity: intstr.FromString("50%"), Traffic: 50, Pause: &v1beta1.RolloutPause{Duration: &metav1.Duration{Duration: time.Hour}}},
+		{Capacity: intstr.FromString("100%"), Traffic: 100},
+	})
+}
+
+// evRepinTightenAnalysis: the step list is repinned with the metric gate
+// kept on its first step at less traffic than the weight on record, so the
+// clamp lowers the split and sets no hold.
+func evRepinTightenAnalysis(isvc *v1beta1.InferenceService, _ *ReconcileInputs) {
+	repinLadder(isvc, []v1beta1.RolloutGroupStep{
+		{Capacity: intstr.FromString("25%"), Traffic: 25, Pause: &v1beta1.RolloutPause{Duration: &metav1.Duration{Duration: time.Hour}}, Analysis: analysisGate(nil)},
+		{Capacity: intstr.FromString("100%"), Traffic: 100},
+	})
+}
+
 // evRepinPastDone: a unit that finished under the old ladder is repinned
 // onto a longer one; done stays done at the new ladder's length.
 func evRepinPastDone(isvc *v1beta1.InferenceService, _ *ReconcileInputs) {
@@ -1054,6 +1747,45 @@ func evResumeReshownAcrossSecondPark(isvc *v1beta1.InferenceService, in *Reconci
 	in.Now = in.Now.Add(cellReadyTimeout + time.Second)
 	reconcileOnce(isvc, in) // the wait outlives the timeout: a second park
 	evResumeOwn(isvc, in)
+}
+
+// withOtherUnit adds a router unit to the plan, run and spec alike, carrying
+// the given record and phase, so a cell observes the engine unit's pass
+// beside another unit's canary.
+func withOtherUnit(isvc *v1beta1.InferenceService, cs *v1beta1.CanaryStatus, phase v1beta1.RolloutPhase) {
+	g := unitGroup(v1beta1.RouterComponent)
+	isvc.Spec.Rollout.Groups = append(isvc.Spec.Rollout.Groups, g)
+	if isvc.Status.Rollout != nil && isvc.Status.Rollout.ActiveRun != nil {
+		isvc.Status.Rollout.ActiveRun.Plan.Groups = append(isvc.Status.Rollout.ActiveRun.Plan.Groups,
+			v1beta1.RolloutRunGroup{Source: v1beta1.RolloutPlanSourceInline, Group: g})
+	}
+	rollout.SetCanaryStatusFor(&isvc.Status, v1beta1.RouterComponent, cs)
+	setPhase(isvc, v1beta1.RouterComponent, phase)
+}
+
+// evRollbackOtherUnitLive: the request arrives while the router unit serves
+// a canary of its own.
+func evRollbackOtherUnitLive(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	withOtherUnit(isvc, &v1beta1.CanaryStatus{CanaryRevisionHash: "r2", StableRevisionHash: "r1"}, v1beta1.RolloutPhaseCanarying)
+	evRollback(isvc, in)
+}
+
+// evRollbackOtherUnitHolds: the visible request is the one the router unit
+// applied; it holds its rollback.
+func evRollbackOtherUnitHolds(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	withOtherUnit(isvc, &v1beta1.CanaryStatus{
+		CanaryRevisionHash: "r2", StableRevisionHash: "r1", RolledBackRevisionHash: "r2", RollbackRequested: true,
+	}, v1beta1.RolloutPhaseRolledBack)
+	evRollback(isvc, in)
+}
+
+// evRollbackOtherUnitRejected: the router unit rolled back on its own
+// (analysis); the request is fresh.
+func evRollbackOtherUnitRejected(isvc *v1beta1.InferenceService, in *ReconcileInputs) {
+	withOtherUnit(isvc, &v1beta1.CanaryStatus{
+		CanaryRevisionHash: "r2", StableRevisionHash: "r1", RolledBackRevisionHash: "r2",
+	}, v1beta1.RolloutPhaseRolledBack)
+	evRollback(isvc, in)
 }
 
 func TestReconcileCells(t *testing.T) {
@@ -1133,7 +1865,23 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Draining/rollback", fixtureDraining, evRollback, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, step: 1, active: true, rolledBk: true}},
 		{"canary/Draining[capacityShort]/rollback", fixtureDrainingShort, evRollback, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, step: 1, active: true, rolledBk: true}},
 		{"canary/Done/rollback", fixtureDone, evRollback, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2, consume: []string{constants.RolloutRollbackAnnotation}}},
-		{"canary/Done[rolling]/rollback", fixtureDoneRolling, evRollback, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true, consume: []string{constants.RolloutRollbackAnnotation}}},
+		// the released floor is still rolling, so the cutover has not landed: the operator's rollback
+		// records the rejection and returns every member to its stable revision. The record keeps the
+		// sentinel, and the request stays in place, inert behind the recorded rejection.
+		{"canary/Done[rolling]/rollback", fixtureDoneRolling, evRollback, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, step: 2, active: true, rolledBk: true}},
+		{"canary/Done[rolling]/rollback[reshown]", fixtureDoneRolling, evRollbackReshown, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, step: 2, active: true, rolledBk: true}},
+		// the released instance restarts in place, so no pod of the stable revision serves: the
+		// operator's rollback proceeds all the same, with the warning, and rebuilds every instance onto it
+		{"canary/Done[rolling]/rollback[stableEmpty]", fixtureDoneRolling, evDoneRollingRollbackStableEmpty, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, step: 2, active: true, rolledBk: true}},
+		// a canary pod that died once and came back on the way changes nothing about the rollback
+		{"canary/Done[rolling]/rollback[restartOnce]", fixtureDoneRolling, evRollbackAfterRestart, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, step: 2, active: true, rolledBk: true}},
+		// a revert begun at the sentinel runs like any other: a pause echoes it so the controller keeps
+		// the replica's revert signal, a lost run is adopted around it, and it reads complete once no
+		// pod of the rejected revision remains
+		{"canary/RollingBack[cutover]/pause", fixtureRollingBackFromCutover, evPause, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, step: 2, active: true, rolledBk: true}},
+		{"canary/RollingBack[cutover]/resync", fixtureRollingBackFromCutover, evNothing, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, step: 2, active: true, rolledBk: true}},
+		{"canary/RollingBack[cutover]/runLost", fixtureRollingBackFromCutover, evRunLost, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, step: 2, active: true, rolledBk: true}},
+		{"canary/RollingBack[cutover]/rejectedPodsGone", fixtureRollingBackFromCutover, evRejectedPodsGone, cellWant{state: rolledBack, phase: v1beta1.RolloutPhaseRolledBack, step: 2, active: true, rolledBk: true}},
 		{"canary/RolledBack/rollback", fixtureRolledBack, evRollback, cellWant{state: rolledBack, phase: v1beta1.RolloutPhaseRolledBack, active: true, rolledBk: true}},
 		{"canary/Failed/rollback", fixtureFailed, evRollback, cellWant{state: rolledBack, phase: v1beta1.RolloutPhaseRolledBack, active: true, rolledBk: true}},
 		// the park at the release still has canary pods to drain, so its rollback drains first
@@ -1141,6 +1889,16 @@ func TestReconcileCells(t *testing.T) {
 		// A park for a missing stable revision already carries the rejection the
 		// request asked for: the request is refused and handed back, the park unmoved.
 		{"canary/Failed[stableMissing]/rollback", fixtureFailedStableMissing, evRollback, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true, consume: []string{constants.RolloutRollbackAnnotation}}},
+		// rollback beside another unit: a request a unit holds, or one another
+		// unit's canary can apply, is that unit's; a request no unit can act on
+		// is removed; a unit rolled back on its own holds no request.
+		{"canary/Idle/rollback[otherUnitLive]", fixtureIdle, evRollbackOtherUnitLive, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
+		{"canary/Idle/rollback[otherUnitHolds]", fixtureIdle, evRollbackOtherUnitHolds, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
+		{"canary/Idle/rollback[otherUnitRejected]", fixtureIdle, evRollbackOtherUnitRejected, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable, consume: []string{constants.RolloutRollbackAnnotation}}},
+		{"canary/Staging/rollback[otherUnitHolds]", fixtureStaging, evRollbackOtherUnitHolds, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
+		{"canary/Staging/rollback[otherUnitRejected]", fixtureStaging, evRollbackOtherUnitRejected, cellWant{state: rolledBack, phase: v1beta1.RolloutPhaseRolledBack, active: true, rolledBk: true}},
+		{"canary/Done/rollback[otherUnitLive]", fixtureDone, evRollbackOtherUnitLive, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
+		{"canary/Done/rollback[otherUnitHolds]", fixtureDone, evRollbackOtherUnitHolds, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
 		// resume: honored at a park it names; everywhere else, and for a hash
 		// no canary carries, consumed and ignored.
 		{"canary/Idle/resume", fixtureIdle, evResumeStale, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable, consume: []string{constants.RolloutResumeAnnotation}}},
@@ -1159,6 +1917,12 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Failed/resume", fixtureFailed, evResumeOwn, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true, consume: []string{constants.RolloutResumeAnnotation}}},
 		{"canary/Failed/resume[stale]", fixtureFailed, evResumeStale, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true, consume: []string{constants.RolloutResumeAnnotation}}},
 		{"canary/Failed[stableMissing]/resume", fixtureFailedStableMissing, evResumeOwn, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true, consume: []string{constants.RolloutResumeAnnotation}}},
+		// resume[untargeted]: the value names the parked revision, but the spec went
+		// back to the stable revision and no member targets it; nothing is left to
+		// re-enter, so the verb is refused and the hold stays.
+		{"canary/RolledBack/resume[untargeted]", fixtureRolledBack, evResumeOwnUntargetedRunClosed, cellWant{state: rolledBack, phase: v1beta1.RolloutPhaseRolledBack, active: true, rolledBk: true, consume: []string{constants.RolloutResumeAnnotation}}},
+		{"canary/Failed/resume[untargeted]", fixtureFailed, evResumeOwnUntargeted, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true, consume: []string{constants.RolloutResumeAnnotation}}},
+		{"canary/Failed[stableMissing]/resume[untargeted]", fixtureFailedStableMissing, evResumeOwnUntargeted, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true, consume: []string{constants.RolloutResumeAnnotation}}},
 		{"canary/Failed[release]/resume", fixtureFailedAtTheRelease, evResumeOwn, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true, consume: []string{constants.RolloutResumeAnnotation}}},
 		// new target
 		{"canary/Staging/newTarget", fixtureStaging, evNewTarget, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
@@ -1201,6 +1965,12 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/PreHold/capacityDropped", fixturePreHold, evCapacityDropped, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/Draining/capacityDropped", fixtureDraining, evDrainingCapacityDropped, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining/capacityDropped[drainElapsed]", fixtureDraining, evDrainingCapacityDroppedPastTheWindow, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		// a further canary pod lost while the capacity is already short deepens a wait that is
+		// already clocked: the step and its clock stay, and the split follows the pods that serve
+		{"canary/Staging/capacityDropped", fixtureStagingServing, evCapacityDropped, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
+		{"canary/Staging[final]/capacityDropped", fixtureStagingFinalServing, evCapacityDropped, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
+		{"canary/Draining[capacityShort,inWindow]/capacityDropped", fixtureDrainingShortInWindow, evDrainingCapacityDroppedDeeper, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[capacityShort]/capacityDropped", fixtureDrainingShort, evDrainingCapacityDroppedDeeper, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		// a canary pod lost after the cutover completed is the workload's repair, not a canary state
 		{"canary/Done/capacityDropped", fixtureDone, evCanaryPodLost, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
 		// canary crashed: a pod that served and keeps dying parks a live ladder at its step, whatever
@@ -1259,6 +2029,15 @@ func TestReconcileCells(t *testing.T) {
 		// instance still serves; the pass that finds nothing on the stable revision completes
 		{"canary/Done[rolling]/replacementReady", fixtureDoneRolling, evReplacementReady, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
 		{"canary/Done[rolling]/lastInstanceRolled", fixtureDoneRolling, evLastInstanceRolled, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2, active: true, complete: true}},
+		// under RecreatePod the released Instance's old pod leaves first: nothing serves the stable
+		// revision, the target is one Instance short, and the cutover waits for the replacement
+		{"canary/Done[rolling]/lastInstanceRolled[short]", fixtureDoneRolling, evLastInstanceLeftShort, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
+		{"canary/Done[rolling,pd]/lastInstanceRolled[short]", fixtureDoneRollingPD, evDecoderLastInstanceLeftShort, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
+		{"canary/Done[rolling,pd]/lastInstanceRolled", fixtureDoneRollingPD, evDecoderLastInstanceRolled, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2, active: true, complete: true}},
+		// a final step forced open while short: no clock runs, the capacity coming up moves the
+		// split onto the canary pods, and the release follows the window (at once with none)
+		{"canary/Staging[final]/promoteForce[thenCapacity]", fixtureStagingFinal, evForceThenCapacity, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true, consume: []string{constants.RolloutPromoteForceAnnotation}}},
+		{"canary/Staging[final,windowed]/promoteForce[thenCapacity]", fixtureStagingFinalWindowed, evForceThenCapacity, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		// nothing changed
 		{"canary/Staging/resync", fixtureStaging, evNothing, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Serving/resync", fixtureServingManual, evNothing, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
@@ -1280,6 +2059,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Idle/resume[otherUnit]", fixtureIdle, evResumeOtherUnit, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
 		{"canary/Idle/planDrift", fixtureIdle, evPlanDrift, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
 		{"canary/Idle/replicasUp", fixtureIdle, evReplicasUp, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
+		{"canary/Idle/replicasDown", fixtureIdle, evReplicasDown, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
 		{"canary/Idle/resync", fixtureIdle, evNothing, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
 		{"canary/Idle/newTarget", fixtureIdle, evRetargetObserved, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Idle/newTarget[runOpen]", fixtureIdle, evNewTargetAtRunOpen, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
@@ -1300,6 +2080,10 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Staging/runAdopted", fixtureStaging, evRunAdopted, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Staging/newTarget[runOpen]", fixtureStaging, evNewTargetAtRunOpen, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Staging/replicasUp", fixtureStaging, evReplicasUp, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
+		{"canary/Staging/replicasDown", fixtureStaging, evReplicasDown, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
+		// with two canary pods serving the step before, a scale-down to two stages one and the
+		// step serves on the same pass
+		{"canary/Staging/replicasDown[met]", fixtureStagingServing, evReplicasDown, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
 		{"canary/Staging/record[noTargetID]", fixtureStaging, evRecordNoTargetID, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Staging/record[stableEqualsCanary]", fixtureStaging, evRecordStableEqualsCanary, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Staging/record[noStable]", fixtureStaging, evRecordNoStable, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
@@ -1327,6 +2111,8 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Staging[final]/newTarget[runOpen]", fixtureStagingFinal, evNewTargetAtRunOpen, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Staging[final]/capacityReached", fixtureStagingFinal, evDrainingCapacityReached, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
 		{"canary/Staging[final]/replicasUp", fixtureStagingFinal, evReplicasUp, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
+		{"canary/Staging[final]/replicasDown", fixtureStagingFinal, evReplicasDown, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
+		{"canary/Staging[final]/replicasDown[met]", fixtureStagingFinalServing, evReplicasDown, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Staging[final]/readyTimeout", fixtureStagingFinal, evReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
 		{"canary/Staging[final]/canaryCrashed", fixtureStagingFinal, evCanaryCrashed, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
 		{"canary/Staging[final]/canaryRestarted", fixtureStagingFinal, evCanaryRestarted, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
@@ -1357,6 +2143,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Serving/record[stableEqualsCanary]", fixtureServingManual, evRecordStableEqualsCanary, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/Serving/record[noStable]", fixtureServingManual, evRecordNoStable, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/Serving/record[negativeStep]", fixtureServingManual, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[second]/record[negativeStep]", fixtureServingSecond, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
 		{"canary/Serving/record[failedPhaseNoMarker]", fixtureServingManual, evPhaseFailedNoMarker, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		// --- Serving/Timed: the same rows on the timed fixture, whose soak is
 		// the one input that differs; the soak keeps counting under a pause.
@@ -1381,6 +2168,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Serving[T]/capacityReached", fixtureServingTimed, evCapacityBack, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/Serving[T]/capacityDropped", fixtureServingTimed, evCapacityDropped, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/Serving[T]/replicasUp", fixtureServingTimed, evReplicasUp, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[T]/replicasDown", fixtureServingTimed, evReplicasDown, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/Serving[T]/readyTimeout", fixtureServingTimed, evDipThenReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Serving[T]/canaryRestarted", fixtureServingTimed, evCanaryRestarted, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/Serving[T]/canaryPodDeleted", fixtureServingTimed, evCanaryPodDeleted, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
@@ -1416,6 +2204,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Serving[A]/capacityReached", fixtureServingAnalysis, evCapacityBack, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/Serving[A]/capacityDropped", fixtureServingAnalysis, evCapacityDropped, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/Serving[A]/replicasUp", fixtureServingAnalysis, evReplicasUp, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[A]/replicasDown", fixtureServingAnalysis, evReplicasDown, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/Serving[A]/readyTimeout", fixtureServingAnalysis, evDipThenReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Serving[A]/pauseElapsed", fixtureServingAnalysis, evBakeElapsedNoSample, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/Serving[A]/sample[pass]", fixtureServingAnalysis, evSample(analysis.Pass, 2*time.Minute), cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
@@ -1458,6 +2247,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/PreHold/newTarget[runOpen]", fixturePreHold, evNewTargetAtRunOpen, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/PreHold/capacityReached", fixturePreHold, evCapacityBack, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/PreHold/replicasUp", fixturePreHold, evReplicasUp, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/PreHold/replicasDown", fixturePreHold, evReplicasDown, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/PreHold/readyTimeout", fixturePreHold, evDipThenReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/PreHold/canaryRestarted", fixturePreHold, evCanaryRestarted, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/PreHold/record[noTargetID]", fixturePreHold, evRecordNoTargetID, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
@@ -1485,11 +2275,13 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Draining/runAdopted", fixtureDraining, evRunAdopted, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining/newTarget[runOpen]", fixtureDraining, evNewTargetAtRunOpen, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Draining/replicasUp", fixtureDraining, evReplicasUp, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining/replicasDown", fixtureDraining, evReplicasDown, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining/canaryRestarted", fixtureDraining, evCanaryRestarted, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining/canaryPodDeleted", fixtureDraining, evDrainingCanaryPodDeleted, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining/record[noTargetID]", fixtureDraining, evRecordNoTargetID, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining/record[stableEqualsCanary]", fixtureDraining, evRecordStableEqualsCanary, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining/record[noStable]", fixtureDraining, evRecordNoStable, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining/record[negativeStep]", fixtureDraining, evRecordNegativeStep, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining/record[failedPhaseNoMarker]", fixtureDraining, evPhaseFailedNoMarker, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
 		// --- Draining/Held: 100% behind a final gate. The gate opens on a
 		// promote, an elapsed soak or a baked pass and the drain follows; a
@@ -1514,7 +2306,13 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Draining[M]/newTarget", fixtureDrainingHeld, evNewTarget, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Draining[M]/newTarget[runOpen]", fixtureDrainingHeld, evNewTargetAtRunOpen, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Draining[M]/capacityDropped", fixtureDrainingHeld, evDrainingCapacityDropped, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
+		// a dip behind the held gate is clocked like any capacity wait: the capacity back clears
+		// the clock and the gate keeps holding; a dip that outlives the ready timeout parks the
+		// unit with the traffic handed back to the held stable instance
+		{"canary/Draining[M]/capacityReached", fixtureDrainingHeld, evDrainingCapacityBack, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
+		{"canary/Draining[M]/readyTimeout", fixtureDrainingHeld, evDrainingDipThenReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
 		{"canary/Draining[M]/replicasUp", fixtureDrainingHeld, evReplicasUp, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
+		{"canary/Draining[M]/replicasDown", fixtureDrainingHeld, evReplicasDown, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
 		{"canary/Draining[T]/pauseElapsed", fixtureDrainingHeldTimed, evClockElapsed, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[T]/pauseElapsed[restartInSoak]", fixtureDrainingHeldTimed, evRestartInSoak, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
 		{"canary/Draining[T]/pauseElapsed[restartSoaked]", fixtureDrainingHeldTimed, evRestartSoaked, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
@@ -1537,6 +2335,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Draining[M]/record[noTargetID]", fixtureDrainingHeld, evRecordNoTargetID, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
 		{"canary/Draining[M]/record[stableEqualsCanary]", fixtureDrainingHeld, evRecordStableEqualsCanary, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
 		{"canary/Draining[M]/record[noStable]", fixtureDrainingHeld, evRecordNoStable, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
+		{"canary/Draining[M]/record[negativeStep]", fixtureDrainingHeld, evRecordNegativeStep, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
 		{"canary/Draining[M]/record[failedPhaseNoMarker]", fixtureDrainingHeld, evPhaseFailedNoMarker, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
 		// --- Draining/ShortInWindow: a canary pod lost inside the window. The
 		// drain runs on under every verb that opens no gate; the release is not
@@ -1561,12 +2360,14 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Draining[capacityShort,inWindow]/newTarget", fixtureDrainingShortInWindow, evNewTarget, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Draining[capacityShort,inWindow]/newTarget[runOpen]", fixtureDrainingShortInWindow, evNewTargetAtRunOpen, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Draining[capacityShort,inWindow]/replicasUp", fixtureDrainingShortInWindow, evReplicasUp, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[capacityShort,inWindow]/replicasDown", fixtureDrainingShortInWindow, evReplicasDown, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort,inWindow]/canaryCrashed", fixtureDrainingShortInWindow, evCanaryCrashed, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
 		{"canary/Draining[capacityShort,inWindow]/canaryRestarted", fixtureDrainingShortInWindow, evCanaryRestarted, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort,inWindow]/canaryPodDeleted", fixtureDrainingShortInWindow, evDrainingCanaryPodDeletedDeeper, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort,inWindow]/record[noTargetID]", fixtureDrainingShortInWindow, evRecordNoTargetID, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort,inWindow]/record[stableEqualsCanary]", fixtureDrainingShortInWindow, evRecordStableEqualsCanary, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort,inWindow]/record[noStable]", fixtureDrainingShortInWindow, evRecordNoStable, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[capacityShort,inWindow]/record[negativeStep]", fixtureDrainingShortInWindow, evRecordNegativeStep, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort,inWindow]/record[failedPhaseNoMarker]", fixtureDrainingShortInWindow, evPhaseFailedNoMarker, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
 		// --- Draining/ShortElapsed: the window elapsed with a canary pod
 		// missing; the release waits for the capacity with the stable instance
@@ -1584,11 +2385,15 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Draining[capacityShort]/runAdopted", fixtureDrainingShort, evRunAdopted, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort]/newTarget[runOpen]", fixtureDrainingShort, evNewTargetAtRunOpen, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Draining[capacityShort]/replicasUp", fixtureDrainingShort, evReplicasUp, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		// a scale-down whose staged count the two serving canary pods already meet passes the
+		// capacity gate on the same pass: the elapsed window releases the held stable instance
+		{"canary/Draining[capacityShort]/replicasDown", fixtureDrainingShort, evReplicasDown, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
 		{"canary/Draining[capacityShort]/canaryRestarted", fixtureDrainingShort, evCanaryRestarted, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort]/canaryPodDeleted", fixtureDrainingShort, evDrainingCanaryPodDeletedDeeper, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort]/record[noTargetID]", fixtureDrainingShort, evRecordNoTargetID, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort]/record[stableEqualsCanary]", fixtureDrainingShort, evRecordStableEqualsCanary, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort]/record[noStable]", fixtureDrainingShort, evRecordNoStable, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[capacityShort]/record[negativeStep]", fixtureDrainingShort, evRecordNegativeStep, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
 		{"canary/Draining[capacityShort]/record[failedPhaseNoMarker]", fixtureDrainingShort, evPhaseFailedNoMarker, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
 		// --- Done/Rolling: the sentinel with the released instance rolling. A
 		// done canary evaluates no gate, so verbs are left in place or consumed
@@ -1608,11 +2413,13 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Done[rolling]/newTarget[runOpen]", fixtureDoneRolling, evNewTargetAtRunOpen, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Done[rolling]/capacityDropped", fixtureDoneRolling, evDrainingCapacityDropped, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
 		{"canary/Done[rolling]/replicasUp", fixtureDoneRolling, evReplicasUp, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
+		{"canary/Done[rolling]/replicasDown", fixtureDoneRolling, evReplicasDown, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
 		{"canary/Done[rolling]/canaryRestarted", fixtureDoneRolling, evCanaryRestarted, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
 		{"canary/Done[rolling]/canaryPodDeleted", fixtureDoneRolling, evDrainingCanaryPodDeleted, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
 		{"canary/Done[rolling]/record[noTargetID]", fixtureDoneRolling, evRecordNoTargetID, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
 		{"canary/Done[rolling]/record[stableEqualsCanary]", fixtureDoneRolling, evRecordStableEqualsCanary, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
 		{"canary/Done[rolling]/record[noStable]", fixtureDoneRolling, evRecordNoStable, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
+		{"canary/Done[rolling]/record[negativeStep]", fixtureDoneRolling, evRecordNegativeStep, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
 		{"canary/Done[rolling]/record[failedPhaseNoMarker]", fixtureDoneRolling, evPhaseFailedNoMarker, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 2, active: true}},
 		// --- Done: the completed cutover reads Stable and is inactive under
 		// everything but a retarget; the applied promote's copy is still taken.
@@ -1626,10 +2433,13 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Done/runLost", fixtureDone, evRunLost, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
 		{"canary/Done/newTarget[runOpen]", fixtureDone, evNewTargetAtRunOpen, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Done/replicasUp", fixtureDone, evReplicasUp, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
+		{"canary/Done/replicasDown", fixtureDone, evReplicasDown, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
 		{"canary/Done/canaryRestarted", fixtureDone, evCanaryRestarted, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
 		{"canary/Done/canaryPodDeleted", fixtureDone, evDoneCanaryPodDeleted, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
 		{"canary/Done/record[noTargetID]", fixtureDone, evRecordNoTargetID, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
+		{"canary/Done/record[stableEqualsCanary]", fixtureDone, evRecordStableEqualsCanary, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
 		{"canary/Done/record[noStable]", fixtureDone, evRecordNoStable, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
+		{"canary/Done/record[negativeStep]", fixtureDone, evRecordNegativeStep, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
 		{"canary/Done/record[failedPhaseNoMarker]", fixtureDone, evPhaseFailedNoMarker, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 2, active: true}},
 		// --- RollingBack: the revert drains. The hold reads no promote and
 		// consumes no copy, a further request is inert, and the record is
@@ -1646,6 +2456,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/RollingBack/planDrift", fixtureRollingBack, evPlanDrift, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
 		{"canary/RollingBack/runAdopted", fixtureRollingBack, evRunAdopted, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
 		{"canary/RollingBack/replicasUp", fixtureRollingBack, evReplicasUp, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
+		{"canary/RollingBack/replicasDown", fixtureRollingBack, evReplicasDown, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
 		{"canary/RollingBack/canaryRestarted", fixtureRollingBack, evCanaryRestarted, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
 		{"canary/RollingBack/record[noTargetID]", fixtureRollingBack, evRecordNoTargetID, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
 		{"canary/RollingBack/record[stableEqualsCanary]", fixtureRollingBack, evRecordStableEqualsCanary, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
@@ -1663,6 +2474,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/RolledBack/resume[otherUnit]", fixtureRolledBack, evResumeOtherUnit, cellWant{state: rolledBack, phase: v1beta1.RolloutPhaseRolledBack, active: true, rolledBk: true}},
 		{"canary/RolledBack/planDrift", fixtureRolledBack, evPlanDrift, cellWant{state: rolledBack, phase: v1beta1.RolloutPhaseRolledBack, active: true, rolledBk: true}},
 		{"canary/RolledBack/replicasUp", fixtureRolledBack, evReplicasUp, cellWant{state: rolledBack, phase: v1beta1.RolloutPhaseRolledBack, active: true, rolledBk: true}},
+		{"canary/RolledBack/replicasDown", fixtureRolledBack, evReplicasDown, cellWant{state: rolledBack, phase: v1beta1.RolloutPhaseRolledBack, active: true, rolledBk: true}},
 		{"canary/RolledBack/record[noTargetID]", fixtureRolledBack, evRecordNoTargetID, cellWant{state: rolledBack, phase: v1beta1.RolloutPhaseRolledBack, active: true, rolledBk: true}},
 		{"canary/RolledBack/record[stableEqualsCanary]", fixtureRolledBack, evRecordStableEqualsCanary, cellWant{state: rolledBack, phase: v1beta1.RolloutPhaseRolledBack, active: true, rolledBk: true}},
 		{"canary/RolledBack/record[noStable]", fixtureRolledBack, evRecordNoStable, cellWant{state: rolledBack, phase: v1beta1.RolloutPhaseRolledBack, active: true, rolledBk: true}},
@@ -1688,6 +2500,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Failed/newTarget[runOpen]", fixtureFailed, evNewTargetAtRunOpen, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
 		{"canary/Failed/capacityDropped", fixtureFailed, evCapacityDropped, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Failed/replicasUp", fixtureFailed, evReplicasUp, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/Failed/replicasDown", fixtureFailed, evReplicasDown, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Failed/canaryRestarted", fixtureFailed, evCanaryRestarted, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Failed/canaryPodDeleted", fixtureFailed, evCanaryPodDeleted, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Failed/record[noTargetID]", fixtureFailed, evRecordNoTargetID, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
@@ -1715,6 +2528,7 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Failed[stableMissing]/capacityReached", fixtureFailedStableMissing, evCapacityReached, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Failed[stableMissing]/capacityDropped", fixtureFailedStableMissing, evCapacityDropped, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Failed[stableMissing]/replicasUp", fixtureFailedStableMissing, evReplicasUp, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/Failed[stableMissing]/replicasDown", fixtureFailedStableMissing, evReplicasDown, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Failed[stableMissing]/canaryCrashed", fixtureFailedStableMissing, evCanaryCrashed, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Failed[stableMissing]/canaryRestarted", fixtureFailedStableMissing, evCanaryRestarted, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Failed[stableMissing]/canaryPodDeleted", fixtureFailedStableMissing, evCanaryPodDeleted, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
@@ -1722,24 +2536,16 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Failed[stableMissing]/record[stableEqualsCanary]", fixtureFailedStableMissing, evRecordStableEqualsCanary, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Failed[stableMissing]/record[noStable]", fixtureFailedStableMissing, evRecordNoStable, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Failed[stableMissing]/record[negativeStep]", fixtureFailedStableMissing, evRecordNegativeStep, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
-		// --- Incomplete record shapes and repins the fixtures above do not drive:
-		// a negative step on a record past step 0 is clamped to 0, which
-		// re-runs step 0 as a live step; an equal pair at the sentinel is
-		// repaired and the cutover re-recorded; a phase-only Failed over a
-		// recorded rejection reads as the revert; a repin clamps the index
-		// under every hold without moving it, and done stays done.
-		{"canary/Draining/record[negativeStep]", fixtureDraining, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, step: 0, active: true}},
+		// --- Repins the fixtures above do not exercise, and a phase-only Failed
+		// over a recorded rejection: a repin clamps the index under every
+		// hold without moving it, done stays done, and the record with a
+		// rejection and no marker reads as the revert, which the dispatch
+		// parks again when the stable revision is still unretained.
 		{"canary/Draining/repin[holdOrTighten]", fixtureDraining, evRepinShorter, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 0, active: true}},
-		{"canary/Draining[M]/record[negativeStep]", fixtureDrainingHeld, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, step: 0, active: true}},
 		{"canary/Draining[M]/repin[holdOrTighten]", fixtureDrainingHeld, evRepinShorterHeld, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 0, active: true}},
-		{"canary/Draining[capacityShort,inWindow]/record[negativeStep]", fixtureDrainingShortInWindow, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, step: 0, active: true}},
 		{"canary/Draining[capacityShort,inWindow]/repin[holdOrTighten]", fixtureDrainingShortInWindow, evRepinShorter, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 0, active: true}},
-		{"canary/Draining[capacityShort]/record[negativeStep]", fixtureDrainingShort, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, step: 0, active: true}},
 		{"canary/Draining[capacityShort]/repin[holdOrTighten]", fixtureDrainingShort, evRepinShorter, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 0, active: true}},
-		{"canary/Done[rolling]/record[negativeStep]", fixtureDoneRolling, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, step: 0, active: true}},
 		{"canary/Done[rolling]/repin[pastDone]", fixtureDoneRolling, evRepinPastDone, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 3, active: true}},
-		{"canary/Done/record[negativeStep]", fixtureDone, evRecordNegativeStep, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, step: 0, active: true}},
-		{"canary/Done/record[stableEqualsCanary]", fixtureDone, evRecordStableEqualsCanary, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2, active: true, complete: true}},
 		{"canary/Done/repin[pastDone]", fixtureDone, evRepinPastDone, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 3}},
 		{"canary/RollingBack/repin[holdOrTighten]", fixtureRollingBack, evRepinLonger, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
 		{"canary/RollingBack/repin[raise]", fixtureRollingBack, evRepinRaise, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
@@ -1749,12 +2555,226 @@ func TestReconcileCells(t *testing.T) {
 		{"canary/Failed/repin[raise]", fixtureFailed, evRepinRaise, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Failed[stableMissing]/repin[holdOrTighten]", fixtureFailedStableMissing, evRepinLonger, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
 		{"canary/Failed[stableMissing]/repin[raise]", fixtureFailedStableMissing, evRepinRaise, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		// --- Repins at the staging and serving states and under the pre-step
+		// hold: a clamp onto a step at or below the weight on record sets
+		// nothing and keeps the state, a clamp onto a step above it sets the
+		// pre-step hold, and a hold already set stays.
+		{"canary/Staging/repin[holdOrTighten]", fixtureStaging, evRepinLonger, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
+		{"canary/Staging/repin[raise]", fixtureStaging, evRepinRaise, cellWant{state: preHold, phase: v1beta1.RolloutPhasePending, active: true}},
+		{"canary/Staging[final]/repin[holdOrTighten]", fixtureStagingFinal, evRepinLonger, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
+		{"canary/Staging[final]/repin[raise]", fixtureStagingFinal, evRepinRaise, cellWant{state: preHold, phase: v1beta1.RolloutPhasePending, active: true}},
+		{"canary/Serving/repin[holdOrTighten]", fixtureServingManual, evRepinLonger, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving/repin[raise]", fixtureServingManual, evRepinRaise, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[T]/repin[holdOrTighten]", fixtureServingTimed, evRepinLongerTimed, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[T]/repin[raise]", fixtureServingTimed, evRepinRaise, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[A]/repin[holdOrTighten]", fixtureServingAnalysis, evRepinTightenAnalysis, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[A]/repin[raise]", fixtureServingAnalysis, evRepinRaise, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/PreHold/repin[holdOrTighten]", fixturePreHold, evRepinLonger, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/PreHold/repin[raise]", fixturePreHold, evRepinRaise, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
 		{"canary/Failed[stableMissing]/record[failedPhaseNoMarker]", fixtureFailedStableMissing, evPhaseFailedNoMarker, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
+		// The decoder's capacity, on a prefill/decode unit: the step reads the
+		// secondary's staged capacity beside the primary's at every state
+		// that reads capacity, and a decoder canary revision with no serving
+		// pod rests the whole unit's split on the stable revisions.
+		{"canary/Idle[pd]/capacityReached", fixtureIdlePD, evDecoderCapacityReached, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
+		{"canary/Staging[pd]/capacityReached", fixtureStagingPD, evDecoderCapacityReached, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Staging[pd]/capacityDropped", fixtureStagingPD, evDecoderCapacityLost, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
+		{"canary/Staging[pd]/readyTimeout", fixtureStagingPD, evReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/Staging[final,pd]/capacityReached", fixtureStagingFinalPD, evDecoderDrainCapacityReached, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Staging[final,pd]/capacityDropped", fixtureStagingFinalPD, evDecoderDrainCapacityDeeper, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
+		{"canary/Serving[pd]/capacityDropped", fixtureServingManualPD, evDecoderCapacityDropped, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[pd]/capacityDropped[allLost]", fixtureServingManualPD, evDecoderCapacityLost, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[pd]/capacityReached", fixtureServingManualPD, evDecoderDipThenBack, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[pd]/readyTimeout", fixtureServingManualPD, evDecoderDipThenReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/Serving[T,pd]/capacityDropped", fixtureServingTimedPD, evDecoderCapacityDropped, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[T,pd]/capacityReached", fixtureServingTimedPD, evDecoderDipThenBack, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[A,pd]/capacityDropped", fixtureServingAnalysisPD, evDecoderCapacityDropped, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[A,pd]/capacityReached", fixtureServingAnalysisPD, evDecoderDipThenBack, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/PreHold[pd]/capacityDropped", fixturePreHoldPD, evDecoderCapacityDropped, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/PreHold[pd]/capacityReached", fixturePreHoldPD, evDecoderDipThenBack, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Draining[pd]/capacityDropped", fixtureDrainingPD, evDecoderDrainCapacityDropped, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[M,pd]/capacityDropped", fixtureDrainingHeldPD, evDecoderDrainCapacityDropped, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
+		{"canary/Draining[M,pd]/capacityReached", fixtureDrainingHeldPD, evDecoderDrainDipThenBack, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
+		{"canary/Draining[M,pd]/readyTimeout", fixtureDrainingHeldPD, evDecoderDrainDipThenReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
+		{"canary/Draining[capacityShort,inWindow,pd]/capacityReached", fixtureDrainingShortInWindowPD, evDecoderDrainCapacityReached, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[capacityShort,inWindow,pd]/capacityDropped", fixtureDrainingShortInWindowPD, evDecoderDrainCapacityDeeper, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[capacityShort,pd]/capacityReached", fixtureDrainingShortPD, evDecoderDrainCapacityReached, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
+		{"canary/Draining[capacityShort,pd]/capacityDropped", fixtureDrainingShortPD, evDecoderDrainCapacityDeeper, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[capacityShort,pd]/readyTimeout", fixtureDrainingShortPD, evReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
+		{"canary/Done[rolling,pd]/capacityDropped", fixtureDoneRollingPD, evDecoderDrainCapacityDropped, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
+		{"canary/Done[pd]/capacityDropped", fixtureDonePD, evDecoderPodLostAfterCutover, cellWant{state: done, phase: v1beta1.RolloutPhaseStable, step: 2}},
+		{"canary/Failed[pd]/capacityReached", fixtureFailedPD, evDecoderCapacityReached, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/Failed[pd]/capacityDropped", fixtureFailedPD, evDecoderCapacityLost, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/Failed[stableMissing,pd]/capacityReached", fixtureFailedStableMissingPD, evDecoderCapacityReached, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/Failed[stableMissing,pd]/capacityDropped", fixtureFailedStableMissingPD, evDecoderCapacityLost, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		// A decoder canary pod's crash loop and restart, on a prefill/decode
+		// unit: the executor stops Failed on a crash of any member and measures a
+		// timed soak from the newest restart of any member's canary pod.
+		{"canary/Staging[pd]/canaryCrashed", fixtureStagingPD, evDecoderCanaryCrashed, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/Serving[pd]/canaryCrashed", fixtureServingManualPD, evDecoderCanaryCrashed, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/Serving[T,pd]/canaryCrashed", fixtureServingTimedPD, evDecoderCanaryCrashed, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/Draining[pd]/canaryCrashed", fixtureDrainingPD, evDecoderCanaryCrashed, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
+		{"canary/Done[rolling,pd]/canaryCrashed", fixtureDoneRollingPD, evDecoderCanaryCrashed, cellWant{state: done, phase: v1beta1.RolloutPhasePromoting, step: 2, active: true}},
+		{"canary/Failed[pd]/canaryCrashed", fixtureFailedPD, evDecoderCanaryCrashed, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/Serving[T,pd]/canaryRestarted", fixtureServingTimedPD, evCanaryRestarted, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[T,pd]/pauseElapsed[restartInSoak]", fixtureServingTimedPD, evRestartInSoak, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[T,pd]/pauseElapsed[restartSoaked]", fixtureServingTimedPD, evRestartSoaked, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
 		// A resume leaves no record in status: a copy re-shown after the
 		// re-armed ladder parks again re-arms it a second time.
 		{"canary/Failed/resume[reshown]", fixtureFailed, evResumeReshownAcrossSecondPark, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true, consume: []string{constants.RolloutResumeAnnotation}}},
 		{"canary/Failed[stableMissing]/resume[reshown]", fixtureFailedStableMissing, evResumeReshownAcrossSecondPark, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true, consume: []string{constants.RolloutResumeAnnotation}}},
 		{"canary/RolledBack/resume[reshown]", fixtureRolledBack, evResumeReshownAcrossSecondPark, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true, consume: []string{constants.RolloutResumeAnnotation}}},
+		// A canary pod of a serving step is lost and being rebuilt: the capacity gate holds in front
+		// of the step's gate, so a promote, an elapsed timed pause or a sample moves nothing until
+		// the pod serves again, and the pass that counts the capacity back takes the live promote
+		// or the elapsed pause at once; a force clears the wait and advances. A pod that died and
+		// came back moves the pause's anchor, so the step waits a full pause from its readiness.
+		{"canary/Serving[short]/promote", fixtureServingManualShort, evPromoteMatch, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[short]/promote[thenCapacity]", fixtureServingManualShort, evPromoteThenCapacityBack, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true, consume: []string{constants.RolloutPromoteAnnotation}}},
+		{"canary/Serving[short]/promoteForce", fixtureServingManualShort, evForceMatch, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true, consume: []string{constants.RolloutPromoteForceAnnotation}}},
+		{"canary/Serving[T,short]/promote", fixtureServingTimedShort, evPromoteMatch, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[T,short]/promote[thenCapacity]", fixtureServingTimedShort, evPromoteThenCapacityBack, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true, consume: []string{constants.RolloutPromoteAnnotation}}},
+		{"canary/Serving[T,short]/promoteForce", fixtureServingTimedShort, evForceMatch, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true, consume: []string{constants.RolloutPromoteForceAnnotation}}},
+		{"canary/Serving[T,short]/pauseElapsed", fixtureServingTimedBriefShort, evPauseElapsedBrief, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[T,short]/pauseElapsed[thenCapacity]", fixtureServingTimedBriefShort, evPauseElapsedBriefThenCapacityBack, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
+		{"canary/Serving[T,short]/pauseElapsed[restartThenCapacity]", fixtureServingTimedBriefShort, evPauseElapsedBriefThenRestartedPodBack, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[A,short]/promote", fixtureServingAnalysisShort, evPromoteMatch, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[A,short]/promote[thenCapacity]", fixtureServingAnalysisShort, evPromoteThenCapacityBack, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true, consume: []string{constants.RolloutPromoteAnnotation}}},
+		{"canary/Serving[A,short]/promoteForce", fixtureServingAnalysisShort, evForceMatch, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true, consume: []string{constants.RolloutPromoteForceAnnotation}}},
+		{"canary/Serving[A,short]/sample[passBaked]", fixtureServingAnalysisBriefShort, evSample(analysis.Pass, 6*time.Minute), cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[A,short]/sample[passBaked,thenCapacity]", fixtureServingAnalysisBriefShort, evSampleBakedBriefThenCapacityBack, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
+		// The metric gate is read for a retreat while the pod is being rebuilt: a breach below the
+		// limit is counted, a breach at the failure limit rolls back, with one canary pod of two
+		// left or with the step's only pod lost; a stall moves nothing, and under RollbackOnStall
+		// it rolls back.
+		{"canary/Serving[A,short]/sample[fail]", fixtureServingAnalysisShort, evSample(analysis.Fail, 2*time.Minute), cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[A,short]/sample[failAtLimit]", fixtureServingAnalysisShort, evSampleAtLimit, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
+		{"canary/Serving[A,onlyPod,short]/sample[failAtLimit]", fixtureServingAnalysisOnlyPodShort, evSampleAtLimit, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
+		{"canary/Serving[A,short]/sample[stalled]", fixtureServingAnalysisShortLate, evSample(analysis.Inconclusive, 11*time.Minute), cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[A,short]/sample[stalledRollbackOnStall]", fixtureServingAnalysisRollbackOnStallShortLate, evSample(analysis.Inconclusive, 11*time.Minute), cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
+		{"canary/PreHold[short]/promote", fixturePreHoldShort, evPromoteMatch, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/PreHold[short]/promote[thenCapacity]", fixturePreHoldShort, evPromoteThenCapacityBack, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true, consume: []string{constants.RolloutPromoteAnnotation}}},
+		{"canary/PreHold[short]/promoteForce", fixturePreHoldShort, evForceMatch, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true, consume: []string{constants.RolloutPromoteForceAnnotation}}},
+		// Behind a held final gate the drain is exempt from the capacity hold: a promote, an
+		// elapsed timed pause or a passing sample opens the gate with the pod still being rebuilt, and
+		// the drain continues short with the wait still clocked (a force clears it); the release
+		// waits for the capacity to come back. A breach at the limit under the same loss rolls back.
+		{"canary/Draining[M,short]/promote", fixtureDrainingHeldShort, evPromoteMatch, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[M,short]/promote[thenCapacity]", fixtureDrainingHeldShort, evDrainingPromoteThenCapacityBack, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[M,short]/promoteForce", fixtureDrainingHeldShort, evForceMatch, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[T,short]/pauseElapsed", fixtureDrainingHeldTimedBriefShort, evPauseElapsedBrief, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[A,short]/sample[passBaked]", fixtureDrainingHeldAnalysisBriefShort, evSample(analysis.Pass, 6*time.Minute), cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[A,short]/sample[failAtLimit]", fixtureDrainingHeldAnalysisBriefShort, evSampleAtLimit, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, step: 1, active: true, rolledBk: true}},
+		// The other verbs under the loss keep their answers: a rollback moves the traffic onto the
+		// stable revision, a new target starts the record over, a scale-down the serving pods meet
+		// clears the wait, a pause observes, and the wait keeps counting through a pause, so a pause
+		// that outlasts the ready timeout stops the unit on the first pass after it.
+		{"canary/Serving[short]/rollback", fixtureServingManualShort, evRollback, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
+		{"canary/Serving[short]/newTarget", fixtureServingManualShort, evNewTarget, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
+		{"canary/Serving[short]/replicasDown[met]", fixtureServingManualShort, evReplicasDown, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[short]/pause", fixtureServingManualShort, evPause, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[short]/unpause", fixtureServingManualShort, evUnpause, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[short]/unpause[pastTimeout]", fixtureServingManualShort, evUnpausePastReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		// The decoder's canary pod lost holds the whole unit the same way.
+		{"canary/Serving[pd,short]/promote", fixtureServingManualPDShort, evPromoteMatch, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[pd,short]/promote[thenCapacity]", fixtureServingManualPDShort, evDecoderPromoteThenCapacityBack, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true, consume: []string{constants.RolloutPromoteAnnotation}}},
+		{"canary/Serving[pd,short]/promoteForce", fixtureServingManualPDShort, evForceMatch, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true, consume: []string{constants.RolloutPromoteForceAnnotation}}},
+		// A stable pod retired by the staging or lost: the split's weight stays the
+		// step's whatever serves it, and a member whose stable revision has no
+		// serving pod sends its whole split to its canary revision while the other
+		// member keeps its own. Neither is decided yet; these rows record the
+		// current behaviour and are updated when it changes.
+		{"canary/Staging/stableGone", fixtureStaging, evStagingStablePodGone, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
+		{"canary/Staging[serving]/stableGone", fixtureStagingServing, evStablePodGone, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
+		{"canary/Staging[serving]/stableGone[last]", fixtureStagingServing, evStablePodsGone, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
+		{"canary/Staging[final,serving]/stableGone", fixtureStagingFinalServing, evStablePodGone, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
+		{"canary/Staging[final,serving]/stableGone[last]", fixtureStagingFinalServing, evStablePodsGone, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
+		{"canary/Staging[final,pd]/stableGone", fixtureStagingFinalPD, evDecoderStablePodGoneShort, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
+		{"canary/Staging[final,pd]/stableGone[last]", fixtureStagingFinalPD, evEngineStablePodsGoneAtTheFinalStep, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
+		{"canary/Serving/stableGone", fixtureServingManual, evStablePodGone, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving/stableGone[last]", fixtureServingManual, evStablePodsGone, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[T]/stableGone", fixtureServingTimed, evStablePodGone, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[T]/stableGone[last]", fixtureServingTimed, evStablePodsGone, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[A]/stableGone", fixtureServingAnalysis, evStablePodGone, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[A]/stableGone[last]", fixtureServingAnalysis, evStablePodsGone, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[pd]/stableGone[last]", fixtureServingManualPD, evEngineStablePodsGone, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[pd]/stableGone[decoderLast]", fixtureServingManualPD, evDecoderStablePodsGone, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/PreHold/stableGone", fixturePreHold, evStablePodGone, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/PreHold/stableGone[last]", fixturePreHold, evStablePodsGone, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Draining[retiring]/stableGone", fixtureDrainingRetiring, evDrainStablePodGone, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining/stableGone[last]", fixtureDraining, evDrainStablePodsGone, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[M,retiring]/stableGone", fixtureDrainingHeldRetiring, evDrainStablePodGone, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
+		{"canary/Draining[M]/stableGone[last]", fixtureDrainingHeld, evDrainStablePodsGone, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
+		{"canary/Draining[capacityShort,inWindow]/stableGone[last]", fixtureDrainingShortInWindow, evStablePodsGone, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[capacityShort]/stableGone[last]", fixtureDrainingShort, evStablePodsGone, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/RollingBack/stableGone", fixtureRollingBack, evStablePodGone, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, active: true, rolledBk: true}},
+		{"canary/RolledBack/stableGone", fixtureRolledBack, evRolledBackStablePodGone, cellWant{state: rolledBack, phase: v1beta1.RolloutPhaseRolledBack, active: true, rolledBk: true}},
+		{"canary/Failed/stableGone", fixtureFailed, evStagingStablePodGone, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/Failed[stableMissing]/stableGone", fixtureFailedStableMissing, evStablePodGone, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		// The ready timeout read through an operator's pause: the paused pass reads no
+		// clock, so the first pass after the pause stops the unit; not decided yet,
+		// these rows record the current behaviour and are updated when it changes.
+		{"canary/Staging/unpause[pastTimeout]", fixtureStaging, evUnpausePastReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/Staging[final]/unpause[pastTimeout]", fixtureStagingFinal, evUnpausePastReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
+		{"canary/Serving[T,short]/unpause[pastTimeout]", fixtureServingTimedShort, evUnpausePastReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/Serving[A,short]/unpause[pastTimeout]", fixtureServingAnalysisShort, evUnpausePastReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/PreHold[short]/unpause[pastTimeout]", fixturePreHoldShort, evUnpausePastReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, active: true}},
+		{"canary/Draining[M,short]/unpause[pastTimeout]", fixtureDrainingHeldShort, evUnpausePastReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
+		{"canary/Draining[capacityShort,inWindow]/unpause[pastTimeout]", fixtureDrainingShortInWindow, evUnpausePastReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
+		{"canary/Draining[capacityShort]/unpause[pastTimeout]", fixtureDrainingShort, evUnpausePastReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 1, active: true}},
+		// A canary pod lost while the operator's pause holds the unit: the paused pass
+		// writes nothing, so the split stands as the step wrote it and no clock
+		// starts until the first pass after the pause; not decided yet, these rows
+		// record the current behaviour and are updated when it changes.
+		{"canary/Serving[paused]/capacityDropped", fixtureServingManualPaused, evCapacityDropped, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[T,paused]/capacityDropped", fixtureServingTimedPaused, evCapacityDropped, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Serving[A,paused]/capacityDropped", fixtureServingAnalysisPaused, evCapacityDropped, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/PreHold[paused]/capacityDropped", fixturePreHoldPaused, evCapacityDropped, cellWant{state: preHold, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Staging[final,paused]/capacityDropped", fixtureStagingFinalServingPaused, evCapacityDropped, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, step: 1, active: true}},
+		{"canary/Serving[pd,paused]/capacityDropped", fixtureServingManualPDPaused, evDecoderCapacityDropped, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Draining[paused]/capacityDropped", fixtureDrainingPaused, evDrainingCapacityDropped, cellWant{state: draining, phase: v1beta1.RolloutPhasePromoting, step: 1, active: true}},
+		{"canary/Draining[M,paused]/capacityDropped", fixtureDrainingHeldPaused, evDrainingCapacityDropped, cellWant{state: draining, phase: v1beta1.RolloutPhasePaused, step: 1, active: true}},
+		// A resume while the fleet already stands past the first step: the steps
+		// start again at step 0 and the next pass serves its split; not decided
+		// yet, these rows record the current behaviour and are updated when it
+		// changes.
+		{"canary/Failed[fleetAhead]/resume", fixtureFailedFleetAhead, evResumeOwn, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true, consume: []string{constants.RolloutResumeAnnotation}}},
+		{"canary/Failed[fleetAhead]/resume[nextPass]", fixtureFailedFleetAhead, evResumeOwnThenPass, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		{"canary/Failed[stableMissing,fleetAhead]/resume", fixtureFailedStableMissingFleetAhead, evResumeOwn, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true, consume: []string{constants.RolloutResumeAnnotation}}},
+		{"canary/Failed[stableMissing,fleetAhead]/resume[nextPass]", fixtureFailedStableMissingFleetAhead, evResumeOwnThenPass, cellWant{state: serving, phase: v1beta1.RolloutPhasePaused, active: true}},
+		// A push landing before the cutover starts over toward it with the pre-canary
+		// stable identity kept, so step 0's held split rests on the one version 1
+		// pod of each member; not decided yet, this row records the current
+		// behaviour and is updated when it changes.
+		{"canary/Draining[pd]/newTarget", fixtureDrainingPD, evNewTargetOverTheDrainPD, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true}},
+		// A stop holds the roll where it stands, on the reference shape of 24
+		// engines and 8 decoders under 10/30/60/100: each member's partition is
+		// its whole count, so no further Instance moves to the stopped
+		// revision, and the split stays as the stop left it; a resume, a
+		// rollback or a new revision ends the hold.
+		{"canary/Staging[final,pd24]/readyTimeout", fixtureStagingFinalPD24, evReadyTimeout, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 3, active: true}},
+		{"canary/Draining[A,pd24]/sample[stalled]", fixtureDrainingHeldAnalysisPD24, evSample(analysis.Inconclusive, 20*time.Minute), cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 3, active: true}},
+		{"canary/Failed[pd24]/resync", fixtureFailedPD24, evNothing, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 3, active: true}},
+		{"canary/Failed[pd24]/stableGone", fixtureFailedPD24, evEngineStablePodGonePD24, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 3, active: true}},
+		{"canary/Failed[pd24]/replicasUp", fixtureFailedPD24, evEngineReplicasUpPD24, cellWant{state: failed, phase: v1beta1.RolloutPhaseFailed, step: 3, active: true}},
+		{"canary/Failed[pd24]/resume", fixtureFailedPD24, evResumeOwn, cellWant{state: staging, phase: v1beta1.RolloutPhasePending, active: true, consume: []string{constants.RolloutResumeAnnotation}}},
+		{"canary/Failed[pd24]/rollback", fixtureFailedPD24, evRollback, cellWant{state: rollingBack, phase: v1beta1.RolloutPhaseRollingBack, step: 3, active: true, rolledBk: true}},
+		// A push reverted with no run open and every Instance already on the
+		// restored revision: the record names a roll that no longer exists and
+		// ends, so the unit reads Stable with no record; a split a step wrote
+		// moves onto the revision every Instance runs. A rejection hold stands.
+		{"canary/Staging/newTarget[reverted]", fixtureStaging, evTargetReverted, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
+		{"canary/Staging[final]/newTarget[reverted]", fixtureStagingFinal, evTargetReverted, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
+		{"canary/Serving/newTarget[reverted]", fixtureServingManual, evTargetReverted, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
+		{"canary/Serving[T]/newTarget[reverted]", fixtureServingTimed, evTargetReverted, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
+		{"canary/Serving[A]/newTarget[reverted]", fixtureServingAnalysis, evTargetReverted, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
+		{"canary/PreHold/newTarget[reverted]", fixturePreHold, evTargetReverted, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
+		{"canary/Draining/newTarget[reverted]", fixtureDraining, evTargetReverted, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
+		{"canary/Draining[M]/newTarget[reverted]", fixtureDrainingHeld, evTargetReverted, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
+		{"canary/Draining[capacityShort,inWindow]/newTarget[reverted]", fixtureDrainingShortInWindow, evTargetReverted, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
+		{"canary/Draining[capacityShort]/newTarget[reverted]", fixtureDrainingShort, evTargetReverted, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
+		{"canary/Failed/newTarget[reverted]", fixtureFailed, evTargetReverted, cellWant{state: idle, phase: v1beta1.RolloutPhaseStable}},
+		{"canary/RolledBack/newTarget[reverted]", fixtureRolledBack, evTargetReverted, cellWant{state: rolledBack, phase: v1beta1.RolloutPhaseRolledBack, active: true, rolledBk: true}},
 	}
 	for _, c := range cells {
 		t.Run(c.id, func(t *testing.T) {
@@ -1792,6 +2812,9 @@ func TestReconcileCells(t *testing.T) {
 			// Whatever the cell decided, every weighted target it leaves behind
 			// names a revision with a serving pod in the pass's own view.
 			expectTrafficServes(t, isvc, v1beta1.EngineComponent, in.PerRevisionPods)
+			if also := cellAlso[c.id]; also != nil {
+				also(t, isvc)
+			}
 			// RollingBack is a wait on the drain: the pass must ask to come back.
 			if c.want.state == rollingBack && res.RequeueAfter == 0 && !res.Requeue {
 				t.Errorf("RollingBack must requeue, got %+v", res)

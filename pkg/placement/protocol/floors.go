@@ -133,7 +133,8 @@ func CheckComponentReplicaFloor(floors []v1beta1.PlacementComponentFloor, compon
 // primary replicas; targets that sum to another count carry each secondary
 // total along in the same ratio, rounded up. A total below the number of
 // positive-target homes cannot satisfy the guarantee and is an error. Router
-// keeps its own floor.
+// is apportioned only when the caller passes its minimum, which a source does
+// when it divides its routers across homes.
 func ApportionReplicaFloors(primary v1beta1.ComponentType, primaryMinimum int32, targets map[string]int32, minimums map[v1beta1.ComponentType]int32) (map[string][]v1beta1.PlacementComponentFloor, error) {
 	if primary != v1beta1.EngineComponent && primary != v1beta1.DecoderComponent {
 		return nil, fmt.Errorf("placement primary component must be the engine or decoder")
@@ -167,9 +168,7 @@ func ApportionReplicaFloors(primary v1beta1.ComponentType, primaryMinimum int32,
 		switch {
 		case component == primary:
 			return nil, fmt.Errorf("placement primary %s floors are the targets and cannot be apportioned", primary)
-		case component == v1beta1.RouterComponent:
-			return nil, fmt.Errorf("placement router floors follow the per-home policy and cannot be apportioned")
-		case component != v1beta1.EngineComponent && component != v1beta1.DecoderComponent:
+		case component != v1beta1.EngineComponent && component != v1beta1.DecoderComponent && component != v1beta1.RouterComponent:
 			return nil, fmt.Errorf("placement cannot apportion component %q", component)
 		case minimum < 0:
 			return nil, fmt.Errorf("placement %s minimum must be nonnegative", component)
@@ -191,6 +190,67 @@ func ApportionReplicaFloors(primary v1beta1.ComponentType, primaryMinimum int32,
 	}
 	for _, floors := range out {
 		slices.SortFunc(floors, func(a, b v1beta1.PlacementComponentFloor) int { return cmp.Compare(a.Component, b.Component) })
+	}
+	return out, nil
+}
+
+// ApportionWeightedReplicaFloor spreads one secondary component's minimum by
+// its own weights, over only the homes with a positive primary target. The
+// total follows the primary targets as in ApportionReplicaFloors. Every such
+// home receives at least one replica whenever the total is positive, and a
+// total below the number of those homes is an error. When none of those homes
+// carries a positive weight, the primary targets serve as the weights.
+func ApportionWeightedReplicaFloor(component v1beta1.ComponentType, primaryMinimum int32, targets map[string]int32, minimum int32, weights map[string]int64) (map[string]int32, error) {
+	if component != v1beta1.EngineComponent && component != v1beta1.DecoderComponent && component != v1beta1.RouterComponent {
+		return nil, fmt.Errorf("placement cannot apportion component %q by weight", component)
+	}
+	if primaryMinimum <= 0 {
+		return nil, fmt.Errorf("placement primary minimum must be positive")
+	}
+	if minimum < 0 {
+		return nil, fmt.Errorf("placement %s minimum must be nonnegative", component)
+	}
+	var sum, weightSum int64
+	positive := 0
+	held := map[string]int64{}
+	hosts := map[string]int64{}
+	for name, target := range targets {
+		if name == "" || target < 0 {
+			return nil, fmt.Errorf("placement homes require a name and a nonnegative target")
+		}
+		sum += int64(target)
+		if target == 0 {
+			continue
+		}
+		positive++
+		hosts[name] = int64(target)
+		weight := weights[name]
+		if weight < 0 {
+			return nil, fmt.Errorf("placement %s weight for home %q must be nonnegative", component, name)
+		}
+		if weight > math.MaxInt64-weightSum {
+			return nil, fmt.Errorf("placement %s weights exceed int64", component)
+		}
+		held[name] = weight
+		weightSum += weight
+	}
+	total, err := ratioTotal(sum, minimum, primaryMinimum)
+	if err != nil {
+		return nil, fmt.Errorf("placement %s total: %w", component, err)
+	}
+	if total > 0 && int(total) < positive {
+		return nil, fmt.Errorf("%s minimum %d cannot give each of the %d homes holding the primary component at least one replica", component, total, positive)
+	}
+	if weightSum == 0 {
+		held = hosts
+	}
+	shares := largestRemainder(total, held)
+	if total > 0 {
+		liftZeroShares(shares, hosts)
+	}
+	out := make(map[string]int32, len(targets))
+	for name := range targets {
+		out[name] = shares[name]
 	}
 	return out, nil
 }

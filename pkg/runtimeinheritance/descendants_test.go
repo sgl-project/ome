@@ -8,7 +8,8 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 // Descendants walks an adjacency map and the cache lists it feeds on iterate
@@ -126,10 +127,7 @@ func TestDescendants(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			c := ctrlclientfake.NewClientBuilder().
-				WithScheme(newScheme(t)).
-				WithObjects(tc.runtimes...).
-				Build()
+			c := fakeclient.New(t, fakeclient.WithObjects(tc.runtimes...))
 
 			got, err := Descendants(context.Background(), c, tc.root)
 			if err != nil {

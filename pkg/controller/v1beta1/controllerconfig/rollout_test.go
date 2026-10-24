@@ -9,12 +9,12 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// TestParseRolloutConfig verifies the rollout block has NO in-code defaults:
+// TestParseRolloutConfig_AbsentOrBadDuration_ReadsZeroWithoutError verifies the rollout block has NO in-code defaults:
 // an absent block yields zero values (uncapped plan size, no configured ready
 // timeout), and an empty, malformed, or non-positive duration degrades to
 // zero rather than failing the load, mirroring the canaryAnalysis duration
 // handling.
-func TestParseRolloutConfig(t *testing.T) {
+func TestParseRolloutConfig_AbsentOrBadDuration_ReadsZeroWithoutError(t *testing.T) {
 	tests := []struct {
 		name        string
 		data        map[string]string
@@ -70,7 +70,7 @@ func TestParseRolloutConfig(t *testing.T) {
 
 // The canary cadences follow the same rule as the ready timeout: configured
 // in the chart, parsed here, zero when absent or unusable.
-func TestParseRolloutConfigCanaryCadences(t *testing.T) {
+func TestParseRolloutConfig_CanaryCadences_ParsedZeroWhenAbsentOrUnusable(t *testing.T) {
 	tests := []struct {
 		name       string
 		data       string
@@ -91,9 +91,9 @@ func TestParseRolloutConfigCanaryCadences(t *testing.T) {
 	}
 }
 
-// TestParseRolloutConfigErrors verifies malformed JSON and a nonsensical
+// TestParseRolloutConfig_BadJsonOrNegativeCap_LoadError verifies malformed JSON and a nonsensical
 // negative plan-size cap are load errors.
-func TestParseRolloutConfigErrors(t *testing.T) {
+func TestParseRolloutConfig_BadJsonOrNegativeCap_LoadError(t *testing.T) {
 	tests := []struct {
 		name    string
 		data    map[string]string
@@ -119,9 +119,9 @@ func TestParseRolloutConfigErrors(t *testing.T) {
 	}
 }
 
-// TestNewRolloutConfigLoaders verifies the clientset-backed loaders resolve
+// TestNewRolloutConfig_PlainAndCachedLoaders_ReadTheConfigMap verifies the clientset-backed loaders resolve
 // through the shared ConfigMap fetch (uncached and TTL-cached paths).
-func TestNewRolloutConfigLoaders(t *testing.T) {
+func TestNewRolloutConfig_PlainAndCachedLoaders_ReadTheConfigMap(t *testing.T) {
 	clientset, _ := countingClientset(t, map[string]string{
 		RolloutConfigName: `{"maxPinnedPlanBytes": 2048, "defaultReadyTimeout": "90s"}`,
 	})

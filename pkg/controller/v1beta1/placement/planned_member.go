@@ -23,8 +23,8 @@ type identifiedClusterClients interface {
 // plannedClient binds both the registration and transport to the accepted UID.
 // A connection selected by name alone cannot authorize an allocation mutation.
 func (r *Reconciler) plannedClient(ctx context.Context, name string, uid types.UID) (client.WithWatch, error) {
-	direct, _, err := r.plannedTransport(ctx, name, uid)
-	return direct, err
+	member, _, err := r.plannedTransport(ctx, name, uid)
+	return member, err
 }
 
 func (r *Reconciler) plannedTransport(ctx context.Context, name string, uid types.UID) (client.WithWatch, workloadcluster.SelectivelyCachingClient, error) {
@@ -44,13 +44,16 @@ func (r *Reconciler) plannedTransport(ctx context.Context, name string, uid type
 	}
 	remote, ok := identified.ClientForUID(name, uid)
 	if !ok {
+		if r.connectionPending(name, uid) {
+			return nil, nil, fmt.Errorf("cluster %q: %w", name, errMemberConnectionPending)
+		}
 		return nil, nil, fmt.Errorf("cluster %q has no connection for its accepted UID", name)
 	}
-	direct, ok := workloadcluster.DirectClient(remote)
+	_, ok = workloadcluster.DirectClient(remote)
 	if !ok {
-		return nil, nil, fmt.Errorf("cluster %q transport cannot provide direct observations", name)
+		return nil, nil, fmt.Errorf("cluster %q transport cannot provide member operations", name)
 	}
-	return direct, remote, nil
+	return remote, remote, nil
 }
 
 func (r *Reconciler) checkPlanCurrent(ctx context.Context, source *v1beta1.InferenceService) error {
@@ -116,10 +119,12 @@ func checkPlannedAssignment(source *v1beta1.InferenceService, candidate v1beta1.
 // placePlannedOn stamps member execution authority before any component can
 // acknowledge it. The member's later IR observation is the application signal.
 func (r *Reconciler) placePlannedOn(ctx context.Context, source *v1beta1.InferenceService, candidate v1beta1.CandidatePlacement) error {
-	return r.placePlannedMember(ctx, source, candidate, false)
+	return r.placePlannedMember(ctx, source, candidate, false, nil)
 }
 
-func (r *Reconciler) placePlannedMember(ctx context.Context, source *v1beta1.InferenceService, candidate v1beta1.CandidatePlacement, existingOnly bool) error {
+// placePlannedMember applies the candidate's allocation. On a split member, holds
+// raise a component's apportioned floor while its replacements elsewhere start.
+func (r *Reconciler) placePlannedMember(ctx context.Context, source *v1beta1.InferenceService, candidate v1beta1.CandidatePlacement, existingOnly bool, holds map[v1beta1.ComponentType]int32) error {
 	if err := r.checkPlanCurrent(ctx, source); err != nil {
 		return err
 	}
@@ -147,6 +152,12 @@ func (r *Reconciler) placePlannedMember(ctx context.Context, source *v1beta1.Inf
 		if err != nil {
 			return err
 		}
+		for component, floor := range holds {
+			if bound, ok := bounds[component]; ok && floor > bound.Floor {
+				bound.Floor = floor
+				bounds[component] = bound
+			}
+		}
 		setPlannedReplicas(desired, bounds)
 	} else if assignment.CurrentHome.InputDigest != source.Status.Placement.Plan.InputDigest || !equality.Semantic.DeepEqual(assignment.CurrentHome, assignment.DesiredHome) {
 		return r.syncPlannedPolicy(ctx, source, candidate)
@@ -170,7 +181,7 @@ func (r *Reconciler) placePlannedMember(ctx context.Context, source *v1beta1.Inf
 }
 
 // syncPlannedPolicy updates coordination authority without a source refresh.
-// Paused full-policy homes retain their accepted floors even when member
+// Paused full-policy members retain their accepted floors even when member
 // runtime or operator defaults change during the transition.
 func (r *Reconciler) syncPlannedPolicy(ctx context.Context, source *v1beta1.InferenceService, candidate v1beta1.CandidatePlacement) error {
 	if err := r.checkPlanCurrent(ctx, source); err != nil {

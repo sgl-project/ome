@@ -21,13 +21,13 @@
 //     and its cause cannot land apart. The in-mutation helper a stamp
 //     composes is named for the state it enters (EnterReady) or the
 //     field it builds (<X>Mutation).
-//   - evidence.go — what the engine observed: the termination record on
+//   - observed.go — what the engine observed: the termination record on
 //     LastFailure, the waiting token an authority reports, the capacity
-//     refusal the create pass carries forward. An evidence writer is
+//     refusal the create pass carries forward. An observed-fact writer is
 //     Record<Fact>; its inverse is Release<Fact> or Clear<Fact>.
-//   - announced.go — the once-only markers: a warning or event that must
-//     reach an operator once per episode and not once per pass. An
-//     announcement is Announce<X>.
+//   - once_per_episode.go — the once-per-episode records: a warning or
+//     event that must reach an operator once per episode and not once per
+//     pass. An announcement is Announce<X>.
 //
 // The RetryBlock is the one non-row record written here, and its writers
 // are RetryBlock<Verb>. The decisions that write two rows at once have
@@ -39,9 +39,11 @@
 // the mutations the Create pass batches; delete.go holds the scale-down
 // wave's admission and removal, each one transaction over every row of
 // the wave; reset.go holds the operator reset. terminal.go holds the
-// writes that end a row — finalize, recycle, overdue — and
+// writes that end a row — finalize, recycle, overdue —
 // precondition.go holds the identity every one of them is preconditioned
-// on.
+// on, and write.go the guarded write they commit through: the owner
+// check every guard starts from, the step move, and the one reading of
+// the adapter's answer.
 //
 // aggregate.go is the read side of the same status: the per-pod
 // predicates, the per-Instance counter set, the desired-count lookup and

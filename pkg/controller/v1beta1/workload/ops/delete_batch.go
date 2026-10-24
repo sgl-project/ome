@@ -77,7 +77,7 @@ func DeleteBatch(
 	if err != nil {
 		return DeleteBatchResult{}, fmt.Errorf("DeleteBatch: resolve scale-down Pod batch size: %w", err)
 	}
-	selection, err := selectDeleteBatch(input.ObservedState.InstanceStatuses, extrasNotParked(input, extras, podsByInstance), podsByInstance, budget)
+	selection, err := selectDeleteBatch(input.ObservedState.InstanceStatuses, extrasNotParked(input, extras, podsByInstance), podsByInstance, budget, input.ObservedState.CordonedInstances)
 	if err != nil {
 		return DeleteBatchResult{}, err
 	}
@@ -201,11 +201,16 @@ func DeleteBatch(
 	return result, nil
 }
 
+// selectDeleteBatch picks the wave this pass drives. Delete-owned rows come
+// first, oldest operation first; only when none remain are fresh extras
+// admitted, those with a pod on a cordoned node first, then the highest
+// index, so a wave the budget splits empties the cordoned nodes first.
 func selectDeleteBatch(
 	statuses []workload.InstanceStatus,
 	extras []int32,
 	podsByInstance map[int32][]*corev1.Pod,
 	budget *int32,
+	cordoned map[int32]struct{},
 ) (deleteBatchSelection, error) {
 	if budget != nil && *budget <= 0 {
 		return deleteBatchSelection{}, fmt.Errorf("DeleteBatch: scale-down Pod batch size must be positive")
@@ -252,7 +257,14 @@ func selectDeleteBatch(
 	if len(pool) == 0 {
 		pool = fresh
 		selection.fresh = true
-		sort.Slice(pool, func(i, j int) bool { return pool[i].status.Index > pool[j].status.Index })
+		sort.Slice(pool, func(i, j int) bool {
+			_, iCordoned := cordoned[pool[i].status.Index]
+			_, jCordoned := cordoned[pool[j].status.Index]
+			if iCordoned != jCordoned {
+				return iCordoned
+			}
+			return pool[i].status.Index > pool[j].status.Index
+		})
 	} else {
 		blockedFresh = len(fresh)
 		sort.SliceStable(pool, func(i, j int) bool {
@@ -281,7 +293,7 @@ func selectDeleteBatch(
 }
 
 func admitDeleteBatch(ctx context.Context, input workload.ReconcileInput, plan workload.ComponentPlan, candidates []deleteBatchCandidate) (bool, error) {
-	failure := retiredAttemptFailure(candidates)
+	failure := retiredAttemptFailure(input.ObservedState, candidates)
 	committed, heldAttempts, err := status.StampDeletingBatch(ctx, input, plan.InstanceReadyTimeout, candidateStatuses(candidates), failure)
 	if committed && heldAttempts > 0 && input.WarnRetryHeld != nil {
 		input.WarnRetryHeld(failure.TargetRevision, heldAttempts, failure.Reason)
@@ -296,15 +308,16 @@ func admitDeleteBatch(ctx context.Context, input workload.ReconcileInput, plan w
 // an attempt failing on its own; the wave is what ends it, so the wave
 // records it the way the escalation would, with the pod's reason. A
 // failed gang surge pair the plan let go is read through its source
-// (retiredGangSurgeFailure). One record per wave: the ladder counts
+// (retiredGangSurgeFailure), against the observed rows, which hold the
+// replacement the source names. One record per wave: the ladder counts
 // waves, not rows. nil when the wave retires no such attempt — an attempt
 // that showed no failure is left to the gate, which reads an
 // authorization with no attempt behind it as interrupted and lets the
 // roll reopen it.
-func retiredAttemptFailure(candidates []deleteBatchCandidate) *status.AttemptFailure {
+func retiredAttemptFailure(observed workload.WorkloadObservedState, candidates []deleteBatchCandidate) *status.AttemptFailure {
 	for _, candidate := range candidates {
 		row := candidate.status
-		if failure := retiredGangSurgeFailure(&row, candidates); failure != nil {
+		if failure := retiredGangSurgeFailure(&row, candidates, observed); failure != nil {
 			return failure
 		}
 		if !retiresUpdateAttempt(&row) {
@@ -352,16 +365,24 @@ func retiresGangSurgeAttempt(row *workload.InstanceStatus) bool {
 }
 
 // retiredGangSurgeFailure is the record a wave owes for a gang surge
-// source it retires. The attempt's pods live under the replacement's
-// index: the marker in the same wave whose pods show a workload-caused
-// failure gives the reason; otherwise the failure the escalation
-// recorded on the source's row does, classified the way the gang abandon
-// classifies it. nil when neither says anything.
-func retiredGangSurgeFailure(row *workload.InstanceStatus, candidates []deleteBatchCandidate) *status.AttemptFailure {
+// source it retires. A source whose replacement is already Ready on the
+// revision the surge rolled to ended a successful attempt and owes
+// nothing, whatever failure its own row still records: a replacement
+// member that exited and was rebuilt during the drain is written there,
+// and this removal only clears the row the finished surge left standing.
+// Otherwise the attempt's pods live under the replacement's index: the
+// marker in the same wave whose pods show a workload-caused failure
+// gives the reason; else the failure the escalation recorded on the
+// source's row does, classified the way the gang abandon classifies it.
+// nil when neither says anything.
+func retiredGangSurgeFailure(row *workload.InstanceStatus, candidates []deleteBatchCandidate, observed workload.WorkloadObservedState) *status.AttemptFailure {
 	if !retiresGangSurgeAttempt(row) {
 		return nil
 	}
 	target := row.Operation.TargetRevision
+	if gangSurgePromotedTargetMatches(observed.Instance(*row.Operation.SurgeIndex), target) {
+		return nil
+	}
 	for _, candidate := range candidates {
 		if candidate.status.Index != *row.Operation.SurgeIndex || !isGangSurgeTargetMarker(&candidate.status) {
 			continue

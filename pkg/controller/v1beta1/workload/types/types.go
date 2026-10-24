@@ -1,20 +1,19 @@
-// Package types holds the workload package's value types — the
-// per-Instance / per-Component / per-Plan data structures every layer
-// of the workload pipeline reads and writes. Lives separately from
-// the parent `workload` package so `workload/ops` and
-// `workload.Reconcile` can both depend on these types without closing
-// an import cycle.
+// Package types holds the value types of the workload engine: the
+// Instance row (InstanceStatus, InstanceOperation, InstanceTermination)
+// and its enumerations, the policy shapes read off the spec (Lifecycle,
+// UpdateStrategy, MigrationPolicy), the pass input (ReconcileInput: the
+// row writers, gates and reporters one pass is handed), the desired spec
+// and the observed state (WorkloadDesiredSpec, WorkloadObservedState),
+// the plan (ComponentPlan, InstancePlan), the event reasons, the
+// conditions and the pass-scoped sinks (APIPacing, PassWake,
+// PromoteWindow, DrainHolds). It imports nothing in the tree, so every
+// layer of the engine can read these types.
 //
-// The workload package owns its own status / operation / component /
-// phase / key types and does NOT depend on the OME CRD API package.
-// Every type here mirrors the corresponding v1beta1 status type
-// field-for-field; the v1beta1convert helpers
-// (`controller/v1beta1/v1beta1convert`) perform the conversion, and
-// the InferenceReplica adapter (inferencereplica) wires those
-// converters into its reconcile loop.
-//
-// External callers reference these types as `workload.X` — the parent
-// `workload` package re-exports them as Go aliases.
+// Nothing here depends on the OME CRD API package. The row and policy
+// types mirror their v1beta1 status types field for field; the
+// v1beta1convert package converts between the two, and the
+// InferenceReplica adapter (inferencereplica) wires those converters
+// into its reconcile loop.
 package types
 
 import (
@@ -134,19 +133,19 @@ const UpdateStepInPlace = "InPlace"
 
 // UpdateStepDrain marks an Instance running the recreate roll: one step
 // spans draining and deleting the old incarnation, recreating at the
-// bumped Incarnation, and the serving flip before promotion.
+// next Incarnation, and the serving flip before promotion.
 const UpdateStepDrain = "Drain"
 
-// UpdateStepParked is the step of an Update attempt parked after its
-// disposition: ended by its deadline or a wedged pod while its own pod
-// set was still alive, kept on the row with Operation.Waiting naming the
-// wait the next attempt stands behind. The step is the attempt's state,
-// not a resume point: no pass drives it, and the roll opens a fresh
-// attempt over it.
+// UpdateStepParked is the step of an Update attempt the escalation
+// stopped: ended by its deadline or by a pod held in a waiting state past
+// its grace while its own pod set still ran, kept on the row with
+// Operation.Waiting naming the wait the next attempt stands behind. The
+// step is the attempt's state, not a resume point: no pass drives it, and
+// the roll opens a fresh attempt over it.
 const UpdateStepParked = "Parked"
 
 // RestartStepDrain is the one step of the Restart machine: draining and
-// deleting the old incarnation, then recreating at the bumped one.
+// deleting the old incarnation, then recreating at the next one.
 const RestartStepDrain = "Drain"
 
 // UpdateStepSurge marks the source Instance while a single-pod or gang
@@ -161,7 +160,7 @@ const UpdateStepSurge = "Surge"
 const UpdateStepGangSurgeTarget = "GangSurgeTarget"
 
 // UpdateStepGangSurgeTargetCleanup marks a replacement gang whose terminal
-// cleanup owns its Pods and PodGroup until the marker status is removed.
+// cleanup owns its Pods and PodGroup until the target row is removed.
 const UpdateStepGangSurgeTargetCleanup = "GangSurgeTargetCleanup"
 
 // UpdateStepSurgeDrain marks a SurgeThenDrain source whose replacement is
@@ -182,8 +181,10 @@ type InstanceOperation struct {
 
 	Type InstanceOperationType
 
-	// Step is the fine-grained resume point within the operation
-	// (e.g., Drain, DeletePods, WaitZero, Recreate, WaitReady).
+	// Step is the fine-grained resume point within the operation: one of
+	// the step constants the operation's machine writes (the UpdateStep*
+	// and RestartStepDrain constants in this package; the create, migrate
+	// and delete steps in the status package).
 	Step string
 
 	StartedAt metav1.Time
@@ -269,7 +270,9 @@ type InstanceStatus struct {
 	// ReadyPodCount counts pods reporting Ready=True.
 	ReadyPodCount int32
 	// ServingPodCount counts pods in rotation: Ready by the control plane
-	// AND serving=True on the controller-managed readiness gate.
+	// AND serving=True on the controller-managed readiness gate. An
+	// Instance with no routable serving pod serves nothing and publishes
+	// 0, whatever its workers read: a gang whose leader is gone counts 0.
 	ServingPodCount int32
 	// AvailablePodCount counts pods in rotation on the Component's
 	// headless Service that, when MinReadySeconds is set, have been Ready
@@ -370,11 +373,11 @@ type Key struct {
 // pods the Instance has, and how many of them are available.
 //
 // Both are written only by the adapter's status publication, never by a
-// pass, from the previous reconcile's pod observation. The replay driver
-// models the pod count the same way; the available count comes only from
-// the adapter, so a guard reading it is covered by a Go unit test rather
-// than a replay scenario. Reading them through one accessor is what marks
-// that at every site. A row the caller has not observed publishes nothing.
+// pass, from the previous reconcile's pod observation; the replay driver
+// runs the same publication after every pass and hands both counts to the
+// next one. Reading them through one accessor is what marks a guard that
+// trails the pods by one pass at every site. A row the caller has not
+// observed publishes nothing.
 func AdapterPublished(s *InstanceStatus) (pods, available int32) {
 	if s == nil {
 		return 0, 0
@@ -410,7 +413,9 @@ type Lifecycle struct {
 	ReadyPolicy *InstanceReadyPolicy
 
 	// InstanceReadyTimeout is the wait ceiling on a newly-created
-	// Instance becoming Ready. nil falls back to the 30m default.
+	// Instance becoming Ready. nil defers to the operator-configured
+	// window (lifecycle.instanceReadyTimeout); when neither is set,
+	// operations open with no deadline.
 	InstanceReadyTimeout *metav1.Duration
 
 	// MigrationPolicy controls whether and how OMENative honors a

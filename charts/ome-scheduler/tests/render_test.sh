@@ -30,6 +30,18 @@ rendered="$("${helm_bin}" template ome-scheduler "${chart_dir}" \
 assert_contains 'helm.sh/chart: ome-scheduler-0.1.0'
 assert_contains 'app.kubernetes.io/version: "0.1.0"'
 
+# Lease timing renders as a complete set, and only then.
+assert_contains '      leaseDuration: 60s'
+assert_contains '      renewDeadline: 30s'
+assert_contains '      retryPeriod: 6s'
+partial_lease="$("${helm_bin}" template ome-scheduler "${chart_dir}" \
+  --kube-version "${kube_version}" \
+  --namespace ome-system \
+  --set scheduler.leaderElection.retryPeriod=)"
+if grep -Fq 'leaseDuration:' <<<"${partial_lease}"; then
+  fail "partial leader-election timing was rendered"
+fi
+
 # Embedded KubeSchedulerConfiguration contract. Helm cannot schema-check the
 # opaque ConfigMap string, so keep indentation-sensitive assertions for its
 # extension-point and plugin-argument structure.

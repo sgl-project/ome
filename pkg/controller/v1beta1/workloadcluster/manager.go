@@ -44,6 +44,11 @@ type Manager struct {
 	mu             sync.RWMutex
 	conns          map[string]*remoteConn
 	nextGeneration uint64
+	// decided maps each cluster name to the registration UID the WorkloadCluster
+	// controller has made a connect or disconnect decision for since this
+	// manager started. A missing connection to a cluster without an entry only
+	// means the controller has not reached it yet.
+	decided map[string]types.UID
 
 	// newClient builds a caching-capable client (+ a cancel for its background
 	// watch context) from raw kubeconfig bytes. Injected for tests; defaults to
@@ -92,8 +97,9 @@ type remoteConn struct {
 // non-empty CachedKinds set switches it to a selectively-caching client.
 func NewManager(scheme *runtime.Scheme) *Manager {
 	m := &Manager{
-		scheme: scheme,
-		conns:  map[string]*remoteConn{},
+		scheme:  scheme,
+		conns:   map[string]*remoteConn{},
+		decided: map[string]types.UID{},
 	}
 	m.newClient = m.buildRemoteClient
 	return m
@@ -186,6 +192,32 @@ func (m *Manager) ClientForUID(name string, uid types.UID) (SelectivelyCachingCl
 	return c.client, true
 }
 
+// MarkConnectionDecided records that the WorkloadCluster controller has
+// decided, at least once since the manager started, whether to connect this
+// registration. An empty UID records a cluster whose registration is gone.
+func (m *Manager) MarkConnectionDecided(name string, uid types.UID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.decided == nil {
+		m.decided = map[string]types.UID{}
+	}
+	m.decided[name] = uid
+}
+
+// ConnectionPending reports whether a missing connection to the cluster may
+// still appear on its own: the WorkloadCluster controller has not yet decided
+// whether to connect it since the manager started, or, for a non-empty uid,
+// has not yet decided for that registration.
+func (m *Manager) ConnectionPending(name string, uid types.UID) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	decided, ok := m.decided[name]
+	if !ok {
+		return true
+	}
+	return uid != "" && decided != uid
+}
+
 // clientForGeneration returns the current client together with an identity
 // that changes whenever Connect replaces it. The funnel uses the generation to
 // attach one informer handler to each remote cache instance.
@@ -220,8 +252,11 @@ func (m *Manager) connect(ctx context.Context, name string, uid types.UID, raw [
 
 	m.mu.RLock()
 	if cur, ok := m.conns[name]; ok && cur.configHash == hash && cur.clusterUID == uid {
-		m.mu.RUnlock()
-		return nil
+		stopped, hasCache := cur.client.(interface{ cacheStopped() bool })
+		if !hasCache || !stopped.cacheStopped() {
+			m.mu.RUnlock()
+			return nil
+		}
 	}
 	m.mu.RUnlock()
 

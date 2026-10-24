@@ -14,11 +14,11 @@ import (
 	toolscache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workloadcluster"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 const (
@@ -64,11 +64,7 @@ func (cachingClient) AddCacheEventHandler(context.Context, client.Object,
 
 func member(t *testing.T, objs ...client.Object) workloadcluster.SelectivelyCachingClient {
 	t.Helper()
-	return cachingClient{fake.NewClientBuilder().
-		WithScheme(capacityScheme(t)).
-		WithObjects(objs...).
-		WithStatusSubresource(&v1beta1.AcceleratorQuota{}).
-		Build()}
+	return cachingClient{fakeclient.New(t, fakeclient.WithTypes(kueuev1beta2.AddToScheme), fakeclient.WithObjects(objs...), fakeclient.WithStatusSubresource(&v1beta1.AcceleratorQuota{}))}
 }
 
 // memberRoot is the root a member's own controller creates, carrying the
@@ -93,7 +89,7 @@ func parkedRoot(allocatable, installed string) *v1beta1.AcceleratorQuota {
 	}
 }
 
-func projectingReconciler(t *testing.T, fleet ClusterClients, objs ...client.Object) (*Reconciler, client.Client) {
+func projectingReconciler(t *testing.T, fleet ClusterClients, objs ...client.Object) (*Reconciler, client.WithWatch) {
 	t.Helper()
 	r, c := newReconciler(t, objs...)
 	r.Project = ProjectOptions{
@@ -128,7 +124,7 @@ func projectedOn(t *testing.T, c workloadcluster.SelectivelyCachingClient) map[s
 
 // The whole point of the management plane: one fleet total becomes a number on
 // each member, sized to what that member actually has.
-func TestProjectSplitsAcrossMembers(t *testing.T) {
+func TestProject_TwoMembersAt3To1_SplitsNominalProportionally(t *testing.T) {
 	a := member(t, memberRoot("3"))
 	b := member(t, memberRoot("1"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{
@@ -156,7 +152,7 @@ func TestProjectSplitsAcrossMembers(t *testing.T) {
 // Copies come back to the plane that wrote them when a hub is also a member.
 // Re-splitting an already-split number compounds it every pass, so a projection
 // must never be read as a source.
-func TestProjectIgnoresItsOwnCopies(t *testing.T) {
+func TestProject_OwnCopyOnTheHub_IsNotReadAsASource(t *testing.T) {
 	a := member(t, memberRoot("1"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": a}}
 
@@ -187,7 +183,7 @@ func TestProjectIgnoresItsOwnCopies(t *testing.T) {
 // A copy carries the marks that make it recognisable as one: without them a
 // member cannot tell it from a node an admin typed, so nothing could ever sweep
 // it and the member's webhook would admit edits to it.
-func TestProjectMarksItsCopies(t *testing.T) {
+func TestProject_CopyWritten_CarriesOriginLabelAndClusterAnnotation(t *testing.T) {
 	a := member(t, memberRoot("1"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": a}}
 
@@ -214,17 +210,13 @@ func TestProjectMarksItsCopies(t *testing.T) {
 // One member being unreachable, or refusing the write, must cost the fleet that
 // member and nothing else. Failing the pass would hold every other member's
 // quota at whatever it last received.
-func TestProjectIsolatesAFailedMember(t *testing.T) {
+func TestProject_OneMemberRefusesWrite_OthersStillProjectedAndErrorSurfaces(t *testing.T) {
 	good := member(t, memberRoot("1"))
-	broken := cachingClient{fake.NewClientBuilder().
-		WithScheme(capacityScheme(t)).
-		WithObjects(memberRoot("1")).
-		WithInterceptorFuncs(interceptor.Funcs{
-			Patch: func(context.Context, client.WithWatch, client.Object,
-				client.Patch, ...client.PatchOption) error {
-				return errors.New("apiserver refused the write")
-			},
-		}).Build()}
+	broken := cachingClient{fakeclient.New(t,
+		fakeclient.WithTypes(kueuev1beta2.AddToScheme),
+		fakeclient.WithObjects(memberRoot("1")),
+		fakeclient.FailingVerb(fakeclient.Patch, fakeclient.EveryCall, errors.New("apiserver refused the write")),
+	)}
 
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{
 		"member-good": good, "member-broken": broken,
@@ -248,7 +240,7 @@ func TestProjectIsolatesAFailedMember(t *testing.T) {
 // A member that has not created its root yet is starting up. Treating that as a
 // capacity of zero would apportion it nothing and, worse, would look identical
 // to a member that genuinely has no hardware.
-func TestProjectWaitsForAMemberThatHasNotReported(t *testing.T) {
+func TestProject_MemberWithoutRoot_IsApportionedNothing(t *testing.T) {
 	silent := member(t) // no root at all
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": silent}}
 
@@ -268,7 +260,7 @@ func TestProjectWaitsForAMemberThatHasNotReported(t *testing.T) {
 // Nothing connected is not a fleet-wide fault. A hub outlives its members'
 // restarts, and reporting every node broken while the fleet comes up would bury
 // a real failure when one happens.
-func TestProjectWithNoMembersConnected(t *testing.T) {
+func TestProject_NoMembersConnected_PassSucceeds(t *testing.T) {
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{}}
 	r, _ := projectingReconciler(t, fleet,
 		cohort(rootName, "", budget("128")),
@@ -281,7 +273,7 @@ func TestProjectWithNoMembersConnected(t *testing.T) {
 
 // A cluster Connected() names but ClientFor no longer has was dropped between
 // the two calls. The next pass sees the newer state; this one must not fail.
-func TestProjectToleratesAClusterDroppedMidPass(t *testing.T) {
+func TestProject_ClusterDroppedMidPass_PassSucceedsAndOthersProjected(t *testing.T) {
 	a := member(t, memberRoot("1"))
 	fleet := &fakeFleet{
 		members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": a},
@@ -310,7 +302,7 @@ func registered(name string) *v1beta1.WorkloadCluster {
 // share grows to fill the gap -- while the absent member still holds the
 // projection it last received. The fleet would then have granted more than the
 // admin authorized, and the excess would only surface when the member returned.
-func TestProjectHoldsWhenAMemberIsUnreachable(t *testing.T) {
+func TestProject_RegisteredMemberUnreachable_ProjectsNothing(t *testing.T) {
 	a := member(t, memberRoot("3"))
 	// member-b is registered but the transport has no client for it.
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": a}}
@@ -336,7 +328,7 @@ func TestProjectHoldsWhenAMemberIsUnreachable(t *testing.T) {
 
 // The hold lifts on its own once the fleet is whole again -- it is a wait, not
 // a state an operator has to clear.
-func TestProjectResumesWhenTheFleetIsWholeAgain(t *testing.T) {
+func TestProject_UnreachableMemberReturns_ClearsHoldAndSplits(t *testing.T) {
 	a := member(t, memberRoot("3"))
 	b := member(t, memberRoot("1"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": a}}
@@ -388,7 +380,7 @@ func TestProjectResumesWhenTheFleetIsWholeAgain(t *testing.T) {
 
 // A member being deregistered is already gone as far as a split is concerned.
 // Holding the fleet for one would mean holding until its finalizers ran.
-func TestProjectDoesNotHoldForADepartingMember(t *testing.T) {
+func TestProject_MemberBeingDeregistered_DoesNotHoldTheFleet(t *testing.T) {
 	a := member(t, memberRoot("1"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": a}}
 
@@ -422,7 +414,7 @@ func projectionOn(name, nominal string) *v1beta1.AcceleratorQuota {
 // A tenant the tree no longer describes must stop granting quota. Without the
 // sweep its queue outlives the budget that justified it, which is a grant
 // nobody authorized and nobody can see from the hub.
-func TestProjectSweepsWhatTheTreeNoLongerDescribes(t *testing.T) {
+func TestProject_CopyWithNoSourceInTree_IsSwept(t *testing.T) {
 	// member-a already carries a copy of a tenant that is not in the tree.
 	a := member(t, memberRoot("1"), projectionOn("departed", "40"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": a}}
@@ -444,7 +436,7 @@ func TestProjectSweepsWhatTheTreeNoLongerDescribes(t *testing.T) {
 // The sweep may only remove what this plane wrote. A node an admin authored on
 // the member carries no origin, and another plane's copies carry a different
 // one -- reaping either would be one plane deleting another's work.
-func TestProjectSweepLeavesWhatItDoesNotOwn(t *testing.T) {
+func TestProject_NodesItDoesNotOwnOnMember_SweepLeavesThem(t *testing.T) {
 	local := leaf("locally-authored", rootName, budget("10"))
 	foreign := projectionOn("other-hubs-copy", "20")
 	foreign.Labels[v1beta1.AcceleratorQuotaOriginLabel] = "some-other-hub"
@@ -473,7 +465,7 @@ func TestProjectSweepLeavesWhatItDoesNotOwn(t *testing.T) {
 // what this pass wrote -- and a sweep reading absence as "no longer belongs"
 // would delete exactly the copy the freeze exists to preserve, turning a held
 // tenant into a deleted one.
-func TestProjectSweepKeepsFrozenCopies(t *testing.T) {
+func TestProject_LeafHeldOnContainment_SweepKeepsItsCopy(t *testing.T) {
 	a := member(t, memberRoot("1"), projectionOn("team", "100"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": a}}
 
@@ -495,7 +487,7 @@ func TestProjectSweepKeepsFrozenCopies(t *testing.T) {
 // Deleting the node is the one way to take a tenant's quota away on purpose.
 // The finalizer is what makes it reach the members at all -- without the claim
 // the CR vanishes and its budgets outlive it on every cluster.
-func TestProjectReapsOnDeletion(t *testing.T) {
+func TestProject_SourceDeleted_RemovesCopyFromMember(t *testing.T) {
 	a := member(t, memberRoot("1"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": a}}
 
@@ -537,7 +529,7 @@ func TestProjectReapsOnDeletion(t *testing.T) {
 // projected: a member's own controller creates it and derives that cluster's
 // capacity onto it. Reaping by name alone would take a member's root down with
 // the hub's, and the capacity every split is sized against would go with it.
-func TestProjectDoesNotReapAMembersOwnRoot(t *testing.T) {
+func TestProject_HubRootDeleted_MembersOwnRootSurvives(t *testing.T) {
 	a := member(t, memberRoot("256"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": a}}
 
@@ -583,7 +575,7 @@ func TestProjectDoesNotReapAMembersOwnRoot(t *testing.T) {
 // grouping with no leaf beneath it never projects, so the name it holds on a
 // member belongs to whoever put it there -- and deleting the hub's copy must
 // not reach through to an admin's own node or to another plane's.
-func TestProjectReapLeavesWhatItDoesNotOwn(t *testing.T) {
+func TestProject_UnownedGroupsDeletedOnHub_MembersCopiesSurvive(t *testing.T) {
 	local := cohort("local-group", rootName)
 	foreign := cohort("foreign-group", rootName)
 	foreign.Labels = map[string]string{v1beta1.AcceleratorQuotaOriginLabel: "some-other-hub"}
@@ -629,7 +621,7 @@ func TestProjectReapLeavesWhatItDoesNotOwn(t *testing.T) {
 // eventually, and only if this plane keeps running. The finalizer is what stops
 // the hub letting go of a node while a member still holds its budget and cannot
 // be reached to be told otherwise.
-func TestProjectHoldsDeletionWhileAMemberIsUnreachable(t *testing.T) {
+func TestProject_SourceDeletingWithMemberUnreachable_KeepsFinalizer(t *testing.T) {
 	a := member(t, memberRoot("1"), projectionOn("team", "100"))
 	// member-b is registered and has no client.
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": a}}
@@ -660,7 +652,7 @@ func TestProjectHoldsDeletionWhileAMemberIsUnreachable(t *testing.T) {
 	}
 }
 
-func TestDepthByParentRef(t *testing.T) {
+func TestDepthByParentRef_ChainsSiblingsAndCycles_MeasuresFromTopAndEnds(t *testing.T) {
 	item := func(name, parent string) v1beta1.AcceleratorQuota {
 		q := v1beta1.AcceleratorQuota{ObjectMeta: metav1.ObjectMeta{Name: name}}
 		if parent != "" {
@@ -718,7 +710,7 @@ func TestDepthByParentRef(t *testing.T) {
 // longer describes has to come off a member deepest-first. Parent-first is
 // refused at every tier but the last, and the subtree then takes as many passes
 // to disappear as it is deep.
-func TestProjectSweepsASubtreeChildrenFirst(t *testing.T) {
+func TestProject_SubtreeNoLongerInTree_DeletesChildBeforeParent(t *testing.T) {
 	// Named so the child sorts before the parent, which is what an order taken
 	// from the list rather than from the shape would get wrong.
 	parent := projectionOn("sim-tenants", "40")
@@ -727,19 +719,13 @@ func TestProjectSweepsASubtreeChildrenFirst(t *testing.T) {
 	child := projectionOn("sim-serving", "40")
 	child.Spec.ParentRef = &v1beta1.AcceleratorQuotaParentRef{Name: "sim-tenants"}
 
-	var deleted []string
-	a := cachingClient{fake.NewClientBuilder().
-		WithScheme(capacityScheme(t)).
-		WithObjects(memberRoot("1"), parent, child).
-		WithStatusSubresource(&v1beta1.AcceleratorQuota{}).
-		WithInterceptorFuncs(interceptor.Funcs{
-			Delete: func(ctx context.Context, c client.WithWatch, obj client.Object,
-				opts ...client.DeleteOption,
-			) error {
-				deleted = append(deleted, obj.GetName())
-				return c.Delete(ctx, obj, opts...)
-			},
-		}).Build()}
+	deletes := fakeclient.CountingVerb(fakeclient.Delete)
+	a := cachingClient{fakeclient.New(t,
+		fakeclient.WithTypes(kueuev1beta2.AddToScheme),
+		fakeclient.WithObjects(memberRoot("1"), parent, child),
+		fakeclient.WithStatusSubresource(&v1beta1.AcceleratorQuota{}),
+		deletes,
+	)}
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": a}}
 
 	r, _ := projectingReconciler(t, fleet,
@@ -751,6 +737,10 @@ func TestProjectSweepsASubtreeChildrenFirst(t *testing.T) {
 		t.Fatalf("Reconcile() = %v", err)
 	}
 
+	var deleted []string
+	for _, key := range deletes.Keys() {
+		deleted = append(deleted, key.Name)
+	}
 	if diff := cmp.Diff([]string{"sim-serving", "sim-tenants"}, deleted); diff != "" {
 		t.Errorf("delete order mismatch (-want +got):\n%s", diff)
 	}
@@ -770,7 +760,7 @@ func TestProjectSweepsASubtreeChildrenFirst(t *testing.T) {
 // The pre-existing fake modelled an unreachable member by removing it from both
 // Connected() and ClientFor at once, which is the one thing a dead apiserver
 // never does.
-func TestProjectHoldsWhenAMemberCannotBeRead(t *testing.T) {
+func TestProject_ConnectedMemberUnreadable_ProjectsNothing(t *testing.T) {
 	a := member(t, memberRoot("3"))
 	b := unreadableMember(t, memberRoot("1"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{
@@ -801,7 +791,7 @@ func TestProjectHoldsWhenAMemberCannotBeRead(t *testing.T) {
 // proportional leaf that cannot be re-split while a member is unreadable keeps
 // its last copies on every reachable member, ancestors included, and re-splits
 // once the fleet reports again.
-func TestProjectKeepsProjectedCopiesWhileAMemberCannotBeRead(t *testing.T) {
+func TestProject_MemberUnreadableThenBack_KeepsCopiesThenResplits(t *testing.T) {
 	a := member(t, memberRoot("3"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{
 		"member-a": a,
@@ -842,7 +832,7 @@ func TestProjectKeepsProjectedCopiesWhileAMemberCannotBeRead(t *testing.T) {
 
 // The unreachable path holds by returning before anything is written or swept.
 // Pinned so a refactor that folds it into the unreadable path keeps the copies.
-func TestProjectKeepsProjectedCopiesWhileAMemberIsUnreachable(t *testing.T) {
+func TestProject_MemberUnreachableAfterSplit_KeepsExistingCopies(t *testing.T) {
 	a := member(t, memberRoot("3"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{
 		"member-a": a,
@@ -871,7 +861,7 @@ func TestProjectKeepsProjectedCopiesWhileAMemberIsUnreachable(t *testing.T) {
 
 // An explicit split edited so it no longer sums to nominal is unresolved, and
 // is held rather than swept: the members keep the last split that did add up.
-func TestProjectKeepsProjectedCopiesWhenAnExplicitSplitStopsAddingUp(t *testing.T) {
+func TestProject_ExplicitSplitStopsAddingUp_KeepsLastCopies(t *testing.T) {
 	a := member(t, memberRoot("3"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": a}}
 
@@ -910,7 +900,7 @@ func TestProjectKeepsProjectedCopiesWhenAnExplicitSplitStopsAddingUp(t *testing.
 // A proportional split divides by what each member can schedule now. Chips on
 // cordoned or NotReady nodes still count toward the high-water mark, but no
 // workload can land on them, so they earn no share.
-func TestProjectSplitsOnSchedulableCapacity(t *testing.T) {
+func TestProject_MemberWithUnschedulableChips_SharesBySchedulableOnly(t *testing.T) {
 	a := member(t, parkedRoot("1", "3"))
 	b := member(t, memberRoot("1"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{
@@ -938,7 +928,7 @@ func TestProjectSplitsOnSchedulableCapacity(t *testing.T) {
 // stay at that rather than being swept: the queue still holds the tenant's
 // admitted and pending work, and deleting it would strand both until the nodes
 // return.
-func TestProjectKeepsAParkedMembersCopiesAtZero(t *testing.T) {
+func TestProject_MemberAllCordoned_CopiesStayAtZeroThenRecover(t *testing.T) {
 	a := member(t, memberRoot("1"))
 	b := member(t, memberRoot("1"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{
@@ -989,7 +979,7 @@ func TestProjectKeepsAParkedMembersCopiesAtZero(t *testing.T) {
 
 // A member with none of the flavor installed is not a home for it, so it gets
 // no queue that could only ever admit nothing.
-func TestProjectLeavesOutAMemberWithoutTheFlavor(t *testing.T) {
+func TestProject_MemberWithoutTheFlavor_GetsNoCopy(t *testing.T) {
 	a := member(t, memberRoot("1"))
 	bare := memberRoot("1")
 	bare.Status.Capacity = nil
@@ -1019,23 +1009,18 @@ func TestProjectLeavesOutAMemberWithoutTheFlavor(t *testing.T) {
 // is what a dead apiserver behind a still-connected transport looks like.
 func unreadableMember(t *testing.T, objs ...client.Object) workloadcluster.SelectivelyCachingClient {
 	t.Helper()
-	return cachingClient{fake.NewClientBuilder().
-		WithScheme(capacityScheme(t)).
-		WithObjects(objs...).
-		WithStatusSubresource(&v1beta1.AcceleratorQuota{}).
-		WithInterceptorFuncs(interceptor.Funcs{
-			Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object,
-				...client.GetOption,
-			) error {
-				return errors.New("connection refused")
-			},
-		}).Build()}
+	return cachingClient{fakeclient.New(t,
+		fakeclient.WithTypes(kueuev1beta2.AddToScheme),
+		fakeclient.WithObjects(objs...),
+		fakeclient.WithStatusSubresource(&v1beta1.AcceleratorQuota{}),
+		fakeclient.FailingVerb(fakeclient.Get, fakeclient.EveryCall, errors.New("connection refused")),
+	)}
 }
 
 // The hub's only account of what its members are doing. Without it the tree
 // reports Ready while a member is refusing every write, which is the shape of
 // failure this whole component exists to make visible.
-func TestProjectReportsEachMemberOnStatus(t *testing.T) {
+func TestProject_CleanPass_ReportsARowPerMemberWithAppliedGeneration(t *testing.T) {
 	a := member(t, memberRoot("3"))
 	b := member(t, memberRoot("1"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{
@@ -1085,7 +1070,7 @@ func TestProjectReportsEachMemberOnStatus(t *testing.T) {
 
 // A member that refused the write is the row an operator needs most, and it
 // must say so rather than simply lacking a generation.
-func TestProjectReportsAMemberThatRefused(t *testing.T) {
+func TestProject_OneMemberRefuses_ItsRowCarriesMessageOthersApplied(t *testing.T) {
 	a := member(t, memberRoot("3"))
 	b := refusingMember(t, memberRoot("1"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{
@@ -1127,7 +1112,7 @@ func TestProjectReportsAMemberThatRefused(t *testing.T) {
 // no-op short-circuit skips the patch when it believes nothing changed, so a
 // field it does not compare is written once and frozen. This package has been
 // bitten by that twice.
-func TestClusterStatusKeepsMoving(t *testing.T) {
+func TestProject_MemberStartsRefusing_StatusRowUpdatesOnNextPass(t *testing.T) {
 	a := member(t, memberRoot("3"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": a}}
 
@@ -1175,17 +1160,12 @@ func clusterNames(rows []v1beta1.AcceleratorQuotaClusterStatus) []string {
 // what a member whose webhook or RBAC says no looks like.
 func refusingMember(t *testing.T, objs ...client.Object) workloadcluster.SelectivelyCachingClient {
 	t.Helper()
-	return cachingClient{fake.NewClientBuilder().
-		WithScheme(capacityScheme(t)).
-		WithObjects(objs...).
-		WithStatusSubresource(&v1beta1.AcceleratorQuota{}).
-		WithInterceptorFuncs(interceptor.Funcs{
-			Patch: func(context.Context, client.WithWatch, client.Object,
-				client.Patch, ...client.PatchOption,
-			) error {
-				return errors.New("denied by the member")
-			},
-		}).Build()}
+	return cachingClient{fakeclient.New(t,
+		fakeclient.WithTypes(kueuev1beta2.AddToScheme),
+		fakeclient.WithObjects(objs...),
+		fakeclient.WithStatusSubresource(&v1beta1.AcceleratorQuota{}),
+		fakeclient.FailingVerb(fakeclient.Patch, fakeclient.EveryCall, errors.New("denied by the member")),
+	)}
 }
 
 // The hub's account of what the fleet is consuming, per member and in total.
@@ -1194,7 +1174,7 @@ func refusingMember(t *testing.T, objs ...client.Object) workloadcluster.Selecti
 // Kueue, and it has already rolled its queues onto the node they belong to, so
 // the hub reads its own arithmetic back beside the consumption that arithmetic
 // authorized.
-func TestProjectReportsWhatEachMemberIsHolding(t *testing.T) {
+func TestProject_MembersReportUsage_SumsConsumptionAndKeepsAuthoredNominal(t *testing.T) {
 	// The members' controllers are not running here, so their copies are seeded
 	// with the status a workload-mode manager would have written.
 	a := member(t, memberRoot("3"))
@@ -1275,7 +1255,7 @@ func TestProjectReportsWhatEachMemberIsHolding(t *testing.T) {
 // The breakdown moves independently of the totals it sums to: two members can
 // trade admitted work and leave the fleet figure unchanged. A comparator that
 // only looked at the totals would freeze the breakdown after the first write.
-func TestPerClusterBudgetsKeepMoving(t *testing.T) {
+func TestProject_UsageMovesBetweenMembers_PerClusterRowsUpdate(t *testing.T) {
 	a := member(t, memberRoot("1"))
 	b := member(t, memberRoot("1"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{
@@ -1351,7 +1331,7 @@ func reportUsage(t *testing.T, m workloadcluster.SelectivelyCachingClient,
 //
 // Only leaves carry figures -- a share is apportioned to a leaf, and an
 // ancestor is projected budget-less -- so the tiers above have to be summed to.
-func TestFleetUsageRollsUpToAncestors(t *testing.T) {
+func TestProject_LeafUsageReported_AncestorsSumItWithoutPerClusterRows(t *testing.T) {
 	a := member(t, memberRoot("2"))
 	b := member(t, memberRoot("1"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{
@@ -1418,7 +1398,7 @@ func TestFleetUsageRollsUpToAncestors(t *testing.T) {
 // their figures would report that tier borrowing from outside itself when it is
 // not. Across CLUSTERS it does sum, because a Kueue cohort lives on one member
 // and two members lending to the same tenant are two separate loans.
-func TestFleetBorrowedIsNotSummedUpTheTree(t *testing.T) {
+func TestProject_LeafBorrowsWithinTier_TierReportsZeroBorrowed(t *testing.T) {
 	a := member(t, memberRoot("2"))
 	fleet := &fakeFleet{members: map[string]workloadcluster.SelectivelyCachingClient{"member-a": a}}
 

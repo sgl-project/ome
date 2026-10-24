@@ -11,13 +11,13 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"knative.dev/pkg/apis"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/placement/allocation"
+	"sigs.k8s.io/ome/pkg/placement/affinity"
 	"sigs.k8s.io/ome/pkg/placement/capacity"
 	"sigs.k8s.io/ome/pkg/placement/plan"
 )
@@ -58,7 +58,7 @@ func (r *Reconciler) reconcileSplit(ctx context.Context, source *v1beta1.Inferen
 }
 
 // executePlannedAllocation persists the proposal, advances it against member
-// observations and applies the step. holds explain unresolved home inputs in
+// observations and applies the step. holds explain unresolved member inputs in
 // the status condition while the step waits for them.
 func (r *Reconciler) executePlannedAllocation(ctx context.Context, source *v1beta1.InferenceService, eligible []string, standing *placementObservations, proposal plan.Proposal, holds []string) (ctrl.Result, error) {
 	proposal.PauseSurge = splitPauseRequired(proposal)
@@ -73,12 +73,14 @@ func (r *Reconciler) executePlannedAllocation(ctx context.Context, source *v1bet
 	observations := r.observeSplitMembers(ctx, accepted, eligible)
 	if proposal.Mode == v1beta1.PlacementModeAll {
 		for name, observed := range observations {
-			// The standing read still describes an unreadable planned home. It keeps
-			// the plan it last acknowledged; only unverified ready capacity is withheld.
-			if home, exists := standing.get(name); exists && !observed.Candidate.ObservationKnown {
-				candidate := *home.candidate.DeepCopy()
+			// The standing read still describes an unreadable planned member. It keeps
+			// the plan it last acknowledged, and its ready count follows the grace
+			// the failed planned read applied.
+			if member, exists := standing.get(name); exists && !observed.Candidate.ObservationKnown {
+				candidate := *member.candidate.DeepCopy()
 				candidate.Allocation, candidate.AppliedPlanID = observed.Candidate.Allocation, observed.Candidate.AppliedPlanID
-				candidate.ObservationKnown, candidate.ReadyReplicas = false, 0
+				candidate.ObservationKnown, candidate.ReadyReplicas = false, observed.Candidate.ReadyReplicas
+				candidate.ObservationFailingSince = observed.Candidate.ObservationFailingSince.DeepCopy()
 				observed.Candidate = candidate
 				observations[name] = observed
 			}
@@ -98,7 +100,7 @@ func (r *Reconciler) executePlannedAllocation(ctx context.Context, source *v1bet
 	}
 	if proposal.SingleMove != nil && proposal.SingleMove.Selected != "" && proposal.SingleMove.Selected != proposal.Winner {
 		selected := observations[proposal.SingleMove.Selected]
-		if !selected.FullHomeReady || !selected.Home.Routable {
+		if !selected.FullPolicyReady || !selected.MemberState.Routable {
 			step.Complete = false
 		}
 	}
@@ -115,7 +117,7 @@ func (r *Reconciler) executePlannedAllocation(ctx context.Context, source *v1bet
 		if slices.Contains(step.Resume, name) {
 			assignment.DrainRequested = false
 		}
-		if target == 0 && assignment.DesiredHome == nil && observations[name].Home.Absent {
+		if target == 0 && assignment.DesiredHome == nil && observations[name].MemberState.Absent {
 			assignment.CurrentHome, assignment.DrainRequested = nil, false
 		}
 		proposal.Assignments[name] = assignment
@@ -130,7 +132,7 @@ func (r *Reconciler) executePlannedAllocation(ctx context.Context, source *v1bet
 		for name, assignment := range proposal.Assignments {
 			assignment.OriginalReplicas = assignment.CurrentReplicas
 			assignment.ReplacementStartedAt = nil
-			if assignment.CurrentReplicas == 0 && assignment.DesiredHome == nil && observations[name].Home.Absent {
+			if assignment.CurrentReplicas == 0 && assignment.DesiredHome == nil && observations[name].MemberState.Absent {
 				assignment.DrainRequested = false
 				assignment.CurrentHome = nil
 				if proposal.Mode == v1beta1.PlacementModeSingle {
@@ -142,7 +144,7 @@ func (r *Reconciler) executePlannedAllocation(ctx context.Context, source *v1bet
 	}
 	if proposal.SingleMove != nil && proposal.SingleMove.Selected != "" && proposal.SingleMove.Selected != proposal.Winner {
 		selected := observations[proposal.SingleMove.Selected]
-		if selected.FullHomeReady && selected.Home.Routable && selected.Home.Known && (slices.Contains(step.Drain, proposal.Winner) || observations[proposal.Winner].Home.Absent) {
+		if selected.FullPolicyReady && selected.MemberState.Routable && selected.MemberState.Known && (slices.Contains(step.Drain, proposal.Winner) || observations[proposal.Winner].MemberState.Absent) {
 			proposal.Winner = proposal.SingleMove.Selected
 		}
 	}
@@ -165,6 +167,15 @@ func (r *Reconciler) executePlannedAllocation(ctx context.Context, source *v1bet
 			}
 		}
 	}
+	// An apportionment error also fails each split member's placement below, while
+	// drains and deletions still proceed.
+	floorHolds, holdErr := splitSecondaryHolds(next, observations)
+	if holdErr != nil {
+		r.Log.V(1).Info("secondary floor holds unresolved", "error", holdErr.Error())
+	}
+	if len(floorHolds) > 0 && step.Reason == "" {
+		step.Reason, step.Message = "ReplacementNotReady", heldFloorsMessage(floorHolds)
+	}
 	for _, candidate := range next.Status.Placement.Candidates {
 		observed := observations[candidate.Cluster]
 		assignment := candidate.Allocation
@@ -175,9 +186,9 @@ func (r *Reconciler) executePlannedAllocation(ctx context.Context, source *v1bet
 		switch {
 		case next.Status.Placement.Plan.SingleMove != nil && next.Status.Placement.Plan.SingleMove.Selected == "" && assignment.RaceCandidate && assignment.CurrentReplicas == 0 && assignment.DesiredReplicas == 0 && assignment.DrainRequested:
 			err = r.deletePlannedRaceLoser(cctx, next, candidate)
-		case (assignment.CurrentReplicas > 0 || (assignment.CurrentHome != nil && !assignment.DrainRequested)) && observed.Home.Eligible:
-			err = r.placePlannedOn(cctx, next, candidate)
-		case assignment.CurrentReplicas == 0 && assignment.DrainRequested && observed.Home.Drained && !changed:
+		case (assignment.CurrentReplicas > 0 || (assignment.CurrentHome != nil && !assignment.DrainRequested)) && observed.MemberState.Eligible:
+			err = r.placePlannedMember(cctx, next, candidate, false, floorHolds[candidate.Cluster])
+		case assignment.CurrentReplicas == 0 && assignment.DrainRequested && observed.MemberState.Drained && !changed:
 			err = r.deletePlannedOn(cctx, next, candidate, true)
 		case observed.Member != nil:
 			err = r.syncPlannedPolicy(cctx, next, candidate)
@@ -186,7 +197,7 @@ func (r *Reconciler) executePlannedAllocation(ctx context.Context, source *v1bet
 		}
 		cancel()
 		if err != nil {
-			if apierrors.IsConflict(err) {
+			if isMemberWriteRace(err) {
 				if step.Reason != "MemberApplicationFailed" {
 					step.Reason = "MemberApplicationPending"
 				}
@@ -229,7 +240,7 @@ func (r *Reconciler) adoptSplitMembers(ctx context.Context, source *v1beta1.Infe
 		}
 	}
 	// Member writes can survive a failed first status write. Inventory every
-	// registration before adopting authority, including currently unmatched homes.
+	// registration before adopting authority, including currently unmatched members.
 	inventory := maps.Clone(proposal.Assignments)
 	for _, cluster := range clusters {
 		if _, exists := inventory[cluster.Name]; !exists {
@@ -239,16 +250,14 @@ func (r *Reconciler) adoptSplitMembers(ctx context.Context, source *v1beta1.Infe
 	for _, name := range slices.Sorted(maps.Keys(inventory)) {
 		assignment := inventory[name]
 		candidate := v1beta1.CandidatePlacement{Cluster: name, Allocation: &assignment}
-		cctx, cancel := context.WithTimeout(ctx, r.placeTimeout())
-		observed, err := r.observePlannedHome(cctx, readSource, candidate, declaredComponents(source))
-		cancel()
+		observed, err := r.observePlannedMember(ctx, readSource, candidate, declaredComponents(source))
 		if err != nil {
 			return fmt.Errorf("cluster %q: %w", name, err)
 		}
-		if _, tracked := proposal.Assignments[name]; observed.Home.Absent && !tracked {
+		if _, tracked := proposal.Assignments[name]; observed.MemberState.Absent && !tracked {
 			continue
 		}
-		if !observed.Home.Absent {
+		if !observed.MemberState.Absent {
 			floor, err := adoptedMemberFloor(observed.Member)
 			if err != nil {
 				return fmt.Errorf("cluster %q: %w", name, err)
@@ -287,44 +296,61 @@ func adoptedMemberFloor(member *v1beta1.InferenceService) (int32, error) {
 	return int32(*floors[0]), nil
 }
 
-func (r *Reconciler) observeSplitMembers(ctx context.Context, source *v1beta1.InferenceService, eligible []string) map[string]plannedHomeObservation {
-	trafficMap := &v1beta1.TrafficMap{}
-	if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(source), trafficMap); err != nil {
-		trafficMap = nil
+func (r *Reconciler) observeSplitMembers(ctx context.Context, source *v1beta1.InferenceService, eligible []string) map[string]plannedMemberObservation {
+	routed := r.routesTraffic(source)
+	var trafficMap *v1beta1.TrafficMap
+	if routed {
+		trafficMap = &v1beta1.TrafficMap{}
+		if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(source), trafficMap); err != nil {
+			trafficMap = nil
+		}
 	}
-	out := map[string]plannedHomeObservation{}
+	out := map[string]plannedMemberObservation{}
 	settled := true
 	for _, candidate := range source.Status.Placement.Candidates {
 		settled = settled && candidate.Allocation.CurrentReplicas == candidate.Allocation.DesiredReplicas
 	}
 	for _, candidate := range source.Status.Placement.Candidates {
-		cctx, cancel := context.WithTimeout(ctx, r.placeTimeout())
-		observed, err := r.observePlannedHome(cctx, source, candidate, declaredComponents(source))
-		cancel()
+		observed, err := r.observePlannedMember(ctx, source, candidate, declaredComponents(source))
 		if err != nil {
 			r.Log.Error(err, "planned member observation failed", "cluster", candidate.Cluster)
 		}
-		observed.Home.Eligible = slices.Contains(eligible, candidate.Cluster)
+		observed.MemberState.Eligible = slices.Contains(eligible, candidate.Cluster)
+		if !routed {
+			// OME routes no traffic for this source, so it never gets a TrafficMap.
+			// A cluster serves what its pods report ready, and a cluster asked to
+			// drain has no OME-routed traffic to wait for.
+			observed.MemberState.Drained = candidate.Allocation.DrainRequested
+			observed.MemberState.Routable = !observed.MemberState.Drained && observed.MemberState.Ready > 0
+			out[candidate.Cluster] = observed
+			continue
+		}
 		known, routable, drained := plannedTrafficEvidence(source, trafficMap, observed.Candidate)
-		observed.Home.Routable, observed.Home.Drained = routable, drained
+		observed.MemberState.Routable, observed.MemberState.Drained = routable, drained
 		// Settled positive floors can release their pause without routing. Any
 		// movement or zero-floor cleanup requires current routing intent so a
-		// stale table cannot authorize retiring a serving home.
+		// stale table cannot authorize retiring a serving member.
 		activeZero := source.Status.Placement.Plan.Mode == v1beta1.PlacementModeAll && !source.Status.Placement.Plan.PauseSurge && candidate.Allocation.CurrentHome != nil && candidate.Allocation.DesiredHome != nil && !candidate.Allocation.DrainRequested
-		if !known && !observed.Home.Absent && (!settled || (candidate.Allocation.CurrentReplicas == 0 && !activeZero)) {
-			observed.Home.Known = false
+		if !known && !observed.MemberState.Absent && (!settled || (candidate.Allocation.CurrentReplicas == 0 && !activeZero)) {
+			observed.MemberState.Known = false
 		}
 		out[candidate.Cluster] = observed
 	}
 	return out
 }
 
-func advanceSplitPlan(source *v1beta1.InferenceService, observations map[string]plannedHomeObservation) (allocation.Step, error) {
+// routesTraffic reports whether OME routes traffic for the source: routing is
+// on for the installation and the source does not turn it off.
+func (r *Reconciler) routesTraffic(source *v1beta1.InferenceService) bool {
+	return !r.RoutingDisabled && !RoutingOptedOut(source)
+}
+
+func advanceSplitPlan(source *v1beta1.InferenceService, observations map[string]plannedMemberObservation) (allocation.Step, error) {
 	accepted := source.Status.Placement.Plan
 	input := allocation.Transition{
 		From:    allocation.Plan{Targets: map[string]int32{}, Unassigned: accepted.OriginalUnassignedReplicas},
 		Current: map[string]int32{}, Desired: allocation.Plan{Targets: map[string]int32{}, Unassigned: accepted.UnassignedReplicas},
-		Homes: map[string]allocation.Home{},
+		Members: map[string]allocation.MemberState{},
 		// A move may hold one extra full copy of the desired allocation.
 		Surge: int64(accepted.UnassignedReplicas),
 	}
@@ -336,10 +362,10 @@ func advanceSplitPlan(source *v1beta1.InferenceService, observations map[string]
 		input.Current[candidate.Cluster] = assignment.CurrentReplicas
 		input.Desired.Targets[candidate.Cluster] = assignment.DesiredReplicas
 		input.Surge += int64(assignment.DesiredReplicas)
-		input.Homes[candidate.Cluster] = observed.Home
+		input.Members[candidate.Cluster] = observed.MemberState
 		reserved += int64(observed.RolloutReserved)
-		occupied += int64(observed.Home.Occupied)
-		if !observed.Home.Absent && !observed.PauseAcknowledged {
+		occupied += int64(observed.MemberState.Occupied)
+		if !observed.MemberState.Absent && !observed.PauseAcknowledged {
 			pauseAcknowledged = false
 		}
 	}
@@ -354,7 +380,7 @@ func advanceSplitPlan(source *v1beta1.InferenceService, observations map[string]
 		zeroFloor := false
 		for _, candidate := range source.Status.Placement.Candidates {
 			a := candidate.Allocation
-			zeroFloor = zeroFloor || zeroHomeFloor(a.CurrentHome) || zeroHomeFloor(a.DesiredHome)
+			zeroFloor = zeroFloor || hasZeroReplicaFloor(a.CurrentHome) || hasZeroReplicaFloor(a.DesiredHome)
 			if a.InventoryPending || a.HomeInputsPending || (a.Matched && (a.DesiredHome == nil || a.DesiredHome.InputDigest != accepted.InputDigest)) {
 				return allocation.Step{Targets: input.Current, Reason: "AwaitingHomeInputs"}, nil
 			}
@@ -371,62 +397,166 @@ func advanceSplitPlan(source *v1beta1.InferenceService, observations map[string]
 		if selected == "" || !resolved {
 			return allocation.Step{Targets: input.Current, Reason: "AwaitingHomeInputs"}, nil
 		}
-		if !observations[selected].FullHomeReady {
-			home := input.Homes[selected]
-			home.Ready = 0
-			input.Homes[selected] = home
+		if !observations[selected].FullPolicyReady {
+			member := input.Members[selected]
+			member.Ready = 0
+			input.Members[selected] = member
 		}
 	}
 	advance := allocation.Advance
 	if accepted.Mode == v1beta1.PlacementModeAll || accepted.SingleMove != nil {
-		advance = allocation.AdvanceWholeHomes
+		advance = allocation.AdvanceWholeMembers
 	}
 	step, err := advance(input)
 	if accepted.SingleMove != nil && accepted.SingleMove.Selected != accepted.Winner && observations[accepted.SingleMove.Selected].Terminal {
 		step.Complete = false
 		step.Reason = "ReplacementFailed"
 	}
-	if step.Complete && accepted.PauseSurge && occupied+reserved > accepted.AssignedReplicas {
+	// While growth is paused, a complete move waits until the members' replicas,
+	// with rollout reservations, fit the plan's minimums. Two changes skip that
+	// wait, because autoscalers need not shrink for them: an All change that keeps
+	// every member and adds no engine replicas, and a Split change with a local
+	// ceiling where no member leaves or drains, once each one serves its new share.
+	if step.Complete && accepted.PauseSurge && occupied+reserved > accepted.AssignedReplicas &&
+		!allMembersStayWithoutEngineGrowth(source.Status.Placement) && !splitSharesChangedInPlace(source, observations) {
 		step.Complete = false
 		step.Reason = "AwaitingMemberCleanup"
 	}
 	return step, err
 }
 
-func (r *Reconciler) writeSplitObservations(ctx context.Context, source *v1beta1.InferenceService, observations map[string]plannedHomeObservation, reason, message string) (ctrl.Result, error) {
+// allMembersStayWithoutEngineGrowth reports whether an All plan keeps every member,
+// drains none, gives each its new minimums, and raises the counted minimum (engine,
+// or decoder without one) no higher than where the change began. Others are not compared.
+func allMembersStayWithoutEngineGrowth(placement *v1beta1.PlacementStatus) bool {
+	if placement.Plan.Mode != v1beta1.PlacementModeAll {
+		return false
+	}
+	// Callers pass only a complete, paused step: adoption never pauses, and a single move needs Single mode.
+	for _, candidate := range placement.Candidates {
+		a := candidate.Allocation
+		switch {
+		case a.DrainRequested:
+			return false
+		case !a.Matched:
+			// A cluster outside the plan must have had no replicas assigned when the change began.
+			if a.OriginalReplicas > 0 {
+				return false
+			}
+		case !equality.Semantic.DeepEqual(a.CurrentHome, a.DesiredHome) || a.CurrentReplicas > a.OriginalReplicas:
+			return false
+		}
+	}
+	return true
+}
+
+// splitSharesChangedInPlace reports whether a complete, paused Split step can
+// end the pause while autoscalers keep replicas above the new shares. The plan
+// needs a local ceiling, which lets an autoscaler run above its share, and no
+// affinity term may set component weights. No member leaves or drains and no
+// replicas are unassigned. A member may join. A complete step shows only that
+// members applied their targets, so each must also serve at least its new
+// engine and decoder shares. No member may keep a decoder or router for a
+// replacement elsewhere.
+func splitSharesChangedInPlace(source *v1beta1.InferenceService, observations map[string]plannedMemberObservation) bool {
+	placement := source.Status.Placement
+	// A Split plan records no mode of its own.
+	if (placement.Plan.Mode != "" && placement.Plan.Mode != v1beta1.PlacementModeSplit) || placementMode(source) != v1beta1.PlacementModeSplit ||
+		affinity.SetsWeights(source.Spec.Placement.ClusterAffinity) || source.Spec.Placement.Split == nil || source.Spec.Placement.Split.MaxReplicasPerCluster <= 0 ||
+		placement.Plan.UnassignedReplicas != 0 || placement.Plan.OriginalUnassignedReplicas != 0 {
+		return false
+	}
+	if source.Spec.Decoder != nil || routerDivided(source) {
+		if held, err := splitSecondaryHolds(source, observations); err != nil || len(held) > 0 {
+			return false
+		}
+	}
+	shares := componentFloorsFor(source, observations)
+	for _, candidate := range placement.Candidates {
+		a := candidate.Allocation
+		// A member that leaves still has replicas to shut down.
+		if a == nil || a.DrainRequested || (a.OriginalReplicas > 0 && a.DesiredReplicas == 0) {
+			return false
+		}
+		if a.DesiredReplicas == 0 {
+			continue
+		}
+		// An ineligible member keeps its old bounds in its spec, so its minimums
+		// there cannot show that it serves the new ones.
+		observed, known := observations[candidate.Cluster]
+		if !known || observed.Member == nil || !observed.MemberState.Eligible {
+			return false
+		}
+		// A member that OME can read but not place gets the new plan without its
+		// new minimums, so its spec can lag the plan's shares.
+		minimums := memberMinimums(observed.Member)
+		if primary := primaryScaleComponent(declaredComponents(source)); primary != "" {
+			minimums[primary] = max(minimums[primary], a.CurrentReplicas)
+		}
+		for _, share := range shares[candidate.Cluster] {
+			minimums[share.Component] = max(minimums[share.Component], share.Desired)
+		}
+		for _, component := range []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent} {
+			if observed.ComponentReady[component] < minimums[component] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// memberMinimums reads the minimum of each scalable component from a member's
+// spec, where the planned allocation writes them.
+func memberMinimums(member *v1beta1.InferenceService) map[v1beta1.ComponentType]int32 {
+	out := map[v1beta1.ComponentType]int32{}
+	if e := member.Spec.Engine; e != nil && e.MinReplicas != nil {
+		out[v1beta1.EngineComponent] = int32(*e.MinReplicas)
+	}
+	if d := member.Spec.Decoder; d != nil && d.MinReplicas != nil {
+		out[v1beta1.DecoderComponent] = int32(*d.MinReplicas)
+	}
+	if r := member.Spec.Router; r != nil && r.MinReplicas != nil {
+		out[v1beta1.RouterComponent] = int32(*r.MinReplicas)
+	}
+	return out
+}
+
+func (r *Reconciler) writeSplitObservations(ctx context.Context, source *v1beta1.InferenceService, observations map[string]plannedMemberObservation, reason, message string) (ctrl.Result, error) {
 	if source.Status.Placement.Plan.Mode == v1beta1.PlacementModeSingle {
-		standing := &placementObservations{homes: map[string]homeObservation{}}
+		standing := &placementObservations{members: map[string]memberObservation{}}
 		for name, observed := range observations {
-			state := homePresent
-			if !observed.Home.Known {
-				state = homeUnknown
-			} else if observed.Home.Absent {
-				state = homeAbsent
+			state := memberPresent
+			if !observed.MemberState.Known {
+				state = memberUnknown
+			} else if observed.MemberState.Absent {
+				state = memberAbsent
 			}
 			serving := observed.Member != nil && placementCandidateServing(observed.Member, observed.Candidate)
-			standing.homes[name] = homeObservation{state: state, candidate: observed.Candidate, serving: serving, terminal: observed.Terminal}
+			standing.members[name] = memberObservation{state: state, candidate: observed.Candidate, serving: serving, terminal: observed.Terminal}
 			standing.standing = append(standing.standing, name)
 		}
 		return r.writeSinglePlanStatus(ctx, source, standing, reason, message)
 	}
-	res := placementResult{phase: v1beta1.PlacementPhasePending, conditions: []policyCondition{splitProgressCondition(reason, message)}}
+	res := placementResult{phase: v1beta1.PlacementPhasePending, conditions: []policyCondition{splitProgressCondition(reason, message), componentSharesCondition(source)}}
 	if placementMode(source) == v1beta1.PlacementModeSplitByCapacity {
 		res.conditions = append(res.conditions, capacityFreshCondition(corev1.ConditionTrue, "CapacityVerified", "Matched members have usable hardware and resolved demand"))
 	}
+	componentFloors := componentFloorsFor(source, observations)
 	for _, previous := range source.Status.Placement.Candidates {
 		observed := observations[previous.Cluster]
 		candidate := observed.Candidate
 		if candidate.Cluster == "" {
-			candidate = retainedUnknownCandidate(source, previous)
+			candidate = r.unknownCandidate(source, previous)
 		}
+		candidate.ComponentFloors = componentFloors[previous.Cluster]
 		res.candidates = append(res.candidates, candidate)
 		if (previous.Allocation.CurrentReplicas > 0 || previous.Allocation.CurrentHome != nil) && res.phase == v1beta1.PlacementPhasePending {
 			res.phase = v1beta1.PlacementPhaseAdmitting
 		}
-		// An idle home proves Placed only through a readable observation. An
+		// An idle member proves Placed only through a readable observation. An
 		// unreadable pass keeps the Placed verdict the last readable pass reached
 		// for this same plan instead of retracting evidence it did not disprove.
-		keptPlaced := !candidate.ObservationKnown && zeroHomeFloor(previous.Allocation.CurrentHome) &&
+		keptPlaced := !candidate.ObservationKnown && hasZeroReplicaFloor(previous.Allocation.CurrentHome) &&
 			candidate.AppliedPlanID == source.Status.Placement.Plan.ID && source.Status.Placement.Phase == v1beta1.PlacementPhasePlaced
 		if candidate.AdmittedReplicas > 0 || observed.IdleZeroFloor || keptPlaced {
 			res.phase = v1beta1.PlacementPhasePlaced
@@ -455,14 +585,17 @@ func (r *Reconciler) writeSplitHold(ctx context.Context, source *v1beta1.Inferen
 		res.conditions = append(res.conditions, capacityFreshCondition(status, reason, cause.Error()))
 	}
 	for _, name := range standing.projectedStanding() {
-		home := standing.homes[name]
-		if home.state == homeAbsent {
+		member := standing.members[name]
+		if member.state == memberAbsent {
 			continue
 		}
-		res.candidates = append(res.candidates, home.candidate)
-		res.ready = res.ready || home.serving
-		res.readinessUnknown = res.readinessUnknown || home.state == homeUnknown
-		if home.candidate.AdmittedReplicas > 0 {
+		res.candidates = append(res.candidates, member.candidate)
+		res.ready = res.ready || member.serving
+		res.readinessUnknown = res.readinessUnknown || member.state == memberUnknown
+		// A pass that waits on a reason has not read the member inventory, so it
+		// cannot re-prove that a member kept idle by a zero minimum replica count is
+		// still placed. It keeps the Placed verdict the last readable pass reached.
+		if member.candidate.AdmittedReplicas > 0 || heldPlaced(source, name, member) {
 			res.phase = v1beta1.PlacementPhasePlaced
 		} else if res.phase == v1beta1.PlacementPhasePending {
 			res.phase = v1beta1.PlacementPhaseAdmitting
@@ -472,6 +605,22 @@ func (r *Reconciler) writeSplitHold(ctx context.Context, source *v1beta1.Inferen
 	result, err := r.writePlacement(ctx, source, res)
 	result.RequeueAfter = r.requeue()
 	return result, err
+}
+
+// heldPlaced keeps the Placed phase for a member whose minimum replica count is
+// zero while a pass waits on a reason: the last readable pass left the placement
+// Placed and the member still acknowledges the plan that stands.
+func heldPlaced(source *v1beta1.InferenceService, cluster string, member memberObservation) bool {
+	placement := source.Status.Placement
+	if member.terminal || placement == nil || placement.Plan == nil || placement.Phase != v1beta1.PlacementPhasePlaced {
+		return false
+	}
+	for _, candidate := range placement.Candidates {
+		if candidate.Cluster == cluster {
+			return candidate.Allocation != nil && hasZeroReplicaFloor(candidate.Allocation.CurrentHome) && candidate.AppliedPlanID == placement.Plan.ID
+		}
+	}
+	return false
 }
 
 func splitProgressCondition(reason, message string) policyCondition {

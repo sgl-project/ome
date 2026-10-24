@@ -180,6 +180,16 @@ data:
   {{- with .teardown }}
   {{- $fields = append $fields (dict "teardown" (dict "deadline" .deadline)) }}
   {{- end }}
+  {{- with .prefillDecodeRoll }}
+  {{- $rules := dict }}
+  {{- if hasKey . "keepRatio" }}
+  {{- $_ := set $rules "keepRatio" .keepRatio }}
+  {{- end }}
+  {{- if hasKey . "firstSide" }}
+  {{- $_ := set $rules "firstSide" .firstSide }}
+  {{- end }}
+  {{- $fields = append $fields (dict "prefillDecodeRoll" $rules) }}
+  {{- end }}
   {{- if $fields }}
   lifecycle: |-
     {{- $merged := dict }}
@@ -212,6 +222,12 @@ data:
         "maxConcurrentReconciles": {{ .Values.ome.multicluster.config.placement.maxConcurrentReconciles | default 0 }},
         "fanoutTimeout": "{{ .Values.ome.multicluster.config.placement.fanoutTimeout | default "" }}",
         "winnerLostGrace": "{{ .Values.ome.multicluster.config.placement.winnerLostGrace | default "" }}",
+        "observationGrace": "{{ .Values.ome.multicluster.config.placement.observationGrace | default "" }}",
+        "memberReadRetry": {
+          "maxAttempts": {{ .Values.ome.multicluster.config.placement.memberReadRetry.maxAttempts | default 0 }},
+          "initialBackoff": "{{ .Values.ome.multicluster.config.placement.memberReadRetry.initialBackoff | default "" }}",
+          "maxBackoff": "{{ .Values.ome.multicluster.config.placement.memberReadRetry.maxBackoff | default "" }}"
+        },
         "statusBatchPeriod": "{{ .Values.ome.multicluster.config.placement.statusBatchPeriod | default "" }}",
         "statusSafetyRequeue": "{{ .Values.ome.multicluster.config.placement.statusSafetyRequeue | default "" }}",
         "dispatcherMode": "{{ .Values.ome.multicluster.config.placement.dispatcherMode | default "" }}",
@@ -264,6 +280,7 @@ data:
           "allFailedPolicy": {{ .allFailedPolicy | quote }}
         }{{- end }}{{- with .Values.ome.multicluster.config.routing.capacity }},
         "capacity": {
+          "mode": {{ .mode | default "" | quote }},
           "path": {{ .path | quote }},
           "method": {{ .method | quote }},
           "format": {{ .format | default "" | quote }},

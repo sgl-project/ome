@@ -205,6 +205,17 @@ type ExtraPodSurge struct {
 	NextRelease time.Time
 }
 
+// TerminatingSlots is the slots the Terminating pods counted hold: every
+// slot counted that no live extra pod holds. They free on their own, as
+// each pod passes its deletion deadline.
+func (e ExtraPodSurge) TerminatingSlots() int32 {
+	var live int32
+	for _, slots := range e.LiveSlotsByInstance {
+		live += slots
+	}
+	return e.Slots - live
+}
+
 // ExtraPodSurgeInFlight counts, in surge slots, the pods beyond an
 // Instance's own pod count that the API still lists: a Terminating pod
 // until its DeletionTimestamp (the request time plus the pod's grace),

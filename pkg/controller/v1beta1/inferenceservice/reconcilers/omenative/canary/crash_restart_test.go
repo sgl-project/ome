@@ -127,9 +127,19 @@ func TestCrashedCanaryPod_OneRestartIsNotACrashLoop(t *testing.T) {
 			observed(func() v1beta1.OMENativeInstanceStatus {
 				r := rebuiltRow(5, death, ready, 2)
 				r.Phase = v1beta1.OMENativeInstanceRestarting
+				r.Operation = repairOperation(5)
 				return r
 			}()),
 			[]*corev1.Pod{crashPod("new", 5, 1, runnerDied(death))}, ""},
+		{"a settled row published Restarting for its crashed set parks on the pod's second death",
+			observed(instanceRow(5, v1beta1.OMENativeInstanceRestarting, "svc-decoder-new", &ready, 1)),
+			[]*corev1.Pod{readyAgain(crashPod("new", 5, 1, runnerDiedTwice(death, death.Add(40*time.Second))))}, "container ome-container Error (exit 1)"},
+		{"a settled row published Restarting while the kubelet backs off parks",
+			observed(instanceRow(5, v1beta1.OMENativeInstanceRestarting, "svc-decoder-new", &ready, 1)),
+			[]*corev1.Pod{notReady(crashPod("new", 5, 1, runnerInCrashLoopBackOff(death.Add(2*time.Second), death.Add(10*time.Second))))}, "container ome-container CrashLoopBackOff (exit 1)"},
+		{"a settled row published Restarting does not make one restart a loop",
+			observed(instanceRow(5, v1beta1.OMENativeInstanceRestarting, "svc-decoder-new", &ready, 1)),
+			[]*corev1.Pod{readyAgain(crashPod("new", 5, 1, runnerDied(death)))}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := crashedCanaryPod(v1beta1.DecoderComponent, tc.observed, tc.pods, since)

@@ -65,11 +65,9 @@ func NewMetadataExtractor(config *Config, kubeClient client.Client, zapLogger *z
 
 	// modelparser logs through *zap.SugaredLogger; reuse the fx-provided
 	// *zap.Logger so we have a single logging stack in the agent process.
-	// Pass nil omeClient — ParseModelConfig only writes to the API server
-	// when called with a non-nil BaseModel/ClusterBaseModel and we pass
-	// both nil; the ConfigMap, not the parser, is the canonical write
-	// path in the PVC flow.
-	parser := modelparser.NewModelConfigParser(nil, zapLogger.Sugar())
+	// The parser writes nothing to the API server; the ConfigMap is the
+	// write path in the PVC flow.
+	parser := modelparser.NewModelConfigParser(zapLogger.Sugar())
 
 	return &MetadataExtractor{
 		config: config,

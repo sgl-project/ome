@@ -1,6 +1,7 @@
 package query_test
 
 import (
+	"errors"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -55,5 +56,25 @@ func TestRevisionID_SameAndConstructors(t *testing.T) {
 	}
 	if !query.RevisionOf(nil).IsZero() || !query.RevisionFromPod(nil).IsZero() {
 		t.Fatalf("nil inputs must yield zero RevisionID")
+	}
+}
+
+func TestRequireNamedRevision_RequiresAControllerRevisionReference(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		revision query.RevisionID
+		known    bool
+	}{
+		{name: "named version", revision: query.RevisionFromName("example-engine-0123abcd"), known: true},
+		{name: "pod hash alone", revision: query.RevisionFromHash("0123abcd")},
+		{name: "zero identity"},
+		{name: "name has no hash", revision: query.RevisionFromName("example-engine-")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := query.RequireNamedRevision(tc.revision)
+			if (err == nil) != tc.known || (!tc.known && !errors.Is(err, query.ErrRevisionUnknown)) {
+				t.Fatalf("error = %v, want known identity=%t", err, tc.known)
+			}
+		})
 	}
 }

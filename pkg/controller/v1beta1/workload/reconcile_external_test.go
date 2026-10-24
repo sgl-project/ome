@@ -3,6 +3,8 @@ package workload_test
 import (
 	"context"
 	"fmt"
+	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -38,6 +40,7 @@ import (
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/revision"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/status"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	workloadtypes "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
@@ -274,6 +277,19 @@ func minimalPlan() workloadtypes.ComponentPlan {
 	}
 }
 
+func desiredRevisionForTest(t *testing.T, c client.Client, input workloadtypes.ReconcileInput) *appsv1.ControllerRevision {
+	t.Helper()
+	target, _, err := revision.EnsureControllerRevisionWithWorker(
+		context.Background(), c, c, input.OwnerObject, input.OwnerGVK,
+		revision.Key{Namespace: input.Key.Namespace, Name: input.Key.OwnerName + "-" + string(input.Key.Component)},
+		input.DesiredSpec.PodSpec, input.DesiredSpec.WorkerPodSpec, input.DesiredSpec.PodTemplateObjectMeta, nil, input.OwnerObject.GetUID(),
+	)
+	if err != nil {
+		t.Fatalf("ensure desired revision: %v", err)
+	}
+	return target
+}
+
 func roundTripMutateInstance(c client.Client, isvc *v1beta1.InferenceService, component workloadtypes.ComponentType) func(context.Context, int32, func(*workloadtypes.InstanceStatus) bool) error {
 	return func(ctx context.Context, idx int32, mutate func(*workloadtypes.InstanceStatus) bool) error {
 		ir := &v1beta1.InferenceReplica{}
@@ -345,28 +361,26 @@ func TestReconcile_NilClient_Errors(t *testing.T) {
 	}
 }
 
-// TestReconcile_NilTarget_DrivesCreate covers the cold-start path:
-// no observed instances, no target ControllerRevision, plan asks for
-// one Instance. Reconcile MUST fall through to the Create pass without
-// scale-down / restart / migration work; Create's first action is to
-// allocate the Instance, which the fake client accepts.
-//
-// We pass target=nil because Create's signature allows it (MinReplicas=0
-// would render a nil target; here we exercise the cold-create path
-// where the renderer hasn't materialized a revision yet).
+// TestReconcile_NilTarget_DrivesCreate covers the shape the renderer
+// hands over at MinReplicas=0: no observed Instance, no pod spec, no
+// target ControllerRevision, a plan with no Instance. Reconcile falls
+// through to the Create pass without scale-down, restart or migration
+// work; the pass has nothing to build and ends without error.
 func TestReconcile_NilTarget_DrivesCreate(t *testing.T) {
-	scheme := makeScheme(t)
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
-	deps := workloadtypes.Deps{Client: c}
+	c := fake.NewClientBuilder().WithScheme(makeScheme(t)).Build()
+	deps := workloadtypes.Deps{Client: c, Expectations: workloadtypes.NewExpectations()}
 
 	in := minimalInput(t)
-	plan := minimalPlan()
+	in.DesiredSpec.Replicas = 0
+	in.DesiredSpec.PodSpec = nil
+	plan := workloadtypes.ComponentPlan{Component: workloadtypes.ComponentEngine}
 
-	// Cold-start path: target nil short-circuits the Update pass.
-	// Create's nil-target branch returns done=true without rendering.
-	_, err := workload.Reconcile(context.Background(), deps, in, plan, nil)
-	if err != nil {
+	if _, err := workload.Reconcile(context.Background(), deps, in, plan, nil); err != nil {
 		t.Fatalf("Reconcile: %v", err)
+	}
+	pods := &corev1.PodList{}
+	if err := c.List(context.Background(), pods); err != nil || len(pods.Items) != 0 {
+		t.Fatalf("a nil target builds nothing; got %d pods (list: %v)", len(pods.Items), err)
 	}
 }
 
@@ -383,7 +397,7 @@ func TestReconcile_UnconfiguredCadenceUsesBackoff(t *testing.T) {
 	}
 
 	configured := fake.NewClientBuilder().WithScheme(scheme).Build()
-	res, err := workload.Reconcile(context.Background(), workloadtypes.Deps{Client: configured}, minimalInput(t), plan, target)
+	res, err := workload.Reconcile(context.Background(), workloadtypes.Deps{Client: configured, Expectations: workloadtypes.NewExpectations()}, minimalInput(t), plan, target)
 	if err != nil {
 		t.Fatalf("Reconcile with a configured cadence: %v", err)
 	}
@@ -394,7 +408,7 @@ func TestReconcile_UnconfiguredCadenceUsesBackoff(t *testing.T) {
 	unconfigured := fake.NewClientBuilder().WithScheme(scheme).Build()
 	in := minimalInput(t)
 	in.Requeue = workloadtypes.RequeueIntervals{}
-	res, err = workload.Reconcile(context.Background(), workloadtypes.Deps{Client: unconfigured}, in, plan, target)
+	res, err = workload.Reconcile(context.Background(), workloadtypes.Deps{Client: unconfigured, Expectations: workloadtypes.NewExpectations()}, in, plan, target)
 	if err != nil {
 		t.Fatalf("Reconcile with no configured cadence: %v", err)
 	}
@@ -412,7 +426,9 @@ func TestReconcile_UnconfiguredCadenceUsesBackoff(t *testing.T) {
 // every other pass is steady and asks for none.
 func TestReconcile_HeldWorkWakesThePass(t *testing.T) {
 	scheme := makeScheme(t)
-	plan := minimalPlan()
+	// Nothing for the passes to do: the plan has no Instance, so the held
+	// work is the only reason to come back.
+	plan := workloadtypes.ComponentPlan{Component: workloadtypes.ComponentEngine}
 
 	for _, tc := range []struct {
 		name      string
@@ -426,14 +442,13 @@ func TestReconcile_HeldWorkWakesThePass(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).Build()
 			in := minimalInput(t)
 			in.Requeue = workloadtypes.RequeueIntervals{}
-			// Nothing for the passes to do: the held work is the only
-			// reason to come back.
 			in.DesiredSpec.Replicas = 0
 			wake := &workloadtypes.PassWake{}
 			wake.Observe(tc.cadence)
 			in.PassWake = wake
 
-			res, err := workload.Reconcile(context.Background(), workloadtypes.Deps{Client: c}, in, plan, nil)
+			deps := workloadtypes.Deps{Client: c, Expectations: workloadtypes.NewExpectations()}
+			res, err := workload.Reconcile(context.Background(), deps, in, plan, nil)
 			if err != nil {
 				t.Fatalf("Reconcile: %v", err)
 			}
@@ -656,19 +671,20 @@ func enginePod(isvc, ns string, idx int32) *corev1.Pod {
 	}
 }
 
-// listCountingReader wraps a client.Reader and counts PodList List calls.
-// Used to prove the dispatcher's restart pass lists pods ONCE per
-// reconcile (via the live APIReader) instead of once per Instance.
+// listCountingReader wraps a client.Reader and records Pod List cost.
 type listCountingReader struct {
 	client.Reader
 	podListCalls int
+	podListItems int
 }
 
 func (r *listCountingReader) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-	if _, ok := list.(*corev1.PodList); ok {
+	err := r.Reader.List(ctx, list, opts...)
+	if pods, ok := list.(*corev1.PodList); ok {
 		r.podListCalls++
+		r.podListItems += len(pods.Items)
 	}
-	return r.Reader.List(ctx, list, opts...)
+	return err
 }
 
 // failedEnginePod is enginePod with Phase=Failed — a restart trigger.
@@ -1227,8 +1243,8 @@ type recoveryHarness struct {
 	// (the pod's own terminationGracePeriodSeconds). Zero removes pods on
 	// delete, as the bare fake client does.
 	podGrace time.Duration
-	// abandonGrace is the input's AbandonedReplacementGrace.
-	abandonGrace time.Duration
+	// retiredReplacementGrace is the input's AbandonedReplacementGrace.
+	retiredReplacementGrace time.Duration
 	// stuckGrace is the input's StuckPodGrace.
 	stuckGrace time.Duration
 	// stepFloor is the least the clock advances per step: a pass that asks
@@ -1265,7 +1281,7 @@ type recoveryHarness struct {
 	events   []string
 	// gate, when set, is the coordination UpdateGate the passes consult
 	// before a fresh start opens.
-	gate func(strategy workloadtypes.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, workloadtypes.RolloutHoldGate, string)
+	gate func(_ string, strategy workloadtypes.UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (bool, workloadtypes.RolloutHoldGate, string)
 	// planGate, when set, is the adapter's plan precondition the passes ask
 	// before any fresh start, the starts exempt from gate included.
 	planGate func() (bool, workloadtypes.RolloutHoldGate, string)
@@ -1311,6 +1327,12 @@ type recoveryHarness struct {
 	// reported phase Failed with its container terminated and stays so,
 	// holding its name, until a pass deletes the object.
 	evicted map[string]bool
+	// rejected names, by UID, the pods the kubelet refused after the
+	// scheduler placed them, with the pod-level reason it wrote: each is
+	// reported phase Failed with no container ever run and stays so,
+	// holding its name, until a pass deletes the object. A pod rebuilt
+	// under the same name has a new UID and starts sound.
+	rejected map[string]string
 
 	// admissionDown is the apiserver unable to reach its pod admission
 	// webhook: every pod create fails closed with the dispatcher's own
@@ -1335,8 +1357,11 @@ type recoveryHarness struct {
 	// binds every new pod to the least-loaded node whose kubelet is alive.
 	// deadNodes names the nodes whose kubelet has stopped — nothing on
 	// them is updated or finishes terminating until the node recovers.
-	nodeNames []string
-	deadNodes map[string]bool
+	// cordonedNodes names the nodes marked unschedulable: their pods keep
+	// running, and no new pod is bound to them.
+	nodeNames     []string
+	deadNodes     map[string]bool
+	cordonedNodes map[string]bool
 
 	// readinessFails names, by UID, the pods whose readiness probe fails
 	// from now on: the kubelet model keeps their container running and
@@ -1384,6 +1409,15 @@ type recoveryHarness struct {
 	// crashed runner; zero reads as a clean exit (Completed) the way a
 	// runner that stops itself reports, any other value as an Error.
 	crashExitCode *int32
+	// terminationLagsFor is how many of an Instance's runner deaths under
+	// crashOnceAfterServingImage the kubelet model first reports with the
+	// new run's start time alone and no last termination state, the way a
+	// pass can read a restarted container before the kubelet has published
+	// the run that ended; the termination follows on the next report.
+	terminationLagsFor int
+	// lateTerminations holds, per pod, the termination the kubelet model
+	// owes its next report.
+	lateTerminations map[string]*corev1.ContainerStateTerminated
 	// killOnce names the pods whose runner the kubelet model kills once
 	// on its next pass: the container restarts at once with its restart
 	// count raised and the termination dated now, and runs on.
@@ -1407,6 +1441,10 @@ type recoveryHarness struct {
 	// workers run it as a sound image, the shape of a runner fault that
 	// lives in the leader's process alone.
 	crashLeaderOnly bool
+	// crashWorkerOnly confines a crash image to the workers of a gang: the
+	// leader runs it as a sound image and keeps serving, the shape of a
+	// runner fault that lives in a worker's process alone.
+	crashWorkerOnly bool
 	// holds records every rollout hold the update pass reported, in
 	// order; a pass that reported none appends nothing.
 	holds []workloadtypes.RolloutHold
@@ -1438,11 +1476,23 @@ type recoveryHarness struct {
 	// removes them on the pass after, as a kubelet publishes a pod it
 	// stopped.
 	exitsCleanOnStop map[string]bool
+	// stopLag is how many kubelet passes a deleted pod keeps running
+	// before the kubelet reports it stopped: the process is still shutting
+	// down under its grace when the controller first looks. Zero stops
+	// the pod on the pass after the delete; stillStopping counts the
+	// passes left per pod.
+	stopLag       int
+	stillStopping map[string]int
 
 	// routed turns on the endpoint-controller model: the per-revision
 	// routed Services and the headless Service carry EndpointSlices that
 	// mirror the pods, so rotation and availability read as on a cluster.
 	routed bool
+	// auditWriteRefusals is how many writes of the owner's audit ledger
+	// ConfigMap the apiserver answers with a conflict before it takes them
+	// again: the ledger is one object per owner, and the passes of the
+	// owner's other Components write it in the same second.
+	auditWriteRefusals int
 	// migrations is the owner's status.migrations: the records the passes
 	// select work from and write back through the MutateMigration seam.
 	migrations []workloadtypes.MigrationRecord
@@ -1620,11 +1670,21 @@ func (h *recoveryHarness) kubelet() {
 			continue
 		}
 		if pod.DeletionTimestamp != nil {
+			if h.stillStopping[pod.Name] > 0 {
+				// The process is still shutting down: the kubelet has
+				// nothing new to report on the pod yet.
+				h.stillStopping[pod.Name]--
+				continue
+			}
 			if h.exitsCleanOnStop[pod.Name] && pod.Status.Phase != corev1.PodSucceeded {
 				h.reportStoppedClean(pod)
 				continue
 			}
 			h.finishTermination(pod)
+			continue
+		}
+		if reason, ok := h.rejected[string(pod.UID)]; ok {
+			h.reportRejected(pod, reason)
 			continue
 		}
 		if h.evicted[wedgeKey(pod)] {
@@ -1702,14 +1762,24 @@ func (h *recoveryHarness) kubelet() {
 			delete(h.killOnce, pod.Name)
 			h.crashes[wedgeKey(pod)]++
 			h.onceCrashed[instanceIndexOf(pod)] = true
+			lagged := false
 			if idx, ok := query.InstanceIdxFromLabels(pod); ok {
 				if h.crashedInstances == nil {
 					h.crashedInstances = map[int32]int{}
 				}
 				h.crashedInstances[idx]++
+				lagged = h.crashedInstances[idx] <= h.terminationLagsFor
 			}
 			h.lastCrash[wedgeKey(pod)] = h.clk.Now()
 			h.lastRunStart[wedgeKey(pod)] = priorRunStart(pod)
+			termination := h.crashTermination(pod)
+			if lagged {
+				if h.lateTerminations == nil {
+					h.lateTerminations = map[string]*corev1.ContainerStateTerminated{}
+				}
+				h.lateTerminations[wedgeKey(pod)] = termination
+				termination = nil
+			}
 			pod.Status.Phase = corev1.PodRunning
 			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
 				Name:                 pod.Spec.Containers[0].Name,
@@ -1717,7 +1787,7 @@ func (h *recoveryHarness) kubelet() {
 				Ready:                false,
 				RestartCount:         1,
 				State:                corev1.ContainerState{Running: &corev1.ContainerStateRunning{StartedAt: metav1.NewTime(h.clk.Now())}},
-				LastTerminationState: corev1.ContainerState{Terminated: h.crashTermination(pod)},
+				LastTerminationState: corev1.ContainerState{Terminated: termination},
 			}}
 			setPodCondition(pod, corev1.ContainersReady, corev1.ConditionFalse, h.clk.Now())
 			setPodCondition(pod, corev1.PodReady, corev1.ConditionFalse, h.clk.Now())
@@ -1801,6 +1871,10 @@ func (h *recoveryHarness) kubelet() {
 				State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{StartedAt: metav1.NewTime(h.clk.Now())}},
 			}}
 			carryRestartEvidence(&pod.Status.ContainerStatuses[0], prior)
+			if late := h.lateTerminations[wedgeKey(pod)]; late != nil {
+				pod.Status.ContainerStatuses[0].LastTerminationState = corev1.ContainerState{Terminated: late}
+				delete(h.lateTerminations, wedgeKey(pod))
+			}
 			setPodCondition(pod, corev1.ContainersReady, corev1.ConditionTrue, h.clk.Now())
 			setPodCondition(pod, corev1.PodReady, h.foldReady(pod), h.clk.Now())
 		}
@@ -1949,9 +2023,13 @@ func instanceIndexOf(pod *corev1.Pod) int32 {
 }
 
 // faultyImage is the image the crash model reads for pod: its spec image,
-// or none for a worker of a gang whose crash is the leader's alone.
+// or none for a worker of a gang whose crash is the leader's alone, or
+// for the leader of a gang whose crash is the workers' alone.
 func (h *recoveryHarness) faultyImage(pod *corev1.Pod) string {
 	if h.crashLeaderOnly && pod.Labels[query.LabelRunner] == workloadtypes.RunnerWorker {
+		return ""
+	}
+	if h.crashWorkerOnly && pod.Labels[query.LabelRunner] == workloadtypes.RunnerLeader {
 		return ""
 	}
 	return pod.Spec.Containers[0].Image
@@ -2260,6 +2338,9 @@ func setPodCondition(pod *corev1.Pod, condType corev1.PodConditionType, status c
 // interceptCreate stamps the UID the API server mints onto a new pod; the
 // delete wave preconditions every pod delete on the UID it observed.
 func (h *recoveryHarness) interceptCreate(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+	if err := h.refuseAuditLedgerWrite(obj); err != nil {
+		return err
+	}
 	if pod, ok := obj.(*corev1.Pod); ok {
 		if h.admissionDown {
 			return webhookUnreachableCreateError()
@@ -2406,6 +2487,9 @@ func (h *recoveryHarness) interceptList(ctx context.Context, cl client.WithWatch
 // stopped the hidden finalizer is what keeps the object there at all -
 // only the kubelet model takes it off once its node is back.
 func (h *recoveryHarness) interceptUpdate(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+	if err := h.refuseAuditLedgerWrite(obj); err != nil {
+		return err
+	}
 	if pod, ok := obj.(*corev1.Pod); ok && pod.DeletionTimestamp != nil {
 		stored := &corev1.Pod{}
 		if err := cl.Get(ctx, client.ObjectKeyFromObject(pod), stored); err == nil {
@@ -2416,6 +2500,17 @@ func (h *recoveryHarness) interceptUpdate(ctx context.Context, cl client.WithWat
 		}
 	}
 	return cl.Update(ctx, obj, opts...)
+}
+
+// refuseAuditLedgerWrite is the apiserver answering a write of the owner's
+// audit ledger ConfigMap with a conflict while auditWriteRefusals stands.
+func (h *recoveryHarness) refuseAuditLedgerWrite(obj client.Object) error {
+	cm, ok := obj.(*corev1.ConfigMap)
+	if !ok || h.auditWriteRefusals <= 0 || !strings.HasSuffix(cm.Name, audit.ConfigMapNameSuffix) {
+		return nil
+	}
+	h.auditWriteRefusals--
+	return apierrors.NewConflict(corev1.Resource("configmaps"), cm.Name, fmt.Errorf("the object has been modified"))
 }
 
 // finishTermination is the kubelet termination model's node half: once
@@ -2509,6 +2604,45 @@ func (h *recoveryHarness) reportEvicted(pod *corev1.Pod) {
 	}
 }
 
+// rejectPod is the kubelet refusing the pod of the single-pod Instance at
+// idx after the scheduler placed it, with reason as the pod-level reason
+// (OutOfcpu, UnexpectedAdmissionError): the pod reads phase Failed from
+// now on and stays in the API under its name.
+func (h *recoveryHarness) rejectPod(idx int32, reason string) *corev1.Pod {
+	h.t.Helper()
+	pods := h.podsOf(idx)
+	if len(pods) != 1 {
+		h.t.Fatalf("instance %d must hold one pod to refuse, got %d", idx, len(pods))
+	}
+	if h.rejected == nil {
+		h.rejected = map[string]string{}
+	}
+	h.rejected[string(pods[0].UID)] = reason
+	h.reportRejected(pods[0], reason)
+	return pods[0]
+}
+
+// reportRejected is the kubelet publishing a pod it refused to admit:
+// phase Failed with the refusal on the pod-level reason, no container
+// status at all since none ran, readiness gone. A pod already reported
+// keeps its record.
+func (h *recoveryHarness) reportRejected(pod *corev1.Pod, reason string) {
+	h.t.Helper()
+	if pod.Status.Phase == corev1.PodFailed {
+		return
+	}
+	now := h.clk.Now()
+	pod.Status.Phase = corev1.PodFailed
+	pod.Status.Reason = reason
+	pod.Status.Message = "Pod was rejected: node resources unavailable"
+	pod.Status.ContainerStatuses = nil
+	setPodCondition(pod, corev1.ContainersReady, corev1.ConditionFalse, now)
+	setPodCondition(pod, corev1.PodReady, corev1.ConditionFalse, now)
+	if err := h.c.Status().Update(h.ctx, pod); err != nil {
+		h.t.Fatalf("kubelet report rejected %s: %v", pod.Name, err)
+	}
+}
+
 // preempt is the scheduler taking the pod of runner at idx for a pod of
 // higher priority: the DisruptionTarget condition lands, then a graceful
 // delete under the pod's own grace. The process exits clean on SIGTERM,
@@ -2532,6 +2666,12 @@ func (h *recoveryHarness) preempt(idx int32, runner string) {
 		h.exitsCleanOnStop = map[string]bool{}
 	}
 	h.exitsCleanOnStop[pod.Name] = true
+	if h.stopLag > 0 {
+		if h.stillStopping == nil {
+			h.stillStopping = map[string]int{}
+		}
+		h.stillStopping[pod.Name] = h.stopLag
+	}
 	if err := h.c.Delete(h.ctx, pod); err != nil {
 		h.t.Fatalf("preempt %s: %v", pod.Name, err)
 	}
@@ -2606,11 +2746,26 @@ func (h *recoveryHarness) useNodes(names ...string) {
 	}
 }
 
+// addNodes brings more nodes into the node model, each with a live
+// kubelet, beside the ones already declared.
+func (h *recoveryHarness) addNodes(names ...string) {
+	h.t.Helper()
+	for _, name := range names {
+		node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: name}}
+		setNodeReady(node, corev1.ConditionTrue, h.clk.Now())
+		if err := h.c.Create(h.ctx, node); err != nil {
+			h.t.Fatalf("create node %s: %v", name, err)
+		}
+		h.nodeNames = append(h.nodeNames, name)
+	}
+}
+
 // leastLoadedLiveNode is the node model's placement for pod: the node
-// with the fewest pods bound to it among those whose kubelet is alive
-// and that the pod's required node affinity admits, earliest declared
-// first on a tie. A node with a stopped kubelet is never chosen, as a
-// scheduler honoring its unreachable taint would not.
+// with the fewest pods bound to it among those whose kubelet is alive,
+// that are not cordoned, and that the pod's required node affinity
+// admits, earliest declared first on a tie. A node with a stopped kubelet
+// is never chosen, as a scheduler honoring its unreachable taint would
+// not, and neither is a cordoned one.
 func (h *recoveryHarness) leastLoadedLiveNode(pod *corev1.Pod, pods []corev1.Pod) string {
 	h.t.Helper()
 	bound := map[string]int{}
@@ -2619,7 +2774,7 @@ func (h *recoveryHarness) leastLoadedLiveNode(pod *corev1.Pod, pods []corev1.Pod
 	}
 	chosen := ""
 	for _, name := range h.nodeNames {
-		if h.deadNodes[name] || !nodeAffinityAdmits(pod, name) {
+		if h.deadNodes[name] || h.cordonedNodes[name] || !nodeAffinityAdmits(pod, name) {
 			continue
 		}
 		if chosen == "" || bound[name] < bound[chosen] {
@@ -2703,6 +2858,35 @@ func (h *recoveryHarness) recoverNode(name string) {
 	h.t.Helper()
 	delete(h.deadNodes, name)
 	h.setNodeCondition(name, corev1.ConditionTrue)
+}
+
+// cordonNode marks name unschedulable, as kubectl cordon does: the pods
+// on it keep running and the scheduler model places nothing new there.
+func (h *recoveryHarness) cordonNode(name string) {
+	h.t.Helper()
+	node := &corev1.Node{}
+	if err := h.c.Get(h.ctx, types.NamespacedName{Name: name}, node); err != nil {
+		h.t.Fatalf("get node %s: %v", name, err)
+	}
+	node.Spec.Unschedulable = true
+	if err := h.c.Update(h.ctx, node); err != nil {
+		h.t.Fatalf("cordon node %s: %v", name, err)
+	}
+	if h.cordonedNodes == nil {
+		h.cordonedNodes = map[string]bool{}
+	}
+	h.cordonedNodes[name] = true
+}
+
+// cordonedInstances projects the Instances with a pod on a cordoned node
+// the way the adapter does, from the Nodes and pods the API holds.
+func (h *recoveryHarness) cordonedInstances() map[int32]struct{} {
+	h.t.Helper()
+	nodes, err := query.CordonedNodes(h.ctx, h.c)
+	if err != nil {
+		h.t.Fatalf("list cordoned nodes: %v", err)
+	}
+	return query.CordonedInstances(query.BucketPodsByInstanceIdx(h.livePods()), nodes)
 }
 
 func (h *recoveryHarness) setNodeCondition(name string, ready corev1.ConditionStatus) {
@@ -2848,11 +3032,12 @@ func (h *recoveryHarness) buildInput() workloadtypes.ReconcileInput {
 		},
 		DesiredSpec: h.desired,
 		ObservedState: workloadtypes.WorkloadObservedState{
-			InstanceStatuses: h.irStatuses(),
-			RetryBlocks:      append([]workloadtypes.RetryBlock(nil), h.blocks...),
-			Migrations:       append([]workloadtypes.MigrationRecord(nil), h.migrations...),
-			CurrentRevision:  h.currentRevision,
-			UpdateRevision:   h.target.Name,
+			InstanceStatuses:  h.irStatuses(),
+			RetryBlocks:       append([]workloadtypes.RetryBlock(nil), h.blocks...),
+			Migrations:        append([]workloadtypes.MigrationRecord(nil), h.migrations...),
+			CurrentRevision:   h.currentRevision,
+			UpdateRevision:    h.target.Name,
+			CordonedInstances: h.cordonedInstances(),
 		},
 		MutateInstance:     h.mutateInstance(),
 		MutateMigration:    h.mutateMigration,
@@ -2869,7 +3054,7 @@ func (h *recoveryHarness) buildInput() workloadtypes.ReconcileInput {
 		Clock:              h.clk,
 		RepairBatchSize:    h.repairBatchSize,
 
-		AbandonedReplacementGrace: h.abandonGrace,
+		AbandonedReplacementGrace: h.retiredReplacementGrace,
 		DrainHolds:                &workloadtypes.DrainHolds{},
 		RecordRolloutHold: func(hold *workloadtypes.RolloutHold) {
 			h.holdVerdicts++
@@ -3281,6 +3466,21 @@ func (h *recoveryHarness) livePods() []*corev1.Pod {
 	return out
 }
 
+// podRevisions is what the adapter's rollup reads beside the rows: the
+// revision label of every pod not in a terminal phase, by Instance index.
+func (h *recoveryHarness) podRevisions() status.PodRevisions {
+	h.t.Helper()
+	pods := &corev1.PodList{}
+	if err := h.c.List(h.ctx, pods, client.InNamespace(recoveryNS)); err != nil {
+		h.t.Fatalf("list pods: %v", err)
+	}
+	all := make([]*corev1.Pod, 0, len(pods.Items))
+	for i := range pods.Items {
+		all = append(all, &pods.Items[i])
+	}
+	return status.PodRevisionsByInstance(query.BucketPodsByInstanceIdx(all))
+}
+
 func (h *recoveryHarness) badPods() []*corev1.Pod {
 	var out []*corev1.Pod
 	for _, p := range h.livePods() {
@@ -3461,7 +3661,7 @@ func TestCorrectiveRecovery_SinglePod_RollForward(t *testing.T) {
 func TestCorrectiveRecovery_SinglePod_StuckSurgeAbandonedOnBoundedGrace(t *testing.T) {
 	h := newRecoveryHarness(t, false)
 	h.podGrace = 10 * time.Minute
-	h.abandonGrace = 10 * time.Second
+	h.retiredReplacementGrace = 10 * time.Second
 	h.driveToReadyOnV1()
 
 	revStuck := h.ensureRevision(recoveryPodSpec(stuckImage))
@@ -3497,6 +3697,140 @@ func TestCorrectiveRecovery_SinglePod_StuckSurgeAbandonedOnBoundedGrace(t *testi
 	if !h.run(80, func() bool { return h.converged(h.revFixed.Name) }) {
 		h.dumpState("corrective convergence")
 		t.Fatalf("the corrective revision did not converge after the stuck surge was abandoned")
+	}
+}
+
+// TestReconcile_SurgeBudgetLoweredUnderKeptFailedReplacements_CorrectedPushLands:
+// 24 single-pod Instances serve v1 under SurgeThenDrain with maxSurge 25
+// percent, six Instances, and maxUnavailable 0. The operator pushes a
+// version whose readiness check never passes: OME builds six replacements
+// beside the 24, none turns Ready, the ready timeout records the six
+// attempts Failed, and the six pods stay beside their serving sources.
+// The operator lowers maxSurge to 1 to cap the extra capacity while the
+// push is broken, then pushes the fix. A start on an Instance that keeps a
+// failed replacement removes that replacement before it creates anything,
+// so it adds no pod, and the lowered budget admits it whatever the other
+// Instances keep: the first pass of the fix starts exactly one such
+// Instance while the Instances without a failed replacement wait, at most
+// one start is open at a time from then on, the pod count never rises
+// above the 30 that stood when the budget was lowered, and the fix lands
+// on every Instance.
+func TestReconcile_SurgeBudgetLoweredUnderKeptFailedReplacements_CorrectedPushLands(t *testing.T) {
+	const replicas = 24
+	const surgeBefore = 6
+	h := newRecoveryHarnessFor(t, false, constants.MainContainerName)
+	h.replicas = replicas
+	none := workloadtypes.RestartPolicyNone
+	maxSurge := intstr.FromString("25%")
+	maxUnavailable := intstr.FromInt32(0)
+	h.lifecycle = workloadtypes.Lifecycle{
+		RestartPolicy: &none,
+		UpdateStrategy: &workloadtypes.UpdateStrategy{
+			Type:          workloadtypes.UpdateStrategySurgeThenDrain,
+			RollingUpdate: &workloadtypes.RollingUpdate{MaxSurge: &maxSurge, MaxUnavailable: &maxUnavailable},
+		},
+		// The ready timeout is what records a replacement that never turns
+		// Ready as a failed attempt.
+		InstanceReadyTimeout: &metav1.Duration{Duration: 4 * time.Minute},
+	}
+	// The broken push's retries come due long after the fix is pushed, so
+	// the fix is the only start the budget is asked for.
+	h.retryPolicy = &workloadtypes.RetryPolicy{MaxAttempts: 3, InitialDelay: 10 * time.Minute, MaxDelay: 30 * time.Minute, Multiplier: 2}
+	h.setTarget(h.revV1, goodImage)
+	if !h.run(40, func() bool { return h.settledOn(h.revV1, replicas) }) {
+		h.dumpState("initial create")
+		t.Fatalf("initial create never settled on v1 for %d instances", replicas)
+	}
+
+	// Version 2: v1's image behind a readiness check its pod never passes.
+	brokenSpec := h.podSpec(goodImage)
+	brokenSpec.Containers[0].ReadinessProbe = &corev1.Probe{ProbeHandler: corev1.ProbeHandler{
+		HTTPGet: &corev1.HTTPGetAction{Path: neverReadyPath, Port: intstr.FromInt32(8080)},
+	}}
+	revBroken := h.ensureRevision(brokenSpec)
+	brokenHash := query.RevisionOf(revBroken).Hash()
+	h.setTarget(revBroken, goodImage)
+	h.desired.PodSpec = brokenSpec
+
+	// keepingFailedReplacement lists the Instances recorded Failed with no
+	// operation whose replacement on the broken version still stands.
+	keepingFailedReplacement := func() []int32 {
+		var out []int32
+		for _, s := range h.irStatuses() {
+			if s.Phase != workloadtypes.InstancePhaseFailed || s.Operation != nil {
+				continue
+			}
+			for _, pod := range h.podsOf(s.Index) {
+				if pod.Labels[query.LabelRevisionHash] == brokenHash {
+					out = append(out, s.Index)
+					break
+				}
+			}
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+		return out
+	}
+	withinBudget := func(budget int32) func() {
+		return func() {
+			if n := escalation.CurrentSurgeInFlight(h.irStatuses()); n > budget {
+				h.dumpState("budget")
+				t.Fatalf("%d surge starts open under a surge budget of %d", n, budget)
+			}
+		}
+	}
+	if !h.runWithInvariant(40, func() bool { return len(keepingFailedReplacement()) == surgeBefore }, withinBudget(surgeBefore)) {
+		h.dumpState("broken push")
+		t.Fatalf("the broken push's %d attempts were never recorded Failed with their replacements standing, got %v", surgeBefore, keepingFailedReplacement())
+	}
+	if got := len(h.livePods()); got != replicas+surgeBefore {
+		t.Fatalf("%d live pods after the broken push, want the %d sources and %d replacements", got, replicas, surgeBefore)
+	}
+
+	// The operator lowers maxSurge to 1 while the push is broken, and
+	// pushes the fix a pass later.
+	one := intstr.FromInt32(1)
+	h.lifecycle.UpdateStrategy.RollingUpdate.MaxSurge = &one
+	h.setTarget(revBroken, goodImage)
+	h.desired.PodSpec = brokenSpec
+	h.step()
+	keeping := keepingFailedReplacement()
+	if len(keeping) != surgeBefore {
+		t.Fatalf("the lowered budget must leave the %d failed replacements standing, got %v", surgeBefore, keeping)
+	}
+	h.setTarget(h.revFixed, fixedImage)
+	h.step()
+
+	// The first pass of the fix starts exactly one Instance that keeps a
+	// failed replacement; every Instance without one waits.
+	var started []int32
+	for _, s := range h.irStatuses() {
+		if s.Phase == workloadtypes.InstancePhaseUpdating && s.Operation != nil && s.Operation.TargetRevision == h.revFixed.Name {
+			started = append(started, s.Index)
+		}
+	}
+	if len(started) != 1 || !slices.Contains(keeping, started[0]) {
+		h.dumpState("first pass of the fix")
+		t.Fatalf("the fix must start one Instance that keeps a failed replacement (one of %v), started %v; hold: %+v", keeping, started, h.lastHold())
+	}
+	for idx := int32(0); idx < replicas; idx++ {
+		if !slices.Contains(keeping, idx) && !h.untouchedOn(idx, h.revV1) {
+			h.dumpState("first pass of the fix")
+			t.Fatalf("instance %d keeps no failed replacement and must wait for the Instances that do, got %+v", idx, h.instance(idx))
+		}
+	}
+
+	// The whole roll: one start at a time, never more pods than stood when
+	// the budget was lowered, and every Instance on the fix at the end.
+	landed := h.runWithInvariant(600, func() bool { return h.settledOn(h.revFixed, replicas) }, func() {
+		withinBudget(1)()
+		if n := len(h.livePods()); n > replicas+surgeBefore {
+			h.dumpState("pod count")
+			t.Fatalf("%d live pods, more than the %d that stood when the budget was lowered", n, replicas+surgeBefore)
+		}
+	})
+	if !landed {
+		h.dumpState("corrected push")
+		t.Fatalf("the fix never landed on every Instance; still keeping a failed replacement: %v; last hold: %+v", keepingFailedReplacement(), h.lastHold())
 	}
 }
 
@@ -4365,6 +4699,9 @@ func (h *admissionHarness) kubelet() {
 			continue
 		}
 		if pod.Status.Phase == "" {
+			if pod.UID == "" {
+				pod.UID = uuid.NewUUID()
+			}
 			pod.CreationTimestamp = metav1.NewTime(h.clk.Now())
 			if err := h.c.Update(h.ctx, pod); err != nil {
 				h.t.Fatalf("kubelet stamp creation %s: %v", pod.Name, err)
@@ -4776,17 +5113,20 @@ func TestTerminalPodRecovery_Gang_SpentRestartReArms(t *testing.T) {
 // acceptance) is covered by the workload/ops expiry tests.
 
 // expiryDispatchFixture wires a Reconcile input holding one Manual
-// record and observation stubs that record what the dispatcher did.
+// record and observation stubs that record what the dispatcher did. The
+// one Instance serves from a pod in the store, so no pass has anything to
+// build and the record alone decides what the pass does.
 func expiryDispatchFixture(t *testing.T, rec workloadtypes.MigrationRecord) (workloadtypes.ReconcileInput, workloadtypes.Deps, *[]workloadtypes.MigrationRecord, *bool) {
 	t.Helper()
-	scheme := makeScheme(t)
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	in := minimalInput(t)
+	isvc := in.OwnerObject.(*v1beta1.InferenceService)
+	c := fake.NewClientBuilder().WithScheme(makeScheme(t)).
+		WithObjects(testfixture.PodForInstance(isvc, 0, true, true)).Build()
 	clk := clocktesting.NewFakeClock(time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC))
 
 	records := []workloadtypes.MigrationRecord{rec}
 	migrateStamped := false
 
-	in := minimalInput(t)
 	in.Clock = clk
 	in.ObservedState.InstanceStatuses = []workloadtypes.InstanceStatus{
 		{Index: 0, Phase: workloadtypes.InstancePhaseReady, RunningRevision: "rev-1"},
@@ -4811,7 +5151,10 @@ func expiryDispatchFixture(t *testing.T, rec workloadtypes.MigrationRecord) (wor
 		}
 		return nil
 	}
-	return in, workloadtypes.Deps{Client: c, Clock: clk}, &records, &migrateStamped
+	// The fixture owns its expectations cache, so a create another test
+	// recorded in the process-wide cache cannot hide a rebuild here.
+	deps := workloadtypes.Deps{Client: c, Clock: clk, Expectations: workloadtypes.NewExpectations()}
+	return in, deps, &records, &migrateStamped
 }
 
 // pastDeadlineRecord builds a non-terminal Manual record whose Deadline
@@ -4890,9 +5233,8 @@ func TestReconcile_ExpiryRunsUnderModeNever(t *testing.T) {
 // TestReconcile_NotYetExpiredRecordNotConsumed is the negative
 // dispatcher control: a non-terminal record whose Deadline is still in
 // the future is left alone by the expiry pass. MigrationMode=Never
-// isolates the expiry pass (the drive pass — which owns a live record
-// — is skipped, and would in this podless stub environment terminally
-// reject it for unrelated reasons).
+// isolates the expiry pass: the drive pass, which owns a live record,
+// is skipped, so the record is read by the expiry pass alone.
 func TestReconcile_NotYetExpiredRecordNotConsumed(t *testing.T) {
 	rec := pastDeadlineRecord("u-live")
 	rec.Deadline = metav1.NewTime(time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)) // 1h ahead of the fixture clock
@@ -5029,6 +5371,7 @@ func TestExecuteErroredOpPassStillEscalatesExpiredDeadline(t *testing.T) {
 		return nil
 	}
 	plan := threeInstancePlan()
+	plan.RestartPolicy = workloadtypes.RestartPolicyRecreateInstance
 	c := fake.NewClientBuilder().WithScheme(makeScheme(t)).Build()
 	deps := workloadtypes.Deps{Client: c, APIReader: c, Expectations: workloadtypes.NewExpectations()}
 	snapshot := workload.SnapshotWithPodsForTest(in, nil)
@@ -5069,11 +5412,10 @@ func TestExecuteErroredOpPassStillEscalatesExpiredDeadline(t *testing.T) {
 	}
 }
 
-// TestExecuteErroredPodReadDoesNotFabricateStuckEvidence: the restart
-// pass fails because the Pod list failed, so the escalation pass reading
-// the same memoized source fails too, before it derives any evidence — a
-// read failure never invents a stuck pod — so nothing is stamped Failed,
-// and the joined error keeps the op error first.
+// TestExecuteErroredPodReadDoesNotFabricateStuckEvidence: a preplanned
+// restart consumes its decision snapshot without another Pod List. The
+// end-of-pass hold and escalation reads still fail before deriving any
+// evidence, so a read failure never invents a stuck pod or stamps Failed.
 func TestExecuteErroredPodReadDoesNotFabricateStuckEvidence(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)
@@ -5107,12 +5449,13 @@ func TestExecuteErroredPodReadDoesNotFabricateStuckEvidence(t *testing.T) {
 	in.WarnInstanceFailed = func(int32, string, string) { warnings++ }
 
 	shed := apierrors.NewServiceUnavailable("the apiserver shed the list")
-	c := fake.NewClientBuilder().WithScheme(makeScheme(t)).
-		WithInterceptorFuncs(interceptor.Funcs{
-			List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
-				return shed
-			},
-		}).Build()
+	base := fake.NewClientBuilder().WithScheme(makeScheme(t)).Build()
+	target := desiredRevisionForTest(t, base, in)
+	c := interceptor.NewClient(base, interceptor.Funcs{
+		List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
+			return shed
+		},
+	})
 	deps := workloadtypes.Deps{Client: c, APIReader: c, Expectations: workloadtypes.NewExpectations()}
 	snapshot := workload.NewObservedSnapshot(deps, in, workloadtypes.ComponentEngine, in.ObservedState.InstanceStatuses)
 
@@ -5120,18 +5463,18 @@ func TestExecuteErroredPodReadDoesNotFabricateStuckEvidence(t *testing.T) {
 	plan.Instances = append(plan.Instances, workloadtypes.InstancePlan{
 		Index: 1, Incarnation: 1, Runners: []workloadtypes.RunnerPlan{{Name: "default", Size: 1}},
 	})
-	_, err := workload.Execute(ctx, deps, in, plan, nil, snapshot, restartOnlyDecision(plan.Instances[1]))
+	_, err := workload.Execute(ctx, deps, in, plan, target, snapshot, restartOnlyDecision(plan.Instances[1]))
 
 	if err == nil {
-		t.Fatal("the pass must report both the restart failure and the escalation read failure")
+		t.Fatal("the pass must report the hold and escalation read failures")
 	}
-	opFirst := strings.Index(err.Error(), "restart instance 1")
-	escalationSecond := strings.Index(err.Error(), "list pods for escalation pass")
-	if opFirst < 0 || escalationSecond < 0 {
-		t.Fatalf("joined error must name both failures; got %v", err)
+	if strings.Contains(err.Error(), "restart instance 1") {
+		t.Fatalf("execution must not issue another restart Pod read; got %v", err)
 	}
-	if opFirst > escalationSecond {
-		t.Fatalf("the op error must be reported first; got %v", err)
+	for _, want := range []string{"read NodeUnknown hold", "list pods for escalation pass"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("joined error must contain %q; got %v", want, err)
+		}
 	}
 	if got := store.status(0); got != nil && got.Phase == workloadtypes.InstancePhaseFailed {
 		t.Fatalf("a failed pod read must not stamp Failed: %+v", got)
@@ -5142,7 +5485,7 @@ func TestExecuteErroredPodReadDoesNotFabricateStuckEvidence(t *testing.T) {
 }
 
 // TestExecuteErroredSiblingKeepsRelocationFirstTry: which
-// DisposeExpiredAttempt branch runs is decided by the blamed pod set, not
+// DecideExpiredAttempt branch runs is decided by the blamed pod set, not
 // by whether a sibling's operation errored this pass. A single-pod Create
 // parked Running-but-unready on one node, under Auto migration policy
 // with budget, still takes the relocation branch on its first expiry
@@ -5195,6 +5538,7 @@ func TestExecuteErroredSiblingKeepsRelocationFirstTry(t *testing.T) {
 	}
 	plan := minimalPlan()
 	plan.MigrationMode = workloadtypes.MigrationModeAuto
+	plan.RestartPolicy = workloadtypes.RestartPolicyRecreateInstance
 	plan.Instances = append(plan.Instances, workloadtypes.InstancePlan{
 		Index: 1, Incarnation: 1, Runners: []workloadtypes.RunnerPlan{{Name: "default", Size: 1}},
 	})
@@ -5284,10 +5628,18 @@ func TestReconcileDeleteOwnedReboundFinishesBeforeRecreate(t *testing.T) {
 		},
 	}}
 	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+	target := desiredRevisionForTest(t, base, in)
 	expectations := workloadtypes.NewExpectations()
 	deps := workloadtypes.Deps{Client: base, APIReader: base, Expectations: expectations}
 	store := installTestAtomicMutationStore(&in)
 	warnings := 0
+	in.ApplyInstanceMutationsWithRetryBlock = func(ctx context.Context, mutations []workloadtypes.InstanceMutation, rev string, mutate func(*workloadtypes.RetryBlock) workloadtypes.RetryBlockDisposition) error {
+		block := workloadtypes.RetryBlock{TargetRevision: rev}
+		if mutate != nil && mutate(&block) != workloadtypes.RetryBlockUnchanged {
+			return fmt.Errorf("delete fixture cannot persist a RetryBlock")
+		}
+		return store.apply(ctx, mutations, rev, nil)
+	}
 	in.WarnInstanceFailed = func(int32, string, string) { warnings++ }
 	finalized := 0
 	in.FinalizeInstanceResources = func(context.Context, int32) (bool, error) {
@@ -5299,7 +5651,7 @@ func TestReconcileDeleteOwnedReboundFinishesBeforeRecreate(t *testing.T) {
 		ByInstance: map[int32][]*corev1.Pod{0: {pod}},
 	}
 
-	result, err := workload.Reconcile(ctx, deps, in, plan, nil)
+	result, err := workload.Reconcile(ctx, deps, in, plan, target)
 	if err != nil {
 		t.Fatalf("delete pass: %v", err)
 	}
@@ -5336,7 +5688,7 @@ func TestReconcileDeleteOwnedReboundFinishesBeforeRecreate(t *testing.T) {
 	expectations.ObservedDelete(in.Key.Namespace, in.Key.OwnerName, in.Key.Component, 0)
 	store.sync(&in)
 	in.AuthoritativePods = &workloadtypes.ComponentPodSnapshot{ByInstance: map[int32][]*corev1.Pod{}}
-	result, err = workload.Reconcile(ctx, deps, in, plan, nil)
+	result, err = workload.Reconcile(ctx, deps, in, plan, target)
 	if err != nil {
 		t.Fatalf("completion pass: %v", err)
 	}
@@ -5355,7 +5707,7 @@ func TestReconcileDeleteOwnedReboundFinishesBeforeRecreate(t *testing.T) {
 	}
 
 	store.sync(&in)
-	result, err = workload.Reconcile(ctx, deps, in, plan, nil)
+	result, err = workload.Reconcile(ctx, deps, in, plan, target)
 	if err != nil {
 		t.Fatalf("recreate pass: %v", err)
 	}
@@ -7460,7 +7812,9 @@ func nodeLossStories() []nodeLossStory {
 // node-b) and Instance 1 on nodes the failure never touches.
 func newNodeLossHarness(t *testing.T, story nodeLossStory, policy *workloadtypes.ForceDeletePolicy) *recoveryHarness {
 	t.Helper()
-	h := newRecoveryHarness(t, story.multiPod)
+	// The pods render the runner container, so the rebuilt set is read
+	// for restart evidence the way the restart pass and the roll read it.
+	h := newRecoveryHarnessFor(t, story.multiPod, constants.MainContainerName)
 	h.replicas = 2
 	restart := story.policy
 	h.lifecycle.RestartPolicy = &restart
@@ -7525,6 +7879,25 @@ func (h *recoveryHarness) requireNoGracefulDeleteOn(node string) {
 	}
 }
 
+// requireRebuiltSetNotReadAsRestarted fails when a pod of Instance idx
+// reads as restarted against the row's ReadySince: the row keeps the
+// ReadySince of the set it lost until the rebuilt set is promoted, and a
+// pod created after that time is a new pod whose first start is no restart.
+// Read this way, the rebuilt set would be drained and rebuilt once more.
+func (h *recoveryHarness) requireRebuiltSetNotReadAsRestarted(idx int32) {
+	h.t.Helper()
+	s := h.instance(idx)
+	if s == nil {
+		return
+	}
+	for _, pod := range h.podsOf(idx) {
+		if reason, restarted := workloadops.RunnerRestartedSinceReady(pod, s.ReadySince); restarted {
+			h.dumpState("rebuilt set read as restarted")
+			h.t.Fatalf("a pod of the rebuilt Instance %d reads as restarted against the ReadySince of the set it replaced: %s", idx, reason)
+		}
+	}
+}
+
 // servingElsewhere reports whether Instance 0 is Ready with no operation on
 // its running revision, every pod of it live, serving and PodReady on a
 // node other than the dead one.
@@ -7558,6 +7931,7 @@ func TestNodeLoss_ServingInstanceIsRebuiltElsewhereUnderTheForceDeletePolicy(t *
 			invariant := func() {
 				h.requirePeerInRotation(peer, peerIncarnation)
 				h.requireNoGracefulDeleteOn(nodeLossDeadNode)
+				h.requireRebuiltSetNotReadAsRestarted(0)
 			}
 
 			h.failNode(nodeLossDeadNode)
@@ -7673,6 +8047,237 @@ func (h *recoveryHarness) servingPodsOf(idx int32) int {
 		}
 	}
 	return n
+}
+
+// TestNodeLoss_ForceDeleteRunsWhileAnotherRepairWaitsOnAdmission: four
+// single-pod Instances on two nodes, the force-delete policy on. The
+// apiserver cannot reach its pod admission webhook. Instance 0's runner
+// exits, the policy rebuilds the set, the rebuilt pod's create is refused,
+// and the repair waits on the webhook, owning every pass while it does.
+// The node under Instances 1 and 3 then stops reporting. Their pods must
+// be force-deleted at the node threshold whether or not Instance 0's
+// repair waits, and once the webhook returns every Instance must serve
+// off the lost node.
+func TestNodeLoss_ForceDeleteRunsWhileAnotherRepairWaitsOnAdmission(t *testing.T) {
+	h := newRecoveryHarnessFor(t, false, constants.MainContainerName)
+	h.replicas = 4
+	restart := workloadtypes.RestartPolicyRecreateInstance
+	h.lifecycle.RestartPolicy = &restart
+	h.podGrace = 30 * time.Second
+	h.forceDelete = &workloadtypes.ForceDeletePolicy{
+		NodeUnreachableThreshold: nodeLossThreshold,
+		OverdueSlack:             nodeLossSlack,
+	}
+	h.recorder = record.NewFakeRecorder(256)
+	// The node model places the pods in index order on the least-loaded
+	// node, the earlier declared one on a tie: Instances 0 and 2 land on
+	// the live node, Instances 1 and 3 on the one that will be lost.
+	h.useNodes("node-live", nodeLossDeadNode)
+	h.setTarget(h.revV1, goodImage)
+	if !h.run(30, func() bool { return h.settledOn(h.revV1, 4) }) {
+		h.dumpState("initial create")
+		t.Fatalf("initial create never converged on v1")
+	}
+	onLostNode := map[string]bool{}
+	for _, pod := range h.podsOnNode(nodeLossDeadNode) {
+		onLostNode[pod.Name] = true
+	}
+	if len(onLostNode) != 2 || !onLostNode[h.podsOf(1)[0].Name] || !onLostNode[h.podsOf(3)[0].Name] {
+		h.dumpState("placement")
+		t.Fatalf("node model placed %v on %s, want the pods of Instances 1 and 3", onLostNode, nodeLossDeadNode)
+	}
+
+	// The webhook goes away and Instance 0's runner exits: the policy
+	// rebuilds the set, the rebuilt pod's create is refused, and the
+	// repair waits on the webhook.
+	h.admissionDown = true
+	h.killRunnerOnce(h.podsOf(0)[0])
+	waitingOnAdmission := func() bool {
+		s := h.instance(0)
+		return s != nil && s.Operation != nil && s.Operation.Type == workloadtypes.InstanceOperationRestart &&
+			s.Operation.Waiting == workloadtypes.RejectionReasonAdmissionUnavailable
+	}
+	if !h.run(10, waitingOnAdmission) {
+		h.dumpState("repair of Instance 0")
+		t.Fatalf("Instance 0's repair never reached the admission wait")
+	}
+
+	// The node under Instances 1 and 3 stops reporting. The names are
+	// freed at the threshold whatever Instance 0's repair is doing.
+	h.failNode(nodeLossDeadNode)
+	failedAt := h.clk.Now()
+	freed := func() bool { return len(h.podsOnNode(nodeLossDeadNode)) == 0 }
+	if !h.run(10, freed) {
+		h.dumpState("node down past the threshold")
+		t.Fatalf("the pods of Instances 1 and 3 on %s were never force-deleted while Instance 0's repair waited on the admission webhook", nodeLossDeadNode)
+	}
+	if elapsed := h.clk.Now().Sub(failedAt); elapsed > nodeLossThreshold+recoveryStepFloor {
+		t.Fatalf("stale pods freed %v after the node stopped reporting, want within the %v threshold plus one pass", elapsed, nodeLossThreshold)
+	}
+	if n := h.eventCount(workloadtypes.EventReasonPodForceDeleted); n != 2 {
+		t.Fatalf("%d PodForceDeleted event(s), want one per pod on %s; events: %v", n, nodeLossDeadNode, h.events)
+	}
+	if !waitingOnAdmission() {
+		h.dumpState("after the force delete")
+		t.Fatalf("Instance 0's repair should still wait on the admission webhook; the force delete of the other Instances' pods does not depend on it")
+	}
+
+	// The webhook returns: every Instance serves again, none on the lost
+	// node.
+	h.admissionDown = false
+	if !h.run(40, func() bool { return h.settledOn(h.revV1, 4) && h.servingPodsOf(1) == 1 && h.servingPodsOf(3) == 1 }) {
+		h.dumpState("after the webhook returned")
+		t.Fatalf("the Component did not settle on v1 with every Instance serving once the webhook returned")
+	}
+	if on := h.podsOnNode(nodeLossDeadNode); len(on) != 0 {
+		t.Fatalf("%d pod(s) still bound to %s after the rebuild", len(on), nodeLossDeadNode)
+	}
+}
+
+// newWholeGangNodeLossHarness is the harness with two gang Instances
+// converged on v1, the leader and the worker of Instance 0 both on
+// node-a: the node model places Instance 0 while node-a is the only node,
+// and Instance 1 on the nodes added after it, which the failure never
+// touches.
+func newWholeGangNodeLossHarness(t *testing.T, policy *workloadtypes.ForceDeletePolicy) *recoveryHarness {
+	t.Helper()
+	// The pods render the runner container, so the rebuilt gang is read
+	// for restart evidence the way the restart pass and the roll read it.
+	h := newRecoveryHarnessFor(t, true, constants.MainContainerName)
+	restart := workloadtypes.RestartPolicyRecreateInstance
+	h.lifecycle.RestartPolicy = &restart
+	h.podGrace = 30 * time.Second
+	h.forceDelete = policy
+	h.recorder = record.NewFakeRecorder(256)
+	h.useNodes(nodeLossDeadNode)
+	h.setTarget(h.revV1, goodImage)
+	if !h.run(30, func() bool { return h.settledOn(h.revV1, 1) }) {
+		h.dumpState("initial create")
+		t.Fatalf("initial create never converged on v1")
+	}
+	h.addNodes("node-b", "node-c")
+	h.replicas = 2
+	h.setTarget(h.revV1, goodImage)
+	if !h.run(30, func() bool { return h.settledOn(h.revV1, 2) }) {
+		h.dumpState("scale to two")
+		t.Fatalf("the second Instance never converged on v1")
+	}
+	on := h.podsOnNode(nodeLossDeadNode)
+	if len(on) != len(h.desired.Runners) {
+		h.dumpState("placement")
+		t.Fatalf("node model placed %d pod(s) on %s, want the whole gang of Instance 0", len(on), nodeLossDeadNode)
+	}
+	for _, pod := range on {
+		if !strings.Contains(pod.Name, "-engine-0-") {
+			h.dumpState("placement")
+			t.Fatalf("pod %s sits on %s, want only Instance 0 there", pod.Name, nodeLossDeadNode)
+		}
+	}
+	return h
+}
+
+// runAllowingPassErrors is runWithInvariant for a story in which a pass
+// may fail: each pass error is collected for the caller instead of ending
+// the test, as the controller's backoff would only run the pass again.
+func (h *recoveryHarness) runAllowingPassErrors(max int, pred func() bool, inv func()) (bool, []error) {
+	h.t.Helper()
+	var errs []error
+	for i := 0; i < max; i++ {
+		inv()
+		if pred() {
+			return true, errs
+		}
+		if _, err := h.stepResult(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	inv()
+	return pred(), errs
+}
+
+// The whole gang on the node that stops. The sweep reads the gang as one
+// set: every member is freed on the pass that frees the first, whatever
+// the audit ledger answers for one of them, so no repair ever opens on a
+// half-swept gang and no graceful delete is issued on the dead node. The
+// ledger is one object per owner: a write that loses the race to another
+// Component's pass is retried, and one refused past the retries fails the
+// pass only after the whole set is freed.
+func TestNodeLoss_WholeGangOnTheDeadNodeIsRebuiltElsewhere(t *testing.T) {
+	policy := &workloadtypes.ForceDeletePolicy{
+		NodeUnreachableThreshold: nodeLossThreshold,
+		OverdueSlack:             nodeLossSlack,
+	}
+	for _, tc := range []struct {
+		name          string
+		auditRefusals int
+		failedPasses  int
+	}{
+		{name: "both members freed in one pass"},
+		{name: "one refused audit write is retried", auditRefusals: 1},
+		{name: "an audit write refused past the retries fails the pass after the whole set is freed", auditRefusals: 6, failedPasses: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newWholeGangNodeLossHarness(t, policy)
+			peer := podIdentities(h.podsOf(1))
+			peerIncarnation := h.instance(1).Incarnation
+			before := h.instance(0).Incarnation
+			invariant := func() {
+				h.requirePeerInRotation(peer, peerIncarnation)
+				h.requireNoGracefulDeleteOn(nodeLossDeadNode)
+				h.requireRebuiltSetNotReadAsRestarted(0)
+				if h.sawEvent(workloadtypes.EventReasonPodForceDeleted) {
+					if on := h.podsOnNode(nodeLossDeadNode); len(on) != 0 {
+						t.Fatalf("the sweep freed part of the gang and left %d pod(s) on %s", len(on), nodeLossDeadNode)
+					}
+				}
+			}
+
+			h.failNode(nodeLossDeadNode)
+			failedAt := h.clk.Now()
+			h.auditWriteRefusals = tc.auditRefusals
+
+			freed := func() bool { return len(h.podsOnNode(nodeLossDeadNode)) == 0 }
+			ok, errs := h.runAllowingPassErrors(10, freed, invariant)
+			if !ok {
+				h.dumpState("node down past the threshold")
+				t.Fatalf("the gang on %s was never force-deleted after the node went silent under a configured policy", nodeLossDeadNode)
+			}
+			if len(errs) != tc.failedPasses {
+				t.Fatalf("%d pass(es) failed, want %d: %v", len(errs), tc.failedPasses, errs)
+			}
+			if elapsed := h.clk.Now().Sub(failedAt); elapsed > nodeLossThreshold+recoveryStepFloor {
+				t.Fatalf("stale pods freed %v after the node went silent, want within the %v threshold plus one pass", elapsed, nodeLossThreshold)
+			}
+
+			if !h.runWithInvariant(40, func() bool { return h.servingElsewhere(nodeLossDeadNode) }, invariant) {
+				h.dumpState("rebuild off the dead node")
+				t.Fatalf("Instance 0 never came back Ready and serving on other nodes while the kubelet of %s was down", nodeLossDeadNode)
+			}
+			h.requirePodsRender(0, h.revV1, goodImage)
+			if s := h.instance(0); s.Incarnation <= before {
+				t.Fatalf("RecreateInstanceOnPodRestart rebuilds the whole gang under a bumped incarnation, got %d (was %d)", s.Incarnation, before)
+			}
+
+			rebuilt := podIdentities(h.podsOf(0))
+			h.recoverNode(nodeLossDeadNode)
+			for i := 0; i < 3; i++ {
+				h.step()
+				invariant()
+			}
+			if on := h.podsOnNode(nodeLossDeadNode); len(on) != 0 {
+				t.Fatalf("%d stale pod object(s) on %s after its kubelet returned", len(on), nodeLossDeadNode)
+			}
+			if !h.settledOn(h.revV1, 2) {
+				h.dumpState("after the node returned")
+				t.Fatalf("the Component did not stay settled on v1 after the node returned")
+			}
+			for _, pod := range h.podsOf(0) {
+				if !rebuilt[wedgeKey(pod)] {
+					t.Fatalf("pod %s of the rebuilt Instance was replaced again after the node returned", pod.Name)
+				}
+			}
+		})
+	}
 }
 
 // TestScaleDown_RemovesTheInstanceThatServesNothingFirst: four Instances
@@ -7796,6 +8401,102 @@ func TestScaleDown_RemovesTheInstanceThatServesNothingFirst(t *testing.T) {
 	}
 }
 
+// TestScaleDown_RemovesTheInstanceOnACordonedNodeFirst: four healthy
+// Instances, every pod on a node of its own, and the node under one pod
+// of Instance 1 is cordoned. A scale-down by one removes Instance 1, not
+// the highest index; a scale-down by two removes Instance 1 and then the
+// highest index. The survivors keep the pods they had, nothing lands on
+// the cordoned node, and the rows settle at the new count. Single pod,
+// and gang where only the worker sits on the cordoned node.
+func TestScaleDown_RemovesTheInstanceOnACordonedNodeFirst(t *testing.T) {
+	shapes := []struct {
+		name     string
+		multiPod bool
+		runner   string
+	}{
+		{"single pod", false, "default"},
+		{"gang worker", true, "worker"},
+	}
+	reductions := []struct {
+		name    string
+		down    int32
+		removed []int32
+		kept    []int32
+	}{
+		{"down by one", 1, []int32{1}, []int32{0, 2, 3}},
+		{"down by two", 2, []int32{1, 3}, []int32{0, 2}},
+	}
+	for _, shape := range shapes {
+		for _, reduction := range reductions {
+			t.Run(shape.name+"/"+reduction.name, func(t *testing.T) {
+				h := newRecoveryHarness(t, shape.multiPod)
+				h.atomicStatus = true
+				h.replicas = 4
+				h.useNodes("node-a", "node-b", "node-c", "node-d", "node-e", "node-f", "node-g", "node-h")
+				h.setTarget(h.revV1, goodImage)
+				if !h.run(40, func() bool { return h.settledOn(h.revV1, 4) }) {
+					h.dumpState("initial create")
+					t.Fatalf("four instances never settled on v1")
+				}
+				cordoned := ""
+				for _, pod := range h.podsOf(1) {
+					if pod.Labels[query.LabelRunner] == shape.runner {
+						cordoned = pod.Spec.NodeName
+					}
+				}
+				if cordoned == "" || len(h.podsOnNode(cordoned)) != 1 {
+					h.dumpState("placement")
+					t.Fatalf("story shape: the %s pod of Instance 1 needs a node of its own, got %q", shape.runner, cordoned)
+				}
+				before := map[int32]string{}
+				for _, idx := range reduction.kept {
+					before[idx] = h.instanceIdentity(idx)
+				}
+
+				h.cordonNode(cordoned)
+				h.replicas = 4 - reduction.down
+				h.setTarget(h.revV1, goodImage)
+				atRest := func() bool {
+					rows := h.irStatuses()
+					if int32(len(rows)) != h.replicas {
+						return false
+					}
+					for _, row := range rows {
+						if row.Phase != workloadtypes.InstancePhaseReady || row.Operation != nil {
+							return false
+						}
+					}
+					return len(h.livePods()) == int(h.replicas)*len(h.desired.Runners)
+				}
+				if !h.run(40, atRest) {
+					h.dumpState("scale-down")
+					t.Fatalf("the component never came to rest at %d instances", h.replicas)
+				}
+				for _, idx := range reduction.removed {
+					if h.instance(idx) != nil || len(h.podsOf(idx)) != 0 {
+						h.dumpState("scale-down")
+						t.Fatalf("instance %d should have left; row=%+v pods=%d", idx, h.instance(idx), len(h.podsOf(idx)))
+					}
+				}
+				for _, idx := range reduction.kept {
+					if got := h.instanceIdentity(idx); got != before[idx] {
+						h.dumpState("scale-down")
+						t.Fatalf("instance %d should have kept its pods:\n got %q\nwant %q", idx, got, before[idx])
+					}
+				}
+				if on := h.podsOnNode(cordoned); len(on) != 0 {
+					h.dumpState("scale-down")
+					t.Fatalf("%d pod(s) still on the cordoned node %s", len(on), cordoned)
+				}
+				if !h.settledOn(h.revV1, h.replicas) {
+					h.dumpState("scale-down")
+					t.Fatalf("the component is not settled on v1 at %d instances", h.replicas)
+				}
+			})
+		}
+	}
+}
+
 // TestNodeLoss_ServingFollowsThePodReadyCondition: the kubelet under a
 // serving Instance stops. The node lifecycle controller sets the pod's
 // Ready condition False, while the container statuses and the serving
@@ -7804,7 +8505,10 @@ func TestScaleDown_RemovesTheInstanceThatServesNothingFirst(t *testing.T) {
 // serving count drops, the Component's serving replicas drop, its peers
 // are untouched, and nothing is rebuilt, because no restart policy frees
 // the names a dead node holds without a force-delete policy. Single pod
-// and gang, under both restart policies.
+// and gang, under both restart policies. A gang whose worker is on the
+// dead node still counts the members that serve; a gang whose leader is
+// on it serves nothing, whatever its workers read, and publishes no
+// serving pod at all.
 func TestNodeLoss_ServingFollowsThePodReadyCondition(t *testing.T) {
 	recreate := workloadtypes.RestartPolicyRecreateInstance
 	none := workloadtypes.RestartPolicyNone
@@ -7813,11 +8517,14 @@ func TestNodeLoss_ServingFollowsThePodReadyCondition(t *testing.T) {
 		multiPod bool
 		runner   string
 		policy   workloadtypes.RestartPolicy
+		// servesNothing: the lost pod is the Instance's routable one, so the
+		// Instance publishes no serving pod however many members still serve.
+		servesNothing bool
 	}{
-		{"single pod under policy None", false, "", none},
-		{"single pod under RecreateInstanceOnPodRestart", false, "", recreate},
-		{"gang worker under policy None", true, "worker", none},
-		{"gang leader under RecreateInstanceOnPodRestart", true, "leader", recreate},
+		{"single pod under policy None", false, "", none, true},
+		{"single pod under RecreateInstanceOnPodRestart", false, "", recreate, true},
+		{"gang worker under policy None", true, "worker", none, false},
+		{"gang leader under RecreateInstanceOnPodRestart", true, "leader", recreate, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -7846,11 +8553,15 @@ func TestNodeLoss_ServingFollowsThePodReadyCondition(t *testing.T) {
 			h.loseNodeUnder(0, tc.runner)
 			h.step()
 
+			wantServing := perInstance - 1
+			if tc.servesNothing {
+				wantServing = 0
+			}
 			requireServingDropped := func() {
 				t.Helper()
 				rows, counters := h.publication()
-				if got := h.publishedRow(rows, 0).ServingPodCount; got != perInstance-1 {
-					t.Fatalf("instance 0 serving pods = %d, want %d: the pod the control plane marked not Ready still counts as serving", got, perInstance-1)
+				if got := h.publishedRow(rows, 0).ServingPodCount; got != wantServing {
+					t.Fatalf("instance 0 serving pods = %d, want %d: the pod the control plane marked not Ready still counts as serving", got, wantServing)
 				}
 				if got := h.publishedRow(rows, 1).ServingPodCount; got != perInstance {
 					t.Fatalf("instance 1 serving pods = %d, want %d: the peer is untouched by the lost node", got, perInstance)
@@ -8052,8 +8763,9 @@ func TestPause_LandsOnAnOpenGangRestart_APushDuringTheHoldRollsItAfterTheUnpause
 // Ready in the pass that observes the loss; the replacement is created as
 // soon as the name is free, under restart policy None as under
 // RecreateInstanceOnPodRestart; while the cluster has no room the row
-// carries the Unschedulable wait with the scheduler's message and reads
-// Failed at no point inside the configured grace; the Instance the
+// carries the Unschedulable wait, keeps the preempted runner's exit record
+// when the kubelet reported it, and reads Failed at no point inside the
+// configured grace; the Instance the
 // scheduler did not take keeps serving on the pod it had; once the room
 // is back the pod that waited is placed and the row returns Ready with no
 // operation open. Every Component runs the same loop, so the story runs
@@ -8136,9 +8848,19 @@ func TestPreemptedPod_ReturnsAndSaysWhyUntilPlaced(t *testing.T) {
 					h.dumpState("after the scheduler's verdict")
 					t.Fatalf("the row does not report the Unschedulable wait after the pass that read the scheduler's verdict: %+v", s)
 				}
-				if s.LastFailure == nil || s.LastFailure.Reason != workloadtypes.WaitingReasonUnschedulable ||
-					s.LastFailure.PodName != replacement.Name || s.LastFailure.Message != noRoom {
-					t.Fatalf("the row's record does not name the held pod and the scheduler's message: %+v", s.LastFailure)
+				// The record names the held pod. A row that remembered the
+				// preempted runner's exit keeps that record through the wait,
+				// because the retry schedule reads it to count the rebuilt
+				// set's death; a row with no such record takes the scheduler's
+				// reading.
+				if s.LastFailure == nil || s.LastFailure.PodName != replacement.Name {
+					t.Fatalf("the row's record does not name the held pod: %+v", s.LastFailure)
+				}
+				if story.stoppedFirst && s.LastFailure.ContainerName == "" {
+					t.Fatalf("the preempted runner's exit record left the row behind the scheduler's wait: %+v", s.LastFailure)
+				}
+				if s.LastFailure.ContainerName == "" && (s.LastFailure.Reason != workloadtypes.WaitingReasonUnschedulable || s.LastFailure.Message != noRoom) {
+					t.Fatalf("a row with no exit record does not carry the scheduler's message: %+v", s.LastFailure)
 				}
 				h.runWithInvariant(6, func() bool { return false }, func() {
 					untouched()
@@ -8171,6 +8893,296 @@ func TestPreemptedPod_ReturnsAndSaysWhyUntilPlaced(t *testing.T) {
 					t.Fatalf("terminal-pod recycle seen = %v, want %v; events = %v",
 						!story.stoppedFirst, story.stoppedFirst, h.events)
 				}
+			})
+		}
+	}
+}
+
+// A steady prefill-decode service loses one pod to the scheduler, as a
+// cluster delivers the loss: the DisruptionTarget condition lands, the
+// pod is deleted under its grace and is still shutting down when the
+// controller first looks, the kubelet then reports it Succeeded, then
+// the object is gone. No rollout is in flight. Within a few passes the
+// Instance that lost its pod has a replacement under the stable name;
+// the scheduler refuses it and the row carries the Unschedulable wait
+// beside the record of the preempted runner's exit, reading Failed at no
+// point inside the grace; every other Instance keeps serving on the pod
+// it had. Once
+// the room is back the Instance returns Ready on the pod that waited. A
+// second preemption that takes another Instance as soon as the first is
+// back runs the same loop and finds the first still serving throughout.
+// The engine and the decoder run four Instances under both restart
+// policies, the router two under the default, all under the service's
+// own SurgeThenDrain budget of one surge and no unavailability.
+func TestPreemptedPod_SteadyPDService_RebuildsAndSaysWhy(t *testing.T) {
+	const noRoom = "0/3 nodes are available: 3 node(s) had untolerated taint(s). no new claims to deallocate"
+	none, recreate := workloadtypes.RestartPolicyNone, workloadtypes.RestartPolicyRecreateInstance
+	cases := []struct {
+		name      string
+		component workloadtypes.ComponentType
+		replicas  int32
+		policy    *workloadtypes.RestartPolicy
+		// cacheLag makes the pass after each loss open on the informer's
+		// stale list, which still shows the taken pod.
+		cacheLag bool
+	}{
+		{"engine x4 policy None", workloadtypes.ComponentEngine, 4, &none, false},
+		{"engine x4 RecreateInstanceOnPodRestart", workloadtypes.ComponentEngine, 4, &recreate, false},
+		{"decoder x4 policy None", workloadtypes.ComponentDecoder, 4, &none, false},
+		{"decoder x4 RecreateInstanceOnPodRestart", workloadtypes.ComponentDecoder, 4, &recreate, false},
+		{"router x2 default policy", workloadtypes.ComponentRouter, 2, nil, false},
+		{"engine x4 policy None, informer lags the loss", workloadtypes.ComponentEngine, 4, &none, true},
+		{"decoder x4 RecreateInstanceOnPodRestart, informer lags the loss", workloadtypes.ComponentDecoder, 4, &recreate, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newComponentRecoveryHarness(t, false, "main", tc.component)
+			h.recorder = record.NewFakeRecorder(256)
+			h.replicas = tc.replicas
+			h.lifecycle.RestartPolicy = tc.policy
+			maxSurge, maxUnavailable := intstr.FromInt(1), intstr.FromInt(0)
+			h.lifecycle.UpdateStrategy = &workloadtypes.UpdateStrategy{
+				Type:          workloadtypes.UpdateStrategySurgeThenDrain,
+				RollingUpdate: &workloadtypes.RollingUpdate{MaxSurge: &maxSurge, MaxUnavailable: &maxUnavailable},
+			}
+			h.unschedulableGrace = 15 * time.Minute
+			h.podGrace = 30 * time.Second
+			h.stopLag = 1
+			h.setTarget(h.revV1, goodImage)
+			if !h.run(40, func() bool { return h.settledOn(h.revV1, tc.replicas) }) {
+				h.dumpState("initial create")
+				t.Fatalf("the Component never settled on v1")
+			}
+			repairs := 0
+			for i, victimIdx := range []int32{0, tc.replicas - 1} {
+				rep := i + 1
+				victim := h.podOf(victimIdx, "")
+				others := map[int32]types.UID{}
+				for idx := int32(0); idx < tc.replicas; idx++ {
+					if idx != victimIdx {
+						others[idx] = h.podOf(idx, "").UID
+					}
+				}
+				untouched := func() {
+					if s := h.instance(victimIdx); s != nil && s.Phase == workloadtypes.InstancePhaseFailed {
+						h.dumpState(fmt.Sprintf("repetition %d: failed inside the grace", rep))
+						t.Fatalf("repetition %d: the Instance read Failed while the scheduler's wait was inside the grace: %+v", rep, s.LastFailure)
+					}
+					for idx, uid := range others {
+						if s := h.instance(idx); s == nil || s.Phase != workloadtypes.InstancePhaseReady || s.Operation != nil {
+							t.Fatalf("repetition %d: Instance %d, which the scheduler did not take, left Ready: %+v", rep, idx, s)
+						}
+						pods := h.podsOf(idx)
+						if len(pods) != 1 || pods[0].UID != uid || !podreadiness.IsServing(pods[0]) {
+							t.Fatalf("repetition %d: the pod of Instance %d, which the scheduler did not take, was replaced or taken out of rotation", rep, idx)
+						}
+					}
+				}
+				h.holdPlacement(noRoom)
+				h.preempt(victimIdx, "")
+				h.cacheLagOnce = tc.cacheLag
+				taken := h.clk.Now()
+				passes := 0
+				replaced := func() bool {
+					pods := h.podsOf(victimIdx)
+					return len(pods) == 1 && pods[0].UID != victim.UID
+				}
+				if !h.runWithInvariant(4, replaced, func() { untouched(); passes++ }) {
+					h.dumpState(fmt.Sprintf("repetition %d: waiting for the replacement", rep))
+					t.Fatalf("repetition %d: no replacement pod for Instance %d within four passes of the loss", rep, victimIdx)
+				}
+				t.Logf("repetition %d: Instance %d rebuilt its pod on pass %d, %s after the loss", rep, victimIdx, passes-1, h.clk.Since(taken))
+				replacement := h.podOf(victimIdx, "")
+				if replacement.Name != victim.Name {
+					t.Fatalf("repetition %d: the replacement is %s, want the stable name %s", rep, replacement.Name, victim.Name)
+				}
+				saysWhy := func() bool {
+					s := h.instance(victimIdx)
+					return s != nil && s.Operation != nil && s.Operation.Waiting == workloadtypes.WaitingReasonUnschedulable
+				}
+				if !h.runWithInvariant(2, saysWhy, untouched) {
+					h.dumpState(fmt.Sprintf("repetition %d: waiting for the reason", rep))
+					t.Fatalf("repetition %d: the row of Instance %d does not report the Unschedulable wait within two passes of the scheduler's verdict: %+v", rep, victimIdx, h.instance(victimIdx))
+				}
+				t.Logf("repetition %d: Instance %d reports the Unschedulable wait %s after the loss", rep, victimIdx, h.clk.Since(taken))
+				// The kubelet reported the preempted runner's exit before the
+				// pod left, so the row keeps that record through the wait for
+				// the retry schedule; the token names the wait.
+				if s := h.instance(victimIdx); s.LastFailure == nil || s.LastFailure.PodName != replacement.Name || s.LastFailure.ContainerName == "" {
+					t.Fatalf("repetition %d: the row's record does not keep the preempted runner's exit under the held pod's name: %+v", rep, s.LastFailure)
+				}
+				h.runWithInvariant(4, func() bool { return false }, func() {
+					untouched()
+					if !saysWhy() {
+						t.Fatalf("repetition %d: the wait left the row while the cluster still had no room: %+v", rep, h.instance(victimIdx))
+					}
+				})
+				h.releasePlacement()
+				if !h.runWithInvariant(10, func() bool { return h.settledOn(h.revV1, tc.replicas) }, untouched) {
+					h.dumpState(fmt.Sprintf("repetition %d: after the room came back", rep))
+					t.Fatalf("repetition %d: the Instance did not return Ready once its pod could be placed", rep)
+				}
+				if pods := h.podsOf(victimIdx); len(pods) != 1 || pods[0].UID != replacement.UID {
+					t.Fatalf("repetition %d: the pod that was placed is not the one that waited", rep)
+				}
+				if tc.policy != nil && *tc.policy == workloadtypes.RestartPolicyRecreateInstance {
+					repairs++
+				}
+				if h.restartEvents() != repairs {
+					t.Fatalf("repetition %d: %d repair(s) opened, want %d; events = %v", rep, h.restartEvents(), repairs, h.events)
+				}
+			}
+			if len(h.failedWarnings) != 0 {
+				t.Fatalf("InstanceFailed warnings raised across two preemptions inside the grace: %v", h.failedWarnings)
+			}
+		})
+	}
+}
+
+// A pod of a settled Instance is pointed at an image that dies at every
+// start, the break a running service takes with nothing pushed. The
+// Instance serves nothing from that moment and the restart pass owns it
+// under either policy: the pod outlived its stuck-pod grace long ago, so
+// the pass that first reads the crash records one RestartTriggered event
+// naming the Instance, before the rebuild has landed, and the Instance
+// then comes back with a new pod, Ready and serving on the revision it was
+// running. The repair opens under an unavailability budget of zero
+// because the broken set serves nothing, the three peers keep the very
+// pods they served through, no pod beyond the replica count ever exists,
+// and nothing is held, escalated or counted on a ladder.
+func TestIdleBreak_RepairIsRecordedBeforeTheInstanceReturns(t *testing.T) {
+	for _, policy := range []workloadtypes.RestartPolicy{workloadtypes.RestartPolicyRecreateInstance, workloadtypes.RestartPolicyNone} {
+		t.Run(string(policy), func(t *testing.T) {
+			const replicas, victim = int32(4), int32(3)
+			h := newRecoveryHarnessFor(t, false, constants.MainContainerName)
+			h.recorder = record.NewFakeRecorder(256)
+			h.replicas = replicas
+			policy := policy
+			h.lifecycle.RestartPolicy = &policy
+			h.useRollingBudget(workloadtypes.UpdateStrategySurgeThenDrain)
+			if !h.run(40, func() bool { return h.settledOn(h.revV1, replicas) }) {
+				h.dumpState("initial create")
+				t.Fatalf("the Component never settled on v1 with %d Instances", replicas)
+			}
+			h.settle(3)
+			peers := map[int32]types.UID{}
+			for idx := int32(0); idx < victim; idx++ {
+				peers[idx] = h.podOf(idx, "").UID
+			}
+			broken := h.podOf(victim, "").UID
+			before := h.instance(victim).Incarnation
+			h.events = nil
+			h.crashPod(victim, "", crashStartImage)
+
+			untouched := func() {
+				t.Helper()
+				if n := len(h.livePods()); n > int(replicas) {
+					h.dumpState("surge")
+					t.Fatalf("%d live pods, want at most %d: a repair rebuilds in place and never surges", n, replicas)
+				}
+				for idx, uid := range peers {
+					if pods := h.podsOf(idx); len(pods) != 1 || pods[0].UID != uid || !h.instanceInRotation(idx) {
+						h.dumpState("peer touched")
+						t.Fatalf("Instance %d, which the break did not hit, lost the pod it served through or left rotation", idx)
+					}
+				}
+				if h.sawEvent(workloadtypes.EventReasonRepairHeld) || len(h.failedWarnings) != 0 || len(h.blocks) != 0 {
+					t.Fatalf("a steady-state break was held, escalated or counted: events=%v failed=%v blocks=%+v", h.events, h.failedWarnings, h.blocks)
+				}
+			}
+			passes := 0
+			recorded := func() bool { return h.restartEvents() > 0 }
+			if !h.runWithInvariant(6, recorded, func() { untouched(); passes++ }) {
+				h.dumpState("no record")
+				t.Fatalf("no RestartTriggered event within six passes of the break; events = %v", h.events)
+			}
+			// The pod parked long after its grace, so the first pass that
+			// reads the crash is the one that records the repair, and the
+			// record comes before any rebuild.
+			if passes != 2 {
+				t.Fatalf("the repair was recorded on pass %d after the break, want the first", passes-1)
+			}
+			if h.repairedAbove(victim, before) {
+				t.Fatalf("the Instance was rebuilt before its repair was recorded")
+			}
+			key := workloadtypes.InstanceKey(workloadtypes.ComponentEngine, victim)
+			for _, e := range h.events {
+				if strings.Contains(e, string(workloadtypes.EventReasonRestartTriggered)) && !strings.Contains(e, key) {
+					t.Fatalf("the repair's record names another Instance: %q", e)
+				}
+			}
+
+			returned := func() bool { return h.repairedAbove(victim, before) && h.settledOn(h.revV1, replicas) }
+			if !h.runWithInvariant(20, returned, untouched) {
+				h.dumpState("never returned")
+				t.Fatalf("the broken Instance never came back Ready and serving on its running revision: %+v", h.instance(victim))
+			}
+			if pod := h.podOf(victim, ""); pod.UID == broken || !h.instanceInRotation(victim) {
+				t.Fatalf("the Instance returned through the pod the break hit, or out of rotation")
+			}
+			h.requirePodsRender(victim, h.revV1, goodImage)
+			if h.restartEvents() != 1 || !h.sawEvent(workloadtypes.EventReasonRestartCompleted) {
+				t.Fatalf("want one RestartTriggered and a RestartCompleted for the one repair; events = %v", h.events)
+			}
+		})
+	}
+}
+
+// The only Instance of a Component rolls in place while a break lands on
+// its pod: the running image is swapped for one that dies at every start,
+// in the same moment the fix is pushed or right after the roll's own
+// patch. The roll owns the Instance either way. No repair is recorded,
+// the roll lands the fixed image on the same pod, re-issuing its patch
+// over a swap that came second, one pod is alive throughout, and the
+// Instance ends Ready and serving on the fixed revision with nothing
+// escalated or counted on a ladder.
+func TestSingleInstanceInPlaceRoll_BrokenAtTheBump_EndsServingWithNoRepair(t *testing.T) {
+	for _, policy := range []workloadtypes.RestartPolicy{workloadtypes.RestartPolicyNone, workloadtypes.RestartPolicyRecreateInstance} {
+		for _, afterPatch := range []bool{false, true} {
+			name := string(policy) + "/break with the push"
+			if afterPatch {
+				name = string(policy) + "/break after the roll's patch"
+			}
+			t.Run(name, func(t *testing.T) {
+				h := offTargetCrashHarness(t, false, workloadtypes.UpdateStrategyInPlaceIfPossible, 0, 1, policy, 1)
+				h.settle(3)
+				pod := h.podOf(0, "")
+				h.events = nil
+				h.setTarget(h.revFixed, fixedImage)
+				if afterPatch {
+					patched := func() bool {
+						p := h.podOf(0, "")
+						return p.Spec.Containers[0].Image == fixedImage && h.instance(0).Operation != nil
+					}
+					if !h.run(4, patched) {
+						h.dumpState("no patch")
+						t.Fatalf("the roll never patched the pod's image in place: %+v", h.instance(0))
+					}
+				}
+				h.crashPod(0, "", crashStartImage)
+
+				onePodNoRepair := func() {
+					t.Helper()
+					if n := len(h.livePods()); n != 1 {
+						h.dumpState("pod count")
+						t.Fatalf("%d live pods, want the one the roll patches in place", n)
+					}
+					if h.sawEvent(workloadtypes.EventReasonRestartTriggered) {
+						t.Fatalf("a repair was recorded for an Instance the roll owns: %v", h.events)
+					}
+					if len(h.failedWarnings) != 0 || len(h.blocks) != 0 {
+						t.Fatalf("the roll escalated or counted the break: failed=%v blocks=%+v", h.failedWarnings, h.blocks)
+					}
+				}
+				served := func() bool { return h.settledOn(h.revFixed, 1) && h.instanceInRotation(0) }
+				if !h.runWithInvariant(20, served, onePodNoRepair) {
+					h.dumpState("never served")
+					t.Fatalf("the only Instance never ended Ready and serving on the fixed revision: %+v", h.instance(0))
+				}
+				if got := h.podOf(0, ""); got.UID != pod.UID {
+					t.Fatalf("the roll replaced the pod instead of patching it in place")
+				}
+				h.requirePodsRender(0, h.revFixed, fixedImage)
 			})
 		}
 	}
@@ -9026,7 +10038,7 @@ func TestMoveRequestedAsAGangPushLands_FollowsTheInstanceAndCompletes(t *testing
 			if story.grouped {
 				// A rolling group lets one surge of its Components be in
 				// flight at a time.
-				h.gate = func(_ workloadtypes.UpdateStrategyType, inFlightSurge, _ int32) (bool, workloadtypes.RolloutHoldGate, string) {
+				h.gate = func(_ string, _ workloadtypes.UpdateStrategyType, inFlightSurge, _ int32) (bool, workloadtypes.RolloutHoldGate, string) {
 					if inFlightSurge > 0 {
 						return false, workloadtypes.RolloutHoldGateBudget, "group surge budget 1 exhausted"
 					}
@@ -10382,6 +11394,260 @@ func TestCrashAfterPromotion_EverySetDiesOnceAfterReady_LadderSaysWhy(t *testing
 	}
 }
 
+// The kubelet can be read between its writes: the runner's new run is on
+// the container status and the run that ended is not on it yet. The
+// policy's first rebuild of a promoted set read that way must still
+// leave the row a failure record naming the runner, or the rebuilt
+// set's own death reads as a first death again and the policy rebuilds
+// it at once, outside the ladder, with no hold naming the Instance.
+// Three single-pod Instances are pushed onto a revision whose runner
+// exits twenty seconds after every promotion; the first death of each
+// Instance, or every death, is read before the kubelet published the
+// termination. Every rebuild the policy opens records the runner on the
+// row; once an Instance's rebuilt set has died, every further
+// crash-revision pod of it is built only after the revision's retry
+// record counted that death and a hold named the Instance while its row
+// waited (the ladder's hold as the attempt's rebuild, or the roll's
+// budget or floor hold as an Instance not serving); the ladder holds
+// after its attempts and nothing is built past the hold.
+func TestCrashAfterPromotion_RebuildReadBeforeTheExitIsPublished_LadderNamesTheRebuiltSet(t *testing.T) {
+	cases := []struct {
+		name     string
+		strategy workloadtypes.UpdateStrategyType
+		// lagsFor is how many of an Instance's deaths the kubelet model
+		// first reports with the new run's start alone.
+		lagsFor int
+	}{
+		{name: "three single-pod Instances under RecreatePod maxUnavailable 1, the first death of each read early", strategy: workloadtypes.UpdateStrategyRecreatePod, lagsFor: 1},
+		{name: "three single-pod Instances under RecreatePod maxUnavailable 1, every death read early", strategy: workloadtypes.UpdateStrategyRecreatePod, lagsFor: math.MaxInt32},
+		{name: "three single-pod Instances under SurgeThenDrain maxSurge 1, the first death of each read early", strategy: workloadtypes.UpdateStrategySurgeThenDrain, lagsFor: 1},
+	}
+	const replicas = int32(3)
+	const attempts = int32(3)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newRecoveryHarnessFor(t, false, constants.MainContainerName)
+			h.recorder = record.NewFakeRecorder(512)
+			h.replicas = replicas
+			rebuild := workloadtypes.RestartPolicyRecreateInstance
+			h.lifecycle.RestartPolicy = &rebuild
+			h.stepFloor = 5 * time.Second
+			h.stepCap = h.stepFloor
+			h.kubeletLag = time.Second
+			// Every set dies twenty seconds after its Instance entered Ready,
+			// inside the stuck-pod grace that bounds the crash window.
+			h.crashAfterServed = 4
+			h.crashEverySet = true
+			h.terminationLagsFor = tc.lagsFor
+			h.retryPolicy = &workloadtypes.RetryPolicy{MaxAttempts: attempts, InitialDelay: 20 * time.Second, MaxDelay: time.Minute, Multiplier: 2}
+			h.useRollingBudget(tc.strategy)
+			if !h.run(200, func() bool { return h.settledOn(h.revV1, replicas) }) {
+				h.dumpState("initial create")
+				t.Fatalf("initial create never settled on v1 for %d instances", replicas)
+			}
+
+			revCrash := h.crashRevision(crashOnceAfterServingImage)
+			seen := map[types.UID]struct{}{}
+			// setsSeen records, per Instance, every crash-revision pod UID
+			// any pass observed.
+			setsSeen := map[int32]map[types.UID]struct{}{}
+			// setsAtLoop is, per Instance, how many of its sets had been
+			// seen when its rebuilt set died; a further set is the
+			// ladder's to admit and name first.
+			setsAtLoop := map[int32]int{}
+			// named marks the Instances the status named while their row
+			// waited after their rebuilt set died, beside the revision's
+			// retry record: the ladder's hold as the attempt's rebuild, or
+			// the roll's budget or floor hold as an Instance not serving.
+			named := map[int32]bool{}
+			holds := len(h.holds)
+			deaths, heldAt, pass := 0, -1, 0
+			var uidsAtHeld int
+			h.runWithInvariant(400, func() bool { return heldAt >= 0 && pass >= heldAt+12 }, func() {
+				pass++
+				h.trackPodsOnImage(crashOnceAfterServingImage, seen)()
+				rows := map[int32]workloadtypes.InstanceStatus{}
+				for _, s := range h.irStatuses() {
+					rows[s.Index] = s
+					if s.Phase == workloadtypes.InstancePhaseRestarting && s.RunningRevision == revCrash.Name &&
+						(s.LastFailure == nil || s.LastFailure.ContainerName != constants.MainContainerName) {
+						h.dumpState("rebuild without a record")
+						t.Fatalf("Instance %d is being rebuilt on %s with no failure record naming its runner (%+v); the rebuilt set's death could not be read as the set's", s.Index, revCrash.Name, s.LastFailure)
+					}
+				}
+				for _, pod := range h.livePods() {
+					idx, ok := query.InstanceIdxFromLabels(pod)
+					if !ok || pod.Spec.Containers[0].Image != crashOnceAfterServingImage {
+						continue
+					}
+					if setsSeen[idx] == nil {
+						setsSeen[idx] = map[types.UID]struct{}{}
+					}
+					setsSeen[idx][pod.UID] = struct{}{}
+				}
+				deaths = 0
+				for idx, n := range h.crashedInstances {
+					deaths = max(deaths, n)
+					if n >= 2 {
+						if _, noted := setsAtLoop[idx]; !noted {
+							setsAtLoop[idx] = len(setsSeen[idx])
+						}
+					}
+				}
+				for ; holds < len(h.holds); holds++ {
+					hold := h.holds[holds]
+					if h.findBlock(revCrash.Name) == nil {
+						continue
+					}
+					for idx := range setsAtLoop {
+						if rows[idx].Phase == workloadtypes.InstancePhaseRestarting {
+							continue
+						}
+						if holdNamesInstance(&hold, idx) || slices.Contains(namedRebuilds(hold.Reason), idx) {
+							named[idx] = true
+						}
+					}
+				}
+				for idx, at := range setsAtLoop {
+					if len(setsSeen[idx]) > at && !named[idx] {
+						h.dumpState("rebuilt unannounced")
+						t.Fatalf("Instance %d got a further crash-revision pod after its rebuilt set died (%d pods seen, %d at that death) before the status named it beside the revision's retry record; holds=%v", idx, len(setsSeen[idx]), at, h.holds)
+					}
+				}
+				if len(h.heldWarnings) > 0 && heldAt < 0 {
+					heldAt, uidsAtHeld = pass, len(seen)
+				}
+				if heldAt >= 0 && len(seen) > uidsAtHeld {
+					h.dumpState("rebuilt after the hold")
+					t.Fatalf("a crash-revision pod was created after the ladder held (%d pods, %d at the hold)", len(seen), uidsAtHeld)
+				}
+				if b := h.findBlock(revCrash.Name); b != nil && b.AttemptsStarted > attempts {
+					t.Fatalf("the ladder counted %d attempts, bound %d", b.AttemptsStarted, attempts)
+				}
+			})
+			if deaths < 2 {
+				h.dumpState("no loop")
+				t.Fatalf("the story did not run: %d crash-revision pod(s) died", deaths)
+			}
+			if heldAt < 0 {
+				h.dumpState("never held")
+				t.Fatalf("the ladder never held %s (deaths=%d, pods=%d, blocks=%+v)", revCrash.Name, deaths, len(seen), h.blocks)
+			}
+			if b := h.findBlock(revCrash.Name); b == nil || b.State != workloadtypes.RetryBlockHeld || b.AttemptsStarted != attempts {
+				t.Fatalf("the held ladder must record %d attempts, got %+v", attempts, b)
+			}
+		})
+	}
+}
+
+// A canary Instance under RecreateInstanceOnPodRestart whose runner exits
+// after it served, with neither minReadySeconds nor the unready-pod grace
+// configured. Eight single-pod Instances under RecreatePod at
+// maxUnavailable 1; a partition of seven keeps Instances 0 to 6 on the
+// stable revision and Instance 7 rolls onto a revision whose runner exits
+// after every set has served. The first death after Ready is the policy's
+// one free rebuild. With no window configured nothing proves a rebuilt
+// set by time, so every further death is the revision's own failure: the
+// retry record counts attempts 1, 2 and 3, each rebuild waits for the
+// backoff, the record holds with a RetryHeld warning, the row reads
+// Failed with an InstanceFailed warning while the set is down, no pod is
+// built past the hold, and the seven held Instances never leave the
+// stable revision.
+func TestCrashAfterPromotion_NoReadinessWindowConfigured_RebuiltSetDeathsCountUntilHeld(t *testing.T) {
+	const (
+		replicas = int32(8)
+		canary   = replicas - 1
+		attempts = int32(3)
+	)
+	h := newRecoveryHarnessFor(t, false, constants.MainContainerName)
+	h.recorder = record.NewFakeRecorder(512)
+	h.replicas = replicas
+	rebuild := workloadtypes.RestartPolicyRecreateInstance
+	h.lifecycle.RestartPolicy = &rebuild
+	// Neither readiness knob is configured, so the proven window is zero.
+	h.stuckGrace = 0
+	h.minReadySeconds = 0
+	h.stepCap = 5 * time.Second
+	h.kubeletLag = time.Second
+	// Every set serves twenty seconds after its Instance entered Ready,
+	// then its runner exits.
+	h.crashAfterServed = 4
+	h.crashEverySet = true
+	h.retryPolicy = &workloadtypes.RetryPolicy{MaxAttempts: attempts, InitialDelay: 20 * time.Second, MaxDelay: time.Minute, Multiplier: 2}
+	h.useRollingBudget(workloadtypes.UpdateStrategyRecreatePod)
+	if !h.run(200, func() bool { return h.settledOn(h.revV1, replicas) }) {
+		h.dumpState("initial create")
+		t.Fatalf("initial create never settled on v1 for %d instances", replicas)
+	}
+
+	// The canary step: the partition keeps Instances 0 to 6 on the stable
+	// revision and Instance 7 rolls onto the crashing revision.
+	partition := canary
+	h.lifecycle.UpdateStrategy.RollingUpdate.Partition = &partition
+	revCrash := h.crashRevision(crashOnceAfterServingImage)
+
+	seen := map[types.UID]struct{}{}
+	deaths, heldAt, pass := 0, -1, 0
+	readFailed := false
+	var uidsAtHeld int
+	h.runWithInvariant(400, func() bool { return heldAt >= 0 && pass >= heldAt+12 }, func() {
+		pass++
+		h.trackPodsOnImage(crashOnceAfterServingImage, seen)()
+		deaths = h.crashedInstances[canary]
+		for _, s := range h.irStatuses() {
+			if s.Index == canary {
+				if s.Phase == workloadtypes.InstancePhaseFailed {
+					readFailed = true
+				}
+				continue
+			}
+			if s.RunningRevision != h.revV1.Name || s.Operation != nil {
+				h.dumpState("partition broken")
+				t.Fatalf("Instance %d left the stable revision under the partition: %+v", s.Index, s)
+			}
+		}
+		if len(h.heldWarnings) > 0 && heldAt < 0 {
+			heldAt, uidsAtHeld = pass, len(seen)
+		}
+		if heldAt >= 0 && len(seen) > uidsAtHeld {
+			h.dumpState("rebuilt after the hold")
+			t.Fatalf("a crash-revision pod was created after the record held (%d pods, %d at the hold)", len(seen), uidsAtHeld)
+		}
+		b := h.findBlock(revCrash.Name)
+		if b != nil && b.AttemptsStarted > attempts {
+			t.Fatalf("the retry record counted %d attempts, bound %d", b.AttemptsStarted, attempts)
+		}
+		// The first set, the policy's free rebuild and one rebuild per
+		// counted attempt short of the last: a further pod means a death
+		// the record did not count.
+		if heldAt < 0 && len(seen) > int(attempts)+1 {
+			h.dumpState("rebuilt without a count")
+			t.Fatalf("Instance %d got pod %d of %s after %d deaths with the retry record reading %+v: a rebuilt set's death is not counted while neither readiness knob is configured", canary, len(seen), revCrash.Name, deaths, b)
+		}
+	})
+	if heldAt < 0 {
+		h.dumpState("never held")
+		t.Fatalf("the retry record never held %s (deaths=%d, pods=%d, blocks=%+v)", revCrash.Name, deaths, len(seen), h.blocks)
+	}
+	if b := h.findBlock(revCrash.Name); b == nil || b.State != workloadtypes.RetryBlockHeld || b.AttemptsStarted != attempts {
+		t.Fatalf("the held record must count %d attempts, got %+v", attempts, b)
+	}
+	if !strings.Contains(h.heldWarnings[0], revCrash.Name) {
+		t.Fatalf("the RetryHeld warning must name %s, got %q", revCrash.Name, h.heldWarnings[0])
+	}
+	if deaths != int(attempts)+1 || len(seen) != int(attempts)+1 {
+		t.Fatalf("the story is one free rebuild and one rebuild per counted attempt but the last: want %d deaths and %d pods, got %d and %d", attempts+1, attempts+1, deaths, len(seen))
+	}
+	if !readFailed || len(h.failedWarnings) == 0 {
+		h.dumpState("no Failed row")
+		t.Fatalf("the held row must read Failed with an InstanceFailed warning while its set is down (failed warnings=%v)", h.failedWarnings)
+	}
+	if stable := h.instancesServingOn(goodImage); stable != int(canary) {
+		h.dumpState("stable side")
+		t.Fatalf("%d Instances serve the stable revision, want %d under the partition", stable, canary)
+	}
+}
+
 // A promoted pod that dies under load and comes back between restarts:
 // once the ladder holds, the row reads Failed while the pod is down and
 // Ready naming the loop while it serves, and leaves that state on its own.
@@ -10649,7 +11915,7 @@ func TestRollbackOverSurge_ResumedManagerClosesTheAbandonedSurge(t *testing.T) {
 	// Deletes linger as Terminating until their grace elapses, as on a
 	// cluster; the abandoned replacement goes on the bounded grace.
 	h.podGrace = 10 * time.Minute
-	h.abandonGrace = 30 * time.Second
+	h.retiredReplacementGrace = 30 * time.Second
 	h.useRollingBudget(workloadtypes.UpdateStrategySurgeThenDrain)
 	if !h.run(30, func() bool { return h.settledOn(h.revV1, replicas) }) {
 		h.dumpState("initial create")
@@ -10716,7 +11982,7 @@ func TestRollbackOverGangSurge_ResumedManagerKeepsTheRolloutOpenUntilTheReplacem
 	// Deletes linger as Terminating until their grace elapses, as on a
 	// cluster; the abandoned replacement goes on the bounded grace.
 	h.podGrace = 10 * time.Minute
-	h.abandonGrace = 30 * time.Second
+	h.retiredReplacementGrace = 30 * time.Second
 	h.useRollingBudget(workloadtypes.UpdateStrategySurgeThenDrain)
 	if !h.run(40, func() bool { return h.settledOn(h.revV1, replicas) }) {
 		h.dumpState("initial create")
@@ -10741,7 +12007,7 @@ func TestRollbackOverGangSurge_ResumedManagerKeepsTheRolloutOpenUntilTheReplacem
 	h.setTarget(h.revV1, goodImage)
 	rollup, withdrawn := h.currentRevision, ""
 	readRollup := func() string {
-		next := status.CurrentRevisionFor(h.irStatuses(), rollup, h.target.Name, h.blocks, withdrawn)
+		next := status.CurrentRevisionFor(h.irStatuses(), rollup, h.target.Name, h.blocks, withdrawn, h.podRevisions())
 		withdrawn = status.WithdrawnRevisionAfter(withdrawn, rollup, next, h.target.Name)
 		rollup = next
 		return rollup
@@ -11400,18 +12666,22 @@ func drainFakeEvents(rec *record.FakeRecorder) []string {
 // the roll waits to take a parked gang, the gang serving again between
 // crashes returns its row to Ready in the pass that observes every member
 // serving, whichever pass each member came back in; the roll then takes
-// the gang as the serving Instance it is.
+// the gang as the serving Instance it is. The parked gang keeps serving
+// through its leader while its worker is down, so it waits its turn
+// behind the budget; a parked gang whose leader is down serves nothing
+// and is taken first instead
+// (TestCrashLoopAfterPromotion_ParkedGangWithItsLeaderDownIsRebuiltFirst).
 func TestCrashLoopAfterPromotion_ParkedGangFollowsItsSetThroughTheCorrectedRoll(t *testing.T) {
 	const replicas = 2
 	h := newRecoveryHarnessFor(t, true, constants.MainContainerName)
 	h.replicas = replicas
 	repair := workloadtypes.RestartPolicyRecreateInstance
 	h.lifecycle.RestartPolicy = &repair
-	// Only the leader dies, a few passes after it serves and inside a
-	// grace that outlives every pod; the worker stays up, so the gang is
-	// whole again in the pass its leader comes back.
+	// Only the worker dies, a few passes after it serves and inside a
+	// grace that outlives every pod; the leader stays up, so the gang is
+	// whole again in the pass its worker comes back.
 	h.crashAfterServed = 4
-	h.crashLeaderOnly = true
+	h.crashWorkerOnly = true
 	h.stuckGrace = 10 * time.Minute
 	h.stepCap = recoveryStepFloor
 	h.useRollingBudget(workloadtypes.UpdateStrategyRecreatePod)
@@ -11435,7 +12705,7 @@ func TestCrashLoopAfterPromotion_ParkedGangFollowsItsSetThroughTheCorrectedRoll(
 		}
 		return true
 	}
-	// The ladder holds and the second gang is parked with its leader down
+	// The ladder holds and the second gang is parked with its worker down
 	// while the first is settled on the crashing revision: the push lands
 	// on that shape, so the roll takes the first gang and the parked one
 	// waits behind the unavailability budget.
@@ -11473,6 +12743,97 @@ func TestCrashLoopAfterPromotion_ParkedGangFollowsItsSetThroughTheCorrectedRoll(
 	if !servedWhileParkedBehind {
 		h.dumpState("shape")
 		t.Fatalf("the parked gang never served again while the roll was on the other Instance; the story did not exercise the unpark")
+	}
+}
+
+// A parked gang whose leader is down serves nothing, however many workers
+// keep the gate: its row publishes no serving pod while the leader is
+// down. Once the corrected revision is pushed, the roll rebuilds that gang
+// first, without consulting the coordination gate for an outage the gate
+// already counts, and the gang that still serves follows within the
+// budget. Counting the gang's Ready worker as serving would put the gang's
+// own outage against its rebuild and, under maxUnavailable 1, deny the
+// only start that can end it on every pass.
+func TestCrashLoopAfterPromotion_ParkedGangWithItsLeaderDownIsRebuiltFirst(t *testing.T) {
+	const replicas = 2
+	h := newRecoveryHarnessFor(t, true, constants.MainContainerName)
+	h.replicas = replicas
+	repair := workloadtypes.RestartPolicyRecreateInstance
+	h.lifecycle.RestartPolicy = &repair
+	// Only the leader dies, a few passes after it serves and inside a
+	// grace that outlives every pod; the worker stays up and keeps the
+	// gate, so the gang holds a pod that is Ready while nobody can reach it.
+	h.crashAfterServed = 4
+	h.crashLeaderOnly = true
+	h.stuckGrace = 10 * time.Minute
+	h.stepCap = recoveryStepFloor
+	h.useRollingBudget(workloadtypes.UpdateStrategyRecreatePod)
+	if !h.run(60, func() bool { return h.settledOn(h.revV1, replicas) }) {
+		h.dumpState("initial create")
+		t.Fatalf("initial create never settled on v1 for %d gangs", replicas)
+	}
+
+	revCrash := h.crashRevision(flapAfterServingImage)
+	member := func(idx int32, runner string) *corev1.Pod {
+		for _, pod := range h.podsOf(idx) {
+			if pod.Labels[query.LabelRunner] == runner {
+				return pod
+			}
+		}
+		return nil
+	}
+	memberServes := func(idx int32, runner string) bool {
+		pod := member(idx, runner)
+		return pod != nil && podreadiness.IsContainersReady(pod) && podreadiness.IsServing(pod)
+	}
+	// The ladder holds, the first gang is settled on the crashing revision
+	// and the second is parked with its leader down and its worker serving.
+	parkedDark := func() bool {
+		first, second := h.instance(0), h.instance(1)
+		return h.heldOn(revCrash.Name) && first != nil && second != nil &&
+			first.RunningRevision == revCrash.Name && first.Operation == nil &&
+			second.RunningRevision == revCrash.Name && second.Operation == nil &&
+			second.Phase == workloadtypes.InstancePhaseFailed &&
+			!memberServes(1, workloadtypes.RunnerLeader) && memberServes(1, workloadtypes.RunnerWorker)
+	}
+	if !h.run(160, parkedDark) {
+		h.dumpState("parked gang")
+		t.Fatalf("the story never reached a held ladder with the second gang parked on %s with its leader down (held=%v, rows=%+v)", revCrash.Name, h.heldOn(revCrash.Name), h.irStatuses())
+	}
+	// From here the leader stays down: the gang keeps a Ready worker and
+	// nobody can reach it.
+	h.keepRunnerDown(member(1, workloadtypes.RunnerLeader))
+	h.step()
+	if !parkedDark() {
+		h.dumpState("leader down")
+		t.Fatalf("the parked gang did not keep its shape once its leader stayed down (rows=%+v)", h.irStatuses())
+	}
+	rows, _ := h.publication()
+	if got := h.publishedRow(rows, 1).ServingPodCount; got != 0 {
+		t.Fatalf("the parked gang publishes %d serving pod(s) with its leader down and its worker Ready; want 0: an Instance nobody can reach serves nothing", got)
+	}
+
+	// The coordination gate reads the Component's serving count: the parked
+	// gang is the one unavailable Instance maxUnavailable 1 allows.
+	consults := 0
+	h.gate = coordinationUnavailabilityGate(h, replicas, 1, &consults)
+	h.setTarget(h.revFixed, fixedImage)
+	updatingTo := func(idx int32, rev string) bool {
+		row := h.instance(idx)
+		return row != nil && row.Operation != nil && row.Operation.Type == workloadtypes.InstanceOperationUpdate && row.Operation.TargetRevision == rev
+	}
+	if !h.runWithInvariant(4, func() bool { return updatingTo(1, h.revFixed.Name) }, func() {
+		if first := h.instance(0); first != nil && first.Operation != nil && !updatingTo(1, h.revFixed.Name) {
+			h.dumpState("order")
+			t.Fatalf("the gang that still serves started its roll ahead of the gang nobody can reach: %+v", first.Operation)
+		}
+	}) {
+		h.dumpState("parked gang not rebuilt")
+		t.Fatalf("the parked gang with its leader down was not rebuilt in the first passes of the corrected roll: its own outage was counted against its rebuild (last hold %+v, rows=%+v)", h.lastHold(), h.irStatuses())
+	}
+	if !h.run(200, func() bool { return h.settledOn(h.revFixed, replicas) }) {
+		h.dumpState("corrected revision")
+		t.Fatalf("the corrected revision did not land on every gang")
 	}
 }
 
@@ -13898,9 +15259,10 @@ func (h *recoveryHarness) requireFreshWindow(before workloadtypes.InstanceOperat
 // The whole replacement gang is deleted after the hand-over, while the
 // source is out of rotation behind it. The loss closes the attempt: the
 // source is Failed with its surge kept and the pinned revision's ladder
-// counts the attempt. Once the ladder admits the next one, the gang is
-// rebuilt under a fresh deadline with the retry counted on the operation,
-// and the hand-over finishes on the pinned revision.
+// counts the attempt. The next pass rebuilds the gang at once under a
+// fresh deadline with the retry counted on the operation, without waiting
+// out the ladder's backoff, and the hand-over finishes on the pinned
+// revision.
 func TestGangSurgeAfterHandover_ReplacementLostIsRebuiltUnderAFreshDeadlineAndCounted(t *testing.T) {
 	h, surgeIdx := gangSurgeHandedOver(t)
 	before := *h.instance(0).Operation
@@ -13911,7 +15273,7 @@ func TestGangSurgeAfterHandover_ReplacementLostIsRebuiltUnderAFreshDeadlineAndCo
 
 	if !h.run(10, h.rearmedRebuild(1)) {
 		h.dumpState("never re-armed")
-		t.Fatalf("the ladder's backoff elapsed and the replacement was not rebuilt")
+		t.Fatalf("the replacement was not rebuilt after the loss")
 	}
 	h.requireFreshWindow(before)
 	if got := len(h.podsOf(surgeIdx)); got != 2 {
@@ -13929,9 +15291,8 @@ func TestGangSurgeAfterHandover_ReplacementLostIsRebuiltUnderAFreshDeadlineAndCo
 
 // One member of the replacement gang is deleted after the hand-over. The
 // loss closes the attempt as a whole loss does and counts it; the surviving
-// member keeps serving; once the ladder admits the next attempt the member
-// is rebuilt under a fresh deadline, and the hand-over finishes on the
-// pinned revision.
+// member keeps serving; the next pass rebuilds the member at once under a
+// fresh deadline, and the hand-over finishes on the pinned revision.
 func TestGangSurgeAfterHandover_LostMemberIsRebuiltUnderAFreshDeadlineAndCounted(t *testing.T) {
 	h, surgeIdx := gangSurgeHandedOver(t)
 	before := *h.instance(0).Operation
@@ -13946,7 +15307,7 @@ func TestGangSurgeAfterHandover_LostMemberIsRebuiltUnderAFreshDeadlineAndCounted
 
 	if !h.run(10, h.rearmedRebuild(1)) {
 		h.dumpState("never re-armed")
-		t.Fatalf("the ladder's backoff elapsed and the lost member was not rebuilt")
+		t.Fatalf("the lost member was not rebuilt after the loss")
 	}
 	h.requireFreshWindow(before)
 	pods := h.podsOf(surgeIdx)
@@ -14412,5 +15773,300 @@ func TestGangVerdict_CorrectiveRevisionResumesTheFailedCreate(t *testing.T) {
 	}
 	if pods := h.podsOf(0); len(pods) != 2 {
 		t.Errorf("the gang was not rebuilt at its own index: %d pod(s) at index 0", len(pods))
+	}
+}
+
+// surgeHandedOver drives a single-pod surge to its drain step and returns
+// the harness there: the replacement serves and the source is out of
+// rotation, draining, with both pods standing.
+func surgeHandedOver(t *testing.T) *recoveryHarness {
+	t.Helper()
+	h := newRecoveryHarness(t, false)
+	h.routed = true
+	h.recorder = record.NewFakeRecorder(256)
+	h.useRollingBudget(workloadtypes.UpdateStrategySurgeThenDrain)
+	h.driveToReadyOnV1()
+	h.lifecycle.InstanceReadyTimeout = &metav1.Duration{Duration: 4 * time.Minute}
+	h.setTarget(h.revFixed, fixedImage)
+	handedOver := func() bool {
+		s := h.instance(0)
+		return s != nil && s.Operation != nil && s.Operation.Step == workloadtypes.UpdateStepSurgeDrain && len(h.podsOf(0)) == 2
+	}
+	if !h.run(20, handedOver) {
+		h.dumpState("hand-over")
+		t.Fatalf("the surge never took the source out of rotation behind a serving replacement")
+	}
+	for _, pod := range h.podsOf(0) {
+		if replacement := pod.Spec.Containers[0].Image == fixedImage; replacement != podreadiness.IsServing(pod) {
+			t.Fatalf("pod %s serving=%v after the hand-over; the replacement serves and the source is out of rotation", pod.Name, !replacement)
+		}
+	}
+	return h
+}
+
+// losePod deletes one live pod, the way a node or an operator takes it
+// away.
+func (h *recoveryHarness) losePod(pod *corev1.Pod) {
+	h.t.Helper()
+	if err := h.c.Delete(h.ctx, pod); err != nil {
+		h.t.Fatalf("delete pod %s: %v", pod.Name, err)
+	}
+}
+
+// noLivePodOnRevision fails the test as soon as a live pod carries rev's
+// hash: what a withdrawal leaves behind for the revision it took away.
+func (h *recoveryHarness) noLivePodOnRevision(rev *appsv1.ControllerRevision) func() {
+	hash := query.RevisionOf(rev).Hash()
+	return func() {
+		for _, pod := range h.livePods() {
+			if pod.Labels[query.LabelRevisionHash] == hash {
+				h.dumpState("withdrawn revision rebuilt")
+				h.t.Fatalf("pod %s was created on the withdrawn revision %s", pod.Name, rev.Name)
+			}
+		}
+	}
+}
+
+// A single-pod surge hands over, the operator re-applies the starting
+// revision, and the replacement is lost before the source's drain
+// converges. Nothing is rebuilt at the withdrawn revision: the roll ends,
+// the source returns to rotation on the starting revision with the pod it
+// had, and the row is Ready there.
+func TestSurgeAfterHandover_RollbackThenReplacementLostEndsTheRollOnTheStartingRevision(t *testing.T) {
+	h := surgeHandedOver(t)
+	source, replacement := h.podsOfOnImage(0, goodImage), h.podsOfOnImage(0, fixedImage)
+	if len(source) != 1 || len(replacement) != 1 {
+		t.Fatalf("hand-over shape: %d source pod(s), %d replacement pod(s), want one of each", len(source), len(replacement))
+	}
+	h.setTarget(h.revV1, goodImage)
+	h.losePod(replacement[0])
+	noWithdrawnPod := h.noLivePodOnRevision(h.revFixed)
+	ended := func() bool {
+		s := h.instance(0)
+		return s != nil && s.Phase == workloadtypes.InstancePhaseReady && s.Operation == nil &&
+			s.RunningRevision == h.revV1.Name && h.instanceInRotation(0)
+	}
+	if !h.runWithInvariant(5, ended, noWithdrawnPod) {
+		h.dumpState("roll never ended")
+		t.Fatalf("the rollback did not end the roll whose replacement was lost: %+v", h.instance(0))
+	}
+	if !h.sawEvent(workloadtypes.EventReasonSurgeAbandoned) {
+		t.Fatalf("no SurgeAbandoned event for the ended roll: %v", h.events)
+	}
+	if pods := h.podsOf(0); len(pods) != 1 || pods[0].UID != source[0].UID {
+		t.Fatalf("the source was rebuilt or joined; it runs the starting revision and keeps its pod: %d pod(s)", len(pods))
+	}
+	// The clock passes: nothing re-opens and no repair runs on the source.
+	h.runWithInvariant(15, func() bool { return false }, noWithdrawnPod)
+	if !ended() {
+		h.dumpState("after the clock")
+		t.Fatalf("the Instance left Ready on the starting revision: %+v", h.instance(0))
+	}
+	if n := h.restartsRecorded(); n != 0 {
+		t.Fatalf("restarts recorded = %d, want none: the rollback owns the Instance: %v", n, h.events)
+	}
+}
+
+// A single-pod surge hands over, the operator pushes a corrected revision,
+// and the replacement is lost before the source's drain converges. The roll
+// ends with the source back in rotation on the starting revision, and the
+// corrected revision rolls from there through the ordinary gates until the
+// Instance serves it; no pod of the withdrawn revision is created again.
+func TestSurgeAfterHandover_CorrectivePushThenReplacementLostRollsToTheCorrectedRevision(t *testing.T) {
+	h := surgeHandedOver(t)
+	replacement := h.podsOfOnImage(0, fixedImage)
+	if len(replacement) != 1 {
+		t.Fatalf("hand-over shape: %d replacement pod(s), want one", len(replacement))
+	}
+	const correctedImage = "registry.test/serving:v3"
+	corrected := h.pushRevision(correctedImage)
+	h.losePod(replacement[0])
+	noWithdrawnPod := h.noLivePodOnRevision(h.revFixed)
+	h.step()
+	noWithdrawnPod()
+	if s := h.instance(0); s == nil || s.Phase != workloadtypes.InstancePhaseReady || s.Operation != nil ||
+		s.RunningRevision != h.revV1.Name || !h.instanceInRotation(0) {
+		h.dumpState("roll never ended")
+		t.Fatalf("the corrected push did not end the roll whose replacement was lost with the source back in rotation: %+v", h.instance(0))
+	}
+	if !h.sawEvent(workloadtypes.EventReasonSurgeAbandoned) {
+		t.Fatalf("no SurgeAbandoned event for the ended roll: %v", h.events)
+	}
+	if !h.runWithInvariant(40, func() bool { return h.converged(corrected.Name) && h.instanceInRotation(0) }, noWithdrawnPod) {
+		h.dumpState("never converged")
+		t.Fatalf("the Instance never settled on the corrected revision: %+v", h.instance(0))
+	}
+	h.requirePodsRender(0, corrected, correctedImage)
+	if n := h.restartsRecorded(); n != 0 {
+		t.Fatalf("restarts recorded = %d, want none: the roll owns the Instance: %v", n, h.events)
+	}
+}
+
+// A single-pod surge hands over and the drained source is deleted; the
+// replacement is then lost in the same window in which the operator
+// re-applies the starting revision. The roll ends as a fresh start: the row
+// re-enters Failed with no attempt on the revision it ran, and the Create
+// pass rebuilds the Instance there without a repair; no pod of the
+// withdrawn revision is created again.
+func TestSurgeAfterHandover_ReplacementLostWithSourceGoneThenRollbackRebuildsAtTheStartingRevision(t *testing.T) {
+	h := surgeHandedOver(t)
+	sourceGone := func() bool {
+		s, pods := h.instance(0), h.podsOf(0)
+		return s != nil && s.Operation != nil && s.Operation.Step == workloadtypes.UpdateStepSurgeDrain &&
+			len(pods) == 1 && pods[0].Spec.Containers[0].Image == fixedImage
+	}
+	if !h.run(10, sourceGone) {
+		h.dumpState("source never drained")
+		t.Fatalf("the drained source was never deleted behind the serving replacement")
+	}
+	h.setTarget(h.revV1, goodImage)
+	h.losePod(h.podsOf(0)[0])
+	noWithdrawnPod := h.noLivePodOnRevision(h.revFixed)
+	h.step()
+	noWithdrawnPod()
+	if s := h.instance(0); s == nil || s.Phase != workloadtypes.InstancePhaseFailed || s.Operation != nil || s.RunningRevision != h.revV1.Name {
+		h.dumpState("no fresh start")
+		t.Fatalf("the roll did not end as a fresh start on the revision the source ran: %+v", h.instance(0))
+	}
+	if !h.runWithInvariant(20, func() bool { return h.converged(h.revV1.Name) && h.instanceInRotation(0) }, noWithdrawnPod) {
+		h.dumpState("never rebuilt")
+		t.Fatalf("the Instance was not rebuilt at the starting revision after the rollback: %+v", h.instance(0))
+	}
+	h.requirePodsRender(0, h.revV1, goodImage)
+	if n := h.restartsRecorded(); n != 0 {
+		t.Fatalf("restarts recorded = %d, want none: the fresh start is the Create pass's, not a repair's: %v", n, h.events)
+	}
+}
+
+// A push lands on a fleet whose broken gang is under repair, and version 1
+// is re-applied at the first pod of version 2. Two gangs of a leader and a
+// worker under RecreatePod with maxUnavailable 1 serve version 1. The
+// ConfigMap key gang 1's leader reads is removed and the leader restarts into
+// CreateContainerConfigError, so the repair drains the gang; version 2 is
+// pushed before the rebuild creates a pod, so the rebuild renders version 2
+// and the row records it as running before any pod of it serves. Version 1
+// is re-applied while that set starts. The set the roll then builds on
+// version 1 never serves either, since the key is still missing, and its
+// attempts fail one after another until the retry record holds the revision.
+//
+// Once the version 2 pods are gone and a version 1 set stands, the row no
+// longer names version 2 as running. The Component's revision rollup, the
+// current revision the adapter publishes, never reports the rollback done
+// while a row names another revision, and the restore attempts that fail do
+// not close and reopen the rollout once per attempt: the rollup closes at
+// most once and stays closed.
+func TestRollback_OverARebuildThatNeverServed_TheRowFollowsTheSetThatStandsAndTheRolloutClosesOnce(t *testing.T) {
+	const replicas = 2
+	const broken = int32(1)
+	h := newRecoveryHarness(t, true)
+	h.recorder = record.NewFakeRecorder(256)
+	h.replicas = replicas
+	h.retryPolicy = &workloadtypes.RetryPolicy{MaxAttempts: 3, InitialDelay: time.Minute, MaxDelay: 2 * time.Minute, Multiplier: 2}
+	policy := workloadtypes.RestartPolicyRecreateInstance
+	maxSurge, maxUnavailable := intstr.FromInt32(0), intstr.FromInt32(1)
+	h.lifecycle = workloadtypes.Lifecycle{
+		RestartPolicy:        &policy,
+		InstanceReadyTimeout: &metav1.Duration{Duration: 90 * time.Second},
+		UpdateStrategy: &workloadtypes.UpdateStrategy{
+			Type:          workloadtypes.UpdateStrategyRecreatePod,
+			RollingUpdate: &workloadtypes.RollingUpdate{MaxSurge: &maxSurge, MaxUnavailable: &maxUnavailable},
+		},
+	}
+	h.setTarget(h.revV1, goodImage)
+	if !h.run(40, func() bool { return h.settledOn(h.revV1, replicas) }) {
+		h.dumpState("initial create")
+		t.Fatalf("the two gangs never settled on %s", h.revV1.Name)
+	}
+	if h.currentRevision != h.revV1.Name {
+		t.Fatalf("the starting revision must be promoted before the fault, got %q", h.currentRevision)
+	}
+
+	// The key is gone: the broken gang's leader restarts into the kubelet's
+	// waiting reason, and so does every leader built from now on.
+	h.armWedge(missingKeyReason, false)
+	h.wedgeRunner = "leader"
+	h.wedgePod(h.podOf(broken, "leader"), missingKeyReason)
+	drained := func() bool {
+		row := h.instance(broken)
+		return row != nil && row.Phase == workloadtypes.InstancePhaseRestarting && len(h.podsOf(broken)) == 0
+	}
+	if !h.run(10, drained) {
+		h.dumpState("repair")
+		t.Fatalf("the repair never drained the broken gang: %+v", h.instance(broken))
+	}
+
+	// The push lands before the rebuild creates a pod, so the rebuild
+	// renders version 2 and records it on the row.
+	pushed := h.pushRevision(correctedImage)
+	if !h.run(10, func() bool { return len(h.podsOfOnImage(broken, correctedImage)) > 0 }) {
+		h.dumpState("push")
+		t.Fatalf("no pod of the pushed revision was built under the broken gang")
+	}
+	if row := h.instance(broken); row.RunningRevision != pushed.Name {
+		t.Fatalf("precondition: the rebuild records the pushed revision as running before it serves, got %+v", row)
+	}
+
+	// Version 1 is re-applied at the first pod of version 2. The rollup is
+	// the current revision the adapter would publish, carried from pass to
+	// pass as the persisted value is.
+	h.setTarget(h.revV1, goodImage)
+	rollup, emptiedFrom := h.currentRevision, ""
+	closes, reopens, reopensAfterClose := 0, 0, 0
+	readRollup := func() string {
+		next := status.CurrentRevisionFor(h.irStatuses(), rollup, h.target.Name, h.blocks, emptiedFrom, h.podRevisions())
+		switch {
+		case rollup == h.revV1.Name && next == "":
+			reopens++
+			if closes > 0 {
+				reopensAfterClose++
+			}
+		case rollup == "" && next == h.revV1.Name:
+			closes++
+		}
+		emptiedFrom = status.WithdrawnRevisionAfter(emptiedFrom, rollup, next, h.target.Name)
+		rollup = next
+		return rollup
+	}
+	namesOther := func(row *workloadtypes.InstanceStatus) bool {
+		return row != nil && row.RunningRevision != "" && row.RunningRevision != h.revV1.Name
+	}
+	invariant := func() {
+		t.Helper()
+		got := readRollup()
+		for _, row := range h.irStatuses() {
+			row := row
+			if got == h.revV1.Name && namesOther(&row) {
+				h.dumpState("closed while a row names another revision")
+				t.Fatalf("the rollup reports the rollback done on %s while Instance %d names %s as running", h.revV1.Name, row.Index, row.RunningRevision)
+			}
+		}
+		row := h.instance(broken)
+		pushedGone := len(h.podsOfOnImage(broken, correctedImage)) == 0
+		restoreStands := len(h.podsOfOnImage(broken, goodImage)) > 0
+		if pushedGone && restoreStands && row != nil && row.RunningRevision == pushed.Name {
+			h.dumpState("row names the pushed revision after its pods are gone")
+			t.Fatalf("Instance %d still names the pushed revision %s as running while every pod it has carries %s: %+v", broken, pushed.Name, h.revV1.Name, row)
+		}
+		if !h.untouchedOn(0, h.revV1) {
+			h.dumpState("peer taken")
+			t.Fatalf("Instance 0 left %s during the rollback", h.revV1.Name)
+		}
+	}
+	if !h.runWithInvariant(60, func() bool { return h.heldOn(h.revV1.Name) }, invariant) {
+		h.dumpState("retries")
+		t.Fatalf("the restore attempts never reached Held on %s; closes=%d reopens=%d", h.revV1.Name, closes, reopens)
+	}
+	h.runWithInvariant(6, func() bool { return false }, invariant)
+	if h.livePodOnRevision(pushed) {
+		t.Fatalf("a pod of the pushed revision is still live after the rollback")
+	}
+	if row := h.instance(broken); row == nil || row.Phase != workloadtypes.InstancePhaseFailed || namesOther(row) {
+		t.Fatalf("Instance %d ends %+v, want it Failed on the key, naming no revision it never served", broken, row)
+	}
+	if closes > 1 || reopensAfterClose > 0 {
+		t.Fatalf("the rollup closed %d times and reopened %d times after a close; a failed restore attempt must not close and reopen the rollout", closes, reopensAfterClose)
+	}
+	if rollup != h.revV1.Name {
+		t.Fatalf("the rollup ends %q, want %s: a rollback whose Instance comes back broken reads landed with a Failed Instance", rollup, h.revV1.Name)
 	}
 }

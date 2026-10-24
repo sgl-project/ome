@@ -65,12 +65,14 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAllocationStatus":        schema_pkg_apis_ome_v1beta1_CandidateAllocationStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAutoscalingStatus":       schema_pkg_apis_ome_v1beta1_CandidateAutoscalingStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateComponentAutoscaling":    schema_pkg_apis_ome_v1beta1_CandidateComponentAutoscaling(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateComponentFloor":          schema_pkg_apis_ome_v1beta1_CandidateComponentFloor(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidatePlacement":               schema_pkg_apis_ome_v1beta1_CandidatePlacement(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidatePolicyDigest":            schema_pkg_apis_ome_v1beta1_CandidatePolicyDigest(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutGroup":            schema_pkg_apis_ome_v1beta1_CandidateRolloutGroup(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutLastRun":          schema_pkg_apis_ome_v1beta1_CandidateRolloutLastRun(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutStatus":           schema_pkg_apis_ome_v1beta1_CandidateRolloutStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityTerm":              schema_pkg_apis_ome_v1beta1_ClusterAffinityTerm(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityWeights":           schema_pkg_apis_ome_v1beta1_ClusterAffinityWeights(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModel":                 schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":             schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterConnectionSource":          schema_pkg_apis_ome_v1beta1_ClusterConnectionSource(ref),
@@ -78,6 +80,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterSelectorRequirement":       schema_pkg_apis_ome_v1beta1_ClusterSelectorRequirement(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterServingRuntime":            schema_pkg_apis_ome_v1beta1_ClusterServingRuntime(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterServingRuntimeList":        schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAffinityMatch":           schema_pkg_apis_ome_v1beta1_ComponentAffinityMatch(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler":              schema_pkg_apis_ome_v1beta1_ComponentAutoscaler(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscalerStatus":        schema_pkg_apis_ome_v1beta1_ComponentAutoscalerStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentExtensionSpec":           schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref),
@@ -97,6 +100,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeight":                  schema_pkg_apis_ome_v1beta1_FineTunedWeight(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeightList":              schema_pkg_apis_ome_v1beta1_FineTunedWeightList(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FineTunedWeightSpec":              schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FollowerScalingStatus":            schema_pkg_apis_ome_v1beta1_FollowerScalingStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupBlueGreen":                   schema_pkg_apis_ome_v1beta1_GroupBlueGreen(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupCanary":                      schema_pkg_apis_ome_v1beta1_GroupCanary(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.GroupRollingUpdate":               schema_pkg_apis_ome_v1beta1_GroupRollingUpdate(ref),
@@ -194,6 +198,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutRunTarget":                 schema_pkg_apis_ome_v1beta1_RolloutRunTarget(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutSpec":                      schema_pkg_apis_ome_v1beta1_RolloutSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutStatus":                    schema_pkg_apis_ome_v1beta1_RolloutStatus(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterCapacityEndpoint":           schema_pkg_apis_ome_v1beta1_RouterCapacityEndpoint(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterSpec":                       schema_pkg_apis_ome_v1beta1_RouterSpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RoutingCapacitySpec":              schema_pkg_apis_ome_v1beta1_RoutingCapacitySpec(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RoutingProbeSpec":                 schema_pkg_apis_ome_v1beta1_RoutingProbeSpec(ref),
@@ -204,6 +209,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScaleTargetRef":                   schema_pkg_apis_ome_v1beta1_ScaleTargetRef(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalerAuthenticationRef":          schema_pkg_apis_ome_v1beta1_ScalerAuthenticationRef(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicy":                    schema_pkg_apis_ome_v1beta1_ScalingPolicy(ref),
+		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicyStatus":              schema_pkg_apis_ome_v1beta1_ScalingPolicyStatus(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServiceMetadata":                  schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntime":                   schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
 		"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ServingRuntimeList":               schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
@@ -3217,6 +3223,13 @@ func schema_pkg_apis_ome_v1beta1_CanaryStatus(ref common.ReferenceCallback) comm
 							Format:      "",
 						},
 					},
+					"rollbackRequested": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RollbackRequested records that this unit's rollback was applied from an ome.io/rollout-rollback request. The request stays on the InferenceService through the hold and is this unit's while set: no other unit's canary acts on it. It clears when the request is observed removed, and with the hold when the unit starts its next canary.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 					"analysisFailedChecks": {
 						SchemaProps: spec.SchemaProps{
 							Description: "AnalysisFailedChecks counts failing analysis samples in the CURRENT step (reset to zero on each advance). Auto-rollback fires when it reaches Analysis.FailureLimit. Set only under Promotion=Analysis.",
@@ -3366,6 +3379,28 @@ func schema_pkg_apis_ome_v1beta1_CandidateAllocationStatus(ref common.ReferenceC
 							Format:      "int64",
 						},
 					},
+					"componentMatches": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"component",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ComponentMatches records the Split weight of the other components when the affinity terms set weights: the decoder's, and the router's when routers are divided. Weight holds the primary component's. The accepted plan keeps them so that member floors never follow unaccepted label changes.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAffinityMatch"),
+									},
+								},
+							},
+						},
+					},
 					"capacity": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Capacity is the accepted hardware sample, when capacity determines weight.",
@@ -3405,7 +3440,7 @@ func schema_pkg_apis_ome_v1beta1_CandidateAllocationStatus(ref common.ReferenceC
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/apis/meta/v1.MicroTime", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementCapacitySample", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementHomePolicy"},
+			"k8s.io/apimachinery/pkg/apis/meta/v1.MicroTime", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAffinityMatch", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementCapacitySample", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementHomePolicy"},
 	}
 }
 
@@ -3493,6 +3528,43 @@ func schema_pkg_apis_ome_v1beta1_CandidateComponentAutoscaling(ref common.Refere
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_CandidateComponentFloor(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CandidateComponentFloor records one component's floor on a Split home.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"component": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"current": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Current is the floor on the home's member copy; zero without a copy.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"desired": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Desired is the floor at the accepted plan's desired shares.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"component", "current", "desired"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_CandidatePlacement(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -3518,6 +3590,12 @@ func schema_pkg_apis_ome_v1beta1_CandidatePlacement(ref common.ReferenceCallback
 							Description: "ObservationKnown distinguishes a current observation from retained evidence.",
 							Type:        []string{"boolean"},
 							Format:      "",
+						},
+					},
+					"observationFailingSince": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservationFailingSince is when the control plane's reads of this home started failing. It is unset while reads succeed. While the configured observation grace lasts from this time, the home keeps the ready count from its last successful read.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
 						},
 					},
 					"cluster": {
@@ -3567,12 +3645,34 @@ func schema_pkg_apis_ome_v1beta1_CandidatePlacement(ref common.ReferenceCallback
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutStatus"),
 						},
 					},
+					"componentFloors": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"component",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ComponentFloors records, on a Split home, each scaled component's floor: the one on the home's member copy now, and the one the accepted plan gives it. A current floor above the desired one is held there until its replacements on other homes are ready.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateComponentFloor"),
+									},
+								},
+							},
+						},
+					},
 				},
 				Required: []string{"cluster"},
 			},
 		},
 		Dependencies: []string{
-			"knative.dev/pkg/apis.URL", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAllocationStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAutoscalingStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutStatus"},
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time", "knative.dev/pkg/apis.URL", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAllocationStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateAutoscalingStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateComponentFloor", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CandidateRolloutStatus"},
 	}
 }
 
@@ -3718,14 +3818,20 @@ func schema_pkg_apis_ome_v1beta1_ClusterAffinityTerm(ref common.ReferenceCallbac
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ClusterAffinityTerm selects WorkloadClusters by ANDing its requirements. Multiple terms form a union; a weight assigns replica shares to each match.",
+				Description: "ClusterAffinityTerm selects WorkloadClusters by ANDing its requirements. Multiple terms form a union; weights assign replica shares to each match.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"weight": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Weight is permitted only for static Split. If any term has an explicit weight, matching term weights add and omitted weights contribute one. Omission must be preserved to distinguish unweighted overlapping terms. Weights are replica ratios, so they have no upper bound.",
+							Description: "Deprecated: Weight is weights.default, and is permitted only for static Split. It is the only weight a manager without weights support reads, so a rollback to such a manager keeps the engine shares set here.",
 							Type:        []string{"integer"},
 							Format:      "int32",
+						},
+					},
+					"weights": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Weights sets each component's replica weight on the clusters this term matches, and is permitted only for static Split. If any term gives a component a weight, the weights of matching terms add and a term that gives none contributes one. Weights are ratios, so they have no upper bound.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityWeights"),
 						},
 					},
 					"matchExpressions": {
@@ -3770,7 +3876,48 @@ func schema_pkg_apis_ome_v1beta1_ClusterAffinityTerm(ref common.ReferenceCallbac
 			},
 		},
 		Dependencies: []string{
-			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterSelectorRequirement"},
+			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterAffinityWeights", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ClusterSelectorRequirement"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ClusterAffinityWeights(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ClusterAffinityWeights holds one term's weight per component. The engine takes engine, then default. The decoder takes decoder, then default, then the engine's weight. Routers are divided across clusters only when a term sets router; a term without it then contributes the engine's weight.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"default": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Default is the weight of every component this term does not name.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"engine": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Engine is the engine's weight.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"decoder": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Decoder is the decoder's weight.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"router": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Router is the router's weight. Setting it on any term divides router.minReplicas across the clusters; otherwise every cluster runs the full router policy.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -4061,6 +4208,34 @@ func schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref common.ReferenceC
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_ComponentAffinityMatch(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ComponentAffinityMatch records the weight the affinity terms give one component on a cluster.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"component": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"weight": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Weight is the component's effective static weight, when applicable.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+				},
+				Required: []string{"component"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_ComponentAutoscaler(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -4167,7 +4342,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentAutoscalerStatus(ref common.ReferenceC
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "Conditions mirrors the HPA's or ScaledObject's conditions verbatim (HPA: ScalingActive / AbleToScale / ScalingLimited; ScaledObject: Ready / Active / Fallback / Paused). Empty when ManagedBy != \"ome\" — operator-owned scalers are surfaced via scaleTargetRef instead.",
+							Description: "Conditions mirrors the HPA's or ScaledObject's conditions verbatim (HPA: ScalingActive / AbleToScale / ScalingLimited; ScaledObject: Ready / Active / Fallback / Paused). OME adds its own conditions next to them: AutoscalerSwitched when the Component moves between an OME HPA and a KEDA ScaledObject, and AutoscalerResolved when it carries an autoscalerPolicyRef. The scaler conditions are empty when ManagedBy != \"ome\" — operator-owned scalers are surfaced via scaleTargetRef instead.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -4203,7 +4378,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 					},
 					"maxReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Maximum number of replicas for autoscaling.",
+							Description: "Maximum number of replicas for autoscaling. A proportional-scaling follower that leaves it unset has no ceiling of its own.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -5045,7 +5220,7 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 					},
 					"maxReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Maximum number of replicas for autoscaling.",
+							Description: "Maximum number of replicas for autoscaling. A proportional-scaling follower that leaves it unset has no ceiling of its own.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -5884,7 +6059,7 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 					},
 					"maxReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Maximum number of replicas for autoscaling.",
+							Description: "Maximum number of replicas for autoscaling. A proportional-scaling follower that leaves it unset has no ceiling of its own.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -6301,6 +6476,56 @@ func schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref common.ReferenceCallbac
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/runtime.RawExtension", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ObjectReference", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.StorageSpec"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_FollowerScalingStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "FollowerScalingStatus compares a target with the committed desired count.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"component": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"ratio": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+					"target": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Target is the anchor's desired count times the ratio, rounded up, after the follower's own bounds.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"current": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Current is the follower's desired count after this pass.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"clamped": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Clamped is true when the follower's minReplicas or a declared maxReplicas moved the target; the Ready condition names the bound.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"component", "ratio", "target"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }
 
@@ -6833,6 +7058,13 @@ func schema_pkg_apis_ome_v1beta1_InferenceReplicaStatus(ref common.ReferenceCall
 							Description: "ObservedGeneration is the InferenceReplica.metadata.generation the most recent status flush reflects.",
 							Type:        []string{"integer"},
 							Format:      "int64",
+						},
+					},
+					"observedTemplateHash": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedTemplateHash is the pod-template hash (the ome.io/template-hash annotation the projector stamps beside the spec's templates) that updateRevision was last computed from. It names the roll target this status describes: a spec whose stamp differs asks for a revision the status has not recorded yet, while a spec change outside the templates leaves both unchanged.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"placementObservedGeneration": {
@@ -7473,11 +7705,17 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref common.ReferenceCall
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationStatus"),
 						},
 					},
+					"scalingPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ScalingPolicy reports the applied cross-component desired-count policy.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicyStatus"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"knative.dev/pkg/apis.Condition", "knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CanaryStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationHistoryEntry", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MountedOverlay", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficStatus"},
+			"knative.dev/pkg/apis.Condition", "knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.CanaryStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MigrationHistoryEntry", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ModelStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MountedOverlay", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.PlacementStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutCoordinationStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RolloutStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ScalingPolicyStatus", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficStatus"},
 	}
 }
 
@@ -9049,7 +9287,7 @@ func schema_pkg_apis_ome_v1beta1_MaintainRatio(ref common.ReferenceCallback) com
 				Properties: map[string]spec.Schema{
 					"tolerance": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Tolerance is the maximum percentage drift from the starting ratio. A roll step that would exceed it is paused until the pools rebalance. An explicit 0 means zero drift. When omitted, the operator-configured default (the coordination block of the operator's ConfigMap) applies; if the operator configures no default either, the group rolls with no drift bound.",
+							Description: "Tolerance is the maximum percentage drift from the starting ratio. A roll step that would exceed it is paused until the pools rebalance. An explicit 0 means zero drift. When omitted, the operator-configured default (the coordination block of the operator's ConfigMap) applies; if the operator configures no default either, the group rolls with no drift bound. A value of 100 opts out of the bound. Admission rejects a drain-first member (RecreatePod, or an in-place strategy on multi-node gangs) whose single drain would empty its side or move the serving ratio more than twice the tolerance from the start, since such a member could never take its first step. A group whose members all roll drain-first is paced by the batch step instead: each member's drains are counted in batches of its maxUnavailable, and no member opens its next batch until every member's previous batch serves. The ratio band is not consulted for such a group, so admission admits it. With the operator's prefillDecodeRoll.keepRatio rule on, the batch step paces every group that lists both the engine and the decoder, on every update path, and sizes each batch so that the share of each side already moving to the new version stays within this tolerance of the other side's share; a batch that cannot fit shrinks, and at least one Instance moves per batch, so a tight tolerance slows the roll and never stops it.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -9359,7 +9597,7 @@ func schema_pkg_apis_ome_v1beta1_MigrationStatus(ref common.ReferenceCallback) c
 					},
 					"deadline": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Deadline is when a non-terminal entry expires. Manual: accept time plus InstanceReadyTimeout.",
+							Description: "Deadline is when a non-terminal entry expires. Manual: accept time plus InstanceReadyTimeout. Cleared while the Component is paused and started again, a full InstanceReadyTimeout from the pass the pause clears.",
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
 						},
 					},
@@ -10662,7 +10900,7 @@ func schema_pkg_apis_ome_v1beta1_PlacementSpec(ref common.ReferenceCallback) com
 				Properties: map[string]spec.Schema{
 					"policy": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Policy selects ClusterAffinity matching and persisted allocation plans.",
+							Description: "Policy selects affinity matching and persisted allocation plans.",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -10683,7 +10921,7 @@ func schema_pkg_apis_ome_v1beta1_PlacementSpec(ref common.ReferenceCallback) com
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "ClusterAffinity ORs terms whose requirements are ANDed. Requires the ClusterAffinity policy; omission then matches every registration. An explicit empty or null list is invalid.",
+							Description: "ClusterAffinity ORs terms whose requirements are ANDed. The engine's clusters are every component's clusters; in Split, each term's weights set the components' shares. Omission matches every registration. An explicit empty or null list is invalid.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -11443,7 +11681,7 @@ func schema_pkg_apis_ome_v1beta1_ProportionalPolicy(ref common.ReferenceCallback
 					},
 					"ratios": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Ratios maps each follower Component to its replica ratio relative to the anchor. A ratio of 1.0 means parity; 0.25 means one follower per four anchor replicas (rounded up). Components not listed scale independently.",
+							Description: "Ratios maps each follower Component to its replica ratio relative to the anchor. A ratio of 1.0 means parity; 0.25 means one follower per four anchor replicas (rounded up). Components not listed scale independently. A follower's minReplicas is a floor on the count it is given. Its maxReplicas, when set, is a ceiling; a follower that sets none has no ceiling of its own, and the anchor's bounds cap its count. The status reports a follower as clamped when either bound moved its target.",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -11933,7 +12171,7 @@ func schema_pkg_apis_ome_v1beta1_RolloutCoordinationRatio(ref common.ReferenceCa
 				Properties: map[string]spec.Schema{
 					"original": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Original is the snapshot of desired replica counts per Component at rollout start. The keys are ComponentType strings.",
+							Description: "Original is the reference the ratio rule measures against: each Component's desired replica count as its spec asks for it now. It follows the spec, so a resize mid-roll or while idle moves it to the new counts. The keys are ComponentType strings.",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -12135,7 +12373,7 @@ func schema_pkg_apis_ome_v1beta1_RolloutGroup(ref common.ReferenceCallback) comm
 					},
 					"maintainRatio": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MaintainRatio guards the cross-Component replica ratio while this group rolls. Meaningful only on multi-Component blueGreen/rollingUpdate groups (e.g. a PD engine+decoder pair); ignored on single-Component groups and rejected by admission on canary groups (the canary engine does not enforce it).",
+							Description: "MaintainRatio bounds how far the two sides of a multi-Component blueGreen/rollingUpdate group (e.g. a PD engine+decoder pair) may drift apart while the group rolls. A group that lists both the engine and the decoder is held to the operator's default tolerance even when it omits this field; set a tolerance of 100 to roll with no bound. Rejected by admission on single-Component groups (there is no second side) and on canary groups (the canary engine does not enforce it).",
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.MaintainRatio"),
 						},
 					},
@@ -12915,6 +13153,36 @@ func schema_pkg_apis_ome_v1beta1_RolloutStatus(ref common.ReferenceCallback) com
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_RouterCapacityEndpoint(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RouterCapacityEndpoint names the router path that reports serving capacity and the router Service port that answers it.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"path": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Path is the exact request path, for example /capacity. It must equal spec.routing.capacity.path, which the control plane polls. \"/\" is rejected because it would send every request to Port.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"port": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Port is the router Service port that answers Path. OME adds the route only while the router Service exposes this port, so a wrong port leaves the capacity endpoint unreachable rather than the service unroutable.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"path", "port"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -13399,7 +13667,7 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 					},
 					"maxReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Maximum number of replicas for autoscaling.",
+							Description: "Maximum number of replicas for autoscaling. A proportional-scaling follower that leaves it unset has no ceiling of its own.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -13517,11 +13785,17 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 							},
 						},
 					},
+					"capacityEndpoint": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CapacityEndpoint exposes one router path on the service's gateway hostname from a router port other than the serving port. Set it when spec.routing.capacity polls the router, and the router answers that path on another port, for example its metrics port. Each serving cluster's top-level HTTPRoute then sends exactly this path to Port; every other path still reaches the serving port. Set it on the InferenceService; serving runtimes reject it.",
+							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterCapacityEndpoint"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec"},
+			"k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.AutoscalerPolicyRef", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ComponentAutoscaler", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.LifecycleSpec", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RouterCapacityEndpoint", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.RunnerSpec"},
 	}
 }
 
@@ -13532,6 +13806,13 @@ func schema_pkg_apis_ome_v1beta1_RoutingCapacitySpec(ref common.ReferenceCallbac
 				Description: "RoutingCapacitySpec configures polling each serving home for its current servable capacity.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
+					"mode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Mode selects a replica ceiling or an authoritative reported weight. Unset preserves Ceiling. In Reported mode a home's accepted report is its capacity in replicas, neither capped by its replica count nor scaled by its capacity factor. A home without one keeps its replica-based weight.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"disabled": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Disabled explicitly disables capacity polling. No other field may be set when true.",
@@ -13597,14 +13878,14 @@ func schema_pkg_apis_ome_v1beta1_RoutingCapacitySpec(ref common.ReferenceCallbac
 					},
 					"quorum": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Quorum is the number of readings required to corroborate a lower capacity.",
+							Description: "Quorum is the number of readings required before a report applies. In Ceiling mode they corroborate a lower capacity; in Reported mode the lower median of the window applies.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
 					},
 					"maxAge": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MaxAge is the maximum accepted age of a capacity report.",
+							Description: "MaxAge is the maximum accepted age of a capacity report. Choose it above quorum * period: otherwise the oldest reading can expire before the next poll lands, and the home briefly falls back to its replica count. In Reported mode each further period keeps a home on its reports through one more failed poll.",
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
 						},
 					},
@@ -14257,6 +14538,87 @@ func schema_pkg_apis_ome_v1beta1_ScalingPolicy(ref common.ReferenceCallback) com
 		},
 		Dependencies: []string{
 			"sigs.k8s.io/ome/pkg/apis/ome/v1beta1.ProportionalPolicy"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ScalingPolicyStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ScalingPolicyStatus records the coordinator's last decision.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"mode": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"source": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"anchor": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"anchorDesired": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"integer"},
+							Format: "int32",
+						},
+					},
+					"followers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"component",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FollowerScalingStatus"),
+									},
+								},
+							},
+						},
+					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "sigs.k8s.io/ome/pkg/apis/ome/v1beta1.FollowerScalingStatus"},
 	}
 }
 
@@ -15379,43 +15741,49 @@ func schema_pkg_apis_ome_v1beta1_TrafficMapCapacity(ref common.ReferenceCallback
 				Description: "TrafficMapCapacity records why an entry's weight is what it is.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
+					"reportedWeight": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReportedWeight is the accepted endpoint capacity in Reported mode, in replicas, and replaces the replica-based weight. Nil means no fresh quorum, so the entry weighs its replica count; zero means the reporter cannot serve traffic.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
 					"allocated": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Allocated is the effective allocation ceiling for this home: the control-plane-admitted count, optionally lowered by a capacity report. Ready independently caps it when computing Weight.",
+							Description: "Allocated is the admitted replica count. In Ceiling mode a report can lower it, and Ready independently caps it when computing Weight. It is diagnostic when ReportedWeight is set, including when it is zero.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
 					},
 					"ready": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Ready is the home's live ready-replica count. It caps Allocated when computing Weight; zero health-gates the entry to weight 0.",
+							Description: "Ready is the live ready-replica count. It caps Weight unless ReportedWeight is set.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
 					},
 					"factor": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Factor is the per-replica relative serving capacity of this home's accelerator (baseline \"1\", higher = faster), so heterogeneous hardware is weighted by capacity rather than raw replica count: weight is proportional to min(allocated, ready) * factor. Defaults to \"1\" (homogeneous) when unset — the multiplicative identity, i.e. no scaling. It is operator-supplied config, never derived from raw hardware FLOPS.",
+							Description: "Factor is the per-replica serving capacity of this home's accelerator (baseline \"1\", higher = faster), so heterogeneous hardware is weighted by capacity rather than raw replica count: weight is proportional to min(allocated, ready) * factor. Defaults to \"1\" (homogeneous) when unset — the multiplicative identity, i.e. no scaling. It is unset when ReportedWeight is, because the report already includes the hardware. It is operator-supplied config, never derived from raw hardware FLOPS.",
 							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
 						},
 					},
 					"source": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Source names which input produced Allocated. FallbackReason separately distinguishes an intentionally control-plane-only allocation from a configured endpoint source that could not supply a usable ceiling.",
+							Description: "Source names the capacity authority: Endpoint when a report lowered Allocated in Ceiling mode or ReportedWeight is set in Reported mode, and ControlPlane otherwise.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"reported": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Reported is the home's own servable-capacity figure, recorded whenever the endpoint source answered — including when it was at or above the plan and therefore did not lower Allocated. Keeping it visible in that case is what makes the ceiling auditable: Allocated alone cannot show that a report was received and found non-binding.",
+							Description: "Reported is the home's servable count in Ceiling mode, recorded whenever the endpoint source answered — including when it was at or above the plan and therefore did not lower Allocated. Keeping it visible in that case is what makes the ceiling auditable: Allocated alone cannot show that a report was received and found non-binding.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
 					},
 					"fallbackReason": {
 						SchemaProps: spec.SchemaProps{
-							Description: "FallbackReason explains why a configured endpoint capacity source did not produce an applied ceiling and the control-plane allocation was retained. Empty means capacity polling is disabled or its latest result was usable.",
+							Description: "FallbackReason explains why a configured endpoint capacity source did not produce a current observation. The entry keeps its replica-based weight; in Reported mode it first uses a fresh cached report. Empty means the latest result was usable or polling is disabled.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -15467,7 +15835,7 @@ func schema_pkg_apis_ome_v1beta1_TrafficMapEntry(ref common.ReferenceCallback) c
 					},
 					"capacity": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Capacity is the provenance of Weight: weight is proportional to min(allocated, ready) * factor, then gated by the active probe.",
+							Description: "Capacity records the inputs to Weight under spec.capacityMode.",
 							Ref:         ref("sigs.k8s.io/ome/pkg/apis/ome/v1beta1.TrafficMapCapacity"),
 						},
 					},
@@ -15828,6 +16196,13 @@ func schema_pkg_apis_ome_v1beta1_TrafficMapSpec(ref common.ReferenceCallback) co
 					"mode": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Mode mirrors the ISVC's spec.placement.mode (Single/All/Split) so a consumer can read the routing intent without reading the ISVC.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"capacityMode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CapacityMode identifies the capacity authority, even for an empty table. In Reported mode a table in which any entry carries a reported weight is published at once, and an earlier positive plan never replaces it. A table without one follows the same retained-positive rules as Ceiling. Unset means Ceiling.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

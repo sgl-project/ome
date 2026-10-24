@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
@@ -115,12 +114,15 @@ func (ctx GateContext) CheckSequential() (allowed bool, reason string) {
 	//
 	// Timestamp source: read the previous Component's IR Ready
 	// condition's LastTransitionTime. Ready sits at Unknown
-	// (RolloutInProgress) while the previous Component rolls and flips
-	// to True on convergence — exactly when its rollout finished. The
-	// group's LastTransitionTime is the wrong source: it only updates
-	// when the base Phase changes, and Sequential's soak window holds
-	// the group at Phase=Idle (CompositePhase=Sequential.AwaitingNextComponent),
-	// so LastTransitionTime points back at the pre-rollout Idle and
+	// (RolloutInProgress) while the previous Component rolls and turns
+	// True when its roll is done: every Instance on the target, or, under
+	// a partition, every movable Instance on the target with the held
+	// ones Ready on their own revision (reason Staged). That transition
+	// is the moment the wait is measured from. The group's
+	// LastTransitionTime is the wrong source: it only updates when the
+	// base Phase changes, and Sequential's soak window holds the group at
+	// Phase=Idle (CompositePhase=Sequential.AwaitingNextComponent), so
+	// LastTransitionTime points back at the pre-rollout Idle and
 	// time.Since(entered) is always past soakDuration.
 	if group.Soak > 0 {
 		if prev := previousCompletedComponentForGate(group.Order, observations, component); prev != "" {
@@ -161,16 +163,17 @@ func (ctx GateContext) CheckSequential() (allowed bool, reason string) {
 //     AggregateAndWriteStatus has stamped UpdateRevision=target.Name on
 //     the Component being reconciled.
 //
-//  2. Status lag: `ir.Status.ObservedGeneration != ir.Generation` —
-//     fires at the *moment of bump*, after the projector has written
-//     the IR spec but BEFORE the IR's deferred status write has run.
-//     In that window UpdateRevision still names the OLD CR (so signal
-//     #1 is silent) even though the Component is about to roll.
-//     Same-object compare: ir.Status.ObservedGeneration mirrors the
-//     IR's own metadata.generation, so it says nothing about the
-//     parent ISVC — that is signal #3's job. Strict equality: any
-//     divergence means the status block was not computed against the
-//     spec being observed, so it cannot vouch for convergence.
+//  2. Status lag: the status was not written for the pod templates the
+//     spec holds (StatusObservedTemplates) — fires at the *moment of
+//     bump*, after the projector has written the IR spec but BEFORE the
+//     IR's status has recorded the new target. In that window
+//     UpdateRevision still names the OLD CR (so signal #1 is silent)
+//     even though the Component is about to roll. The compare is
+//     against the template hash the projector stamped beside the spec,
+//     not the generation: a spec write that changes no template (an
+//     annotation value the revision leaves out, a count, a pause, a
+//     partition) leaves the status current. The stamp says nothing
+//     about the parent ISVC — that is signal #3's job.
 //
 //  3. Projection lag: the parent-generation annotation the projector
 //     stamps on every pass differs from the live isvc.Generation (or
@@ -217,7 +220,7 @@ func observeSequentialComponentsForGate(ctx context.Context, reads client.Reader
 			obs.CurrentRevisionHash = cur.Hash()
 			obs.TargetRevisionHash = tgt.Hash()
 			revisionSkew := !tgt.IsZero() && !tgt.Same(cur)
-			statusLag := summary.ObservedGeneration != ir.Generation
+			statusLag := !StatusObservedTemplates(ir)
 			projectionLag := irParentGenerationMismatch(ir, isvc.Generation)
 			obs.RolloutInFlight = revisionSkew || statusLag || projectionLag
 			// Convergence to the desired staged shape — mirrors
@@ -269,12 +272,18 @@ func irParentGenerationMismatch(ir *v1beta1.InferenceReplica, isvcGeneration int
 	return gen != isvcGeneration
 }
 
-// previousCompletedComponentForGate is the order-aware "what came
-// before `c`" lookup that mirrors previousCompletedComponent on
-// GroupObservation. Pulled out into its own helper so the gate can
-// answer the soak-arming question (is there a prior Component whose
-// completion started the soak window?) without synthesizing a full
-// GroupObservation.
+// previousCompletedComponentForGate names the Component before c in the
+// order when that Component's roll is done: not in flight, or at its
+// staged shape (every Instance the partition lets the roll move is Ready
+// on the target, the held ones Ready on their own revision). A staged
+// Component keeps its current revision behind its update revision by
+// design, so "in flight" alone would never name it and the wait after
+// readiness would never be measured behind a partition. The reading is
+// the one activeSequentialComponent skips a done Component by, so the
+// Component the wait is measured after is the one the gate stopped
+// waiting on. Empty for the first Component in the order, and while the
+// previous Component is still rolling: the gate then names that Component
+// as the active one and no wait comes into it.
 func previousCompletedComponentForGate(order []v1beta1.ComponentType, observations map[v1beta1.ComponentType]ComponentObservation, c v1beta1.ComponentType) v1beta1.ComponentType {
 	for i, oc := range order {
 		if oc != c {
@@ -283,12 +292,8 @@ func previousCompletedComponentForGate(order []v1beta1.ComponentType, observatio
 		if i == 0 {
 			return ""
 		}
-		// The previous entry counts as "completed" only when its
-		// rollout is no longer in flight. If the previous Component is
-		// still rolling, soak hasn't armed yet (the state machine
-		// would have routed to it instead of us).
 		prev := order[i-1]
-		if pobs, ok := observations[prev]; ok && pobs.RolloutInFlight {
+		if pobs, ok := observations[prev]; ok && pobs.RolloutInFlight && !pobs.AtDesiredShape {
 			return ""
 		}
 		return prev
@@ -299,9 +304,10 @@ func previousCompletedComponentForGate(order []v1beta1.ComponentType, observatio
 // previousComponentReadyAt returns the moment the named Component's
 // rollout completed — read from its IR `Ready` condition's
 // LastTransitionTime. Ready sits at Unknown (RolloutInProgress) while
-// the Component rolls and transitions to True on convergence, so the
-// timestamp anchors the wall-clock the Sequential soak gate compares
-// `time.Since(...)` against.
+// the Component rolls and transitions to True when every Instance is on
+// the target, or when the Component reached its staged shape under a
+// partition (reason Staged), so the timestamp anchors the wall-clock the
+// Sequential soak gate compares `time.Since(...)` against.
 //
 // Returns the zero time when:
 //   - The Component has no IR / no Ready condition yet (first reconcile
@@ -330,14 +336,5 @@ func previousComponentReadyAt(ctx context.Context, reads client.Reader, isvc *v1
 	if summary == nil {
 		return time.Time{}, nil
 	}
-	for _, cond := range summary.Conditions {
-		if cond.Type != conditionReady {
-			continue
-		}
-		if cond.Status != metav1.ConditionTrue {
-			return time.Time{}, nil
-		}
-		return cond.LastTransitionTime.Time, nil
-	}
-	return time.Time{}, nil
+	return readyTransitionAt(summary.Conditions), nil
 }

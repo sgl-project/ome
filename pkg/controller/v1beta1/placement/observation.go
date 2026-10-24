@@ -2,6 +2,7 @@ package placement
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -15,19 +16,19 @@ import (
 	"sigs.k8s.io/ome/pkg/placement/protocol"
 )
 
-type homeObservationState uint8
+type memberObservationState uint8
 
 const (
-	homeUnknown homeObservationState = iota
-	homeAbsent
-	homePresent
+	memberUnknown memberObservationState = iota
+	memberAbsent
+	memberPresent
 )
 
-// homeObservation is one status-recorded home's current member-side state.
-// Unknown means the home could not be read, while Absent is reserved for
-// conclusive evidence that the placement copy is gone.
-type homeObservation struct {
-	state          homeObservationState
+// memberObservation is what one pass read from a member cluster the placement
+// status records. Unknown means the member could not be read. Absent means the
+// pass confirmed that the placement copy is gone.
+type memberObservation struct {
+	state          memberObservationState
 	candidate      v1beta1.CandidatePlacement
 	serving        bool
 	terminal       bool
@@ -44,7 +45,7 @@ type placementObservations struct {
 	projectAll bool
 	previous   map[string]v1beta1.CandidatePlacement
 	standing   []string
-	homes      map[string]homeObservation
+	members    map[string]memberObservation
 }
 
 func newPlacementObservations(isvc *v1beta1.InferenceService, clusters []v1beta1.WorkloadCluster) *placementObservations {
@@ -52,7 +53,7 @@ func newPlacementObservations(isvc *v1beta1.InferenceService, clusters []v1beta1
 		known:    make(map[string]bool, len(clusters)),
 		matches:  make(map[string]bool, len(clusters)),
 		previous: make(map[string]v1beta1.CandidatePlacement),
-		homes:    make(map[string]homeObservation),
+		members:  make(map[string]memberObservation),
 	}
 	selector, selectorErr := placementSelector(isvc)
 	o.projectAll = selectorErr != nil
@@ -85,7 +86,7 @@ func (o *placementObservations) projects(cluster string) bool {
 	return o.projectAll || o.matches[cluster]
 }
 
-func (r *Reconciler) observeStandingHomes(ctx context.Context, isvc *v1beta1.InferenceService, clusters []v1beta1.WorkloadCluster) *placementObservations {
+func (r *Reconciler) observeStandingMembers(ctx context.Context, isvc *v1beta1.InferenceService, clusters []v1beta1.WorkloadCluster) *placementObservations {
 	observations := newPlacementObservations(isvc, clusters)
 	for _, cluster := range observations.standing {
 		observations.refresh(ctx, r, isvc, cluster)
@@ -93,55 +94,72 @@ func (r *Reconciler) observeStandingHomes(ctx context.Context, isvc *v1beta1.Inf
 	return observations
 }
 
-func (o *placementObservations) refresh(ctx context.Context, r *Reconciler, isvc *v1beta1.InferenceService, cluster string) homeObservation {
+func (o *placementObservations) refresh(ctx context.Context, r *Reconciler, isvc *v1beta1.InferenceService, cluster string) memberObservation {
 	previous, ok := o.previous[cluster]
 	if !ok {
 		previous = v1beta1.CandidatePlacement{Cluster: cluster, Phase: v1beta1.CandidatePhaseAdmitting}
 	}
-	if current, observed := o.homes[cluster]; observed {
-		if current.state == homeAbsent {
+	if current, observed := o.members[cluster]; observed {
+		if current.state == memberAbsent {
 			previous = identityCandidate(cluster)
 		} else {
 			previous = current.candidate
 		}
 	}
-	observationCtx, cancel := context.WithTimeout(ctx, r.placeTimeout())
-	home := r.observeHome(observationCtx, isvc, previous, o.known[cluster])
-	cancel()
-	o.homes[cluster] = home
-	return home
+	member := r.observeMember(ctx, isvc, previous, o.known[cluster])
+	o.members[cluster] = member
+	return member
 }
 
-func (o *placementObservations) get(cluster string) (homeObservation, bool) {
-	home, ok := o.homes[cluster]
-	return home, ok
+func (o *placementObservations) get(cluster string) (memberObservation, bool) {
+	member, ok := o.members[cluster]
+	return member, ok
 }
 
-// observeHome reads one member without changing it. A disconnected or
-// unreadable member is Unknown and loses routable ready capacity for this
-// observation. NotFound, a terminating copy, a foreign same-name object, or a
+// observeMember reads one member without changing it, re-reading it after a
+// transient failure as MemberReadRetry allows. A disconnected or unreadable
+// member is Unknown and keeps its ready count only within the observation
+// grace. NotFound, a terminating copy, a foreign same-name object, or a
 // removed WorkloadCluster are conclusive absence.
-func (r *Reconciler) observeHome(
+func (r *Reconciler) observeMember(
 	ctx context.Context,
 	isvc *v1beta1.InferenceService,
 	previous v1beta1.CandidatePlacement,
 	known bool,
-) homeObservation {
-	absent := func() homeObservation {
+) memberObservation {
+	member, _ := retryMemberRead(ctx, r, previous.Cluster, func(attemptCtx context.Context) (memberObservation, error) {
+		member := r.observeMemberOnce(attemptCtx, isvc, previous, known)
+		return member, member.err
+	})
+	// A read that reached the member is known on every path that writes it,
+	// including a hold, so the next failed read starts a grace.
+	if member.state == memberPresent {
+		member.candidate.ObservationKnown = true
+	}
+	return member
+}
+
+func (r *Reconciler) observeMemberOnce(
+	ctx context.Context,
+	isvc *v1beta1.InferenceService,
+	previous v1beta1.CandidatePlacement,
+	known bool,
+) memberObservation {
+	absent := func() memberObservation {
 		if hasPolicyRefs(isvc) {
-			r.policyState().forgetHome(isvc.UID, previous.Cluster)
+			r.policyState().forgetMember(isvc.UID, previous.Cluster)
 		}
 		if hasRolloutPolicyRefs(isvc) {
-			r.rolloutState().forgetHome(isvc.UID, previous.Cluster)
+			r.rolloutState().forgetMember(isvc.UID, previous.Cluster)
 		}
-		return homeObservation{state: homeAbsent}
+		return memberObservation{state: memberAbsent}
 	}
 	if !known {
 		return absent()
 	}
-	unknown := func(err error) homeObservation {
-		candidate := retainedUnknownCandidate(isvc, previous)
-		return homeObservation{state: homeUnknown, candidate: candidate, err: err}
+	unknown := func(err error) memberObservation {
+		candidate := r.unknownCandidate(isvc, previous)
+		return memberObservation{state: memberUnknown, candidate: candidate, err: err}
 	}
 	var cl client.Client
 	if isvc.Status.Placement != nil && isvc.Status.Placement.Plan != nil {
@@ -159,6 +177,9 @@ func (r *Reconciler) observeHome(
 	if cl == nil {
 		remote, connected := r.Clusters.ClientFor(previous.Cluster)
 		if !connected {
+			if r.connectionPending(previous.Cluster, "") {
+				return unknown(fmt.Errorf("cluster %q: %w", previous.Cluster, errMemberConnectionPending))
+			}
 			return unknown(nil)
 		}
 		cl = remote
@@ -179,24 +200,29 @@ func (r *Reconciler) observeHome(
 	r.observeDerivedPolicyStatus(isvc, previous.Cluster, derived)
 	r.observeDerivedRolloutStatus(isvc, previous.Cluster, derived)
 	if IsTerminallyFailed(derived, nil) {
-		return terminalHome(previous.Cluster, derived)
+		return terminalMember(previous.Cluster, derived)
 	}
 
 	statuses, err := componentIRStatuses(ctx, r.instanceStatusReader(cl), derived)
 	if err != nil {
-		candidate := retainedUnknownCandidate(isvc, previous)
+		candidate := r.unknownCandidate(isvc, previous)
 		candidate.Endpoint = nil
 		if endpoint := endpointFor(derived); endpoint != nil {
 			candidate.Endpoint = endpoint.DeepCopy()
 		}
 		candidate.Autoscaling = nil
 		candidate.Rollout = nil
-		return homeObservation{
-			state: homeUnknown, candidate: candidate, err: err,
+		// The member's own status was read: an ingress it reports not ready
+		// means the member cannot serve, whatever ready count the grace keeps.
+		if !derived.Status.IsConditionReady(v1beta1.IngressReady) {
+			candidate.ReadyReplicas = 0
+		}
+		return memberObservation{
+			state: memberUnknown, candidate: candidate, err: err,
 		}
 	}
 	if IsTerminallyFailed(derived, statuses) {
-		return terminalHome(previous.Cluster, derived)
+		return terminalMember(previous.Cluster, derived)
 	}
 
 	candidate := v1beta1.CandidatePlacement{
@@ -205,26 +231,26 @@ func (r *Reconciler) observeHome(
 	}
 	if AllComponentsAdmitted(derived, statuses) {
 		components := placementScaleComponents(derived)
-		floors := observedHomeFloors(derived)
+		floors := observedMemberFloors(derived)
 		candidate.Phase = v1beta1.CandidatePhaseAdmitted
 		if endpoint := endpointFor(derived); endpoint != nil {
 			candidate.Endpoint = endpoint.DeepCopy()
 		}
 		candidate.AdmittedReplicas = placementAdmittedReplicas(components, statuses, floors)
 		if derived.Status.IsConditionReady(v1beta1.IngressReady) {
-			candidate.ReadyReplicas = placementReadyReplicas(components, statuses, floors)
+			candidate.ReadyReplicas = placementReadyReplicas(components, statuses, servingFloors(isvc, floors))
 		}
 	}
-	return homeObservation{
-		state: homePresent, candidate: candidate,
+	return memberObservation{
+		state: memberPresent, candidate: candidate,
 		serving: placementCandidateServing(derived, candidate),
 	}
 }
 
-// observedHomeFloors reads the per-component floors a standing member is held
+// observedMemberFloors reads the per-component floors a standing member is held
 // to: its execution policy's floors when it carries them, otherwise the
 // replica minimums written into its spec.
-func observedHomeFloors(derived *v1beta1.InferenceService) map[v1beta1.ComponentType]int32 {
+func observedMemberFloors(derived *v1beta1.InferenceService) map[v1beta1.ComponentType]int32 {
 	if policy, err := protocol.FromDerived(derived); err == nil && policy != nil && len(policy.ReplicaFloors) > 0 {
 		return floorMap(policy.ReplicaFloors)
 	}
@@ -254,9 +280,9 @@ func decoderExtension(isvc *v1beta1.InferenceService) *v1beta1.ComponentExtensio
 	return &isvc.Spec.Decoder.ComponentExtensionSpec
 }
 
-func terminalHome(cluster string, member *v1beta1.InferenceService) homeObservation {
-	return homeObservation{
-		state: homePresent,
+func terminalMember(cluster string, member *v1beta1.InferenceService) memberObservation {
+	return memberObservation{
+		state: memberPresent,
 		candidate: v1beta1.CandidatePlacement{
 			Cluster: cluster,
 			Phase:   v1beta1.CandidatePhaseAdmitting,
@@ -264,22 +290,6 @@ func terminalHome(cluster string, member *v1beta1.InferenceService) homeObservat
 		terminal:       true,
 		terminalMember: member,
 	}
-}
-
-// retainedUnknownCandidate carries a home's last known state behind an unknown
-// observation. Ready capacity is withheld because it is the routing weight.
-func retainedUnknownCandidate(isvc *v1beta1.InferenceService, previous v1beta1.CandidatePlacement) v1beta1.CandidatePlacement {
-	candidate := *previous.DeepCopy()
-	candidate = normalizeCandidatePhase(candidate)
-	candidate.ObservationKnown = false
-	candidate.ReadyReplicas = 0
-	if !hasPolicyRefs(isvc) {
-		candidate.Autoscaling = nil
-	}
-	if !hasRolloutPolicyRefs(isvc) {
-		candidate.Rollout = nil
-	}
-	return candidate
 }
 
 func standingPlacementCandidates(isvc *v1beta1.InferenceService) []v1beta1.CandidatePlacement {
@@ -362,18 +372,18 @@ func (r *Reconciler) writeObservedSingle(
 		candidates := make([]v1beta1.CandidatePlacement, 0, len(observations.standing))
 		unknown := false
 		for _, cluster := range observations.projectedStanding() {
-			home := observations.homes[cluster]
-			if home.state == homeAbsent {
+			member := observations.members[cluster]
+			if member.state == memberAbsent {
 				continue
 			}
-			unknown = unknown || home.state == homeUnknown
-			candidates = append(candidates, home.candidate)
-			if home.state == homePresent && !home.terminal && home.candidate.Phase == v1beta1.CandidatePhaseAdmitted {
+			unknown = unknown || member.state == memberUnknown
+			candidates = append(candidates, member.candidate)
+			if member.state == memberPresent && !member.terminal && member.candidate.Phase == v1beta1.CandidatePhaseAdmitted {
 				r.clearGrace(isvc.UID)
 				return r.writePlacement(ctx, isvc, placementResult{
 					winner: cluster, phase: v1beta1.PlacementPhasePlaced,
-					candidates: []v1beta1.CandidatePlacement{home.candidate},
-					url:        home.candidate.Endpoint, ready: home.serving,
+					candidates: []v1beta1.CandidatePlacement{member.candidate},
+					url:        member.candidate.Endpoint, ready: member.serving,
 				})
 			}
 		}
@@ -386,24 +396,24 @@ func (r *Reconciler) writeObservedSingle(
 		})
 	}
 
-	home, ok := observations.get(winner)
+	member, ok := observations.get(winner)
 	if !ok {
-		home = homeObservation{state: homeAbsent}
+		member = memberObservation{state: memberAbsent}
 	}
-	switch home.state {
-	case homeUnknown:
-		return r.writePlacement(ctx, isvc, observedSingleResult(isvc, winner, home))
-	case homeAbsent:
+	switch member.state {
+	case memberUnknown:
+		return r.writePlacement(ctx, isvc, observedSingleResult(isvc, winner, member))
+	case memberAbsent:
 		return r.writeSingleAbsentGrace(ctx, isvc, winner)
-	case homePresent:
-		if home.terminal {
+	case memberPresent:
+		if member.terminal {
 			r.clearGrace(isvc.UID)
 			return r.writePlacement(ctx, isvc, placementResult{
 				winner: winner, phase: v1beta1.PlacementPhaseFailed,
-				candidates: []v1beta1.CandidatePlacement{home.candidate},
+				candidates: []v1beta1.CandidatePlacement{member.candidate},
 			})
 		}
-		if home.candidate.Phase != v1beta1.CandidatePhaseAdmitted {
+		if member.candidate.Phase != v1beta1.CandidatePhaseAdmitted {
 			remaining := r.graceRemaining(isvc.UID, time.Now())
 			if remaining > 0 {
 				return r.writeSingleAdmissionGrace(ctx, isvc, winner)
@@ -411,14 +421,14 @@ func (r *Reconciler) writeObservedSingle(
 			r.clearGrace(isvc.UID)
 			return r.writePlacement(ctx, isvc, placementResult{
 				phase:      v1beta1.PlacementPhaseAdmitting,
-				candidates: []v1beta1.CandidatePlacement{home.candidate},
+				candidates: []v1beta1.CandidatePlacement{member.candidate},
 			})
 		}
 		r.clearGrace(isvc.UID)
 		return r.writePlacement(ctx, isvc, placementResult{
 			winner: winner, phase: v1beta1.PlacementPhasePlaced,
-			candidates: []v1beta1.CandidatePlacement{home.candidate},
-			url:        home.candidate.Endpoint, ready: home.serving,
+			candidates: []v1beta1.CandidatePlacement{member.candidate},
+			url:        member.candidate.Endpoint, ready: member.serving,
 		})
 	default:
 		return r.writePlacement(ctx, isvc, placementResult{phase: v1beta1.PlacementPhasePending})
@@ -434,15 +444,15 @@ func sourceHasPendingWinnerIdentity(isvc *v1beta1.InferenceService) bool {
 func observedSingleResult(
 	isvc *v1beta1.InferenceService,
 	winner string,
-	home homeObservation,
+	member memberObservation,
 ) placementResult {
-	if home.state == homeUnknown && sourceHasPendingWinnerIdentity(isvc) {
+	if member.state == memberUnknown && sourceHasPendingWinnerIdentity(isvc) {
 		return placementResult{
 			winner: winner, phase: v1beta1.PlacementPhasePending,
 			readinessUnknown: true,
 		}
 	}
-	return observedCandidateResult(home)
+	return observedCandidateResult(member)
 }
 
 func (r *Reconciler) writeSingleAbsentGrace(
@@ -500,21 +510,21 @@ func (r *Reconciler) writeObservedMulti(
 			continue
 		}
 		considered++
-		if observations.homes[cluster].state != homeAbsent {
+		if observations.members[cluster].state != memberAbsent {
 			allAbsent = false
 		}
 	}
 	for _, cluster := range standing {
-		home := observations.homes[cluster]
-		if home.state == homeAbsent {
+		member := observations.members[cluster]
+		if member.state == memberAbsent {
 			continue
 		}
-		candidate := home.candidate
+		candidate := member.candidate
 		candidates = append(candidates, candidate)
-		unknown = unknown || home.state == homeUnknown
+		unknown = unknown || member.state == memberUnknown
 		if candidate.Phase == v1beta1.CandidatePhaseAdmitted {
 			admitted++
-			serving = serving || home.serving
+			serving = serving || member.serving
 		}
 	}
 	phase := v1beta1.PlacementPhasePending
@@ -531,15 +541,15 @@ func (r *Reconciler) writeObservedMulti(
 	})
 }
 
-func observedCandidateResult(home homeObservation) placementResult {
+func observedCandidateResult(member memberObservation) placementResult {
 	phase := v1beta1.PlacementPhaseAdmitting
-	if home.candidate.Phase == v1beta1.CandidatePhaseAdmitted {
+	if member.candidate.Phase == v1beta1.CandidatePhaseAdmitted {
 		phase = v1beta1.PlacementPhasePlaced
 	}
 	return placementResult{
-		winner: home.candidate.Cluster, phase: phase,
-		candidates: []v1beta1.CandidatePlacement{home.candidate},
-		url:        home.candidate.Endpoint, ready: home.serving,
-		readinessUnknown: home.state == homeUnknown,
+		winner: member.candidate.Cluster, phase: phase,
+		candidates: []v1beta1.CandidatePlacement{member.candidate},
+		url:        member.candidate.Endpoint, ready: member.serving,
+		readinessUnknown: member.state == memberUnknown,
 	}
 }

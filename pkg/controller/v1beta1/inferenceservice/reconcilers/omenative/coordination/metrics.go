@@ -72,7 +72,7 @@ var (
 	ratioGateBypassedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "ome_omenative_ratio_gate_bypassed_total",
-			Help: "Number of times CheckRatioGate was bypassed for an in-place strategy because the drain is paired 1:1 with a same-pod return.",
+			Help: "Number of times the RatioBalanced serving-capacity band was waived for an in-place strategy because the drain is paired 1:1 with a same-pod return; the new-revision lockstep still ran.",
 		},
 		[]string{"component", "strategy"},
 	)
@@ -158,9 +158,10 @@ func RecordMixedPairing(namespace, isvc, group string) {
 }
 
 // RecordRatioGateBypassed increments the bypass counter when the
-// OMENative ops dispatcher skips CheckRatioGate for an in-place
-// update strategy (InPlaceIfPossible / InPlaceOnly). See
-// EventReasonRatioGateBypassed for the rationale.
+// OMENative ops dispatcher admits an in-place start (InPlaceIfPossible /
+// InPlaceOnly) past the RatioBalanced serving-capacity band; the
+// new-revision lockstep still ran for it. See EventReasonRatioGateBypassed
+// for the rationale.
 func RecordRatioGateBypassed(component, strategy string) {
 	if component == "" || strategy == "" {
 		return

@@ -598,6 +598,7 @@ const (
 	omeAPIPackagePath  = "sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	codecPackagePath   = "sigs.k8s.io/ome/pkg/controller/v1beta1/irstatus"
 	fixturePackagePath = codecPackagePath + "/irstatustest"
+	engineFixturePath  = "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/testfixture"
 	decodedAccessor    = "GetDecoded"
 	singleWriter       = "persistInferenceReplicaStatus"
 
@@ -658,13 +659,26 @@ const (
 	// published, so the service's pass can be driven without that
 	// controller; a test-only package no binary links.
 	replicaControllerStandIn = "replay driver standing in for the replica controller; a test-only package no binary links"
+	// engineTestFixtureStore: the workload engine's shared test fixtures read
+	// and write the dense rows of a replica on a fake apiserver, standing in
+	// for the replica controller's row store under an engine pass; a
+	// test-only package no binary links (TestIRStatusFixturePackageImportInventory).
+	engineTestFixtureStore = "engine test fixture standing in for the replica controller's row store; a test-only package no binary links"
 )
+
+// testOnlyFixturePackages are the production-built packages only tests
+// import; the import inventory proves it, which is what makes their rows
+// below true.
+var testOnlyFixturePackages = []string{fixturePackagePath, engineFixturePath}
 
 // approvedStatusWriters are the InferenceReplica status writes outside the
 // single writer, keyed as the sweep prints a site, each with the reason it
 // stands: the one stand-in for the replica controller itself.
 var approvedStatusWriters = map[string]string{
 	"pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/replay/members.go:driver.publish (Status().Update)": replicaControllerStandIn,
+	"pkg/controller/v1beta1/workload/testfixture/service.go:MutateInstanceOnReplica (Status().Update)":                 engineTestFixtureStore,
+	"pkg/controller/v1beta1/workload/testfixture/service.go:RemoveInstanceOnReplica (Status().Update)":                 engineTestFixtureStore,
+	"pkg/controller/v1beta1/workload/testfixture/revision.go:SeedRunningRevisionWithMeta (Status().Update)":            engineTestFixtureStore,
 }
 
 type accessCounts struct {
@@ -722,6 +736,7 @@ func TestInferenceReplicaStatusReadInventory(t *testing.T) {
 	approve("pkg/controller/v1beta1/inferencereplica/status.go", "mirrorInstanceCounters", accessCounts{reads: 1, readWrites: 1}, inMemoryMirror, rows)
 	approve("pkg/controller/v1beta1/inferencereplica/status.go", "stagedAtPartition", read(1), decodedObjectRows, rows)
 	approve("pkg/controller/v1beta1/inferencereplica/status.go", "computeRolloutStalledCondition", read(2), decodedObjectRows, rows)
+	approve("pkg/controller/v1beta1/inferencereplica/status.go", "computeRetryBlockRolloutHold", read(1), decodedObjectRows, rows)
 	approve("pkg/controller/v1beta1/inferencereplica/status.go", "computeDrainOverdueCondition", read(2), decodedObjectRows, rows)
 	approve("pkg/controller/v1beta1/inferencereplica/status.go", "computeReadyCondition", read(1), decodedObjectRows, rows)
 	approve("pkg/controller/v1beta1/inferencereplica/reconciler.go", "Reconciler.Reconcile", read(2), decodedObjectRows, rows)
@@ -742,14 +757,20 @@ func TestInferenceReplicaStatusReadInventory(t *testing.T) {
 
 	// Remote readers: coordination and placement consume the object that
 	// irprojector.DecodedComponentIR(Status) returned.
-	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/pairing.go", "GateContext.CheckPairing", accessCounts{reads: 1, readWrites: 1}, decodedObjectRows, rows)
-	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/ratio.go", "GateContext.CheckRatio", read(3), decodedObjectRows, rows)
+	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/pairing.go", "GateContext.pairingVerdict", accessCounts{reads: 1, readWrites: 1}, decodedObjectRows, rows)
+	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/pairing.go", "attemptOpen", accessCounts{reads: 1, readWrites: 1}, decodedObjectRows, rows)
+	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/pairing.go", "pairingPicture.heldStill", accessCounts{reads: 1, readWrites: 1}, decodedObjectRows, rows)
+	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/pairing.go", "sideComingUp", accessCounts{reads: 1, readWrites: 1}, decodedObjectRows, rows)
+	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/pairing.go", "gangReplacementServes", accessCounts{reads: 1, readWrites: 1}, decodedObjectRows, rows)
+	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/pairing_drain.go", "pinnedCohort", accessCounts{reads: 1, readWrites: 1}, decodedObjectRows, rows)
+	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/batch_step.go", "readBatchMember", read(1), decodedObjectRows, rows)
+	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/ratio.go", "GateContext.ratioState", read(4), decodedObjectRows, rows)
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/ratio.go", "GateContext.CheckSurge", read(1), decodedObjectRows, rows)
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/sequential_gate.go", "observeSequentialComponentsForGate", read(1), decodedObjectRows, rows)
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/coordination/reconciler.go", "buildComponentObservation", read(2), decodedObjectRows, rows)
 	// The canary dispatcher reads each member's rows through the decoded
 	// accessor to anchor a canary pod's death at its Instance's entry into Ready.
-	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/canary/dispatch.go", "observeCanaryRevisions", read(2), decodedObjectRows, rows)
+	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/canary/dispatch.go", "observeCanaryRevisions", read(1), decodedObjectRows, rows)
 	approve("pkg/controller/v1beta1/placement/admission.go", "admittedReplicaCount", read(2), decodedObjectRows, rows)
 	approve("pkg/controller/v1beta1/placement/admission.go", "componentHasAdmittedInstance", read(1), decodedObjectRows, rows)
 	approve("pkg/controller/v1beta1/placement/member_admission.go", "verifiedMemberAdmission", accessCounts{reads: 1, readWrites: 1}, decodedObjectRows+" (filters admission on a deep copy; never persists rows)", rows)
@@ -775,9 +796,20 @@ func TestInferenceReplicaStatusReadInventory(t *testing.T) {
 	// Shared test fixtures: the builder writes dense rows into a status it
 	// constructs; nothing outside tests links it.
 	approve("pkg/controller/v1beta1/irstatus/irstatustest/fixtures.go", "LogicalStatus", accessCounts{writes: 1}, testFixtureBuilder, rows)
+	// The workload engine's shared test fixtures: the replica builder writes
+	// dense rows into the status it constructs, and the row store the tests
+	// hand an engine pass reads and writes them on the fake apiserver.
+	approve("pkg/controller/v1beta1/workload/testfixture/service.go", "InferenceReplica", accessCounts{writes: 1}, engineTestFixtureStore, rows)
+	approve("pkg/controller/v1beta1/workload/testfixture/service.go", "StoredInstanceStatuses", read(1), engineTestFixtureStore, rows)
+	approve("pkg/controller/v1beta1/workload/testfixture/service.go", "MutateInstanceOnReplica", accessCounts{reads: 3, writes: 1, readWrites: 1}, engineTestFixtureStore, rows)
+	approve("pkg/controller/v1beta1/workload/testfixture/service.go", "RemoveInstanceOnReplica", accessCounts{reads: 3, writes: 1}, engineTestFixtureStore, rows)
+	approve("pkg/controller/v1beta1/workload/testfixture/revision.go", "SeedRunningRevisionWithMeta", accessCounts{reads: 2, readWrites: 1}, engineTestFixtureStore, rows)
 	// The InferenceService replay driver builds the dense rows its replica
 	// stand-in publishes.
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/replay/members.go", "driver.publish", accessCounts{writes: 1}, replicaControllerStandIn, rows)
+	// The same driver's run check reads the dense rows its stand-in published,
+	// on the replica it built itself.
+	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/replay/invariants.go", "CheckRunOpensOnChange", read(1), replicaControllerStandIn, rows)
 
 	inv := loadStatusInventory(t)
 	actual := map[fieldUse]accessCounts{}
@@ -831,11 +863,18 @@ func TestInferenceReplicaFetchInventory(t *testing.T) {
 	// Replay harness pass-through reads.
 	approve("pkg/controller/v1beta1/workload/replay/driver.go", "driver.bumpGeneration", "Get", 1, passThroughSpecMetadata+" (replay owner generation bump)")
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/replay/members.go", "driver.replica", "Get", 1, replicaControllerStandIn+" (the live replica its publication, revisions and pods are built on)")
+	// The workload engine's shared test fixtures re-read the replica they
+	// seeded on the fake apiserver before every row read or write.
+	approve("pkg/controller/v1beta1/workload/testfixture/service.go", "StoredInstanceStatuses", "Get", 1, engineTestFixtureStore)
+	approve("pkg/controller/v1beta1/workload/testfixture/service.go", "MutateInstanceOnReplica", "Get", 1, engineTestFixtureStore)
+	approve("pkg/controller/v1beta1/workload/testfixture/service.go", "RemoveInstanceOnReplica", "Get", 1, engineTestFixtureStore)
+	approve("pkg/controller/v1beta1/workload/testfixture/revision.go", "SeedRunningRevisionWithMeta", "Get", 1, engineTestFixtureStore)
 
 	// ISVC-side raw accessors and their callers.
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector/irstatus_read.go", "componentIRAt", "Get", 1, passThroughTopLevelStatus+" (raw accessor behind ComponentIR and ComponentIRFor, for callers that inspect no rows)")
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector/status.go", "aggregateOneComponent", "Get", 1, passThroughTopLevelStatus+" (counters, revisions, RolloutHold, Conditions mirrored onto the ISVC)")
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector/projector.go", "EnsureInferenceReplica", "Get", 1, passThroughSpecMetadata+" (spec projection)")
+	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/scaling/reconcile.go", "observe", "Get", 1, passThroughSpecMetadata+" (anchor and follower desired replica counts, ownership and autoscaler checks; no status rows)")
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/canary/dispatch.go", "reconcileRollbackSignal", "Get", 1, passThroughTopLevelStatus+" (revision pointers and observedGeneration)")
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/omenative/rolloutrun/observe.go", "observeGroupTargets", "Get", 1, passThroughTopLevelStatus+" (revision pointers and replica counters)")
 	approve("pkg/controller/v1beta1/inferenceservice/reconcilers/pdb/cutover.go", "OMENativeCutoverReady", "Get", 1, passThroughTopLevelStatus+" (ready and available counters)")
@@ -847,7 +886,7 @@ func TestInferenceReplicaFetchInventory(t *testing.T) {
 	approve("pkg/webhook/admission/isvc/replica_refs.go", "InferenceServiceValidator.validateReferencedReplica", "Get", 1, passThroughSpecMetadata+" (referenced replica: component, parentRef, owner)")
 
 	// Placement discovers identities before fetching bounded decoded rows.
-	approve("pkg/controller/v1beta1/placement/planned_observation.go", "Reconciler.observePlannedHome", "List", 1, passThroughSpecMetadata+" (inventory identities; each object is fetched through GetDecoded before resource accounting)")
+	approve("pkg/controller/v1beta1/placement/planned_observation.go", "Reconciler.observePlannedMemberOnce", "List", 1, passThroughSpecMetadata+" (inventory identities; each object is fetched through GetDecoded before resource accounting)")
 
 	// Generated client-go informer: a raw list/watch cache that consumes no
 	// rows; row-consuming code reads through the decoded accessor, never
@@ -952,30 +991,33 @@ func readerCarriesDecoder(typ types.Type) bool {
 	return false
 }
 
-// The shared fixture package writes the dense representation directly, so its
-// read-inventory classification holds only while no production package links
-// it. The inventory loads non-test files only, so any importer found here is
-// production code; the fixture package itself must be among the loaded
-// packages so a rename cannot make the check pass vacuously.
+// The shared fixture packages read and write the dense representation
+// directly, so their inventory classifications hold only while no production
+// package links them. The inventory loads non-test files only, so any
+// importer found here is production code; each fixture package itself must
+// be among the loaded packages so a rename cannot make the check pass
+// vacuously.
 func TestIRStatusFixturePackageImportInventory(t *testing.T) {
 	inv := loadStatusInventory(t)
-	loaded := false
-	var importers []string
-	for _, pkg := range inv.pkgs {
-		if pkg.PkgPath == fixturePackagePath {
-			loaded = true
-			continue
+	for _, fixturePath := range testOnlyFixturePackages {
+		loaded := false
+		var importers []string
+		for _, pkg := range inv.pkgs {
+			if pkg.PkgPath == fixturePath {
+				loaded = true
+				continue
+			}
+			if _, ok := pkg.Imports[fixturePath]; ok {
+				importers = append(importers, pkg.PkgPath)
+			}
 		}
-		if _, ok := pkg.Imports[fixturePackagePath]; ok {
-			importers = append(importers, pkg.PkgPath)
+		if !loaded {
+			t.Fatalf("fixture package %s is not among the loaded production packages; update testOnlyFixturePackages", fixturePath)
 		}
-	}
-	if !loaded {
-		t.Fatalf("fixture package %s is not among the loaded production packages; update fixturePackagePath", fixturePackagePath)
-	}
-	sort.Strings(importers)
-	if len(importers) != 0 {
-		t.Fatalf("production packages import the test-only fixture package %s: %v", fixturePackagePath, importers)
+		sort.Strings(importers)
+		if len(importers) != 0 {
+			t.Fatalf("production packages import the test-only fixture package %s: %v", fixturePath, importers)
+		}
 	}
 }
 

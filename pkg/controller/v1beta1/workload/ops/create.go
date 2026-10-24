@@ -63,19 +63,13 @@ func Create(ctx context.Context, deps workload.Deps, input workload.ReconcileInp
 // demoted row on the target already records, and a Failed row is admitted
 // only on the target it already records. See the surgeFreeIndex predicate.
 //
-// No-op (returns ctrl.Result{}, nil) when no index qualifies, so pure
-// rollouts are unaffected.
+// The pass builds nothing for the other indices, but it still frees a
+// lost node's names for every planned Instance (recoverUnknownPhaseInstances):
+// a Ready row whose pods sit on a node that stopped reporting is not
+// surge-free and has no attempt of its own, so this scope is the only one
+// that reaches it while another Instance's roll or repair holds the pass.
+// With no index to build and nothing to free the pass writes nothing.
 func CreateFreshIndices(ctx context.Context, deps workload.Deps, input workload.ReconcileInput, plan workload.ComponentPlan, target *appsv1.ControllerRevision) (ctrl.Result, error) {
-	eligible := false
-	for _, inst := range plan.Instances {
-		if surgeFreeIndex(input, inst.Index, target) {
-			eligible = true
-			break
-		}
-	}
-	if !eligible {
-		return ctrl.Result{}, nil
-	}
 	return createFiltered(ctx, deps, input, plan, target, func(idx int32) bool {
 		return surgeFreeIndex(input, idx, target)
 	})
@@ -258,12 +252,16 @@ func createFilteredBatched(
 	// missing-pod diff below reads that target as present and nothing else
 	// in the pass would free it. Route it the same way the rebuild paths
 	// do — node-death evidence decides when the name is freed, and the
-	// attempt reports the wait meanwhile — before any Instance is selected.
-	// A held Instance is dropped from the selection below, which would
-	// otherwise leave the pass looking converged: not-converged keeps the
-	// ordinary poll, and nodeDeathAt carries the exact policy boundary,
-	// because the node this waits on emits no event to wake anyone on.
-	held, nodeDeathAt, err := recoverUnknownPhaseInstances(ctx, deps, input, plan, keep, byInstance)
+	// attempt reports the wait meanwhile — before any Instance is selected,
+	// and over every planned Instance, not only the ones keep admits: the
+	// scope says which Instances this pass may build for, and a lost node
+	// under any other Instance is freed on the same policy clock whatever
+	// the pass is otherwise doing. A held Instance is dropped from the
+	// selection below, which would otherwise leave the pass looking
+	// converged: not-converged keeps the ordinary poll, and nodeDeathAt
+	// carries the exact policy boundary, because the node this waits on
+	// raises no event to requeue on.
+	held, nodeDeathAt, err := recoverUnknownPhaseInstances(ctx, deps, input, plan, byInstance)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -273,6 +271,7 @@ func createFilteredBatched(
 	}
 
 	allReady := len(held) == 0
+	var revisionErr error
 	var retryBlockWait time.Duration
 	actions := make([]createPassAction, 0, len(plan.Instances))
 	retirements := make([]retiredCreateAttempt, 0)
@@ -281,15 +280,15 @@ func createFilteredBatched(
 	// does not fit, it leads the next wave instead of being bypassed by smaller
 	// later Instances.
 	selectionClosed := false
-	heldByStep := canaryStepHeldIndices(input, plan, target)
+	heldByRoll := RollHeldIndices(input, plan, target)
 
-	for _, inst := range plan.Instances {
-		if !keep(inst.Index) {
+	for _, planned := range plan.Instances {
+		if !keep(planned.Index) {
 			continue
 		}
 		// A row the apiserver refused is left as the rejection left it
 		// until the revision in force admits a fresh attempt.
-		if parked, wait := rejectionParked(input, input.ObservedState.Instance(inst.Index)); parked {
+		if parked, wait := rejectionParked(input, input.ObservedState.Instance(planned.Index)); parked {
 			if wait > 0 && (retryBlockWait == 0 || wait < retryBlockWait) {
 				retryBlockWait = wait
 			}
@@ -298,11 +297,11 @@ func createFilteredBatched(
 		// A row keeping an attempt the gang verdict ended is not this
 		// pass's to build or promote: the roll replaces it at a corrective
 		// revision and the reset mailbox clears it.
-		if workload.EndedByOwnershipVerdict(input.ObservedState.Instance(inst.Index)) {
+		if workload.EndedByOwnershipVerdict(input.ObservedState.Instance(planned.Index)) {
 			continue
 		}
-		existing := byInstance[inst.Index]
-		observed := input.ObservedState.Instance(inst.Index)
+		existing := byInstance[planned.Index]
+		observed := input.ObservedState.Instance(planned.Index)
 		// A parked attempt whose set stands is the roll's: nothing of it is
 		// refilled or promoted here. The pass keeps its cadence while a
 		// pod of the set is still coming up, as for any index it is not
@@ -313,6 +312,22 @@ func createFilteredBatched(
 			}
 			continue
 		}
+		// Both rows of a migration pair are the migration record's while
+		// their pins stand: the drive moves them, and only the record's
+		// completion or expiry ends a pin. The pass neither refills nor
+		// promotes either row, whatever its pods report, and keeps its
+		// cadence so the record's deadline is met when no drive paces the
+		// pair.
+		if workload.Owner(observed) == workload.OwnerMigrate {
+			allReady = false
+			continue
+		}
+		// The attempt renders one revision and is short of that revision's
+		// pod set: a gang refilled beside live pods keeps the width it runs,
+		// and one rebuilt at the target takes the target's.
+		rev := createRevision(input, planned.Index, existing, target, heldByRoll[planned.Index])
+		inst := planned
+		inst.Runners = plan.RunnersFor(planned, rev)
 		desired := expectedPodNamesForInstance(input, plan, inst)
 		missing := missingPodTargets(desired, existing)
 		// An attempt that is fully materialized and runtime-ready is one
@@ -348,7 +363,6 @@ func createFilteredBatched(
 			continue
 		}
 		if len(missing) > 0 {
-			rev := createRevision(input, inst.Index, existing, target, heldByStep[inst.Index])
 			allowed, treatedReady, retryAfter := allowCreateForMissingInstance(input, plan, inst, existing, rev)
 			if retryAfter > 0 && (retryBlockWait == 0 || retryAfter < retryBlockWait) {
 				retryBlockWait = retryAfter
@@ -432,13 +446,21 @@ func createFilteredBatched(
 			actions = append(actions, createPassAction{ready: action})
 			continue
 		}
-		var mutation workload.InstanceMutation
-		onTarget := target != nil && existingPodsMatchTargetRevision(podSet, target)
-		if onTarget {
-			mutation = status.ReadyOnRevisionMutation(inst.Index, target.Name, input.Now())
-		} else {
-			mutation = status.ReadyMutation(inst.Index, input.Now())
+		readyRevision := podSetRevision(podsAtTargets(podSet, desired), observed, target)
+		if readyRevision == "" {
+			action.promote = false
+			actions = append(actions, createPassAction{ready: action})
+			// Preserve a settled legacy row so the update pass can replace its
+			// pods under normal rollout budgets. An unfinished attempt cannot
+			// discard its operation without knowing what its pods run.
+			if observed == nil || observed.Phase != workload.InstancePhaseReady || observed.Operation != nil {
+				allReady = false
+				revisionErr = errors.Join(revisionErr, fmt.Errorf("instance %d cannot become Ready from its pod labels: %w", inst.Index, query.ErrRevisionUnknown))
+			}
+			continue
 		}
+		mutation := status.ReadyOnRevisionMutation(inst.Index, readyRevision, input.Now())
+		onTarget := target != nil && readyRevision == target.Name
 		probe := workload.InstanceStatus{Index: inst.Index}
 		if observed != nil {
 			probe = *observed
@@ -535,7 +557,7 @@ func createFilteredBatched(
 	}
 	// A server-suggested throttle delay is a floor, not a preference:
 	// waking earlier just re-earns the 429.
-	return workload.NoSoonerThan(res, input.Pacing.Pending()), nil
+	return workload.NoSoonerThan(res, input.Pacing.Pending()), revisionErr
 }
 
 func processStartActions(
@@ -637,7 +659,7 @@ func processReadyActions(ctx context.Context, deps workload.Deps, input workload
 			if podreadiness.IsServing(pod) {
 				continue
 			}
-			changed, err := podreadiness.MarkPodServingWithChange(ctx, deps.Client, deps.Reader(), pod, podreadiness.WriterLifecycle, podreadiness.KeyLifecycleInstanceReady)
+			changed, err := putPodBackIntoService(ctx, deps, input, action.instance.Index, pod)
 			if err != nil {
 				// A permanently refused gate patch disposes the row; its
 				// promotion is void and the neighbours go on.
@@ -671,6 +693,21 @@ func processReadyActions(ctx context.Context, deps workload.Deps, input workload
 		}
 	}
 	return commitReadyActions(ctx, deps, input, completed)
+}
+
+// putPodBackIntoService writes the serving gate on a pod the Create pass
+// promotes. A hold a surge's drain step left on the pod outlives the
+// attempt that wrote it, so it is lifted first: the gate write alone would
+// leave the pod out of rotation under a hold nothing else releases.
+func putPodBackIntoService(ctx context.Context, deps workload.Deps, input workload.ReconcileInput, idx int32, pod *corev1.Pod) (bool, error) {
+	var activeOrdinal int32
+	if row := input.ObservedState.Instance(idx); row != nil {
+		activeOrdinal = row.ActiveOrdinal
+	}
+	if err := liftSurgeDrainHolds(ctx, deps, idx, activeOrdinal, []*corev1.Pod{pod}); err != nil {
+		return false, err
+	}
+	return podreadiness.MarkPodServingWithChange(ctx, deps.Client, deps.Reader(), pod, podreadiness.WriterLifecycle, podreadiness.KeyLifecycleInstanceReady)
 }
 
 func commitReadyActions(ctx context.Context, deps workload.Deps, input workload.ReconcileInput, actions []*createReadyAction) (bool, error) {
@@ -983,33 +1020,24 @@ func podsAtTargets(existing []*corev1.Pod, targets []podTarget) []*corev1.Pod {
 
 // createRevision names the revision a Create attempt on Instance idx renders
 // and pins: a committed attempt's pin; else the running revision, for a refill
-// beside live pods of it or an Instance the canary step holds; else the target.
-func createRevision(input workload.ReconcileInput, idx int32, existing []*corev1.Pod, target *appsv1.ControllerRevision, heldByStep bool) string {
+// beside live pods of it or an Instance the roll's partition holds; else the
+// target.
+func createRevision(input workload.ReconcileInput, idx int32, existing []*corev1.Pod, target *appsv1.ControllerRevision, heldByRoll bool) string {
 	s := input.ObservedState.Instance(idx)
 	if s != nil && s.Operation != nil && s.Operation.Type == workload.InstanceOperationCreate && s.Operation.TargetRevision != "" {
 		return s.Operation.TargetRevision
 	}
-	// A refilled member joins the set it repairs, and an Instance the canary
-	// step holds stays on the step's stable side: rolling either is the update
-	// pass's job. Any other Instance with no live pod left is rebuilt at the target.
-	if s != nil && s.RunningRevision != "" && (heldByStep || len(query.ExcludeTerminalPods(existing)) > 0) {
+	// A refilled member joins the set it repairs, and an Instance the roll's
+	// partition holds stays on the revision it runs: rolling either is the
+	// update pass's job, and the roll may not take a held Instance. Any other
+	// Instance with no live pod left is rebuilt at the target.
+	if s != nil && s.RunningRevision != "" && (heldByRoll || len(query.ExcludeTerminalPods(existing)) > 0) {
 		return s.RunningRevision
 	}
 	if target != nil {
 		return target.Name
 	}
 	return ""
-}
-
-// canaryStepHeldIndices is the set of Instances the canary step's projected
-// partition holds on the revision they run, the step's stable side. Empty
-// when no canary governs the Component or the pass has no roll target.
-func canaryStepHeldIndices(input workload.ReconcileInput, plan workload.ComponentPlan, target *appsv1.ControllerRevision) map[int32]bool {
-	pacing := input.DesiredSpec.Pacing
-	if target == nil || pacing == nil || pacing.Partition == nil {
-		return nil
-	}
-	return PartitionHeldIndices(pacing.Partition, input, plan.Instances, target.Name)
 }
 
 // createAttemptOwnsPods reports whether an Instance's pods belong to a Create
@@ -1206,22 +1234,40 @@ func earliestPodCreation(pods []*corev1.Pod) time.Time {
 // prior RunningRevision; a fresh recreate would label them and the
 // next pass would promote correctly.
 func existingPodsMatchTargetRevision(existing []*corev1.Pod, target *appsv1.ControllerRevision) bool {
-	if len(existing) == 0 || target == nil {
-		return false
-	}
-	tgt := query.RevisionOf(target)
-	if tgt.IsZero() {
+	return existingPodsMatchRevision(existing, query.RevisionOf(target))
+}
+
+func existingPodsMatchRevision(existing []*corev1.Pod, rev query.RevisionID) bool {
+	if len(existing) == 0 || query.RequireNamedRevision(rev) != nil {
 		return false
 	}
 	for _, pod := range existing {
 		if pod == nil {
 			return false
 		}
-		if !query.RevisionFromPod(pod).Same(tgt) {
+		if !query.RevisionFromPod(pod).Same(rev) {
 			return false
 		}
 	}
 	return true
+}
+
+// podSetRevision verifies one known revision against every active pod.
+// The current target alone cannot identify a pod created at an older version.
+func podSetRevision(pods []*corev1.Pod, row *workload.InstanceStatus, target *appsv1.ControllerRevision) string {
+	revisions := []string{query.RevisionOf(target).Name()}
+	if row != nil {
+		revisions = append(revisions, row.RunningRevision, row.TargetRevision)
+		if row.Operation != nil {
+			revisions = append(revisions, row.Operation.TargetRevision)
+		}
+	}
+	for _, name := range revisions {
+		if existingPodsMatchRevision(pods, query.RevisionFromName(name)) {
+			return name
+		}
+	}
+	return ""
 }
 
 // podTarget describes one pod to create within an Instance.
@@ -1290,6 +1336,9 @@ func activeOrdinalForInstance(input workload.ReconcileInput, idx int32) int32 {
 // unclassified (transient) rejection stays a *podCreateError, which callers
 // propagate.
 func createMissingPods(ctx context.Context, deps workload.Deps, input workload.ReconcileInput, plan workload.ComponentPlan, inst workload.InstancePlan, idx int32, targets []podTarget, tmpl podTemplate) (int, error) {
+	if len(targets) == 0 {
+		return 0, nil
+	}
 	// A gang whose deterministic PodGroup name this owner cannot write —
 	// held by another controller, or by an object still being collected —
 	// gets no members: every pod is stamped with that name, so creating
@@ -1298,6 +1347,9 @@ func createMissingPods(ctx context.Context, deps workload.Deps, input workload.R
 	// reports; the escalation pass owns the row's fate.
 	if input.Gangs.BlocksPods(idx) {
 		return 0, nil
+	}
+	if err := query.RequireNamedRevision(tmpl.revision); err != nil {
+		return 0, fmt.Errorf("cannot create pods for instance %d: %w", idx, err)
 	}
 	// Capacity the provisioner has not readied withholds the whole batch:
 	// nothing created is the same wait, and the hold pass reports it.
@@ -1344,6 +1396,9 @@ func createMissingPods(ctx context.Context, deps workload.Deps, input workload.R
 		}
 		if err := confine(pod, selectors[i]); err != nil {
 			return created, fmt.Errorf("confine pod %s: %w", t.Name, err)
+		}
+		if !query.RevisionFromPod(pod).Same(tmpl.revision) {
+			return created, fmt.Errorf("cannot create pod %s: revision label %q does not identify template %s", t.Name, pod.Labels[query.LabelRevisionHash], tmpl.revision.Name())
 		}
 
 		// Advisory (non-blocking): a multi-node gang worker rendered with no

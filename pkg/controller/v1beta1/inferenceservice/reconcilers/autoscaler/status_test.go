@@ -327,8 +327,8 @@ func TestWriteAutoscalerStatus_ScaledObjectMirror(t *testing.T) {
 }
 
 // TestWriteAutoscalerStatus_ScaledObjectMirror_NoDerivedHPA pins the
-// fallback where SO.Status.HpaName is empty (older KEDA versions stamp it
-// lazily) AND no HPA exists under the SO's own name — counters land at
+// fallback where SO.Status.HpaName is empty (KEDA records it after its
+// first reconcile) AND the SO configures no HPA name — counters land at
 // zero, no error. The Conditions + LastScaleTime still mirror because
 // those live on the SO directly.
 func TestWriteAutoscalerStatus_ScaledObjectMirror_NoDerivedHPA(t *testing.T) {

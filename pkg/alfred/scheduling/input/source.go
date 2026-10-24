@@ -44,6 +44,10 @@ type sourceState struct {
 	members []podMember
 	groups  []*unstructured.Unstructured
 	pending []corev1.Pod
+	// inlineCSI accepts member Pods with CSI inline volumes. Only a move onto
+	// a new TPU slice sets it: it runs no simulation, and such a volume binds
+	// no PersistentVolume, so it adds no placement constraint.
+	inlineCSI bool
 }
 
 // BuildRequest constructs a closed scheduling prediction from one validated
@@ -64,7 +68,7 @@ func BuildRequest(s *Snapshot, source Source, profiles scheduling.Config, reques
 		return scheduling.Request{}, fmt.Errorf("scheduling profiles: %w", err)
 	}
 
-	state, err := resolveSource(s, source)
+	state, err := resolveSource(s, source, false)
 	if err != nil {
 		return scheduling.Request{}, err
 	}
@@ -90,7 +94,7 @@ func BuildRequest(s *Snapshot, source Source, profiles scheduling.Config, reques
 		if schedulerName != initial.ProfileIdentity().SchedulerName || pod.Labels[labelPodGroup] != "" {
 			return scheduling.Request{}, fmt.Errorf("pending Pod %s/%s requires unsupported scheduler or gang competition", pod.Namespace, pod.Name)
 		}
-		if err := rejectUnsupportedPodInputs(pod); err != nil {
+		if err := rejectUnsupportedPodInputs(pod, false); err != nil {
 			return scheduling.Request{}, fmt.Errorf("pending competitor %s/%s: %w", pod.Namespace, pod.Name, err)
 		}
 	}
@@ -169,8 +173,8 @@ func validateSourceKey(source Source) error {
 	return nil
 }
 
-func resolveSource(s *Snapshot, source Source) (*sourceState, error) {
-	state := &sourceState{}
+func resolveSource(s *Snapshot, source Source, inlineCSI bool) (*sourceState, error) {
+	state := &sourceState{inlineCSI: inlineCSI}
 	for i := range s.InferenceServices {
 		candidate := &s.InferenceServices[i]
 		if candidate.Namespace == source.Namespace && candidate.Name == source.InferenceService {
@@ -385,7 +389,7 @@ func (state *sourceState) memberFromPod(pod corev1.Pod, source Source) (podMembe
 	if !revisionMatches(pod.Labels[labelRevisionHash], state.row.RunningRevision) {
 		return podMember{}, fmt.Errorf("source Pod revision does not match running revision")
 	}
-	if err := rejectUnsupportedPodInputs(&pod); err != nil {
+	if err := rejectUnsupportedPodInputs(&pod, state.inlineCSI); err != nil {
 		return podMember{}, err
 	}
 	return podMember{pod: pod, runner: runner, ordinal: ordinal, incarnation: incarnation}, nil

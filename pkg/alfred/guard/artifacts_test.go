@@ -3,11 +3,13 @@ package guard
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	admissionv1 "k8s.io/api/admissionregistration/v1"
@@ -176,11 +178,26 @@ func TestChartMigrationOptIn(t *testing.T) {
 			t.Fatal("default chart enabled migration artifacts")
 		}
 	}
-	for _, args := range [][]string{{"--set", "migration.apiVersion=v2", "--set", "simulation.configMapName=worker"}, {"--set", "migration.apiVersion=v1"}} {
-		out, err := exec.Command("helm", append([]string{"template", "alfred", "../../../charts/ome-alfred"}, args...)...).CombinedOutput()
-		if err == nil {
-			t.Fatalf("invalid opt-in accepted: %s", out)
+	out, err := exec.Command("helm", "template", "alfred", "../../../charts/ome-alfred", "--set", "migration.apiVersion=v2", "--set", "simulation.configMapName=worker").CombinedOutput()
+	if err == nil {
+		t.Fatalf("invalid opt-in accepted: %s", out)
+	}
+
+	// Without a simulation worker, dispatch is enabled for TPU slice moves only:
+	// the guard and journal render, and no worker flag or volume does.
+	guarded, journal := false, false
+	for _, o := range rendered(t, "helm", "template", "alfred", "../../../charts/ome-alfred", "--set", "migration.apiVersion=v1") {
+		guarded = guarded || o.GetKind() == "ValidatingAdmissionPolicy"
+		journal = journal || o.GetName() == "alfred-dispatch-state"
+		if o.GetKind() == "Deployment" {
+			raw, _ := json.Marshal(o.Object)
+			if strings.Contains(string(raw), "--simulation-workers") || strings.Contains(string(raw), "alfred-simulation") {
+				t.Fatalf("dispatch without a worker rendered a simulation worker: %s", raw)
+			}
 		}
+	}
+	if !guarded || !journal {
+		t.Fatalf("dispatch without a worker must still render the admission guard (%t) and journal (%t)", guarded, journal)
 	}
 }
 

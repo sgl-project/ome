@@ -8,10 +8,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 // acceleratorNames is the list a wired dispatch site passes, from the manager's
@@ -56,7 +56,7 @@ func acceleratorPodSpec(name string) *corev1.PodSpec {
 // lands the label on the pod template.
 func queuedParams(t *testing.T, isvc *v1beta1.InferenceService, queue string) Params {
 	t.Helper()
-	p := minimalParams(t, isvc, fake.NewClientBuilder().WithScheme(testScheme(t)).Build())
+	p := minimalParams(t, isvc, fakeclient.New(t))
 	p.ObjectMeta.Labels[constants.KueueQueueLabelKey] = queue
 	if isvc.Spec.Engine.Labels == nil {
 		isvc.Spec.Engine.Labels = map[string]string{}

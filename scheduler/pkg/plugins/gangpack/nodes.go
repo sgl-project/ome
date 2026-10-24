@@ -70,7 +70,7 @@ func nodeFitsPod(ni framework.NodeInfo, pod *v1.Pod) bool {
 // already placed (assumed or bound) that share the pod's PodGroup: how many
 // were found and the domain they sit in (the domain of the last such node
 // seen; a healthy gang is single-domain). This is how the plugin recovers a
-// gang whose in-memory pin was lost (scheduler restart / leader failover):
+// gang whose in-memory assignment was lost (scheduler restart / leader failover):
 // the truth of where a gang lives is where its members already are. The pod
 // being scheduled is not yet in any node's pod list, so it never counts
 // itself.
@@ -120,7 +120,7 @@ func inspectBoundGangMembers(nodeInfos []framework.NodeInfo, pod *v1.Pod, topolo
 // placedInDomain counts a gang's members (namespace + pod-group name) occupying
 // nodes of the given domain in the snapshot. Unlike inspectBoundGangMembers it matches a
 // gang by its resolved key rather than a live pod object, so the reservation
-// reconciler can count a pinned gang's real footprint without a pod in hand.
+// reconciler can count an assigned gang's real footprint without a pod in hand.
 func placedInDomain(nodeInfos []framework.NodeInfo, namespace, pgName, topologyKey, domain string) int {
 	count := 0
 	for _, info := range nodeInfos {
@@ -142,10 +142,10 @@ func placedInDomain(nodeInfos []framework.NodeInfo, namespace, pgName, topologyK
 // node right now — beyond having the accelerator free, the node must be
 // schedulable: not cordoned (spec.unschedulable), and its NoSchedule/NoExecute
 // taints tolerated by the pod. Without this check, freeByDomain would count a
-// cordoned or tainted node as free, so Choose could pin a domain whose nodes the
+// cordoned or tainted node as free, so Choose could take a domain whose nodes the
 // framework's own Filter (NodeUnschedulable / TaintToleration) then rejects —
-// wedging the gang there (pinStale keeps the pin because the domain still looks
-// "free") while genuinely schedulable domains sit unused.
+// holding the gang there forever (assignmentStale keeps the assignment because
+// the domain still looks "free") while genuinely schedulable domains sit unused.
 func nodeSchedulable(node *v1.Node, pod *v1.Pod) bool {
 	if node == nil || node.Spec.Unschedulable {
 		return false

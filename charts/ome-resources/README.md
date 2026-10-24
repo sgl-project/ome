@@ -40,6 +40,7 @@ OME Resources and Controller
 | ome.controller.ingressGateway.pathTemplate | string | `""` |  |
 | ome.controller.ingressGateway.urlScheme | string | `"http"` |  |
 | ome.controller.nodeSelector | object | `{}` |  |
+| ome.controller.pprofBindAddress | string | `""` | Address the manager serves net/http/pprof on. Empty disables it. Bind to loopback, for example `127.0.0.1:6060`, so profiles are reachable only through `kubectl port-forward`. |
 | ome.controller.replicaCount | int | `3` |  |
 | ome.controller.resources.limits.cpu | int | `2` |  |
 | ome.controller.resources.limits.memory | string | `"4Gi"` |  |
@@ -52,6 +53,10 @@ OME Resources and Controller
 | ome.metricsaggregator.enablePrometheusScraping | string | `"false"` |  |
 | ome.multiclusterAccess.enabled | bool | `false` | Install the remote placement ClusterRole. |
 | ome.multiclusterAccess.subjects | list | `[]` | Bind existing identities; empty leaves bindings to the platform. |
+| ome.multicluster.config.placement.memberReadRetry.initialBackoff | string | `""` | Wait before the first re-read of a member after a transient failure; doubles per re-read. Required when `maxAttempts` exceeds 1. |
+| ome.multicluster.config.placement.memberReadRetry.maxAttempts | int | `0` | Reads of one member per reconcile, the first included. 0 or 1 reads once. |
+| ome.multicluster.config.placement.memberReadRetry.maxBackoff | string | `""` | Cap on the wait between re-reads. Required when `maxAttempts` exceeds 1. |
+| ome.multicluster.config.placement.observationGrace | string | `""` | How long a home whose reads fail keeps the ready count, and so the traffic share, from its last successful read. Empty withdraws it at the first failed read. |
 | ome.multicluster.config.routing.publisher.name | string | `""` | TrafficMap publisher name; empty or `gatewayapi` uses the built-in Gateway API publisher. |
 | ome.multicluster.config.routing.publisher.options | object | `{}` | Options interpreted by the selected publisher. |
 | ome.multicluster.config.routing.publisher.resyncInterval | string | `"1m"` | Periodic TrafficMap publication reconciliation backstop. |

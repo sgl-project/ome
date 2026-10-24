@@ -179,7 +179,7 @@ func (p *GatewayAPITrafficMapPublisher) Plan(
 	}
 
 	target.GlobalHost = globalHost
-	target.Homes = make([]Home, 0, len(trafficMap.Spec.Entries))
+	target.Clusters = make([]ServingCluster, 0, len(trafficMap.Spec.Entries))
 	seenClusters := make(map[string]struct{}, len(trafficMap.Spec.Entries))
 	seenServices := make(map[string]string, len(trafficMap.Spec.Entries))
 	for _, entry := range trafficMap.Spec.Entries {
@@ -218,14 +218,14 @@ func (p *GatewayAPITrafficMapPublisher) Plan(
 				otherCluster, entry.Cluster, serviceName)
 		}
 		seenServices[serviceName] = entry.Cluster
-		target.Homes = append(target.Homes, Home{
+		target.Clusters = append(target.Clusters, ServingCluster{
 			Cluster:     entry.Cluster,
 			Endpoint:    entry.Endpoint.String(),
 			BackendHost: backendHost,
 			Weight:      entry.Weight,
 		})
 	}
-	sort.Slice(target.Homes, func(i, j int) bool { return target.Homes[i].Cluster < target.Homes[j].Cluster })
+	sort.Slice(target.Clusters, func(i, j int) bool { return target.Clusters[i].Cluster < target.Clusters[j].Cluster })
 	return &gatewayAPITrafficMapPlan{
 		owner:    ownerCopy,
 		target:   target,
@@ -480,7 +480,7 @@ func (p *GatewayAPITrafficMapPublisher) Unpublish(
 
 func cloneGatewayAPITarget(target Target) Target {
 	cloned := target
-	cloned.Homes = append([]Home(nil), target.Homes...)
+	cloned.Clusters = append([]ServingCluster(nil), target.Clusters...)
 	return cloned
 }
 

@@ -100,10 +100,12 @@ const (
 	// Status=Unknown so `kubectl wait --for=condition=Ready` doesn't
 	// short-circuit while a rollout is mid-flight.
 	ReasonRolloutInProgress = "RolloutInProgress"
-	// ReasonStaged is stamped when the IR has converged to a static
-	// partition (a projected canary step or a user rollingUpdate partition)
-	// — (replicas-partition) Instances on the target revision and
-	// `partition` held on the prior one, all Ready. Ready=True:
+	// ReasonStaged is stamped when the IR rests at its staged shape under a
+	// non-zero partition (a projected canary step or a user rollingUpdate
+	// partition): every Instance Ready, the ones still on the prior revision
+	// held by the partition, at most `partition` of them. A partition that
+	// asks for more held Instances than still run the prior revision holds
+	// every one of them, and the message says how many fewer. Ready=True:
 	// a partitioned rollout is intentionally complete-and-holding, not
 	// "in progress". Distinct from AllInstancesReady (fully rolled).
 	ReasonStaged = "Staged"
@@ -160,10 +162,15 @@ const (
 // aggregateAndWriteStatus publishes cached Pod and EndpointSlice facts over
 // freshly read lifecycle rows, then computes the IR summaries and conditions.
 // Lifecycle fields and CurrentRevision retain their dedicated writers, with
-// one exception the publication owns: a settled Ready row with no pods is
-// written back as Pending (workloadstatus.DemotableReady), so the phase never
-// contradicts the zero pod count published beside it. A nil target leaves
-// revision pointers untouched while counters still publish.
+// one exception the publication owns: the phase of a settled row follows
+// the pods published beside it, so the phase never contradicts the
+// counters. A Ready row (workloadstatus.DemotableReady) reads Pending with
+// no pods and Restarting while its set serves nothing; a Failed row off the
+// revision it runs, its attempt spent (workloadtypes.FailedOffRunningRevision)
+// or still kept at its surge step
+// (workloadtypes.FailedKeepingSurgeOffRunningRevision), reads Ready while
+// the pods on that revision serve. A nil target leaves revision pointers
+// untouched while counters still publish.
 //
 // holdObserved/hold carry this pass's Update-pass rollout-hold verdict
 // (ReconcileInput.RecordRolloutHold): holdObserved is true when the Update
@@ -233,7 +240,7 @@ func (r *Reconciler) aggregateAndWriteStatus(ctx context.Context, ir *v1beta1.In
 			ownerUnavailable = true
 			return nil
 		}
-		if fresh.Generation != ownerGeneration {
+		if fresh.Generation != ownerGeneration && specChangedSincePlanned(ir, fresh) {
 			return workloadtypes.ErrStatusMutationPrecondition
 		}
 
@@ -292,6 +299,7 @@ func (r *Reconciler) aggregateAndWriteStatus(ctx context.Context, ir *v1beta1.In
 			fresh.Status.UpdatedReadyReplicas = counters.UpdatedReadyReplicas
 			withdrawn := withdrawnRevisionFor(&fresh.Status)
 			fresh.Status.UpdateRevision = target.Name
+			fresh.Status.ObservedTemplateHash = templateHashOf(ir)
 			recordCurrentRevisionWithdrawal(&fresh.Status, withdrawn, fresh.Status.CurrentRevision)
 		}
 		irstatus.ClearPodDerivedObservations(fresh.Status.InstanceStatuses)
@@ -299,7 +307,7 @@ func (r *Reconciler) aggregateAndWriteStatus(ctx context.Context, ir *v1beta1.In
 		fresh.Status.ObservedGeneration = fresh.Generation
 		fresh.Status.PlacementObservedGeneration = 0
 		if ir.Spec.PlacementExecution != nil {
-			fresh.Status.PlacementObservedGeneration = ownerGeneration
+			fresh.Status.PlacementObservedGeneration = fresh.Generation
 		}
 		fresh.Status.LabelSelector = irLabelSelectorString(fresh.NamePrefix(), fresh.Spec.Component)
 
@@ -381,6 +389,35 @@ func (r *Reconciler) aggregateAndWriteStatus(ctx context.Context, ir *v1beta1.In
 	return nextAvailableIn, nil
 }
 
+// specChangedSincePlanned reports whether the live spec differs from the one
+// the pass planned against in anything the pass reads. A generation that
+// moved for the values of the inherited annotation keys the revision leaves
+// out changes nothing the pass read: the hash ignores them and they reach
+// only the pods rendered after the change. The plan, the counters and the
+// revision pair a pass computed stay valid for such a spec, so the status
+// writes land and name the live generation, and a writer that keeps
+// rewriting a service annotation costs no status write.
+func specChangedSincePlanned(planned, fresh *v1beta1.InferenceReplica) bool {
+	excluded := v1beta1convert.ExcludedAnnotationKeys(fresh)
+	return !equality.Semantic.DeepEqual(
+		specWithoutExcludedAnnotations(&planned.Spec, excluded),
+		specWithoutExcludedAnnotations(&fresh.Spec, excluded))
+}
+
+// specWithoutExcludedAnnotations is a copy of spec with the excluded
+// annotation keys removed from every runner template; the spec itself when
+// no key is excluded.
+func specWithoutExcludedAnnotations(spec *v1beta1.InferenceReplicaSpec, excluded map[string]struct{}) *v1beta1.InferenceReplicaSpec {
+	if len(excluded) == 0 {
+		return spec
+	}
+	out := spec.DeepCopy()
+	for i := range out.Runners {
+		out.Runners[i].Template.ObjectMeta = *v1beta1convert.StripExcludedAnnotations(&out.Runners[i].Template.ObjectMeta, excluded)
+	}
+	return out
+}
+
 // mirrorBack copies Component fields and transient publication counters onto
 // the caller's in-memory IR. Lifecycle fields remain owned by workload
 // operations and are left untouched, except the phase, which comes along so
@@ -393,6 +430,7 @@ func mirrorBack(ir, fresh *v1beta1.InferenceReplica, publication []workloadtypes
 	ir.Status.UpdatedReplicas = fresh.Status.UpdatedReplicas
 	ir.Status.UpdatedReadyReplicas = fresh.Status.UpdatedReadyReplicas
 	ir.Status.UpdateRevision = fresh.Status.UpdateRevision
+	ir.Status.ObservedTemplateHash = fresh.Status.ObservedTemplateHash
 	ir.Status.CurrentRevision = fresh.Status.CurrentRevision
 	ir.Status.ObservedGeneration = fresh.Status.ObservedGeneration
 	ir.Status.PlacementObservedGeneration = fresh.Status.PlacementObservedGeneration
@@ -413,8 +451,8 @@ func mirrorBack(ir, fresh *v1beta1.InferenceReplica, publication []workloadtypes
 
 // reconcileHeldDeadlines parks/restarts InstanceReadyTimeout around either
 // admission gating or an operator pause. Pausing holds every in-flight
-// Instance; unpausing rearms each parked deadline from that point unless its
-// pods remain admission-gated.
+// Instance and every open move record; unpausing rearms each parked deadline
+// from that point unless its pods remain admission-gated.
 func (r *Reconciler) reconcileHeldDeadlines(ctx context.Context, ir *v1beta1.InferenceReplica, byIndex map[int32][]*corev1.Pod, paused bool, timeout time.Duration) error {
 	if ir == nil {
 		return nil
@@ -446,13 +484,20 @@ func (r *Reconciler) reconcileHeldDeadlines(ctx context.Context, ir *v1beta1.Inf
 			held[ir.Status.InstanceStatuses[i].Index] = true
 		}
 	}
-	return escalation.ReconcileGatedDeadlines(ctx, r.buildDeadlineParkInput(ir),
-		v1beta1convert.InstanceStatusSliceToWorkload(ir.Status.InstanceStatuses), held, timeout)
+	input := r.buildDeadlineParkInput(ir)
+	if err := escalation.ReconcileGatedDeadlines(ctx, input,
+		v1beta1convert.InstanceStatusSliceToWorkload(ir.Status.InstanceStatuses), held, timeout); err != nil {
+		return err
+	}
+	// The move records' clocks follow the pause the same way: a paused
+	// Component drives no record, so none of them runs out under it.
+	return escalation.ReconcilePausedMigrationDeadlines(ctx, input, paused, timeout)
 }
 
 // buildDeadlineParkInput builds the minimal workload.ReconcileInput the
-// InstanceReadyTimeout parking step (escalation.ReconcileGatedDeadlines)
-// consumes: the deadline write goes through MutateInstance (same retry +
+// InstanceReadyTimeout parking step (escalation.ReconcileGatedDeadlines and
+// ReconcilePausedMigrationDeadlines) consumes: the deadline writes go
+// through MutateInstance and MutateMigration (same retry +
 // in-memory-mirror semantics as dispatch-time writes) and the clock seam
 // supplies now. The remaining callbacks satisfy the ReconcileInput
 // must-be-set contract as explicit no-ops — parking never removes
@@ -465,6 +510,7 @@ func (r *Reconciler) buildDeadlineParkInput(ir *v1beta1.InferenceReplica) worklo
 		ObservedState:           observedFromIR(ir),
 		Clock:                   r.Clock,
 		MutateInstance:          buildMutateInstance(r.statusWriter(), r.liveReader(), ir),
+		MutateMigration:         buildMutateMigration(r.statusWriter(), r.liveReader(), ir),
 		RemoveInstance:          func(_ context.Context, _ int32) (bool, error) { return false, nil },
 		WriteAggregateCondition: func(_ context.Context, _ metav1.Condition) error { return nil },
 		WarnInstanceFailed:      func(_ int32, _, _ string) {},
@@ -572,19 +618,25 @@ func effectivePartition(lifecycle *v1beta1.LifecycleSpec, pacing *v1beta1.Infere
 	return *p
 }
 
-// stagedAtPartition reports whether the IR has converged to a static,
-// non-zero partition: (replicas-partition) Instances Ready on the target
-// revision and `partition` Instances held Ready on the prior one. Zero
-// partition (full rollout) is not staged — it converges via the normal
-// promotion path.
-func stagedAtPartition(status *v1beta1.InferenceReplicaStatus, lifecycle *v1beta1.LifecycleSpec, pacing *v1beta1.InferenceReplicaPacing) bool {
+// stagedAtPartition reports whether the IR rests at its staged shape under
+// a non-zero partition, and how many Instances that partition holds on the
+// prior revision: every Instance Ready, the ones still off the update
+// revision held, at least one and at most `partition` of them. A partition
+// that asks for more held Instances than still run the prior revision
+// (raised above that count mid-roll, or the count scaled below it) holds
+// every one of them, so the IR rests staged at what the partition can hold
+// rather than reading in progress for good. Zero partition (full rollout)
+// is not staged — it converges via the normal promotion path.
+func stagedAtPartition(status *v1beta1.InferenceReplicaStatus, lifecycle *v1beta1.LifecycleSpec, pacing *v1beta1.InferenceReplicaPacing) (staged bool, held int32) {
 	part := effectivePartition(lifecycle, pacing)
 	if part <= 0 {
-		return false
+		return false, 0
 	}
-	return workloadstatus.ReachedDesiredShape(
-		v1beta1convert.InstanceStatusSliceToWorkload(status.InstanceStatuses),
-		status.UpdateRevision, part, status.Replicas)
+	insts := v1beta1convert.InstanceStatusSliceToWorkload(status.InstanceStatuses)
+	if !workloadstatus.ReachedDesiredShape(insts, status.UpdateRevision, part, status.Replicas) {
+		return false, 0
+	}
+	return true, workloadstatus.HeldInstanceCount(insts, status.UpdateRevision)
 }
 
 // computeRolloutStalledCondition derives the advisory RolloutStalled
@@ -752,28 +804,57 @@ func effectiveRolloutHold(holdObserved bool, hold *workloadtypes.RolloutHold, st
 // carries no block, the block is RetryInProgress (an attempt is
 // authorized), or a Backoff whose NextRetryAt has already elapsed (about
 // to retry, not currently held).
+//
+// The reason names the Instances on the block's revision that do not
+// serve it, in the words the update pass uses for the same hold, so the
+// account an operator reads does not change with the pass that wrote
+// it: a record Held on the revision every Instance runs, as after a
+// rollback onto it, names the Instance it keeps down and the failure
+// that spent its attempts.
 func computeRetryBlockRolloutHold(status *v1beta1.InferenceReplicaStatus, now time.Time) *v1beta1.RolloutHold {
 	b, found := retryBlockForRevision(status.RetryBlocks, status.UpdateRevision)
 	if !found {
 		return nil
 	}
+	notServing := workloadtypes.InstancesNotServingClause(instancesNotServingOn(status.InstanceStatuses, b.TargetRevision), b.TargetRevision)
 	switch b.State {
 	case v1beta1.RetryBlockHeld:
 		return &v1beta1.RolloutHold{
 			Gate:   v1beta1.RolloutHoldGateHeld,
-			Reason: fmt.Sprintf("update to %s held after %d failed attempt(s): %s", b.TargetRevision, b.AttemptsStarted, b.Reason),
+			Reason: fmt.Sprintf("update to %s held after %d failed attempt(s): %s%s", b.TargetRevision, b.AttemptsStarted, b.Reason, notServing),
 			Target: b.TargetRevision,
 		}
 	case v1beta1.RetryBlockBackoff:
 		if b.NextRetryAt != nil && b.NextRetryAt.Time.After(now) {
 			return &v1beta1.RolloutHold{
 				Gate:   v1beta1.RolloutHoldGateRetryBlock,
-				Reason: fmt.Sprintf("update to %s in backoff after %d failed attempt(s): %s", b.TargetRevision, b.AttemptsStarted, b.Reason),
+				Reason: fmt.Sprintf("update to %s in backoff after %d failed attempt(s): %s%s", b.TargetRevision, b.AttemptsStarted, b.Reason, notServing),
 				Target: b.TargetRevision,
 			}
 		}
 	}
 	return nil
+}
+
+// instancesNotServingOn lists, in row order, the Instances that run
+// revision and do not serve it, as the published rows read: a row
+// Failed on it, one whose pod set is being rebuilt (Restarting), or one
+// left with no pod set (Pending). A Ready row serves. A row leaving the
+// revision under an update, a move or a delete is another pass's to
+// report, and a row that never ran the revision is not on it.
+func instancesNotServingOn(rows []v1beta1.OMENativeInstanceStatus, revision string) []int32 {
+	var out []int32
+	for i := range rows {
+		row := &rows[i]
+		if revision == "" || row.RunningRevision != revision {
+			continue
+		}
+		switch row.Phase {
+		case v1beta1.OMENativeInstanceFailed, v1beta1.OMENativeInstanceRestarting, v1beta1.OMENativeInstancePending:
+			out = append(out, row.Index)
+		}
+	}
+	return out
 }
 
 // nextRolloutHold merges this pass's observed RolloutHold onto the
@@ -800,20 +881,26 @@ func computeReadyCondition(status *v1beta1.InferenceReplicaStatus, desiredReplic
 		Type:               InferenceReplicaConditionReady,
 		ObservedGeneration: status.ObservedGeneration,
 	}
+	staged, held := stagedAtPartition(status, lifecycle, pacing)
 	switch {
 	case hasFailedInstance(status.InstanceStatuses):
 		cond.Status = metav1.ConditionFalse
 		cond.Reason = ReasonInstanceFailed
 		cond.Message = "At least one Instance has Phase=Failed"
-	case stagedAtPartition(status, lifecycle, pacing):
+	case staged:
 		// Converged to a static partition: intentionally holding old-revision
 		// Instances, all Ready. Ready=True (not RolloutInProgress/Unknown) —
-		// the rollout is complete for the configured partition.
+		// the rollout is complete for the configured partition. A partition
+		// that asks for more held Instances than still run the prior revision
+		// holds every one of them; the message names the shortfall.
 		part := effectivePartition(lifecycle, pacing)
 		cond.Status = metav1.ConditionTrue
 		cond.Reason = ReasonStaged
 		cond.Message = fmt.Sprintf("Staged at partition %d: %d/%d Instances on %s, %d held on the prior revision",
-			part, status.Replicas-part, status.Replicas, status.UpdateRevision, part)
+			part, status.Replicas-held, status.Replicas, status.UpdateRevision, held)
+		if held < part {
+			cond.Message += fmt.Sprintf(" (%d fewer than the partition asks for)", part-held)
+		}
 	case status.UpdateRevision != "" && status.CurrentRevision != status.UpdateRevision:
 		cond.Status = metav1.ConditionUnknown
 		cond.Reason = ReasonRolloutInProgress

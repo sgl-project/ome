@@ -1664,8 +1664,26 @@ func (s *Gopher) verifyDownloadedFilesWithValidator(ctx context.Context, uris []
 
 func (s *Gopher) deleteModel(destPath string, task *GopherTask) error {
 	startTime := time.Now()
-
-	err := os.RemoveAll(destPath)
+	path, err := canonicalModelPath(destPath)
+	if err != nil {
+		return err
+	}
+	if path == string(filepath.Separator) {
+		return fmt.Errorf("model deletion target cannot be the filesystem root")
+	}
+	var baseModel *v1beta1.BaseModel
+	var clusterBaseModel *v1beta1.ClusterBaseModel
+	if task != nil {
+		baseModel, clusterBaseModel = task.BaseModel, task.ClusterBaseModel
+	}
+	protectedPaths, err := s.collectReferencedPaths(destPath, baseModel, clusterBaseModel)
+	if err != nil {
+		return err
+	}
+	retained, err := removeUnreferencedFiles(path, protectedPaths)
+	if retained && err == nil {
+		s.logger.Infof("Preserved model directory %s after cleanup; referenced paths: %v", destPath, protectedPaths)
+	}
 
 	// Log deletion time regardless of success or failure
 	deleteTime := time.Since(startTime)

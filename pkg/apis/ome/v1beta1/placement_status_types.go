@@ -25,6 +25,11 @@ const PlacementCapacityFresh = "PlacementCapacityFresh"
 // OMENative. It is advisory and does not change observed serving readiness.
 const PlacementBackendReady = "PlacementBackendReady"
 
+// PlacementComponentShares reports, for a Split source with per-component
+// terms, whether each component follows the Engine shares or its own weights,
+// and which weights go unused. It is advisory and never gates placement.
+const PlacementComponentShares = "PlacementComponentShares"
+
 // PlacementReplicaFloorsReady reports whether resolved member floors match
 // placement authority. It does not change observed serving readiness.
 const PlacementReplicaFloorsReady = "PlacementReplicaFloorsReady"
@@ -121,6 +126,15 @@ type CandidateAllocationStatus struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	Weight *int64 `json:"weight,omitempty"`
+	// ComponentMatches records the Split weight of the other components when
+	// the affinity terms set weights: the decoder's, and the router's when
+	// routers are divided. Weight holds the primary component's. The accepted
+	// plan keeps them so that member floors never follow unaccepted label changes.
+	// +optional
+	// +listType=map
+	// +listMapKey=component
+	// +kubebuilder:validation:MaxItems=2
+	ComponentMatches []ComponentAffinityMatch `json:"componentMatches,omitempty"`
 	// Capacity is the accepted hardware sample, when capacity determines weight.
 	// +optional
 	Capacity *PlacementCapacitySample `json:"capacity,omitempty"`
@@ -199,6 +213,17 @@ type PlacementExecutionPolicy struct {
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=3
 	ReplicaFloors []PlacementComponentFloor `json:"replicaFloors,omitempty"`
+}
+
+// ComponentAffinityMatch records the weight the affinity terms give one
+// component on a cluster.
+type ComponentAffinityMatch struct {
+	// +kubebuilder:validation:Enum=engine;decoder;router
+	Component ComponentType `json:"component"`
+	// Weight is the component's effective static weight, when applicable.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	Weight *int64 `json:"weight,omitempty"`
 }
 
 // PlacementComponentFloor records a resolved component's guaranteed count.

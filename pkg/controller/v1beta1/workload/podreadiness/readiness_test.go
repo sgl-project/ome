@@ -8,23 +8,17 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
+// newReadinessTestClient builds a client holding objs whose Pod status is a
+// subresource, as the apiserver's is.
 func newReadinessTestClient(t *testing.T, objs ...client.Object) client.Client {
 	t.Helper()
-	scheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(scheme); err != nil {
-		t.Fatalf("add corev1: %v", err)
-	}
-	return fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(objs...).
-		WithStatusSubresource(&corev1.Pod{}).
-		Build()
+	return fakeclient.New(t, fakeclient.WithObjects(objs...), fakeclient.WithStatusSubresource(&corev1.Pod{}))
 }
 
 func mustParseList(t *testing.T, raw string) messageList {
@@ -546,17 +540,10 @@ func TestAddNotReadyKey_RecoversInconsistentStatusTrueWithStaleMessage(t *testin
 // patch applies cleanly and silently drops the competing writer's hold.
 func TestAddNotReadyKey_ConflictRetryPreservesConcurrentWriter(t *testing.T) {
 	pod := newReadinessTestPod("p")
-	scheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(scheme); err != nil {
-		t.Fatalf("add corev1: %v", err)
-	}
 	competitor := Message{UserAgent: WriterMigrateSourceDrain, Key: "uuid-1"}
 	raced := false
-	c := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(pod).
-		WithStatusSubresource(&corev1.Pod{}).
-		WithInterceptorFuncs(interceptor.Funcs{
+	c := fakeclient.New(t, fakeclient.WithObjects(pod), fakeclient.WithStatusSubresource(&corev1.Pod{}),
+		fakeclient.WithInterceptors(interceptor.Funcs{
 			SubResourcePatch: func(ctx context.Context, cl client.Client, subResourceName string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
 				if !raced {
 					raced = true
@@ -570,8 +557,7 @@ func TestAddNotReadyKey_ConflictRetryPreservesConcurrentWriter(t *testing.T) {
 				}
 				return cl.SubResource(subResourceName).Patch(ctx, obj, patch, opts...)
 			},
-		}).
-		Build()
+		}))
 
 	ours := Message{UserAgent: WriterUpdateInPlace, Key: "0-1"}
 	if err := AddNotReadyKey(context.Background(), c, c, pod, ours); err != nil {
@@ -670,15 +656,7 @@ func TestRemoveNotReadyKeyIgnoreNotFound_PodGone_ReturnsNil(t *testing.T) {
 // instead of converging.
 func TestAddNotReadyKey_LaggingCacheConvergesViaLiveReader(t *testing.T) {
 	pod := newReadinessTestPod("p")
-	scheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(scheme); err != nil {
-		t.Fatalf("add corev1: %v", err)
-	}
-	live := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(pod).
-		WithStatusSubresource(&corev1.Pod{}).
-		Build()
+	live := fakeclient.New(t, fakeclient.WithObjects(pod), fakeclient.WithStatusSubresource(&corev1.Pod{}))
 
 	// Freeze a "cache" snapshot, then land a competing writer so the
 	// stored pod's resourceVersion moves past it.
@@ -691,21 +669,9 @@ func TestAddNotReadyKey_LaggingCacheConvergesViaLiveReader(t *testing.T) {
 		t.Fatalf("competing Add: %v", err)
 	}
 
-	// lagging serves the frozen snapshot on every Get; writes pass through.
-	lagging := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(pod).
-		WithStatusSubresource(&corev1.Pod{}).
-		WithInterceptorFuncs(interceptor.Funcs{
-			Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-				staleSnapshot.DeepCopyInto(obj.(*corev1.Pod))
-				return nil
-			},
-			SubResourcePatch: func(ctx context.Context, cl client.Client, subResourceName string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
-				return live.SubResource(subResourceName).Patch(ctx, obj, patch, opts...)
-			},
-		}).
-		Build()
+	// lagging serves the frozen snapshot on every Get; writes pass through to
+	// the live store.
+	lagging := fakeclient.Wrap(t, live, fakeclient.StaleRead(staleSnapshot))
 
 	ours := Message{UserAgent: WriterUpdateInPlace, Key: "0-1"}
 	if err := AddNotReadyKey(context.Background(), lagging, live, pod, ours); err != nil {
@@ -855,6 +821,40 @@ func TestIsPodAvailable(t *testing.T) {
 			}
 			if retry != tt.wantRetry {
 				t.Fatalf("retry: got %v want %v", retry, tt.wantRetry)
+			}
+		})
+	}
+}
+
+// The node lifecycle controller's revocation is read off the Ready
+// condition's reason: Ready False under NodeNotReadyReason. A pod whose
+// Ready is True, absent, or False for the kubelet's own reasons is not
+// revoked, whatever its node.
+func TestReadyRevokedByNode(t *testing.T) {
+	podWithReady := func(status corev1.ConditionStatus, reason string) *corev1.Pod {
+		return &corev1.Pod{Status: corev1.PodStatus{Conditions: []corev1.PodCondition{
+			{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
+			{Type: ConditionType, Status: corev1.ConditionTrue},
+			{Type: corev1.PodReady, Status: status, Reason: reason},
+		}}}
+	}
+	tests := []struct {
+		name string
+		pod  *corev1.Pod
+		want bool
+	}{
+		{name: "nil pod", pod: nil, want: false},
+		{name: "no Ready condition", pod: &corev1.Pod{}, want: false},
+		{name: "Ready True", pod: podWithReady(corev1.ConditionTrue, ""), want: false},
+		{name: "Ready False with no reason", pod: podWithReady(corev1.ConditionFalse, ""), want: false},
+		{name: "Ready False for a failed probe", pod: podWithReady(corev1.ConditionFalse, "ContainersNotReady"), want: false},
+		{name: "Ready False revoked by the node controller", pod: podWithReady(corev1.ConditionFalse, NodeNotReadyReason), want: true},
+		{name: "Ready True carrying a stale reason", pod: podWithReady(corev1.ConditionTrue, NodeNotReadyReason), want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ReadyRevokedByNode(tc.pod); got != tc.want {
+				t.Errorf("ReadyRevokedByNode = %v, want %v", got, tc.want)
 			}
 		})
 	}

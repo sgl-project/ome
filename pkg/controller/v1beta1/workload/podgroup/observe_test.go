@@ -10,6 +10,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	schedulingv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podgroup"
@@ -30,14 +31,12 @@ func ownedGroup(timeoutSeconds int32) *schedulingv1alpha1.PodGroup {
 				Kind:       "InferenceReplica",
 				Name:       "svc-engine",
 				UID:        observeOwnerUID,
-				Controller: ptrBool(true),
+				Controller: ptr.To(true),
 			}},
 		},
 		Spec: schedulingv1alpha1.PodGroupSpec{MinMember: 2, ScheduleTimeoutSeconds: &timeoutSeconds},
 	}
 }
-
-func ptrBool(b bool) *bool { return &b }
 
 // TestObserveGang_AbsentOrHealthy: a name nothing occupies, and a gang
 // the scheduler placed, both report nothing for the row to wait on.

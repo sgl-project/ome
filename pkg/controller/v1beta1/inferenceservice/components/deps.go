@@ -11,8 +11,9 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler"
-	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/omenative"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
 	isvcutils "sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	workloadtypes "sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
 
 // ComponentDeps are the dependencies shared by every component
@@ -24,7 +25,7 @@ type ComponentDeps struct {
 	Client       client.Client
 	Clientset    kubernetes.Interface
 	APIReader    client.Reader // AuthoritativeReader role (see workload/types)
-	Expectations *omenative.Expectations
+	Expectations *workloadtypes.Expectations
 	Recorder     record.EventRecorder
 	Scheme       *runtime.Scheme
 	Config       *controllerconfig.InferenceServicesConfig
@@ -63,9 +64,15 @@ type ComponentInputs struct {
 	// fails refs closed instead of silently ignoring them.
 	PolicyResolver *autoscaler.PolicyResolver
 
-	// PacingPartition is the rollout-control partition the canary machine
-	// computed for this Component this reconcile (step hold or plan-gate
-	// hold), projected onto the InferenceReplica's spec.pacing.partition.
-	// nil when no canary governs the Component.
-	PacingPartition *int32
+	// PacingPartition sizes the rollout-control partition the canary machine
+	// projects for this Component this reconcile (step hold or plan-gate
+	// hold) against the replica count the projector stamps, onto the
+	// InferenceReplica's spec.pacing.partition. nil when no canary governs
+	// the Component.
+	PacingPartition irprojector.PartitionResolver
+	// CoordinatorFollower marks a Component whose desired count the scaling
+	// coordinator owns; CoordinatorTarget is the count it resolved for this
+	// reconcile, nil when it resolved none.
+	CoordinatorFollower bool
+	CoordinatorTarget   *int32
 }

@@ -5,69 +5,69 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-logr/logr/testr"
 	"github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/policystatus"
 	policycore "sigs.k8s.io/ome/pkg/rolloutpolicy"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
-// fakeBindings is a test ProviderBindings: a fixed name set, interval, and
-// optional transient error.
-type fakeBindings struct {
-	names    map[string]struct{}
-	interval time.Duration
-	err      error
-}
+// Values of the metricProviders key of the operator ConfigMap: one bound
+// provider, or a different one.
+const (
+	boundProviderConfig = `{"llm-metrics":{"serverAddress":"http://prometheus.example.com"}}`
+	otherProviderConfig = `{"some-other-provider":{"serverAddress":"http://prometheus.example.com"}}`
+)
 
-func (f *fakeBindings) Providers() (map[string]struct{}, error) { return f.names, f.err }
-func (f *fakeBindings) RecheckInterval() time.Duration          { return f.interval }
+type reconciler = policystatus.Reconciler[*v1beta1.RolloutPolicy]
 
-func boundBindings(names ...string) *fakeBindings {
-	set := map[string]struct{}{}
-	for _, name := range names {
-		set[name] = struct{}{}
-	}
-	return &fakeBindings{names: set}
-}
-
-func newReconciler(t *testing.T, bindings ProviderBindings, objs ...client.Object) *StatusReconciler {
+// newReconciler builds the controller over a fake operator ConfigMap whose
+// metricProviders key holds providersJSON; an empty string seeds no
+// ConfigMap at all, so a configuration read fails.
+func newReconciler(t *testing.T, providersJSON string, objs ...client.Object) *reconciler {
 	t.Helper()
-	scheme := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(scheme); err != nil {
-		t.Fatalf("AddToScheme: %v", err)
+	c := fakeclient.New(t,
+		fakeclient.WithStatusSubresource(&v1beta1.RolloutPolicy{}),
+		fakeclient.WithIndex(&v1beta1.InferenceService{}, PolicyRefIndexField, PolicyRefIndexer),
+		fakeclient.WithObjects(objs...),
+	)
+
+	clientset := k8sfake.NewSimpleClientset()
+	if providersJSON != "" {
+		clientset = k8sfake.NewSimpleClientset(&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      constants.InferenceServiceConfigMapName,
+				Namespace: constants.OMENamespace,
+			},
+			Data: map[string]string{controllerconfig.MetricProvidersConfigName: providersJSON},
+		})
 	}
-	c := ctrlclientfake.NewClientBuilder().
-		WithScheme(scheme).
-		WithStatusSubresource(&v1beta1.RolloutPolicy{}).
-		WithIndex(&v1beta1.InferenceService{}, PolicyRefIndexField, PolicyRefIndexer).
-		WithObjects(objs...).
-		Build()
-	return &StatusReconciler{
-		Client:    c,
-		Providers: bindings,
-		Log:       testr.New(t),
-		Scheme:    scheme,
+	return &reconciler{
+		Client: c,
+		Kind:   kind{},
+		Config: policystatus.ConfigSource{Clientset: clientset, Cache: controllerconfig.NewConfigCache(0)},
 	}
 }
 
-func runReconcile(t *testing.T, r *StatusReconciler, namespace, name string) {
+func runReconcile(t *testing.T, r *reconciler, namespace, name string) {
 	t.Helper()
 	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: namespace, Name: name}}); err != nil {
 		t.Fatalf("Reconcile(%s/%s): %v", namespace, name, err)
 	}
 }
 
-func getPolicy(t *testing.T, r *StatusReconciler, namespace, name string) *v1beta1.RolloutPolicy {
+func getPolicy(t *testing.T, r *reconciler, namespace, name string) *v1beta1.RolloutPolicy {
 	t.Helper()
 	policy := &v1beta1.RolloutPolicy{}
 	if err := r.Get(context.Background(), types.NamespacedName{Namespace: namespace, Name: name}, policy); err != nil {
@@ -127,7 +127,7 @@ func mkISVC(namespace, name string, refs ...string) *v1beta1.InferenceService {
 func TestReconcileValidPolicy(t *testing.T) {
 	g := gomega.NewWithT(t)
 	policy := mkPolicy("ns1", "canary-std", 3, canarySpec("llm-metrics"))
-	r := newReconciler(t, boundBindings("llm-metrics"),
+	r := newReconciler(t, boundProviderConfig,
 		policy,
 		// Two groups on one consumer plus one on another: the count is per
 		// rollout group, not per InferenceService.
@@ -164,7 +164,7 @@ func TestReconcileValidPolicy(t *testing.T) {
 
 func TestReadyFlipsOnInvalidBody(t *testing.T) {
 	g := gomega.NewWithT(t)
-	r := newReconciler(t, boundBindings("llm-metrics"),
+	r := newReconciler(t, boundProviderConfig,
 		mkPolicy("ns1", "canary-std", 1, canarySpec("llm-metrics")))
 
 	runReconcile(t, r, "ns1", "canary-std")
@@ -197,10 +197,11 @@ func TestReadyFlipsOnInvalidBody(t *testing.T) {
 func TestReadyFalseOnPolicyOnlyRules(t *testing.T) {
 	g := gomega.NewWithT(t)
 	// A plan-valid canary whose first step uses an absolute capacity: legal
-	// inline, rejected in a policy body (percent-only portability rule).
+	// inline, rejected in a policy body (percent-only portability rule). No
+	// provider is named, so no operator ConfigMap is needed.
 	spec := canarySpec("")
 	spec.Canary.Steps[0].Capacity = intstr.FromInt32(3)
-	r := newReconciler(t, boundBindings(), mkPolicy("ns1", "absolute", 1, spec))
+	r := newReconciler(t, "", mkPolicy("ns1", "absolute", 1, spec))
 
 	runReconcile(t, r, "ns1", "absolute")
 	got := getPolicy(t, r, "ns1", "absolute")
@@ -217,7 +218,7 @@ func TestReadyFalseOnPolicyOnlyRules(t *testing.T) {
 // and a different body must not.
 func TestDigestStableAcrossIdenticalSpecs(t *testing.T) {
 	g := gomega.NewWithT(t)
-	r := newReconciler(t, boundBindings("llm-metrics"),
+	r := newReconciler(t, boundProviderConfig,
 		mkPolicy("ns1", "copy-a", 1, canarySpec("llm-metrics")),
 		mkPolicy("ns1", "copy-b", 5, canarySpec("llm-metrics")),
 		mkPolicy("ns1", "different", 1, v1beta1.RolloutPolicySpec{BlueGreen: &v1beta1.GroupBlueGreen{}}))
@@ -239,7 +240,7 @@ func TestDigestStableAcrossIdenticalSpecs(t *testing.T) {
 func TestAttachDetachFlipsInUse(t *testing.T) {
 	g := gomega.NewWithT(t)
 	consumer := mkISVC("ns1", "consumer-a", "canary-std")
-	r := newReconciler(t, boundBindings("llm-metrics"),
+	r := newReconciler(t, boundProviderConfig,
 		mkPolicy("ns1", "canary-std", 1, canarySpec("llm-metrics")),
 		consumer)
 
@@ -258,11 +259,11 @@ func TestAttachDetachFlipsInUse(t *testing.T) {
 }
 
 // An unbound provider name is a per-cluster caveat, not a body defect:
-// members of one fleet legitimately bind different provider sets. Ready must
-// stay True with the ProviderUnbound reason naming the provider.
+// clusters in one fleet bind different provider sets. Ready must stay True
+// with the ProviderUnbound reason naming the provider.
 func TestUnboundProviderIsWarningNotFailure(t *testing.T) {
 	g := gomega.NewWithT(t)
-	r := newReconciler(t, boundBindings("some-other-provider"),
+	r := newReconciler(t, otherProviderConfig,
 		mkPolicy("ns1", "canary-std", 2, canarySpec("unbound-provider")))
 
 	runReconcile(t, r, "ns1", "canary-std")
@@ -276,26 +277,9 @@ func TestUnboundProviderIsWarningNotFailure(t *testing.T) {
 	g.Expect(got.Status.PortableDigest).NotTo(gomega.BeEmpty())
 }
 
-// A nil bindings seam means the wiring supplies no binding source — the same
-// observable state as an empty binding set, degraded but never an error.
-func TestNilBindingsReportsProviderUnbound(t *testing.T) {
-	g := gomega.NewWithT(t)
-	r := newReconciler(t, nil,
-		mkPolicy("ns1", "canary-std", 1, canarySpec("llm-metrics")))
-
-	result, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "canary-std"}})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	g.Expect(result).To(gomega.Equal(ctrl.Result{}))
-
-	got := getPolicy(t, r, "ns1", "canary-std")
-	ready := apimeta.FindStatusCondition(got.Status.Conditions, v1beta1.RolloutPolicyReadyCondition)
-	g.Expect(ready.Status).To(gomega.Equal(metav1.ConditionTrue))
-	g.Expect(ready.Reason).To(gomega.Equal(v1beta1.RolloutPolicyReasonProviderUnbound))
-}
-
-// Provider bindings emit no watch event toward this controller — a reconcile
-// that consults them must self-schedule a re-check on the bindings' cadence,
-// for both binding outcomes, so the Ready reason converges after a binding
+// The operator configuration sends no watch event toward this controller.
+// A pass that read it must check again once the configuration cache
+// expires, for both binding outcomes, so the Ready reason follows a binding
 // edit without a policy write.
 func TestReconcileRequeuesAfterConsultingBindings(t *testing.T) {
 	const interval = 30 * time.Second
@@ -309,9 +293,8 @@ func TestReconcileRequeuesAfterConsultingBindings(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			g := gomega.NewWithT(t)
-			bindings := boundBindings("llm-metrics")
-			bindings.interval = interval
-			r := newReconciler(t, bindings, tc.policy)
+			r := newReconciler(t, boundProviderConfig, tc.policy)
+			r.Config.Cache = controllerconfig.NewConfigCache(interval)
 
 			result, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "canary-std"}})
 			g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -325,23 +308,23 @@ func TestReconcileRequeuesAfterConsultingBindings(t *testing.T) {
 	}
 }
 
-// No periodic requeue when the bindings report no cadence, or when the body
-// references no provider and bindings are never consulted.
+// No periodic requeue when the configuration cache keeps nothing, or when
+// the body references no provider and the configuration is never read.
 func TestReconcileSkipsBindingRequeue(t *testing.T) {
 	g := gomega.NewWithT(t)
 
-	// Zero interval, provider-consulting policy.
-	r := newReconciler(t, boundBindings("llm-metrics"),
+	// Zero cache lifetime, provider-consulting policy.
+	r := newReconciler(t, boundProviderConfig,
 		mkPolicy("ns1", "canary-std", 1, canarySpec("llm-metrics")))
 	result, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "canary-std"}})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(result).To(gomega.Equal(ctrl.Result{}))
 
-	// Positive interval, body with no provider reference.
-	bindings := boundBindings("llm-metrics")
-	bindings.interval = 30 * time.Second
-	r = newReconciler(t, bindings,
+	// Positive cache lifetime, body with no provider reference and no
+	// operator ConfigMap to read.
+	r = newReconciler(t, "",
 		mkPolicy("ns1", "bluegreen", 1, v1beta1.RolloutPolicySpec{BlueGreen: &v1beta1.GroupBlueGreen{}}))
+	r.Config.Cache = controllerconfig.NewConfigCache(30 * time.Second)
 	result, err = r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "bluegreen"}})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(result).To(gomega.Equal(ctrl.Result{}))
@@ -349,10 +332,10 @@ func TestReconcileSkipsBindingRequeue(t *testing.T) {
 
 func TestBindingFetchErrorIsTransient(t *testing.T) {
 	g := gomega.NewWithT(t)
-	// A provider-referencing policy whose binding source cannot be read is a
-	// transient fetch failure: the reconcile must error (and retry), not mark
-	// the policy off missing data.
-	r := newReconciler(t, &fakeBindings{err: context.DeadlineExceeded},
+	// A provider-referencing policy with no reachable operator config is a
+	// transient fetch failure: the reconcile must error (and retry), not
+	// mark the policy off missing data.
+	r := newReconciler(t, "",
 		mkPolicy("ns1", "canary-std", 1, canarySpec("llm-metrics")))
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "canary-std"}})
@@ -362,86 +345,13 @@ func TestBindingFetchErrorIsTransient(t *testing.T) {
 	g.Expect(got.Status.Conditions).To(gomega.BeEmpty())
 }
 
-func TestReconcileSkipsUnchangedStatus(t *testing.T) {
-	g := gomega.NewWithT(t)
-	r := newReconciler(t, boundBindings("llm-metrics"),
-		mkPolicy("ns1", "canary-std", 1, canarySpec("llm-metrics")),
-		mkISVC("ns1", "consumer-a", "canary-std"))
-
-	runReconcile(t, r, "ns1", "canary-std")
-	first := getPolicy(t, r, "ns1", "canary-std")
-
-	runReconcile(t, r, "ns1", "canary-std")
-	second := getPolicy(t, r, "ns1", "canary-std")
-
-	g.Expect(second.ResourceVersion).To(gomega.Equal(first.ResourceVersion))
-}
-
-// A status rewrite for an unrelated field (here: a spec edit that moves the
-// digest) must not reset LastTransitionTime on conditions whose status did
-// not change.
-func TestLastTransitionTimePreservedOnUnchangedConditions(t *testing.T) {
-	g := gomega.NewWithT(t)
-	r := newReconciler(t, boundBindings("llm-metrics"),
-		mkPolicy("ns1", "canary-std", 1, canarySpec("llm-metrics")))
-
-	runReconcile(t, r, "ns1", "canary-std")
-
-	// Backdate the transition times so a reset is distinguishable from a
-	// same-second rewrite.
-	got := getPolicy(t, r, "ns1", "canary-std")
-	past := metav1.NewTime(time.Now().Add(-time.Hour).Truncate(time.Second))
-	for i := range got.Status.Conditions {
-		got.Status.Conditions[i].LastTransitionTime = past
-	}
-	g.Expect(r.Status().Update(context.Background(), got)).To(gomega.Succeed())
-
-	got = getPolicy(t, r, "ns1", "canary-std")
-	digestBefore := got.Status.PortableDigest
-	delay := int32(60)
-	got.Spec.Canary.ScaleDownDelaySeconds = &delay
-	g.Expect(r.Update(context.Background(), got)).To(gomega.Succeed())
-
-	runReconcile(t, r, "ns1", "canary-std")
-	got = getPolicy(t, r, "ns1", "canary-std")
-
-	// The digest moved, so this reconcile really rewrote status.
-	g.Expect(got.Status.PortableDigest).NotTo(gomega.Equal(digestBefore))
-	ready := apimeta.FindStatusCondition(got.Status.Conditions, v1beta1.RolloutPolicyReadyCondition)
-	g.Expect(ready.Status).To(gomega.Equal(metav1.ConditionTrue))
-	g.Expect(ready.LastTransitionTime.Time.Equal(past.Time)).To(gomega.BeTrue())
-	inUse := apimeta.FindStatusCondition(got.Status.Conditions, v1beta1.RolloutPolicyInUseCondition)
-	g.Expect(inUse.LastTransitionTime.Time.Equal(past.Time)).To(gomega.BeTrue())
-}
-
-func TestReconcileMissingPolicyIsNoop(t *testing.T) {
-	g := gomega.NewWithT(t)
-	r := newReconciler(t, boundBindings())
-	result, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "gone"}})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	g.Expect(result).To(gomega.Equal(ctrl.Result{}))
-}
-
-func TestPoliciesReferencedBy(t *testing.T) {
-	g := gomega.NewWithT(t)
-	r := newReconciler(t, boundBindings())
-
-	// Distinct names only: two groups share a policy, a third names another.
-	reqs := r.policiesReferencedBy(context.Background(), mkISVC("ns1", "consumer-a", "policy-a", "policy-a", "policy-b"))
-	g.Expect(reqs).To(gomega.ConsistOf(
-		ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "policy-a"}},
-		ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "ns1", Name: "policy-b"}},
-	))
-
-	g.Expect(r.policiesReferencedBy(context.Background(), mkISVC("ns1", "no-rollout"))).To(gomega.BeEmpty())
-	g.Expect(r.policiesReferencedBy(context.Background(), mkISVC("ns1", "no-refs", ""))).To(gomega.BeEmpty())
-	g.Expect(r.policiesReferencedBy(context.Background(), &corev1.Pod{})).To(gomega.BeNil())
-}
-
 func TestPolicyRefIndexer(t *testing.T) {
 	g := gomega.NewWithT(t)
+
+	// Distinct names only: two groups share a policy, a third names another.
 	g.Expect(PolicyRefIndexer(mkISVC("ns1", "a", "policy-a", "policy-a", "policy-b"))).
-		To(gomega.ConsistOf("policy-a", "policy-b"))
-	g.Expect(PolicyRefIndexer(mkISVC("ns1", "b"))).To(gomega.BeNil())
+		To(gomega.Equal([]string{"policy-a", "policy-b"}))
+	g.Expect(PolicyRefIndexer(mkISVC("ns1", "no-rollout"))).To(gomega.BeNil())
+	g.Expect(PolicyRefIndexer(mkISVC("ns1", "no-refs", ""))).To(gomega.BeNil())
 	g.Expect(PolicyRefIndexer(&corev1.Pod{})).To(gomega.BeNil())
 }

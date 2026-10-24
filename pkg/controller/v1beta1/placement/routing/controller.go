@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -44,7 +45,7 @@ const trafficMapRoutableStatusFieldOwner = "ome-trafficmap-routing"
 // generates the capacity-aware TrafficMap a gateway consumes: one namespaced
 // TrafficMap per ISVC, named after it and owner-ref'd to it so it is
 // garbage-collected with the ISVC. It recomputes the routing table whenever
-// placement or per-home capacity changes.
+// placement or per-cluster capacity changes.
 //
 // While routing remains selected, the map exists even when nothing is
 // routable: an empty table plus a Routable=False reason. When routing becomes
@@ -59,13 +60,11 @@ type Reconciler struct {
 	Log       logr.Logger
 	// Config gates generation. When disabled the controller reaps what it owns.
 	Config Config
-	// Prober supplies the optional end-to-end reachability verdict ANDed into
-	// each home's health gate. Nil, or configured off, means the gate stays
-	// readyReplicas > 0 and no entry carries probe provenance.
+	// Prober optionally gates capacity on end-to-end reachability. Nil or
+	// disabled leaves the selected capacity mode as the health source.
 	Prober *Prober
-	// Capacity supplies the optional home-reported ceiling on each home's
-	// planned allocation. Nil, or configured off, means the plan stands and
-	// every entry records CapacitySourceControlPlane.
+	// Capacity supplies endpoint ceilings or weights. A missing report uses
+	// replica counts in Ceiling mode and zero weight in Reported mode.
 	Capacity *CapacityPoller
 }
 
@@ -78,17 +77,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		r.Prober.Forget(req.NamespacedName)
 		r.Capacity.Forget(req.NamespacedName)
 		deleteCapacityFallbackMetric(req.Namespace, req.Name)
+		deleteTrafficMapEntryMetrics(req.Namespace, req.Name)
 		return reapResult(r.reapSourceAbsentTrafficMap(ctx, req.NamespacedName))
 	}
 	if !isvc.DeletionTimestamp.IsZero() {
 		r.Prober.Forget(req.NamespacedName)
 		r.Capacity.Forget(req.NamespacedName)
 		deleteCapacityFallbackMetric(req.Namespace, req.Name)
+		deleteTrafficMapEntryMetrics(req.Namespace, req.Name)
 		return reapResult(r.reap(ctx, isvc))
 	}
 
 	if isvc.Status.Placement != nil && isvc.Status.Placement.Plan != nil && !isvc.Spec.Placement.UsesClusterAffinity() {
-		return ctrl.Result{}, fmt.Errorf("an accepted placement plan requires spec.placement.policy: ClusterAffinity")
+		return ctrl.Result{}, validation.ErrAcceptedPlanRequiresClusterAffinity
 	}
 
 	// A TrafficMap-backed publisher uses its finalizer as the teardown handshake:
@@ -97,6 +98,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		r.Prober.Forget(req.NamespacedName)
 		r.Capacity.Forget(req.NamespacedName)
 		deleteCapacityFallbackMetric(req.Namespace, req.Name)
+		deleteTrafficMapEntryMetrics(req.Namespace, req.Name)
 		return reapResult(r.reap(ctx, isvc))
 	}
 
@@ -275,6 +277,7 @@ func (r *Reconciler) ownedTrafficMap(
 // as a spurious reconcile error.
 func (r *Reconciler) apply(ctx context.Context, isvc *v1beta1.InferenceService, spec v1beta1.TrafficMapSpec) error {
 	var op controllerutil.OperationResult
+	var persisted *v1beta1.TrafficMap
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		tm := &v1beta1.TrafficMap{ObjectMeta: metav1.ObjectMeta{Name: isvc.Name, Namespace: isvc.Namespace}}
 		var err error
@@ -305,10 +308,14 @@ func (r *Reconciler) apply(ctx context.Context, isvc *v1beta1.InferenceService, 
 			tm.Spec = spec
 			return nil
 		})
+		if err == nil {
+			persisted = tm
+		}
 		return err
 	}); err != nil {
 		return err
 	}
+	recordTrafficMapEntryMetrics(isvc.Namespace, isvc.Name, persisted.Spec)
 	if op != controllerutil.OperationResultNone {
 		r.Log.Info("trafficmap generated", "isvc", client.ObjectKeyFromObject(isvc).String(),
 			"op", op, "mode", spec.Mode, "homes", len(spec.Entries))
@@ -435,7 +442,7 @@ func overrideActiveCondition(entries []v1beta1.TrafficMapEntry, overrides []traf
 
 // routableMessage renders the operator-facing explanation for a Routable reason.
 // The entry count is included because "empty" and "degraded" are different
-// problems and the reason alone does not distinguish how many homes exist.
+// problems and the reason alone does not distinguish how many clusters exist.
 func routableMessage(reason string, status metav1.ConditionStatus, entries int) string {
 	switch reason {
 	case v1beta1.TrafficMapReasonNotPlaced:
@@ -605,6 +612,10 @@ func buildSpec(
 		Mode:                   placementMode(isvc),
 		ObservedISVCGeneration: isvc.Generation,
 	}
+	useReportedWeight := capacityPolicy.IsEnabled() && capacityPolicy.Capacity.Mode == v1beta1.RoutingCapacityModeReported
+	if useReportedWeight {
+		empty.CapacityMode = v1beta1.RoutingCapacityModeReported
+	}
 	pl := isvc.Status.Placement
 	if pl != nil && pl.Plan != nil {
 		empty.PlacementPlanID = pl.Plan.ID
@@ -617,28 +628,41 @@ func buildSpec(
 		return empty, metav1.ConditionFalse, v1beta1.TrafficMapReasonNoAddressableHome
 	}
 
-	// Index-aligned: homes feed the weight computation, entries carry the result
+	// Index-aligned: clusters feed the weight computation, entries carry the result
 	// plus provenance, both in the same cluster-sorted order.
-	homes := make([]Home, len(cands))
+	clusters := make([]ClusterCapacity, len(cands))
 	targets := make([]Target, len(cands))
 	capacityFallbackReasons := make([]string, len(cands))
 	for i, c := range cands {
 		targets[i] = targetForCandidate(isvc, c, probePolicy.PolicyDigest)
 		reported, fallbackReason := capacity.observation(targets[i], capacityPolicy)
 		capacityFallbackReasons[i] = fallbackReason
-		// A nil factor is the identity 1.0; a per-cluster override scales the home's
+		// A nil factor is the identity 1.0; a per-cluster override scales the cluster's
 		// share for heterogeneous hardware. A nil reachability verdict does not
 		// gate — probing off, or no verdict yet.
-		homes[i] = Home{
+		clusters[i] = ClusterCapacity{
 			Cluster:   c.Cluster,
 			Allocated: c.AdmittedReplicas,
 			Ready:     c.ReadyReplicas,
 			Factor:    capacityFactor(isvc, c.Cluster),
 			Reachable: probe.Reachable(targets[i]),
-			Reported:  reported,
+		}
+		if useReportedWeight {
+			clusters[i].Mode = v1beta1.RoutingCapacityModeReported
+			if reported != nil {
+				quantity, err := resource.ParseQuantity(strconv.FormatFloat(*reported, 'f', -1, 64))
+				if err == nil {
+					clusters[i].ReportedWeight = &quantity
+				} else {
+					capacityFallbackReasons[i] = "reported capacity cannot be represented as a weight"
+				}
+			}
+		} else if reported != nil {
+			count := int32(*reported)
+			clusters[i].Reported = &count
 		}
 	}
-	computedWeights := weights(homes, probeAllFailedPolicy(probePolicy))
+	computedWeights := weights(clusters, probeAllFailedPolicy(probePolicy))
 
 	entries := make([]v1beta1.TrafficMapEntry, len(cands))
 	for i, c := range cands {
@@ -647,16 +671,17 @@ func buildSpec(
 			Endpoint: c.Endpoint.DeepCopy(),
 			Weight:   computedWeights[i],
 			// Healthy reports readiness plus probe evidence. Capacity remains
-			// independent: a healthy home can have weight zero when its admitted or
+			// independent: a healthy cluster can have weight zero when its admitted or
 			// reported capacity is zero, while PreserveTraffic may ignore only a
 			// fleet-wide probe failure.
-			Healthy: c.ReadyReplicas > 0 && (homes[i].Reachable == nil || *homes[i].Reachable),
+			Healthy: clusters[i].hasReadyCapacity() && (clusters[i].Reachable == nil || *clusters[i].Reachable),
 			Capacity: &v1beta1.TrafficMapCapacity{
-				Allocated:      homes[i].EffectiveAllocated(),
+				ReportedWeight: clusters[i].ReportedWeight,
+				Allocated:      clusters[i].EffectiveAllocated(),
 				Ready:          c.ReadyReplicas,
-				Factor:         homes[i].Factor,
-				Source:         allocationSource(homes[i]),
-				Reported:       homes[i].Reported,
+				Factor:         clusters[i].appliedFactor(),
+				Source:         allocationSource(clusters[i]),
+				Reported:       clusters[i].Reported,
 				FallbackReason: capacityFallbackReasons[i],
 			},
 			Probe: probe.Provenance(targets[i]),
@@ -672,20 +697,21 @@ func buildSpec(
 	if hasPositiveWeight {
 		status = metav1.ConditionTrue
 		reason = v1beta1.TrafficMapReasonRoutable
-		if allProbesFailed(homes) {
+		if allProbesFailed(clusters) {
 			reason = v1beta1.TrafficMapReasonAllHomesProbeFailed
 		}
 	} else if manualDrainCausedAllZero {
 		reason = v1beta1.TrafficMapReasonTrafficDrain
-	} else if !slices.ContainsFunc(homes, func(h Home) bool { return h.Ready > 0 }) {
+	} else if !slices.ContainsFunc(clusters, func(h ClusterCapacity) bool { return h.usesReportedWeight() || h.Ready > 0 }) {
 		reason = v1beta1.TrafficMapReasonAllHomesUnready
-	} else if !slices.ContainsFunc(homes, func(h Home) bool { return h.RoutableReplicas() > 0 }) {
+	} else if !slices.ContainsFunc(clusters, func(h ClusterCapacity) bool { return h.capacityValue().Sign() > 0 }) {
 		reason = v1beta1.TrafficMapReasonNoRoutableCapacity
-	} else if allProbesFailed(homes) {
+	} else if allProbesFailed(clusters) {
 		reason = v1beta1.TrafficMapReasonAllHomesProbeFailed
 	}
 	return v1beta1.TrafficMapSpec{
 		PlacementPlanID:        empty.PlacementPlanID,
+		CapacityMode:           empty.CapacityMode,
 		Service:                isvc.Name,
 		Mode:                   placementMode(isvc),
 		Entries:                entries,
@@ -749,11 +775,17 @@ func applyTrafficDrains(entries []v1beta1.TrafficMapEntry, overrides []trafficdr
 	return hadPositive && !slices.ContainsFunc(entries, func(e v1beta1.TrafficMapEntry) bool { return e.Weight > 0 })
 }
 
-// allocationSource names which input produced the entry's allocation. Endpoint
-// only when a report actually lowered the plan: a report that matched or
-// exceeded the plan left Allocated untouched, so claiming Endpoint there would
-// misattribute a control-plane number to the home.
-func allocationSource(h Home) v1beta1.CapacitySource {
+// allocationSource names the capacity authority. Ceiling mode records Endpoint
+// only when the report lowered Allocated. Reported mode records Endpoint when
+// the report is the cluster's capacity and ControlPlane when the cluster fell back to
+// its replica count.
+func allocationSource(h ClusterCapacity) v1beta1.CapacitySource {
+	if h.Mode == v1beta1.RoutingCapacityModeReported {
+		if h.usesReportedWeight() {
+			return v1beta1.CapacitySourceEndpoint
+		}
+		return v1beta1.CapacitySourceControlPlane
+	}
 	if h.Reported != nil && h.EffectiveAllocated() != h.Allocated {
 		return v1beta1.CapacitySourceEndpoint
 	}
@@ -761,7 +793,7 @@ func allocationSource(h Home) v1beta1.CapacitySource {
 }
 
 // servingCandidates returns the admitted candidates that report an addressable
-// endpoint — the serving homes — sorted by cluster for a deterministic table.
+// endpoint — the serving clusters — sorted by cluster for a deterministic table.
 func servingCandidates(isvc *v1beta1.InferenceService) []*v1beta1.CandidatePlacement {
 	pl := isvc.Status.Placement
 	if pl == nil {
@@ -771,7 +803,7 @@ func servingCandidates(isvc *v1beta1.InferenceService) []*v1beta1.CandidatePlace
 	for i := range pl.Candidates {
 		c := &pl.Candidates[i]
 		// Allocation retirement can precede the observation refresh. An absent
-		// home cannot regain traffic from its last admitted endpoint.
+		// cluster cannot regain traffic from its last admitted endpoint.
 		if a := c.Allocation; pl.Plan != nil && a != nil && a.CurrentReplicas == 0 && a.DesiredReplicas == 0 && a.CurrentHome == nil && a.DesiredHome == nil {
 			continue
 		}
@@ -780,7 +812,7 @@ func servingCandidates(isvc *v1beta1.InferenceService) []*v1beta1.CandidatePlace
 				continue
 			}
 			// A cancelled selection can still back the serving floor. Keep its
-			// route until the allocator authorizes draining that retained home.
+			// route until the allocator authorizes draining that retained cluster.
 			retained := pl.Plan.SingleMove != nil && pl.Plan.SingleMove.Selected == pl.Plan.Winner && c.Allocation != nil && !c.Allocation.RaceCandidate && c.Allocation.CurrentReplicas > 0 && !c.Allocation.DrainRequested
 			if !retained && (pl.Plan.SingleMove == nil || pl.Plan.SingleMove.Selected == "" || pl.Plan.SingleMove.Selected != c.Cluster) {
 				continue
@@ -869,7 +901,7 @@ var routingTableChange = predicate.Funcs{
 		if placementcontroller.IsPlacementEligible(oldISVC) != placementcontroller.IsPlacementEligible(newISVC) {
 			return true
 		}
-		if routingOptedOut(oldISVC) != routingOptedOut(newISVC) {
+		if placementcontroller.RoutingOptedOut(oldISVC) != placementcontroller.RoutingOptedOut(newISVC) {
 			return true
 		}
 		if !equality.Semantic.DeepEqual(routingProbeSpec(oldISVC), routingProbeSpec(newISVC)) {
@@ -912,12 +944,7 @@ var trafficMapRoutingChange = predicate.Funcs{
 }
 
 func routingEnabled(config Config, isvc *v1beta1.InferenceService) bool {
-	return config.IsEnabled() && !routingOptedOut(isvc)
-}
-
-func routingOptedOut(isvc *v1beta1.InferenceService) bool {
-	return isvc != nil && isvc.Spec.Routing != nil &&
-		isvc.Spec.Routing.Enabled != nil && !*isvc.Spec.Routing.Enabled
+	return config.IsEnabled() && !placementcontroller.RoutingOptedOut(isvc)
 }
 
 func routingProbeSpec(isvc *v1beta1.InferenceService) *v1beta1.RoutingProbeSpec {

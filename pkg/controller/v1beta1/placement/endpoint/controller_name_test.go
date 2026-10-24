@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -15,6 +14,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/placement"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/placement/endpoint"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 // TestEndpointPublisher_NoControllerNameCollision guards the control-plane crash
@@ -25,8 +25,7 @@ import (
 // and there's no collision. A non-connecting rest.Config suffices — setup only
 // registers controllers; nothing dials the apiserver until mgr.Start.
 func TestEndpointPublisher_NoControllerNameCollision(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, v1beta1.AddToScheme(scheme))
+	scheme := fakeclient.Scheme(t)
 
 	mgr, err := ctrl.NewManager(&rest.Config{Host: "http://127.0.0.1:1"}, ctrl.Options{
 		Scheme:  scheme,

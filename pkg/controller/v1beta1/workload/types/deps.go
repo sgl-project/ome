@@ -50,7 +50,7 @@ type Deps struct {
 	// after composing the canonical pod (name, hostname, labels,
 	// controller env, owner ref) but before c.Create. The IR
 	// reconciler (the sole workload.Reconcile caller) wires this to
-	// coordination.InjectPeerEnv via core.ISVCRenderHook so
+	// coordination.InjectPeerEnv via inferencereplica.ISVCRenderHook so
 	// OME_<PEER>_ENDPOINT vars land on every container.
 	//
 	// The hook MUST be idempotent — Render may be invoked twice in

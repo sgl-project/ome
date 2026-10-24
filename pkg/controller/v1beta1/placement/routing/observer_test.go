@@ -23,23 +23,33 @@ func startTestObserverExecutor(t *testing.T, workers, queueCapacity int) (*Obser
 		done <- executor.Start(ctx)
 	}()
 
+	// Only a worker finishes a task, and Start creates the workers after it has
+	// moved the executor to running, so a probe handed straight to the queue
+	// comes back only from a running executor.
+	probe := &observerTask{
+		ctx:     ctx,
+		timeout: observerTestTimeout,
+		run:     func(context.Context) error { return nil },
+		done:    make(chan struct{}),
+	}
 	deadline := time.NewTimer(observerTestTimeout)
 	defer deadline.Stop()
-	for {
-		executor.mu.Lock()
-		running := executor.state == observerExecutorRunning
-		executor.mu.Unlock()
-		if running {
-			break
+	select {
+	case executor.queue <- probe:
+	case err := <-done:
+		t.Fatalf("ObserverExecutor.Start() returned before startup: %v", err)
+	case <-deadline.C:
+		t.Fatal("ObserverExecutor.Start() did not take a queued task")
+	}
+	select {
+	case <-probe.done:
+		if probe.err != nil {
+			t.Fatalf("startup probe error = %v", probe.err)
 		}
-		select {
-		case err := <-done:
-			t.Fatalf("ObserverExecutor.Start() returned before startup: %v", err)
-		case <-deadline.C:
-			t.Fatal("ObserverExecutor.Start() did not enter running state")
-		default:
-			time.Sleep(time.Millisecond)
-		}
+	case err := <-done:
+		t.Fatalf("ObserverExecutor.Start() returned before startup: %v", err)
+	case <-deadline.C:
+		t.Fatal("ObserverExecutor.Start() did not enter running state")
 	}
 
 	t.Cleanup(func() {
@@ -69,7 +79,7 @@ func waitFuture(t *testing.T, future *ObserverFuture) error {
 	return future.Wait(ctx)
 }
 
-func TestNewObserverExecutorRequiresExplicitBounds(t *testing.T) {
+func TestNewObserverExecutor_NonPositiveWorkersOrNegativeQueue_ReturnsError(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		workers       int
@@ -91,7 +101,7 @@ func TestNewObserverExecutorRequiresExplicitBounds(t *testing.T) {
 	}
 }
 
-func TestObserverExecutorUsesFixedWorkerBound(t *testing.T) {
+func TestObserverExecutor_TwelveJobsTwoWorkers_RunsAtMostTwoAtOnce(t *testing.T) {
 	const (
 		workerCount = 2
 		jobCount    = 12
@@ -150,7 +160,7 @@ func TestObserverExecutorUsesFixedWorkerBound(t *testing.T) {
 	}
 }
 
-func TestObserverExecutorSkipsCancelledQueuedJob(t *testing.T) {
+func TestObserverExecutor_QueuedJobCancelled_NeverRunsItReportsCanceled(t *testing.T) {
 	executor, _, _ := startTestObserverExecutor(t, 1, 1)
 
 	firstStarted := make(chan struct{})
@@ -197,7 +207,7 @@ func TestObserverExecutorSkipsCancelledQueuedJob(t *testing.T) {
 	}
 }
 
-func TestObserverExecutorSubmitStopsWaitingWhenQueueIsFull(t *testing.T) {
+func TestObserverExecutor_QueueFullAndCallerCancels_SubmitReturnsCanceled(t *testing.T) {
 	executor, _, _ := startTestObserverExecutor(t, 1, 0)
 
 	firstStarted := make(chan struct{})
@@ -241,7 +251,7 @@ func TestObserverExecutorSubmitStopsWaitingWhenQueueIsFull(t *testing.T) {
 	}
 }
 
-func TestObserverExecutorTimeoutStartsInWorker(t *testing.T) {
+func TestObserverExecutor_JobWaitsInQueue_TimeoutStartsWhenAWorkerTakesIt(t *testing.T) {
 	const jobTimeout = 100 * time.Millisecond
 	executor, _, _ := startTestObserverExecutor(t, 1, 1)
 
@@ -298,7 +308,7 @@ func TestObserverExecutorTimeoutStartsInWorker(t *testing.T) {
 	}
 }
 
-func TestObserverExecutorPreservesSubmitContextValues(t *testing.T) {
+func TestObserverExecutor_SubmitContextCarriesAValue_JobSeesIt(t *testing.T) {
 	type contextKey struct{}
 	executor, _, _ := startTestObserverExecutor(t, 1, 1)
 	submitCtx := context.WithValue(context.Background(), contextKey{}, "request-value")
@@ -318,7 +328,7 @@ func TestObserverExecutorPreservesSubmitContextValues(t *testing.T) {
 	}
 }
 
-func TestObserverExecutorShutdownCancelsAndDrainsAcceptedJobs(t *testing.T) {
+func TestObserverExecutor_Shutdown_CancelsRunningSkipsQueuedRefusesNew(t *testing.T) {
 	executor, cancelExecutor, executorDone := startTestObserverExecutor(t, 1, 2)
 
 	runningStarted := make(chan struct{})
@@ -370,7 +380,7 @@ func TestObserverExecutorShutdownCancelsAndDrainsAcceptedJobs(t *testing.T) {
 	}
 }
 
-func TestObserverExecutorRejectsInvalidLifecycleAndJobs(t *testing.T) {
+func TestObserverExecutor_NotStartedStartedTwiceOrBadJob_ReturnsError(t *testing.T) {
 	executor, err := NewObserverExecutor(1, 1)
 	if err != nil {
 		t.Fatalf("NewObserverExecutor() error = %v", err)
@@ -397,7 +407,7 @@ func TestObserverExecutorRejectsInvalidLifecycleAndJobs(t *testing.T) {
 	}
 }
 
-func TestObserverFutureSupportsConcurrentWaiters(t *testing.T) {
+func TestObserverFuture_FourWaitersOnOneJob_AllReturnItsResult(t *testing.T) {
 	executor, _, _ := startTestObserverExecutor(t, 1, 1)
 	release := make(chan struct{})
 	future, err := executor.Submit(context.Background(), observerTestTimeout, func(context.Context) error {

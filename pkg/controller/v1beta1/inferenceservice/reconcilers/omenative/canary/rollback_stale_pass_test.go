@@ -207,7 +207,7 @@ func componentExt(isvc *v1beta1.InferenceService, comp v1beta1.ComponentType) *v
 // replica's.
 func (s *passSim) project(working *v1beta1.InferenceService, comp v1beta1.ComponentType) {
 	s.t.Helper()
-	want := StepPartition(working, rollout.Policies{}, comp, componentExt(working, comp))
+	want := StepPartition(working, rollout.Policies{}, comp, DesiredReplicas(nil, componentExt(working, comp)))
 	if want == nil {
 		return
 	}
@@ -280,6 +280,7 @@ func (s *passSim) pass(name string, stale bool) {
 	for _, comp := range s.members {
 		s.project(working, comp)
 	}
+	syncInstanceRows(s.t, s.c, working, s.members...)
 	res, err := Dispatch(ctx, DispatchDeps{
 		Client: s.c, Reader: s.c, ISVC: working, Now: s.now, Requeue: reconcileRequeue,
 		ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(working, rollout.Policies{}),

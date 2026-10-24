@@ -14,10 +14,11 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 const gatewayPublicationTestFinalizer = "example.com/hold"
@@ -29,7 +30,7 @@ var gatewayPublicationResourceKinds = []string{
 	"BackendTLSPolicy",
 }
 
-func TestGatewayAPITrafficMapPreflightRetriesTerminatingDesiredResources(t *testing.T) {
+func TestGatewayAPITrafficMapPreflight_DesiredResourceTerminating_FailsRetryably(t *testing.T) {
 	for _, resourceKind := range gatewayPublicationResourceKinds {
 		t.Run(resourceKind, func(t *testing.T) {
 			cfg := gatewayBackendConfig()
@@ -54,10 +55,7 @@ func TestGatewayAPITrafficMapPreflightRetriesTerminatingDesiredResources(t *test
 			terminating.SetDeletionTimestamp(&now)
 			terminating.SetFinalizers([]string{gatewayPublicationTestFinalizer})
 
-			kubeClient := fakeclient.NewClientBuilder().
-				WithScheme(pubScheme(t)).
-				WithObjects(terminating).
-				Build()
+			kubeClient := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(terminating))
 			publisher := NewGatewayAPITrafficMapPublisher(
 				kubeClient,
 				kubeClient,
@@ -96,7 +94,7 @@ func TestGatewayAPITrafficMapPreflightRetriesTerminatingDesiredResources(t *test
 	}
 }
 
-func TestGatewayAPITrafficMapPreflightProbesBothEndpointSliceFamiliesWithoutResolver(t *testing.T) {
+func TestGatewayAPITrafficMapPreflight_IPv4OrIPv6SliceTerminating_NeedsNoResolver(t *testing.T) {
 	for _, suffix := range []string{ipv4EndpointSliceSuffix, ipv6EndpointSliceSuffix} {
 		t.Run(suffix, func(t *testing.T) {
 			cfg := gatewayBackendConfig()
@@ -115,10 +113,7 @@ func TestGatewayAPITrafficMapPreflightProbesBothEndpointSliceFamiliesWithoutReso
 				DeletionTimestamp: &now,
 				Finalizers:        []string{gatewayPublicationTestFinalizer},
 			}}
-			kubeClient := fakeclient.NewClientBuilder().
-				WithScheme(pubScheme(t)).
-				WithObjects(endpointSlice).
-				Build()
+			kubeClient := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(endpointSlice))
 			publisher := NewGatewayAPITrafficMapPublisher(kubeClient, kubeClient, cfg)
 
 			err = publisher.Preflight(context.Background(), plan)
@@ -134,7 +129,7 @@ func TestGatewayAPITrafficMapPreflightProbesBothEndpointSliceFamiliesWithoutReso
 	}
 }
 
-func TestGatewayAPITrafficMapPreflightClassifiesChildOwnershipConflicts(t *testing.T) {
+func TestGatewayAPITrafficMapPreflight_UnlabeledChildResource_FailsTerminally(t *testing.T) {
 	for _, resourceKind := range []string{"Service", "EndpointSlice", "BackendTLSPolicy"} {
 		t.Run(resourceKind, func(t *testing.T) {
 			cfg := gatewayBackendConfig()
@@ -151,10 +146,7 @@ func TestGatewayAPITrafficMapPreflightClassifiesChildOwnershipConflicts(t *testi
 			objects := gatewayPublicationObjects(t, renderer.publisher, gatewayPlan.owner, gatewayPlan.target, addresses)
 			collision := objects[resourceKind]
 			collision.SetLabels(nil)
-			kubeClient := fakeclient.NewClientBuilder().
-				WithScheme(pubScheme(t)).
-				WithObjects(collision).
-				Build()
+			kubeClient := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(collision))
 			publisher := NewGatewayAPITrafficMapPublisher(kubeClient, kubeClient, cfg)
 
 			err = publisher.Preflight(context.Background(), plan)
@@ -165,7 +157,7 @@ func TestGatewayAPITrafficMapPreflightClassifiesChildOwnershipConflicts(t *testi
 	}
 }
 
-func TestGatewayAPIPublisherApplyRejectsTerminationAfterPreflight(t *testing.T) {
+func TestGatewayAPIPublisher_TerminationSeenAtApply_FailsWithoutWriting(t *testing.T) {
 	for _, resourceKind := range gatewayPublicationResourceKinds {
 		t.Run(resourceKind, func(t *testing.T) {
 			cfg := gatewayBackendConfig()
@@ -173,7 +165,7 @@ func TestGatewayAPIPublisherApplyRejectsTerminationAfterPreflight(t *testing.T) 
 				"cluster-a": {{Address: "192.0.2.10", Type: discoveryv1.AddressTypeIPv4}},
 			}
 			owner := testISVC()
-			target := oneHome("svc.prod.global.example", "cluster-a", "backend.example")
+			target := oneCluster("svc.prod.global.example", "cluster-a", "backend.example")
 			renderer := NewGatewayAPIPublisher(
 				nil,
 				cfg,
@@ -190,19 +182,31 @@ func TestGatewayAPIPublisherApplyRejectsTerminationAfterPreflight(t *testing.T) 
 				}
 				liveObjects = append(liveObjects, live)
 			}
-			kubeClient := fakeclient.NewClientBuilder().
-				WithScheme(pubScheme(t)).
-				WithObjects(liveObjects...).
-				Build()
+			kubeClient := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(liveObjects...))
 			targetObject := objects[resourceKind]
 			before := getGatewayPublicationObject(t, kubeClient, targetObject)
-			reader := &terminateGatewayResourceOnGetReader{
-				Reader:      kubeClient,
-				writer:      kubeClient,
-				targetKey:   client.ObjectKeyFromObject(targetObject),
-				targetType:  reflect.TypeOf(targetObject),
-				terminateOn: 2,
-			}
+			targetKey := client.ObjectKeyFromObject(targetObject)
+			targetType := reflect.TypeOf(targetObject)
+			targetGets := 0
+			// The second read of the target deletes it first, so the publisher
+			// meets a resource that started terminating between its reads.
+			reader := fakeclient.Wrap(t, kubeClient, fakeclient.WithInterceptors(interceptor.Funcs{
+				Get: func(ctx context.Context, next client.WithWatch, key client.ObjectKey, object client.Object, opts ...client.GetOption) error {
+					if key == targetKey && reflect.TypeOf(object) == targetType {
+						targetGets++
+						if targetGets == 2 {
+							live := object.DeepCopyObject().(client.Object)
+							if err := next.Get(ctx, key, live, opts...); err != nil {
+								return fmt.Errorf("load resource before deletion race: %w", err)
+							}
+							if err := kubeClient.Delete(ctx, live); err != nil {
+								return fmt.Errorf("start resource deletion race: %w", err)
+							}
+						}
+					}
+					return next.Get(ctx, key, object, opts...)
+				},
+			}))
 			publisher := NewGatewayAPIPublisher(
 				kubeClient,
 				cfg,
@@ -214,7 +218,7 @@ func TestGatewayAPIPublisherApplyRejectsTerminationAfterPreflight(t *testing.T) 
 
 			err := publisher.Publish(context.Background(), owner, target)
 			require.ErrorContains(t, err, "is terminating")
-			assert.Equal(t, 2, reader.targetGets, "preflight and apply must each read the target")
+			assert.Equal(t, 2, targetGets, "preflight and apply must each read the target")
 			after := getGatewayPublicationObject(t, kubeClient, targetObject)
 			require.NotNil(t, after.GetDeletionTimestamp())
 			assert.Equal(t, []string{gatewayPublicationTestFinalizer}, after.GetFinalizers())
@@ -230,13 +234,13 @@ func TestGatewayAPIPublisherApplyRejectsTerminationAfterPreflight(t *testing.T) 
 	}
 }
 
-func TestGatewayAPIPublisherPreservesFinalizersOnOwnedUpdates(t *testing.T) {
+func TestGatewayAPIPublisher_OwnedResourcesCarryFinalizers_UpdateKeepsThem(t *testing.T) {
 	cfg := gatewayBackendConfig()
 	addresses := staticBackendAddressResolver{
 		"cluster-a": {{Address: "192.0.2.10", Type: discoveryv1.AddressTypeIPv4}},
 	}
 	owner := testISVC()
-	target := oneHome("svc.prod.global.example", "cluster-a", "backend.example")
+	target := oneCluster("svc.prod.global.example", "cluster-a", "backend.example")
 	renderer := NewGatewayAPIPublisher(
 		nil,
 		cfg,
@@ -251,10 +255,7 @@ func TestGatewayAPIPublisherPreservesFinalizersOnOwnedUpdates(t *testing.T) {
 		makeGatewayPublicationObjectStale(live)
 		liveObjects = append(liveObjects, live)
 	}
-	kubeClient := fakeclient.NewClientBuilder().
-		WithScheme(pubScheme(t)).
-		WithObjects(liveObjects...).
-		Build()
+	kubeClient := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(liveObjects...))
 	publisher := NewGatewayAPIPublisher(
 		kubeClient,
 		cfg,
@@ -272,36 +273,6 @@ func TestGatewayAPIPublisherPreservesFinalizersOnOwnedUpdates(t *testing.T) {
 	}
 }
 
-type terminateGatewayResourceOnGetReader struct {
-	client.Reader
-	writer      client.Client
-	targetKey   client.ObjectKey
-	targetType  reflect.Type
-	terminateOn int
-	targetGets  int
-}
-
-func (r *terminateGatewayResourceOnGetReader) Get(
-	ctx context.Context,
-	key client.ObjectKey,
-	object client.Object,
-	options ...client.GetOption,
-) error {
-	if key == r.targetKey && reflect.TypeOf(object) == r.targetType {
-		r.targetGets++
-		if r.targetGets == r.terminateOn {
-			live := object.DeepCopyObject().(client.Object)
-			if err := r.Reader.Get(ctx, key, live, options...); err != nil {
-				return fmt.Errorf("load resource before deletion race: %w", err)
-			}
-			if err := r.writer.Delete(ctx, live); err != nil {
-				return fmt.Errorf("start resource deletion race: %w", err)
-			}
-		}
-	}
-	return r.Reader.Get(ctx, key, object, options...)
-}
-
 func gatewayPublicationObjects(
 	t *testing.T,
 	publisher *GatewayAPIPublisher,
@@ -310,17 +281,17 @@ func gatewayPublicationObjects(
 	addresses map[string][]BackendAddress,
 ) map[string]client.Object {
 	t.Helper()
-	require.Len(t, target.Homes, 1)
-	home := target.Homes[0]
-	serviceName := publisher.serviceName(owner, home.Cluster)
-	endpointSlices, err := publisher.buildEndpointSlices(owner, serviceName, home, addresses[home.Cluster])
+	require.Len(t, target.Clusters, 1)
+	cluster := target.Clusters[0]
+	serviceName := publisher.serviceName(owner, cluster.Cluster)
+	endpointSlices, err := publisher.buildEndpointSlices(owner, serviceName, cluster, addresses[cluster.Cluster])
 	require.NoError(t, err)
 	require.Len(t, endpointSlices, 1)
 	return map[string]client.Object{
 		"HTTPRoute":        publisher.buildHTTPRoute(owner, target),
-		"Service":          publisher.buildExternalNameService(owner, serviceName, home),
+		"Service":          publisher.buildExternalNameService(owner, serviceName, cluster),
 		"EndpointSlice":    endpointSlices[0],
-		"BackendTLSPolicy": publisher.buildBackendTLSPolicy(owner, serviceName, home),
+		"BackendTLSPolicy": publisher.buildBackendTLSPolicy(owner, serviceName, cluster),
 	}
 }
 

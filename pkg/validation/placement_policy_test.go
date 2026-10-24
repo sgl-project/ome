@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-func TestPlacementRequiresExplicitPolicy(t *testing.T) {
+func TestValidatePlacementIntent_PolicyMissingOrUnknown_Rejected(t *testing.T) {
 	for _, tt := range []struct {
 		name, payload string
 		invalid       bool
@@ -40,7 +40,7 @@ func TestPlacementRequiresExplicitPolicy(t *testing.T) {
 	}
 }
 
-func TestPlacementPolicyHandoff(t *testing.T) {
+func TestValidatePlacementPolicyUpdate_PolicyRemovedOrDowngraded_Rejected(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
 		old, new *v1beta1.PlacementSpec

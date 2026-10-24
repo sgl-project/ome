@@ -14,10 +14,11 @@ import (
 const metricsSubsystem = "ome_scheduler"
 
 var (
-	// gangPinTotal counts domain-placement decisions by result: pinned,
-	// no_fit (no domain has the capacity), reserved (a domain has the capacity
-	// but a forming gang holds it), adopted, stale_replan, topology_replan.
-	gangPinTotal = metrics.NewCounterVec(
+	// gangAssignmentTotal, exported as gang_pin_total, counts domain-placement
+	// decisions by result: pinned (a domain chosen and assigned), no_fit (no
+	// domain has the capacity), reserved (a domain has the capacity but a forming
+	// gang holds it), adopted, stale_replan, topology_replan.
+	gangAssignmentTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      metricsSubsystem,
 			Name:           "gang_pin_total",
@@ -42,12 +43,13 @@ var (
 
 	// gangActivationTotal counts explicit activations by trigger: "permit" (a
 	// member reached the gate), "templates_complete" (the live member set
-	// reached minMember after a member had parked short of it),
+	// reached minMember after a member had waited short of it),
 	// "reservation_released" (a forming gang's domain reservation drained or was
-	// released, waking the pods it had kept out of the domain), "podgroup_change"
-	// (the plugin's PodGroup informer stored a new or edited PodGroup, waking the
-	// gang's members) or "domain_failed" (a pinned member was vetoed in a domain
-	// new to its gang while another is untried, and retries to plan there).
+	// released, requeuing the pods it had kept out of the domain),
+	// "podgroup_change" (the plugin's PodGroup informer stored a new or edited
+	// PodGroup, requeuing the gang's members) or "domain_failed" (an assigned
+	// member was vetoed in a domain new to its gang while another is untried,
+	// and retries to plan there).
 	gangActivationTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      metricsSubsystem,
@@ -69,9 +71,9 @@ var (
 		},
 	)
 
-	// pinnedGroups tracks how many placement groups are currently pinned to a
-	// domain (holding a capacity reservation).
-	pinnedGroups = metrics.NewGauge(
+	// assignedGroups, exported as pinned_groups, is how many placement groups
+	// currently hold a domain assignment (and its capacity reservation).
+	assignedGroups = metrics.NewGauge(
 		&metrics.GaugeOpts{
 			Subsystem:      metricsSubsystem,
 			Name:           "pinned_groups",
@@ -87,7 +89,7 @@ var registerMetricsOnce sync.Once
 // registry exactly once.
 func registerMetrics() {
 	registerMetricsOnce.Do(func() {
-		legacyregistry.MustRegister(gangPinTotal, gangGateTotal, gangActivationTotal, gangUnwindTotal, pinnedGroups)
+		legacyregistry.MustRegister(gangAssignmentTotal, gangGateTotal, gangActivationTotal, gangUnwindTotal, assignedGroups)
 	})
 }
 

@@ -206,6 +206,11 @@ type ReconcileInput struct {
 	// waives its capacity checks for an in-place start therefore waives
 	// them only for a start that returns the same pod.
 	//
+	// fromRevision is the ControllerRevision the Instance runs now (its
+	// row's RunningRevision), so a gate that paces cohorts charges the
+	// start to the cohort the Instance actually leaves; empty when the row
+	// records none.
+	//
 	// allowed=false skips this Instance for this reconcile pass; the
 	// dispatcher emits a short requeue. inFlightSurge / inFlightUnavail
 	// are the dispatcher's within-pass counters so the gate can
@@ -215,7 +220,7 @@ type ReconcileInput struct {
 	// rather than parsing the message.
 	//
 	// Nil is treated as always-allowed.
-	UpdateGate func(strategy UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (allowed bool, gate RolloutHoldGate, denyReason string)
+	UpdateGate func(fromRevision string, strategy UpdateStrategyType, inFlightSurge, inFlightUnavail int32) (allowed bool, gate RolloutHoldGate, denyReason string)
 
 	// PlanGate, when non-nil, is asked before every fresh Update start, the
 	// starts that skip UpdateGate included: it is the adapter's precondition
@@ -225,13 +230,18 @@ type ReconcileInput struct {
 	// as always-allowed.
 	PlanGate func() (allowed bool, gate RolloutHoldGate, denyReason string)
 
-	// DrainGate, when non-nil, is asked by a surge update right before it
-	// takes its source out of rotation, with the replacement already
-	// serving. It is the drain-time half of a cross-Component gate that
-	// UpdateGate can only evaluate at operation start; sourcePods names the
-	// pods about to leave rotation. allowed=false keeps the source serving
-	// at Step=Surge for this pass, the op records the hold through
-	// DrainHolds, and the dispatcher requeues at the update cadence.
+	// DrainGate, when non-nil, is asked by a surge update right before pods
+	// of its Instance leave rotation: its source once the replacement
+	// serves, and a serving replacement the roll target has moved past
+	// before the abandon withdraws it. It is the drain-time half of a
+	// cross-Component gate that UpdateGate can only evaluate at operation
+	// start; sourcePods names the pods about to leave rotation.
+	// allowed=false for the source keeps it serving at Step=Surge for this
+	// pass, the op records the hold through DrainHolds, and the dispatcher
+	// requeues at the update cadence. A Pairing hold for the replacement
+	// keeps it in rotation and the surge finishes its hand-over onto the
+	// pinned revision instead of abandoning it; any other answer lets the
+	// abandon proceed.
 	//
 	// Nil is treated as always-allowed.
 	DrainGate func(sourcePods []string) (allowed bool, gate RolloutHoldGate, denyReason string)
@@ -337,6 +347,20 @@ type ReconcileInput struct {
 	// no second delete. The dispatcher allocates it per pass.
 	Swept *SweptPods
 
+	// SurgeIndexes hands out the Instance indexes the surges of this pass
+	// take, each the lowest free one, from one reading of the rows. The
+	// dispatcher allocates it per pass; read it through
+	// SurgeIndexAllocator, which serves a verb run outside a pass too.
+	SurgeIndexes *SurgeIndexAllocator
+
+	// Held is the set of Instances the roll's partition keeps on the
+	// revision they run this pass, read once against the roll target and
+	// shared by the restart selection, the update selection and the
+	// create pass. The dispatcher allocates it per pass and the first
+	// reader fills it (ops.RollHeldIndices); nil, outside a pass, reads
+	// the rows on every ask.
+	Held *HeldInstances
+
 	// Gangs carries what each multi-pod Instance's PodGroup says about
 	// its gang, recorded by the PodGroup pass that runs ahead of the
 	// dispatcher. The pod-create choke point reads it to keep members off
@@ -364,7 +388,7 @@ type ReconcileInput struct {
 	PromoteWindow *PromoteWindow
 
 	// Disposition carries the operator-config inputs the terminal-failure
-	// disposition (DisposeExpiredAttempt) branches on. The zero value
+	// disposition (DecideExpiredAttempt) branches on. The zero value
 	// fails safe (no relocation, terminal branch for non-workload-caused
 	// failures). MigrationMode is plan-derived: the escalation pass
 	// overlays ComponentPlan.MigrationMode, so adapters leave it zero.
@@ -547,4 +571,13 @@ func (r *ReconcileInput) Now() time.Time {
 		return r.Clock.Now()
 	}
 	return time.Now()
+}
+
+// SurgeIndexAllocator is the pass's allocator of surge indexes, or, for a
+// verb run outside a pass, a fresh one over the rows as they stand.
+func (in *ReconcileInput) SurgeIndexAllocator() *SurgeIndexAllocator {
+	if in.SurgeIndexes != nil {
+		return in.SurgeIndexes
+	}
+	return NewSurgeIndexAllocator(in.ObservedState.InstanceStatuses)
 }

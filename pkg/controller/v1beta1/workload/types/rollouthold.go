@@ -1,5 +1,11 @@
 package types
 
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
 // RolloutHoldGate names the layer that most recently denied a
 // per-Instance Update for a Component. Values mirror
 // v1beta1.RolloutHoldGate byte-for-byte; the adapter converts by simple
@@ -76,4 +82,33 @@ func ParkedWaitingReason(token string) bool {
 // ends, and the row's phase is whatever its pod set earns.
 func OperationParked(op *InstanceOperation) bool {
 	return op != nil && op.Type == InstanceOperationUpdate && op.Step == UpdateStepParked
+}
+
+// InstancesNotServingClause names, for a hold's reason, the Instances
+// already on revision that do not serve it: "; Instance 3 on revision
+// <rev> not serving", "; Instances 0, 2 on revision <rev> not serving".
+// Empty when there are none. The update pass and the status writer both
+// word the hold they stand behind through it, so an operator reads one
+// account whichever of them reports the hold.
+func InstancesNotServingClause(indices []int32, revision string) string {
+	if len(indices) == 0 {
+		return ""
+	}
+	noun, list := InstanceNoun(indices)
+	return fmt.Sprintf("; %s %s on revision %s not serving", noun, list, revision)
+}
+
+// InstanceNoun is the noun and the comma-joined list a clause names a
+// non-empty set of Instance indices with: "Instance" and "3", or
+// "Instances" and "0, 2".
+func InstanceNoun(indices []int32) (noun, list string) {
+	names := make([]string, 0, len(indices))
+	for _, idx := range indices {
+		names = append(names, strconv.Itoa(int(idx)))
+	}
+	noun = "Instance"
+	if len(indices) > 1 {
+		noun = "Instances"
+	}
+	return noun, strings.Join(names, ", ")
 }

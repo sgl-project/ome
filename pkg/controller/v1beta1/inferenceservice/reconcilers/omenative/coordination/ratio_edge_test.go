@@ -37,12 +37,14 @@ func TestEvaluateSurge_ZeroToleranceAllowsOnlyMinimalSurge(t *testing.T) {
 	}
 }
 
-// Drain stays strict under a zero band: the drain tiebreaker relaxes
-// the band by one extra tolerance width, and twice zero is still zero,
-// so a drain-first strategy is refused. This is the honest-deadlock
-// posture — capacity is never removed when the operator asked for
-// exact ratio hold.
-func TestEvaluateSurge_ZeroToleranceRefusesDrain(t *testing.T) {
+// A zero band admits the one drain no single step can keep inside it, one
+// pod of the side at a time: twice zero is still zero, so the rounding-
+// error allowance never fires, and the band's one-step rule admits the
+// drain from a balanced fleet at its reference rather than holding a
+// drain-first roll for good. The second pod, from a baseline below the
+// reference, is refused. Admission refuses this shape at creation; the
+// gate meets it after a resize.
+func TestEvaluateSurge_ZeroToleranceAdmitsTheOneDrainAtATime(t *testing.T) {
 	pacing := v1beta1.CoordinationPacing{
 		Type:                  v1beta1.CoordinationPacingRatioBalanced,
 		RatioTolerancePercent: int32Ptr(0),
@@ -58,8 +60,13 @@ func TestEvaluateSurge_ZeroToleranceRefusesDrain(t *testing.T) {
 		},
 	}
 	d := EvaluateSurge(pacing, state, v1beta1.EngineComponent, -1)
-	if d.AllowedSurgeDelta != 0 || !d.SkewRejected {
-		t.Errorf("zero tolerance must refuse a -1 drain (projected 4/3 breaks an exact-ratio band): got %+v", d)
+	if d.AllowedSurgeDelta != -1 || !d.OutsideTolerance ||
+		d.Reason != "engine 3 of 4 serving after the drain; no single step fits tolerance 0 at 4:4; admitting one" {
+		t.Errorf("zero tolerance admits the one drain no step keeps inside it, from a balanced 4:4, and says so: got %+v", d)
+	}
+	state.Serving[v1beta1.EngineComponent] = 3
+	if d := EvaluateSurge(pacing, state, v1beta1.EngineComponent, -1); d.AllowedSurgeDelta != 0 || !d.SkewRejected {
+		t.Errorf("the second pod, from a 3:4 baseline below the reference, must be refused: got %+v", d)
 	}
 }
 
@@ -85,8 +92,9 @@ func TestEvaluateSurge_NegativeToleranceClampsToZero(t *testing.T) {
 	if d := EvaluateSurge(pacing, state, v1beta1.EngineComponent, 1); d.AllowedSurgeDelta != 1 {
 		t.Errorf("negative tolerance must behave as zero (minimal +1 surge allowed on a balanced baseline), not as an inverted reject-all band: got %+v", d)
 	}
-	if d := EvaluateSurge(pacing, state, v1beta1.EngineComponent, -1); d.AllowedSurgeDelta != 0 {
-		t.Errorf("negative tolerance must behave as zero for drains (refused): got %+v", d)
+	if d := EvaluateSurge(pacing, state, v1beta1.EngineComponent, -1); d.AllowedSurgeDelta != -1 || !d.OutsideTolerance ||
+		d.Reason != "engine 3 of 4 serving after the drain; no single step fits tolerance 0 at 4:4; admitting one" {
+		t.Errorf("negative tolerance must behave as zero for drains too (the one drain admitted and named at tolerance 0): got %+v", d)
 	}
 }
 

@@ -10,14 +10,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/quota/tree"
 	"sigs.k8s.io/ome/pkg/quota/usage"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 // quantities carry unexported state, so they are compared on Cmp rather than
@@ -196,8 +195,7 @@ func TestReadUsage(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			c := fake.NewClientBuilder().WithScheme(backendScheme(t)).
-				WithObjects(tc.objects...).Build()
+			c := kueueClient(t, fakeclient.WithObjects(tc.objects...))
 			b := &Backend{Writer: c, Reader: c, Options: testOptions()}
 
 			built, _, err := tree.Build(quotas, tree.Options{RootName: "root"})
@@ -241,12 +239,7 @@ func TestReadUsageSurfacesAFailedList(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			c := fake.NewClientBuilder().WithScheme(backendScheme(t)).
-				WithInterceptorFuncs(interceptor.Funcs{
-					List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
-						return errListFailed
-					},
-				}).Build()
+			c := kueueClient(t, fakeclient.FailingVerb(fakeclient.List, fakeclient.EveryCall, errListFailed))
 			b := &Backend{Writer: c, Reader: c, Options: testOptions()}
 
 			var leaves []*tree.Node

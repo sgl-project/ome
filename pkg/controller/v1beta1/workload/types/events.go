@@ -102,10 +102,20 @@ const (
 
 	// EventReasonSurgeAbandoned fires when a single-pod surge is abandoned
 	// because the desired state has withdrawn the revision it is pinned
-	// to: the replacement is deleted and the source, still in
-	// rotation, is reset to Ready on its running revision. Normal, not a
-	// failure: the retired revision never got the chance to fail.
+	// to: the replacement is deleted and the source, still in rotation, is
+	// reset to Ready on its running revision; past the hand-over a lost
+	// replacement is not rebuilt and the source returns to rotation.
+	// Normal, not a failure: the retired revision never got the chance to
+	// fail.
 	EventReasonSurgeAbandoned EventReason = "SurgeAbandoned"
+
+	// EventReasonSurgeKeptForPairing fires when a surge pinned to a revision
+	// the desired state has withdrawn finishes its hand-over anyway: its
+	// replacement is in rotation and the pairing drain gate holds it there,
+	// because the other pairing Component's serving pods pair with it and
+	// with nothing else. The Instance promotes on the pinned revision and
+	// rolls toward the newer target from there. Normal, not a failure.
+	EventReasonSurgeKeptForPairing EventReason = "SurgeKeptForPairing"
 
 	// Restart (workload/ops/restart.go).
 	EventReasonRestartTriggered EventReason = "RestartTriggered"

@@ -82,15 +82,6 @@ func FilterPodOnlyAnnotations(annotations map[string]string) map[string]string {
 	})
 }
 
-func IncludesArg(slice []string, arg string) bool {
-	for _, v := range slice {
-		if v == arg || strings.HasPrefix(v, arg) {
-			return true
-		}
-	}
-	return false
-}
-
 func AppendVolumeIfNotExists(slice []v1.Volume, volume v1.Volume) []v1.Volume {
 	for i := range slice {
 		if slice[i].Name == volume.Name {
@@ -163,27 +154,6 @@ func PodRequestsAccelerator(spec *v1.PodSpec, acceleratorResources []string) boo
 	return holds(spec.Containers) || holds(spec.InitContainers)
 }
 
-// FirstNonNilError returns the first non nil interface in the slice
-func FirstNonNilError(objects []error) error {
-	for _, object := range objects {
-		if object != nil {
-			return object
-		}
-	}
-	return nil
-}
-
-// RemoveString Helper functions to remove string from a slice of strings.
-func RemoveString(slice []string, s string) (result []string) {
-	for _, item := range slice {
-		if item == s {
-			continue
-		}
-		result = append(result, item)
-	}
-	return
-}
-
 // IsPrefixSupported Check if a given string contains one of the prefixes in the provided list.
 func IsPrefixSupported(input string, prefixes []string) bool {
 	for _, prefix := range prefixes {
@@ -218,22 +188,6 @@ func MergeEnvs(baseEnvs []v1.EnvVar, overrideEnvs []v1.EnvVar) []v1.EnvVar {
 	}
 
 	return append(baseEnvs, extra...)
-}
-
-func AppendEnvVarIfNotExists(slice []v1.EnvVar, elems ...v1.EnvVar) []v1.EnvVar {
-	for _, elem := range elems {
-		isElemExists := false
-		for _, item := range slice {
-			if item.Name == elem.Name {
-				isElemExists = true
-				break
-			}
-		}
-		if !isElemExists {
-			slice = append(slice, elem)
-		}
-	}
-	return slice
 }
 
 func AppendPortIfNotExists(slice []v1.ContainerPort, elems ...v1.ContainerPort) []v1.ContainerPort {
@@ -315,15 +269,6 @@ func SetAvailableResourcesForApi(groupVersion string, resources *metav1.APIResou
 	gvResourcesCache[groupVersion] = resources
 }
 
-var blankRegex = regexp.MustCompile(`\s`)
-
-// IsStringEmptyOrWithWhitespaces reports whether input is empty or contains any
-// whitespace character (per the \s regex class). Name is misleading — kept for
-// backward compatibility with callers that grep for the symbol.
-func IsStringEmptyOrWithWhitespaces(input string) bool {
-	return input == "" || blankRegex.MatchString(input)
-}
-
 func Retry(attempts int, sleep time.Duration, f func() error) (err error) {
 	for i := 0; ; i++ {
 		err = f()
@@ -338,95 +283,27 @@ func Retry(attempts int, sleep time.Duration, f func() error) (err error) {
 		time.Sleep(sleep)
 	}
 
-	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
+	return fmt.Errorf("after %d attempts, last error: %w", attempts, err)
 }
 
-// CreateSymbolicLink ensures that childPath is a symbolic link pointing to parentPath,
-// using a relative link target computed from the directory of childPath to parentPath.
-//
-// Behavior:
-// - Ensures the parent directory of childPath exists (creates it if necessary).
-// - If childPath is an existing symlink with the same target, it is a no-op.
-// - If childPath is an existing symlink with a different target, it is replaced.
-// - If a non-symlink already exists at childPath, an error is returned.
-//
-// Note: The link target stored in the symlink is always a relative path.
-func CreateSymbolicLink(childPath string, parentPath string) error {
-	// Ensure the parent directory of childPath exists
-	childDir := filepath.Dir(childPath)
-	if err := os.MkdirAll(childDir, 0755); err != nil {
-		return fmt.Errorf("failed to create child directory %s: %w", childDir, err)
-	}
-
-	// Compute relative path from childPath to parentPath
-	relTarget, err := filepath.Rel(childDir, parentPath)
-	if err != nil {
-		return fmt.Errorf("failed to compute relative path: %w", err)
-	}
-
-	// Check if symlink already exists
-	fileInfo, err := os.Lstat(childPath)
-	if err == nil {
-		switch {
-		case fileInfo.Mode()&os.ModeSymlink != 0:
-			// Existing symlink
-			currentTarget, err := os.Readlink(childPath)
-			if err != nil {
-				return fmt.Errorf("failed to read existing symlink %s: %w", childPath, err)
-			}
-
-			if currentTarget == relTarget {
-				// Already correct
-				return nil
-			}
-
-			// Remove incorrect symlink
-			if err := os.Remove(childPath); err != nil {
-				return fmt.Errorf("failed to remove existing symlink %s: %w", childPath, err)
-			}
-
-		case fileInfo.IsDir():
-			// Existing directory (with or without content)
-			if err := os.RemoveAll(childPath); err != nil {
-				return fmt.Errorf("failed to remove existing directory %s: %w", childPath, err)
-			}
-
-		default:
-			// Existing regular file or other type
-			if err := os.Remove(childPath); err != nil {
-				return fmt.Errorf("failed to remove existing file %s: %w", childPath, err)
-			}
+// RemoveString Helper functions to remove string from a slice of strings.
+func RemoveString(slice []string, s string) (result []string) {
+	for _, item := range slice {
+		if item == s {
+			continue
 		}
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("failed to stat childPath: %w", err)
+		result = append(result, item)
 	}
-
-	// Create the symlink
-	if err := os.Symlink(relTarget, childPath); err != nil {
-		return fmt.Errorf("failed to create symlink: %w", err)
-	}
-
-	return nil
+	return
 }
 
-// ContainsString reports whether values contains target.
-// If isCaseSensitive is true, comparison is case-sensitive; otherwise it is case-insensitive.
-// Non-string elements in values are ignored.
-func ContainsString(values []interface{}, target string, isCaseSensitive bool) bool {
-	for _, v := range values {
-		if s, ok := v.(string); ok {
-			var result bool
-			if isCaseSensitive {
-				result = s == target
-			} else {
-				result = strings.EqualFold(s, target)
-			}
-			if result {
-				return result
-			}
-		}
-	}
-	return false
+var blankRegex = regexp.MustCompile(`\s`)
+
+// IsStringEmptyOrWithWhitespaces reports whether input is empty or contains any
+// whitespace character (per the \s regex class). Name is misleading — kept for
+// backward compatibility with callers that grep for the symbol.
+func IsStringEmptyOrWithWhitespaces(input string) bool {
+	return input == "" || blankRegex.MatchString(input)
 }
 
 // HasSymlinkPointingToDir recursively searches under searchDir to determine
@@ -496,41 +373,22 @@ func HasSymlinkPointingToDir(searchDir, targetDir string) (bool, error) {
 	return false, nil
 }
 
-// IsSymbolicLink determines whether the given path exists and is a symbolic link.
-func IsSymbolicLink(path string) (bool, error) {
-	info, err := os.Lstat(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false, fmt.Errorf("path %s does not exist: %w", path, err)
+// ContainsString reports whether values contains target.
+// If isCaseSensitive is true, comparison is case-sensitive; otherwise it is case-insensitive.
+// Non-string elements in values are ignored.
+func ContainsString(values []interface{}, target string, isCaseSensitive bool) bool {
+	for _, v := range values {
+		if s, ok := v.(string); ok {
+			var result bool
+			if isCaseSensitive {
+				result = s == target
+			} else {
+				result = strings.EqualFold(s, target)
+			}
+			if result {
+				return result
+			}
 		}
-		return false, fmt.Errorf("failed to stat path %s: %w", path, err)
 	}
-
-	if info.Mode()&os.ModeSymlink == 0 {
-		return false, nil
-	}
-
-	return true, nil
-}
-
-// RemoveSymbolicLink removes the symbolic link at the given path in a safe manner.
-//
-// This function guarantees that only the symbolic link itself is removed.
-// The target file or directory that the symlink points to is never modified.
-func RemoveSymbolicLink(path string) error {
-	isSymlink, err := IsSymbolicLink(path)
-	if err != nil {
-		return err
-	}
-
-	if !isSymlink {
-		// Path does not exist or is not a symlink
-		return fmt.Errorf("path %s is not symbolic link", path)
-	}
-
-	if err := os.Remove(path); err != nil {
-		return fmt.Errorf("failed to remove symbolic link %s: %w", path, err)
-	}
-
-	return nil
+	return false
 }

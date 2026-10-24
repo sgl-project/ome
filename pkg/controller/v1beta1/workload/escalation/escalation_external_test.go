@@ -3159,3 +3159,261 @@ func TestEscalation_ParkedAttemptIsLeftToItsLadder(t *testing.T) {
 		})
 	}
 }
+
+// routedDeps is a client with no routed Service or EndpointSlice behind it,
+// which is what the hold pass reads a serving source's rotation through.
+func routedDeps(t *testing.T) workloadtypes.Deps {
+	t.Helper()
+	c := fake.NewClientBuilder().WithScheme(makeScheme(t)).Build()
+	return workloadtypes.Deps{Client: c, APIReader: c}
+}
+
+// surgePairAtIncarnation is a gang surge in flight: the source row at idx,
+// at the given incarnation, surging to surgeIdx, beside the replacement's
+// marker row at incarnation one, both pinned to the target revision with
+// the same attempt deadline.
+func surgePairAtIncarnation(idx, surgeIdx int32, incarnation int64, deadline time.Time) []workloadtypes.InstanceStatus {
+	k := surgeIdx
+	return []workloadtypes.InstanceStatus{
+		{
+			Index: idx, Incarnation: incarnation, Phase: workloadtypes.InstancePhaseUpdating, PodCount: 2,
+			RunningRevision: "own-engine-oldhash", TargetRevision: "own-engine-newhash",
+			Operation: &workloadtypes.InstanceOperation{
+				ID: "gangsurge-1-1", Type: workloadtypes.InstanceOperationUpdate, Step: workloadtypes.UpdateStepSurge,
+				SurgeIndex: &k, TargetRevision: "own-engine-newhash", Strategy: workloadtypes.UpdateStrategySurgeThenDrain,
+				Deadline: metav1.NewTime(deadline),
+			},
+		},
+		{
+			Index: surgeIdx, Incarnation: 1, Phase: workloadtypes.InstancePhaseCreating, TargetRevision: "own-engine-newhash",
+			Operation: &workloadtypes.InstanceOperation{
+				ID: "gangsurgetarget-2-1", Type: workloadtypes.InstanceOperationUpdate, Step: workloadtypes.UpdateStepGangSurgeTarget,
+				TargetRevision: "own-engine-newhash", Deadline: metav1.NewTime(deadline),
+			},
+		},
+	}
+}
+
+// gangPlan plans a two-member gang, a leader and one worker, at each index.
+func gangPlan(indexes ...int32) workloadtypes.ComponentPlan {
+	var plan workloadtypes.ComponentPlan
+	for _, idx := range indexes {
+		plan.Instances = append(plan.Instances, workloadtypes.InstancePlan{
+			Index:   idx,
+			Runners: []workloadtypes.RunnerPlan{{Name: "leader", Size: 1}, {Name: "worker", Size: 1}},
+		})
+	}
+	return plan
+}
+
+// gangMemberAt is a gang member at the named incarnation and revision
+// hash: serving, or Running and not yet ready.
+func gangMemberAt(name, incarnation, hash string, serving bool, now time.Time) *corev1.Pod {
+	pod := servingPod(name)
+	pod.CreationTimestamp = metav1.NewTime(now.Add(-time.Hour))
+	pod.Labels = map[string]string{query.LabelInstanceIncarnation: incarnation, query.LabelRevisionHash: hash}
+	if !serving {
+		pod.Status.Conditions = nil
+	}
+	return pod
+}
+
+// warnsByIndex records every WarnInstanceFailed call as "<index>:<pod>:<reason>".
+func warnsByIndex(input *workloadtypes.ReconcileInput) *[]string {
+	var warned []string
+	input.WarnInstanceFailed = func(idx int32, pod, reason string) {
+		warned = append(warned, strconv.Itoa(int(idx))+":"+pod+":"+reason)
+	}
+	return &warned
+}
+
+// A gang surge's replacement is a row of its own and its pods carry that
+// row's incarnation, one, whatever the source's is. A wedge on it fails
+// the source all the same: a source a repair rebuilt once takes the same
+// route as a first-time one, Failed on the first pass that reads the
+// reason, with the surge kept for the abandon path and the wedged
+// replacement pod on its record, announced once.
+func TestEscalation_RepairedGangSourceFailsOnAWedgedReplacement(t *testing.T) {
+	now := time.Now()
+	for _, tc := range []struct {
+		name        string
+		incarnation int64
+	}{
+		{name: "a first-time source", incarnation: 1},
+		{name: "a source a repair rebuilt once", incarnation: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input, rec := escalationFixture(surgePairAtIncarnation(1, 2, tc.incarnation, now.Add(30*time.Minute)))
+			warned := warnsByIndex(&input)
+			input.StuckPodGrace = time.Second
+			input.ObservedState.CurrentRevision = "own-engine-oldhash"
+			inc := strconv.FormatInt(tc.incarnation, 10)
+			source := []*corev1.Pod{
+				gangMemberAt("engine-1-leader-0", inc, "oldhash", true, now),
+				gangMemberAt("engine-1-worker-0", inc, "oldhash", true, now),
+			}
+			replacement := []*corev1.Pod{
+				parkedPodAt("engine-2-leader-0", "CreateContainerConfigError", "1", "newhash", now),
+				gangMemberAt("engine-2-worker-0", "1", "newhash", false, now),
+			}
+
+			if err := runEscalationPass(t, routedDeps(t), input, gangPlan(1, 2), map[int32][]*corev1.Pod{1: source, 2: replacement}); err != nil {
+				t.Fatalf("escalation pass: %v", err)
+			}
+			src := rec.store[0]
+			if src.Phase != workloadtypes.InstancePhaseFailed {
+				t.Errorf("source Phase: got %q want Failed", src.Phase)
+			}
+			if src.Operation == nil || src.Operation.Step != workloadtypes.UpdateStepSurge || src.Operation.SurgeIndex == nil || *src.Operation.SurgeIndex != 2 {
+				t.Errorf("source Operation: got %+v want the surge kept for the abandon path", src.Operation)
+			}
+			if src.LastFailure == nil || src.LastFailure.PodName != "engine-2-leader-0" || src.LastFailure.Reason != "CreateContainerConfigError" {
+				t.Errorf("source LastFailure: got %+v want the wedged replacement pod and its reason", src.LastFailure)
+			}
+			sourceWarns := 0
+			for _, w := range *warned {
+				if strings.HasPrefix(w, "1:") {
+					sourceWarns++
+				}
+			}
+			if sourceWarns != 1 || !strings.Contains(strings.Join(*warned, " "), "1:engine-2-leader-0:CreateContainerConfigError") {
+				t.Errorf("WarnInstanceFailed: got %v want the source announced once with the wedged replacement pod", *warned)
+			}
+		})
+	}
+}
+
+// The fast path decides on the pass's observation and stamps the fresh
+// row. A repair that claimed a gang surge's source since the observation
+// reads at a bumped incarnation when the stamp lands and keeps the row:
+// the stamp is withheld and nothing is announced for the source.
+func TestEscalation_StuckStampYieldsToARepairThatClaimedTheGangSource(t *testing.T) {
+	now := time.Now()
+	input, rec := escalationFixture(surgePairAtIncarnation(1, 2, 2, now.Add(30*time.Minute)))
+	warned := warnsByIndex(&input)
+	input.StuckPodGrace = time.Second
+	input.ObservedState.CurrentRevision = "own-engine-oldhash"
+	rec.store[0] = workloadtypes.InstanceStatus{
+		Index: 1, Incarnation: 3, Phase: workloadtypes.InstancePhaseRestarting, PodCount: 2, RunningRevision: "own-engine-oldhash",
+		Operation: &workloadtypes.InstanceOperation{Type: workloadtypes.InstanceOperationRestart, Step: workloadtypes.RestartStepDrain},
+	}
+	replacement := []*corev1.Pod{
+		parkedPodAt("engine-2-leader-0", "CreateContainerConfigError", "1", "newhash", now),
+		gangMemberAt("engine-2-worker-0", "1", "newhash", false, now),
+	}
+
+	if err := runEscalationPass(t, routedDeps(t), input, gangPlan(1, 2), map[int32][]*corev1.Pod{1: nil, 2: replacement}); err != nil {
+		t.Fatalf("escalation pass: %v", err)
+	}
+	src := rec.store[0]
+	if src.Phase != workloadtypes.InstancePhaseRestarting || src.Operation == nil || src.Operation.Type != workloadtypes.InstanceOperationRestart {
+		t.Errorf("source row: got phase %q op %+v want the repair's Restart kept", src.Phase, src.Operation)
+	}
+	for _, w := range *warned {
+		if strings.HasPrefix(w, "1:") {
+			t.Errorf("WarnInstanceFailed: got %v want nothing announced for the source", *warned)
+		}
+	}
+}
+
+// The deadline backstop reads no incarnation: a repaired gang source whose
+// replacement never reports a terminal reason is failed when the attempt's
+// deadline elapses, the surge kept for the abandon path.
+func TestEscalation_RepairedGangSourceDeadlineFailsOnAPendingReplacement(t *testing.T) {
+	now := time.Now()
+	input, rec := escalationFixture(surgePairAtIncarnation(1, 2, 2, now.Add(-time.Minute)))
+	warned := warnsByIndex(&input)
+	input.StuckPodGrace = time.Second
+	input.ObservedState.CurrentRevision = "own-engine-oldhash"
+	pending := func(name string) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              name,
+				CreationTimestamp: metav1.NewTime(now.Add(-5 * time.Minute)),
+				Labels:            map[string]string{query.LabelInstanceIncarnation: "1", query.LabelRevisionHash: "newhash"},
+			},
+			Status: corev1.PodStatus{Phase: corev1.PodPending},
+		}
+	}
+	source := []*corev1.Pod{
+		gangMemberAt("engine-1-leader-0", "2", "oldhash", true, now),
+		gangMemberAt("engine-1-worker-0", "2", "oldhash", true, now),
+	}
+	replacement := []*corev1.Pod{pending("engine-2-leader-0"), pending("engine-2-worker-0")}
+
+	if err := runEscalationPass(t, routedDeps(t), input, gangPlan(1, 2), map[int32][]*corev1.Pod{1: source, 2: replacement}); err != nil {
+		t.Fatalf("escalation pass: %v", err)
+	}
+	src := rec.store[0]
+	if src.Phase != workloadtypes.InstancePhaseFailed {
+		t.Errorf("source Phase: got %q want Failed", src.Phase)
+	}
+	if src.Operation == nil || src.Operation.Step != workloadtypes.UpdateStepSurge {
+		t.Errorf("source Operation: got %+v want the surge kept for the abandon path", src.Operation)
+	}
+	if src.LastFailure == nil || src.LastFailure.Reason != escalation.DeadlineExceededReason {
+		t.Errorf("source LastFailure: got %+v want Reason=%s", src.LastFailure, escalation.DeadlineExceededReason)
+	}
+	sourceWarns := 0
+	for _, w := range *warned {
+		if strings.HasPrefix(w, "1:") {
+			sourceWarns++
+		}
+	}
+	if sourceWarns != 1 {
+		t.Errorf("WarnInstanceFailed: got %v want the source announced once", *warned)
+	}
+}
+
+// A single-pod surge's replacement shares the source's index and carries
+// the source's incarnation, and its attempt is ended by the attempt's own
+// identity: a source a repair rebuilt once is disposed on a wedged
+// replacement exactly as a first-time one, the revision's block recorded
+// and the attempt ended.
+func TestEscalation_RepairedSinglePodSourceFailsOnAWedgedReplacement(t *testing.T) {
+	now := time.Now()
+	for _, tc := range []struct {
+		name        string
+		incarnation int64
+	}{
+		{name: "a first-time source", incarnation: 1},
+		{name: "a source a repair rebuilt once", incarnation: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			insts := []workloadtypes.InstanceStatus{{
+				Index: 0, Incarnation: tc.incarnation, Phase: workloadtypes.InstancePhaseUpdating, PodCount: 1,
+				RunningRevision: "own-engine-oldhash", TargetRevision: "own-engine-newhash",
+				Operation: &workloadtypes.InstanceOperation{
+					ID: "update-0-1", Type: workloadtypes.InstanceOperationUpdate, Step: workloadtypes.UpdateStepSurge,
+					TargetRevision: "own-engine-newhash", Strategy: workloadtypes.UpdateStrategySurgeThenDrain,
+					Deadline: metav1.NewTime(now.Add(30 * time.Minute)),
+				},
+			}}
+			input, rec := escalationFixture(insts)
+			input.StuckPodGrace = time.Second
+			input.ObservedState.CurrentRevision = "own-engine-oldhash"
+			inc := strconv.FormatInt(tc.incarnation, 10)
+			pods := []*corev1.Pod{
+				gangMemberAt("engine-0-default-0", inc, "oldhash", true, now),
+				parkedPodAt("engine-0-default-1", "CreateContainerConfigError", inc, "newhash", now),
+			}
+
+			if err := runEscalationPass(t, routedDeps(t), input, singleInstancePlan(0, 1), map[int32][]*corev1.Pod{0: pods}); err != nil {
+				t.Fatalf("escalation pass: %v", err)
+			}
+			row := rec.store[0]
+			if row.Phase != workloadtypes.InstancePhaseFailed {
+				t.Errorf("Phase: got %q want Failed", row.Phase)
+			}
+			if row.Operation != nil {
+				t.Errorf("Operation: got %+v want the attempt ended", row.Operation)
+			}
+			if len(rec.blocks) != 1 || rec.blocks[0].TargetRevision != "own-engine-newhash" {
+				t.Errorf("RetryBlock: got %+v want one block for own-engine-newhash", rec.blocks)
+			}
+			if len(rec.warns) != 1 || !strings.HasPrefix(rec.warns[0], "CreateContainerConfigError") {
+				t.Errorf("WarnInstanceFailed: got %v want one call naming the wedge", rec.warns)
+			}
+		})
+	}
+}

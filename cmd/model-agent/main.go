@@ -217,7 +217,7 @@ func initializeComponents(
 	zapLogger := logger.Desugar()
 
 	// Create a ModelConfigParser instance
-	modelConfigParser := modelparser.NewModelConfigParser(omeClient, logger)
+	modelConfigParser := modelparser.NewModelConfigParser(logger)
 
 	// Create a ConfigMapReconciler instance
 	configMapReconciler := modelagent.NewConfigMapReconciler(cfg.nodeName, cfg.namespace, kubeClient, logger)
@@ -234,6 +234,7 @@ func initializeComponents(
 		omeInformerFactory,
 		gopherTaskChan,
 		kubeClient,
+		configMapReconciler,
 		omeClient,
 		logger)
 	if err != nil {

@@ -2,6 +2,7 @@ package v1beta1
 
 import (
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
@@ -108,6 +109,38 @@ type InferenceServiceStatus struct {
 	// +optional
 	// +ome:since=v1.3
 	RolloutCoordination *RolloutCoordinationStatus `json:"rolloutCoordination,omitempty"`
+	// ScalingPolicy reports the applied cross-component desired-count policy.
+	// +optional
+	// +ome:since=v1.3
+	ScalingPolicy *ScalingPolicyStatus `json:"scalingPolicy,omitempty"`
+}
+
+// ScalingPolicyStatus records the coordinator's last decision.
+type ScalingPolicyStatus struct {
+	Mode          ScalingMode   `json:"mode,omitempty"`
+	Source        string        `json:"source,omitempty"`
+	Anchor        ComponentType `json:"anchor,omitempty"`
+	AnchorDesired int32         `json:"anchorDesired,omitempty"`
+	// +listType=map
+	// +listMapKey=component
+	Followers []FollowerScalingStatus `json:"followers,omitempty"`
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// FollowerScalingStatus compares a target with the committed desired count.
+type FollowerScalingStatus struct {
+	Component ComponentType     `json:"component"`
+	Ratio     resource.Quantity `json:"ratio"`
+	// Target is the anchor's desired count times the ratio, rounded up, after
+	// the follower's own bounds.
+	Target int32 `json:"target"`
+	// Current is the follower's desired count after this pass.
+	Current int32 `json:"current,omitempty"`
+	// Clamped is true when the follower's minReplicas or a declared
+	// maxReplicas moved the target; the Ready condition names the bound.
+	Clamped bool `json:"clamped,omitempty"`
 }
 
 // MountedOverlay records one overlay the controller wired into the
@@ -600,6 +633,14 @@ type CandidatePlacement struct {
 	// +optional
 	ObservationKnown bool `json:"observationKnown,omitempty"`
 
+	// ObservationFailingSince is when the control plane's reads of this home
+	// started failing. It is unset while reads succeed. While the configured
+	// observation grace lasts from this time, the home keeps the ready count
+	// from its last successful read.
+	// +optional
+	// +ome:since=v1.3
+	ObservationFailingSince *metav1.Time `json:"observationFailingSince,omitempty"`
+
 	// Cluster is the WorkloadCluster name.
 	Cluster string `json:"cluster"`
 	// Phase is the candidate's state.
@@ -638,6 +679,28 @@ type CandidatePlacement struct {
 	// source's rollout groups reference a RolloutPolicy.
 	// +optional
 	Rollout *CandidateRolloutStatus `json:"rollout,omitempty"`
+
+	// ComponentFloors records, on a Split home, each scaled component's floor:
+	// the one on the home's member copy now, and the one the accepted plan
+	// gives it. A current floor above the desired one is held there until its
+	// replacements on other homes are ready.
+	// +optional
+	// +listType=map
+	// +listMapKey=component
+	// +kubebuilder:validation:MaxItems=3
+	ComponentFloors []CandidateComponentFloor `json:"componentFloors,omitempty"`
+}
+
+// CandidateComponentFloor records one component's floor on a Split home.
+type CandidateComponentFloor struct {
+	// +kubebuilder:validation:Enum=engine;decoder;router
+	Component ComponentType `json:"component"`
+	// Current is the floor on the home's member copy; zero without a copy.
+	// +kubebuilder:validation:Minimum=0
+	Current int32 `json:"current"`
+	// Desired is the floor at the accepted plan's desired shares.
+	// +kubebuilder:validation:Minimum=0
+	Desired int32 `json:"desired"`
 }
 
 // CandidateAutoscalingStatus is the per-home AutoscalerPolicy digest state

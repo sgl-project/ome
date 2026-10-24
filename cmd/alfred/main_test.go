@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 	"sigs.k8s.io/ome/pkg/alfred/engine"
 	"sigs.k8s.io/ome/pkg/alfred/observer"
 	"sigs.k8s.io/ome/pkg/alfred/scheduling"
+	"sigs.k8s.io/ome/pkg/alfred/snapshot"
+	"sigs.k8s.io/ome/pkg/constants"
 )
 
 func resetFlags(t *testing.T, args []string) {
@@ -93,7 +96,6 @@ func TestMigrationStartupRejectsUnsafeOptions(t *testing.T) {
 		{"unsupported API", func(o *Options) { o.migrationAPIVersion = "v2" }},
 		{"missing account", func(o *Options) { o.migrationServiceAccount = "" }},
 		{"invalid account", func(o *Options) { o.migrationServiceAccount = "Bad_Account" }},
-		{"missing worker", func(o *Options) { o.simulationWorkers = "" }},
 		{"leader election disabled", func(o *Options) { o.enableLeaderElection = false }},
 		{"zero acknowledgement timeout", func(o *Options) { o.migrationAckTimeout = 0 }},
 		{"negative acknowledgement timeout", func(o *Options) { o.migrationAckTimeout = -time.Second }},
@@ -113,6 +115,10 @@ func TestMigrationStartupRejectsUnsafeOptions(t *testing.T) {
 	valid.migrationAckTimeout, valid.migrationFailureBackoff = time.Hour, time.Hour
 	if err := validateOptions(valid); err != nil {
 		t.Fatalf("inclusive timeout limits rejected: %v", err)
+	}
+	valid.simulationWorkers = ""
+	if err := validateOptions(valid); err != nil {
+		t.Fatalf("dispatch without a simulation worker, for moves that need none, rejected: %v", err)
 	}
 }
 
@@ -144,6 +150,18 @@ func TestConfigureMigrationRequiresOptInAndLoadedWorker(t *testing.T) {
 	if err := configureMigration(opts, nil, nil, observations, decisions); err == nil {
 		t.Fatal("a prediction stage without its simulator must fail startup")
 	}
+
+	// Without configured workers, dispatch runs with no simulator: only moves
+	// onto a new TPU slice can be submitted.
+	opts.simulationWorkers = ""
+	decisions.Predictions = nil
+	if err := configureMigration(opts, nil, nil, observations, decisions); err != nil {
+		t.Fatalf("dispatch without a simulation worker rejected: %v", err)
+	}
+	dispatcher, ok := decisions.Dispatcher.(*engine.Dispatcher)
+	if !ok || dispatcher.Simulator != nil {
+		t.Fatalf("dispatcher must have no simulator without simulation-workers: %+v", decisions.Dispatcher)
+	}
 }
 
 func TestConfigureMigrationReusesWorkerAndChecksGuard(t *testing.T) {
@@ -153,9 +171,10 @@ func TestConfigureMigrationReusesWorkerAndChecksGuard(t *testing.T) {
 	opts.simulationWorkers = "/etc/alfred/workers.json"
 	opts.migrationAckTimeout, opts.migrationFailureBackoff = 3*time.Minute, 7*time.Minute
 	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+	direct := fake.NewClientBuilder().WithScheme(scheme).Build()
 	observations := &observer.Loop{}
 	decisions := &engine.DecisionLoop{Store: config.NewStore(), Predictions: &engine.PredictionStage{Reader: cl, Simulator: &startupSimulator{}}}
-	if err := configureMigration(opts, cl, cl, observations, decisions); err != nil {
+	if err := configureMigration(opts, direct, cl, observations, decisions); err != nil {
 		t.Fatal(err)
 	}
 	compatibility := observations.OMENativeExecutor(context.Background())
@@ -163,8 +182,11 @@ func TestConfigureMigrationReusesWorkerAndChecksGuard(t *testing.T) {
 		t.Fatalf("operator compatibility must not claim a liveness observation: %+v", compatibility)
 	}
 	dispatcher, ok := decisions.Dispatcher.(*engine.Dispatcher)
-	if !ok || dispatcher.Reader != cl || dispatcher.Client != cl || dispatcher.Simulator != decisions.Predictions.Simulator || dispatcher.Store != decisions.Store {
+	if !ok || dispatcher.Reader != direct || dispatcher.Client != cl || dispatcher.Simulator != decisions.Predictions.Simulator || dispatcher.Store != decisions.Store {
 		t.Fatalf("dispatcher did not reuse the direct reader, worker and configuration: %+v", decisions.Dispatcher)
+	}
+	if dispatcher.CacheReader != cl {
+		t.Fatal("TPU slice moves must replay the policy through the cached client, not the direct reader")
 	}
 	if dispatcher.Namespace != "caretaker" || dispatcher.Options.APIVersion != "v1" || dispatcher.Options.AcknowledgementTimeout != 3*time.Minute || dispatcher.Options.FailureBackoff != 7*time.Minute {
 		t.Fatalf("dispatcher startup bounds or identity namespace changed: %+v", dispatcher)
@@ -336,6 +358,101 @@ func TestPodCacheTransformStripsNonControllerOwners(t *testing.T) {
 	}
 	if owners := out.(*corev1.Pod).OwnerReferences; len(owners) != 0 {
 		t.Fatalf("non-controller owners retained: %+v", owners)
+	}
+}
+
+// tpuSlicePod is a slice-provisioned pod that requests resourceName, with an
+// extra annotation and node affinity beyond what TPU slice moves read.
+func tpuSlicePod(resourceName corev1.ResourceName) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "prod",
+			Name:      "svc-engine-0",
+			Labels: map[string]string{
+				constants.InferenceServicePodLabelKey: "svc",
+				constants.OMEComponentLabel:           "engine",
+			},
+			Annotations: map[string]string{
+				constants.TPUSliceProvisioningAnnotationKey: "true",
+				"example.com/other":                         "x",
+			},
+		},
+		Spec: corev1.PodSpec{
+			NodeName:     "tpu-1",
+			NodeSelector: map[string]string{"cloud.google.com/gke-tpu-topology": "2x2x2"},
+			Affinity: &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{{MatchExpressions: []corev1.NodeSelectorRequirement{
+							{Key: "topology.kubernetes.io/zone", Operator: corev1.NodeSelectorOpIn, Values: []string{"zone-a"}},
+						}}},
+					},
+					PreferredDuringSchedulingIgnoredDuringExecution: []corev1.PreferredSchedulingTerm{{Weight: 1}},
+				},
+				PodAntiAffinity: &corev1.PodAntiAffinity{},
+			},
+			Containers: []corev1.Container{{Name: "main", Resources: corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{resourceName: resource.MustParse("4")},
+			}}},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+}
+
+// TestPodCacheTransformKeepsTPUSliceFields checks a TPU pod keeps only the
+// slice-provisioning annotation and the required node affinity, and other pods
+// keep neither.
+func TestPodCacheTransformKeepsTPUSliceFields(t *testing.T) {
+	source := tpuSlicePod("google.com/tpu")
+	out, err := podCacheTransform(source.DeepCopy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out.(*corev1.Pod)
+	if want := map[string]string{constants.TPUSliceProvisioningAnnotationKey: "true"}; !reflect.DeepEqual(got.Annotations, want) {
+		t.Fatalf("annotations = %v, want %v", got.Annotations, want)
+	}
+	want := &corev1.Affinity{NodeAffinity: &corev1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: source.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+	}}
+	if !reflect.DeepEqual(got.Spec.Affinity, want) {
+		t.Fatalf("affinity = %+v, want only the required node affinity", got.Spec.Affinity)
+	}
+
+	bare := tpuSlicePod("google.com/tpu")
+	bare.Annotations, bare.Spec.Affinity = map[string]string{"example.com/other": "x"}, nil
+	if out, _ := podCacheTransform(bare); out.(*corev1.Pod).Annotations != nil || out.(*corev1.Pod).Spec.Affinity != nil {
+		t.Fatalf("a TPU pod without the fields must keep none: %+v", out)
+	}
+	if out, _ := podCacheTransform(tpuSlicePod("nvidia.com/gpu")); out.(*corev1.Pod).Annotations != nil || out.(*corev1.Pod).Spec.Affinity != nil {
+		t.Fatalf("a non-TPU pod must keep no annotation or affinity: %+v", out)
+	}
+}
+
+// TestCachedTPUPodStaysSliceProvisioned builds a snapshot from a pod after the
+// cache transform, as the live informer does, and checks the TPU slice fields
+// survive.
+func TestCachedTPUPodStaysSliceProvisioned(t *testing.T) {
+	source := tpuSlicePod("google.com/tpu")
+	cached, err := podCacheTransform(source.DeepCopy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "tpu-1"}}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(node, cached.(*corev1.Pod)).Build()
+	snap, err := snapshot.Build(context.Background(), cl, snapshot.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got *snapshot.PodInfo
+	for i := range snap.Nodes["tpu-1"].OMEPods {
+		if p := &snap.Nodes["tpu-1"].OMEPods[i]; p.Name == source.Name {
+			got = p
+		}
+	}
+	if got == nil || !got.TPUSliceProvisioned || got.NodeSelector["cloud.google.com/gke-tpu-topology"] != "2x2x2" ||
+		!reflect.DeepEqual(got.RequiredNodeAffinity, source.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution) {
+		t.Fatalf("cached TPU pod lost the fields TPU slice moves read: %+v", got)
 	}
 }
 

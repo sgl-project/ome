@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-func TestCalculateLifecycleState(t *testing.T) {
+func TestCalculateLifecycleState_ReadyFailedOrNoNodes_ReadyIfAnyNodeIsReady(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
 	tests := []struct {
@@ -51,7 +51,7 @@ func TestCalculateLifecycleState(t *testing.T) {
 	}
 }
 
-func TestAddToSlice(t *testing.T) {
+func TestAddToSlice_NewOrExistingItem_AppendsOnlyNewItems(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
 	tests := []struct {

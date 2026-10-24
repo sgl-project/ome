@@ -34,6 +34,11 @@ func MergeRuntimeContainers(runtimeContainer *v1.Container, predictorContainer *
 		return nil, err
 	}
 
+	overrides, err = nullStaleEnvSources(overrides)
+	if err != nil {
+		return nil, err
+	}
+
 	mergedContainer := v1.Container{}
 	jsonResult, err := strategicpatch.StrategicMergePatch(runtimeContainerJson, overrides, mergedContainer)
 	if err != nil {
@@ -64,6 +69,57 @@ func MergeRuntimeContainers(runtimeContainer *v1.Container, predictorContainer *
 	return &mergedContainer, nil
 }
 
+// nullStaleEnvSources sets the other half of every env entry in the override
+// to null: `valueFrom` for an entry that sets `value`, `value` for one that
+// sets `valueFrom`. An entry that sets both is left as written. Within a
+// `valueFrom`, every source it does not set is nulled too. Strategic merge
+// joins env entries by name and merges them field by field, so without the
+// nulls an entry that changes its source keeps the base entry's other half or
+// other source, and the API server rejects the env var.
+func nullStaleEnvSources(patch []byte) ([]byte, error) {
+	var doc any
+	if err := json.Unmarshal(patch, &doc); err != nil {
+		return nil, err
+	}
+	var walk func(v any)
+	walk = func(v any) {
+		switch t := v.(type) {
+		case map[string]any:
+			if env, ok := t["env"].([]any); ok {
+				for _, e := range env {
+					entry, ok := e.(map[string]any)
+					if !ok {
+						continue
+					}
+					_, hasSource := entry["valueFrom"]
+					_, hasValue := entry["value"]
+					if hasSource && !hasValue {
+						entry["value"] = nil
+					} else if hasValue && !hasSource {
+						entry["valueFrom"] = nil
+					}
+					if source, ok := entry["valueFrom"].(map[string]any); ok {
+						for _, key := range []string{"fieldRef", "resourceFieldRef", "configMapKeyRef", "secretKeyRef", "fileKeyRef"} {
+							if _, set := source[key]; !set {
+								source[key] = nil
+							}
+						}
+					}
+				}
+			}
+			for _, child := range t {
+				walk(child)
+			}
+		case []any:
+			for _, child := range t {
+				walk(child)
+			}
+		}
+	}
+	walk(doc)
+	return json.Marshal(doc)
+}
+
 // mergeSpec merges two Kubernetes-style specs using strategic merge patch.
 // `runtimeInit` is the base (typically from a runtime default), and `override` comes from the user-defined resource.
 // Fields from `override` will overwrite corresponding fields in `runtimeInit`.
@@ -74,6 +130,11 @@ func mergeSpec[T any](runtimeInit T, override T) (*T, error) {
 	}
 
 	overrideJSON, err := json.Marshal(override)
+	if err != nil {
+		return nil, err
+	}
+
+	overrideJSON, err = nullStaleEnvSources(overrideJSON)
 	if err != nil {
 		return nil, err
 	}

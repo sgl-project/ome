@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-func TestValidateRouting(t *testing.T) {
+func TestValidateRouting_PolicyShapes_RequiresPositiveCapacityFactors(t *testing.T) {
 	t.Run("nil spec and absent routing are valid", func(t *testing.T) {
 		require.NoError(t, ValidateRouting(nil))
 		require.NoError(t, ValidateRouting(&v1beta1.InferenceServiceSpec{}))
@@ -60,7 +60,7 @@ func TestValidateRouting(t *testing.T) {
 
 }
 
-func TestValidateRoutingProbe(t *testing.T) {
+func TestValidateRouting_ProbeFields_RejectsEachMalformedField(t *testing.T) {
 	t.Run("disabled alone is valid", func(t *testing.T) {
 		require.NoError(t, ValidateRouting(routingSpec(&v1beta1.RoutingSpec{
 			Probe: &v1beta1.RoutingProbeSpec{Disabled: true},
@@ -119,7 +119,7 @@ func TestValidateRoutingProbe(t *testing.T) {
 	}
 }
 
-func TestValidateRoutingCapacity(t *testing.T) {
+func TestValidateRouting_CapacityFields_RejectsEachMalformedField(t *testing.T) {
 	t.Run("disabled alone is valid", func(t *testing.T) {
 		require.NoError(t, ValidateRouting(routingSpec(&v1beta1.RoutingSpec{
 			Capacity: &v1beta1.RoutingCapacitySpec{Disabled: true},
@@ -147,6 +147,10 @@ func TestValidateRoutingCapacity(t *testing.T) {
 		wantContain string
 	}{
 		{name: "empty", mutate: func(c *v1beta1.RoutingCapacitySpec) { *c = v1beta1.RoutingCapacitySpec{} }, wantContain: "path is required"},
+		{name: "invalid mode", mutate: func(c *v1beta1.RoutingCapacitySpec) { c.Mode = "unknown" }, wantContain: "mode"},
+		{name: "disabled mode", mutate: func(c *v1beta1.RoutingCapacitySpec) {
+			*c = v1beta1.RoutingCapacitySpec{Disabled: true, Mode: v1beta1.RoutingCapacityModeReported}
+		}, wantContain: "disabled"},
 		{name: "relative path", mutate: func(c *v1beta1.RoutingCapacitySpec) { c.Path = "capacity" }, wantContain: "must begin"},
 		{name: "missing method", mutate: func(c *v1beta1.RoutingCapacitySpec) { c.Method = "" }, wantContain: "method is required"},
 		{name: "unsafe method", mutate: func(c *v1beta1.RoutingCapacitySpec) { c.Method = "CONNECT" }, wantContain: "must be GET, HEAD, or POST"},
@@ -173,7 +177,7 @@ func TestValidateRoutingCapacity(t *testing.T) {
 	}
 }
 
-func TestValidateRoutingPublisher(t *testing.T) {
+func TestValidateRouting_PublisherOptions_RejectsBlankLongOrTooMany(t *testing.T) {
 	tests := []struct {
 		name        string
 		options     map[string]string
@@ -242,5 +246,56 @@ func validRoutingCapacity() *v1beta1.RoutingCapacitySpec {
 		Samples: 10,
 		Quorum:  2,
 		MaxAge:  metav1.Duration{Duration: time.Minute},
+	}
+}
+
+func TestValidateRouting_RouterCapacityEndpoint_PathPortAndPollPathMustAgree(t *testing.T) {
+	spec := func(path string, port int32, capacity *v1beta1.RoutingCapacitySpec) *v1beta1.InferenceServiceSpec {
+		s := &v1beta1.InferenceServiceSpec{Router: &v1beta1.RouterSpec{
+			CapacityEndpoint: &v1beta1.RouterCapacityEndpoint{Path: path, Port: port},
+		}}
+		if capacity != nil {
+			s.Routing = &v1beta1.RoutingSpec{Capacity: capacity}
+		}
+		return s
+	}
+
+	t.Run("valid without routing, as on a serving cluster's copy", func(t *testing.T) {
+		require.NoError(t, ValidateRouting(spec("/capacity", 9090, nil)))
+	})
+
+	t.Run("matching inline poll path is valid", func(t *testing.T) {
+		capacity := validRoutingCapacity()
+		capacity.Path = "/capacity"
+		require.NoError(t, ValidateRouting(spec("/capacity", 9090, capacity)))
+	})
+
+	t.Run("a different inline poll path is rejected", func(t *testing.T) {
+		capacity := validRoutingCapacity()
+		capacity.Path = "/load"
+		err := ValidateRouting(spec("/capacity", 9090, capacity))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must equal spec.routing.capacity.path")
+	})
+
+	t.Run("disabled polling does not compare paths", func(t *testing.T) {
+		require.NoError(t, ValidateRouting(spec("/capacity", 9090, &v1beta1.RoutingCapacitySpec{Disabled: true})))
+	})
+
+	for _, path := range []string{"", "capacity", "/", "//capacity", "/a//b", "/a/./b", "/a/../b", "/a/.", "/a/..",
+		"/a%2Fb", "/load?x=1", "/load#x", "/" + strings.Repeat("a", 1024)} {
+		t.Run("rejects path "+fmt.Sprintf("%.20q", path), func(t *testing.T) {
+			err := ValidateRouting(spec(path, 9090, nil))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "spec.router.capacityEndpoint.path")
+		})
+	}
+
+	for _, port := range []int32{0, -1, 65536} {
+		t.Run(fmt.Sprintf("rejects port %d", port), func(t *testing.T) {
+			err := ValidateRouting(spec("/capacity", port, nil))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "spec.router.capacityEndpoint.port")
+		})
 	}
 }

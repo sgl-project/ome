@@ -373,6 +373,21 @@ func instanceRow(index int32, phase v1beta1.OMENativeInstancePhase, revision str
 	return row
 }
 
+// repairOperation is the Restart operation a repair in flight carries on
+// its row; a Restarting row without one is the status publication's
+// reading of a settled row whose pod set serves nothing.
+func repairOperation(index int32) *v1beta1.InstanceOperation {
+	return &v1beta1.InstanceOperation{ID: fmt.Sprintf("restart-%d", index), Type: v1beta1.InstanceOperationRestart, Step: "Drain"}
+}
+
+// repairRow is the row of an Instance a repair is rebuilding at
+// incarnation: Restarting, with the repair's operation.
+func repairRow(index int32, revision string, readySince *time.Time, incarnation int64) v1beta1.OMENativeInstanceStatus {
+	row := instanceRow(index, v1beta1.OMENativeInstanceRestarting, revision, readySince, incarnation)
+	row.Operation = repairOperation(index)
+	return row
+}
+
 func TestCrashedCanaryPod(t *testing.T) {
 	ready := time.Unix(100000, 0)
 	since := ready.Add(time.Minute) // the canary's anchor, after the Instance entered Ready
@@ -403,9 +418,11 @@ func TestCrashedCanaryPod(t *testing.T) {
 		{"the stable revision's crash loop is not the canary's", observed(readyRow, instanceRow(1, v1beta1.OMENativeInstanceReady, "svc-engine-old", &ready, 1)), []*corev1.Pod{crashPod("old", 1, 1, runnerDiedTwice(after, after.Add(30*time.Second)))}, "", ""},
 		{"a row that never served has no serving run to lose", observed(instanceRow(3, v1beta1.OMENativeInstanceReady, "svc-engine-new", nil, 1)), []*corev1.Pod{crashPod("new", 3, 1, runnerDiedTwice(after, after.Add(30*time.Second)))}, "", ""},
 		{"a rolling row's restarts are the roll", observed(instanceRow(3, v1beta1.OMENativeInstanceUpdating, "svc-engine-old", &ready, 1)), []*corev1.Pod{crashPod("new", 3, 1, runnerDiedTwice(after, after.Add(30*time.Second)))}, "", ""},
-		{"a repair drains the pod set that crash-looped", observed(instanceRow(3, v1beta1.OMENativeInstanceRestarting, "svc-engine-new", &ready, 2)), []*corev1.Pod{crashPod("new", 3, 1, runnerDiedTwice(after, after.Add(30*time.Second)))}, "svc-engine-3", "container ome-container Error (exit 1)"},
-		{"a repair drains a pod set that died once: a single death", observed(instanceRow(3, v1beta1.OMENativeInstanceRestarting, "svc-engine-new", &ready, 2)), []*corev1.Pod{crashPod("new", 3, 1, runnerDied(after))}, "", ""},
-		{"a repair's rebuilt pod boots like any fresh pod", observed(instanceRow(3, v1beta1.OMENativeInstanceRestarting, "svc-engine-new", &ready, 2)), []*corev1.Pod{crashPod("new", 3, 2, runnerDiedTwice(after, after.Add(30*time.Second)))}, "", ""},
+		{"a repair drains the pod set that crash-looped", observed(repairRow(3, "svc-engine-new", &ready, 2)), []*corev1.Pod{crashPod("new", 3, 1, runnerDiedTwice(after, after.Add(30*time.Second)))}, "svc-engine-3", "container ome-container Error (exit 1)"},
+		{"a repair drains a pod set that died once: a single death", observed(repairRow(3, "svc-engine-new", &ready, 2)), []*corev1.Pod{crashPod("new", 3, 1, runnerDied(after))}, "", ""},
+		{"a repair's rebuilt pod boots like any fresh pod", observed(repairRow(3, "svc-engine-new", &ready, 2)), []*corev1.Pod{crashPod("new", 3, 2, runnerDiedTwice(after, after.Add(30*time.Second)))}, "", ""},
+		{"a settled row published Restarting for its crashed set speaks for its pod", observed(instanceRow(3, v1beta1.OMENativeInstanceRestarting, "svc-engine-new", &ready, 1)), []*corev1.Pod{crashPod("new", 3, 1, runnerDiedTwice(after, after.Add(30*time.Second)))}, "svc-engine-3", "container ome-container Error (exit 1)"},
+		{"a settled row published Restarting whose pod died once is a single death", observed(instanceRow(3, v1beta1.OMENativeInstanceRestarting, "svc-engine-new", &ready, 1)), []*corev1.Pod{crashPod("new", 3, 1, runnerDied(after))}, "", ""},
 		{"a sidecar's crash loop leaves the serving process alone", observed(readyRow), []*corev1.Pod{crashPod("new", 3, 1, func() corev1.ContainerStatus {
 			s := runnerDiedTwice(after, after.Add(30*time.Second))
 			s.Name = "sidecar"
@@ -556,6 +573,7 @@ func TestDispatch_CanaryPodDeathParksFromPodsAndRows(t *testing.T) {
 			ctx := context.Background()
 			rec := record.NewFakeRecorder(16)
 			deps := DispatchDeps{Client: c, Reader: c, Recorder: rec, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{}), Now: t0}
+			syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 			if _, err := Dispatch(ctx, deps); err != nil {
 				t.Fatalf("Dispatch arming the canary: %v", err)
 			}
@@ -608,6 +626,7 @@ func TestDispatch_CanaryPodDeathParksFromPodsAndRows(t *testing.T) {
 				t.Fatal(err)
 			}
 			deps.Now = t0.Add(30 * time.Second)
+			syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 			if _, err := Dispatch(ctx, deps); err != nil {
 				t.Fatalf("Dispatch after the death: %v", err)
 			}

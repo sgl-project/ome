@@ -14,11 +14,11 @@ import (
 
 var errPositiveMovementFloor = errors.New("placement movement requires positive component floors")
 
-func zeroHomeFloor(home *v1beta1.PlacementHomePolicy) bool {
-	if home == nil {
+func hasZeroReplicaFloor(policy *v1beta1.PlacementHomePolicy) bool {
+	if policy == nil {
 		return false
 	}
-	for _, floor := range home.ReplicaFloors {
+	for _, floor := range policy.ReplicaFloors {
 		if floor.Replicas == 0 {
 			return true
 		}
@@ -26,11 +26,11 @@ func zeroHomeFloor(home *v1beta1.PlacementHomePolicy) bool {
 	return false
 }
 
-func positiveMovementFloor(home *v1beta1.PlacementHomePolicy) error {
-	if home == nil {
+func positiveMovementFloor(policy *v1beta1.PlacementHomePolicy) error {
+	if policy == nil {
 		return nil
 	}
-	if _, err := protocol.ValidatePositiveReplicaFloors(home.ReplicaFloors); err != nil {
+	if _, err := protocol.ValidatePositiveReplicaFloors(policy.ReplicaFloors); err != nil {
 		return fmt.Errorf("%w: %v", errPositiveMovementFloor, err)
 	}
 	return nil
@@ -43,29 +43,27 @@ func (r *Reconciler) retainZeroFloorWinner(ctx context.Context, source *v1beta1.
 		return false, nil
 	}
 	for _, candidate := range source.Status.Placement.Candidates {
-		if candidate.Cluster != winner || candidate.Allocation == nil || !zeroHomeFloor(candidate.Allocation.CurrentHome) {
+		if candidate.Cluster != winner || candidate.Allocation == nil || !hasZeroReplicaFloor(candidate.Allocation.CurrentHome) {
 			continue
 		}
-		cctx, cancel := context.WithTimeout(ctx, r.placeTimeout())
-		observed, err := r.observePlannedHome(cctx, source, candidate, declaredComponents(source))
-		cancel()
+		observed, err := r.observePlannedMember(ctx, source, candidate, declaredComponents(source))
 		if err != nil {
 			return false, err
 		}
-		return observed.IdleZeroFloor || observed.ScalingToZero || (observed.Member != nil && !observed.Home.Applied), nil
+		return observed.IdleZeroFloor || observed.ScalingToZero || (observed.Member != nil && !observed.MemberState.Applied), nil
 	}
 	return false, nil
 }
 
 // refreshSingleMovementFloor applies an authored positive floor to the retained
-// home before it can reserve availability for a placement move.
+// member before it can reserve availability for a placement move.
 func (r *Reconciler) refreshSingleMovementFloor(ctx context.Context, source *v1beta1.InferenceService, clusters []v1beta1.WorkloadCluster, standing *placementObservations) (bool, ctrl.Result, error) {
 	winner := winnerCluster(source)
 	if source.Status.Placement == nil || source.Status.Placement.Plan == nil || source.Status.Placement.Plan.SingleMove != nil {
 		return false, ctrl.Result{}, nil
 	}
 	for _, candidate := range source.Status.Placement.Candidates {
-		if candidate.Cluster != winner || candidate.Allocation == nil || !zeroHomeFloor(candidate.Allocation.CurrentHome) {
+		if candidate.Cluster != winner || candidate.Allocation == nil || !hasZeroReplicaFloor(candidate.Allocation.CurrentHome) {
 			continue
 		}
 		proposal, err := r.singleProposal(ctx, source, clusters, winner, []string{winner})
@@ -88,7 +86,7 @@ func (r *Reconciler) refreshSingleMovementFloor(ctx context.Context, source *v1b
 		for _, target := range accepted.Status.Placement.Candidates {
 			if target.Cluster == winner {
 				cctx, cancel := context.WithTimeout(ctx, r.placeTimeout())
-				err = r.placePlannedMember(cctx, accepted, target, true)
+				err = r.placePlannedMember(cctx, accepted, target, true, nil)
 				cancel()
 				if err != nil {
 					result, writeErr := r.writeSplitHold(ctx, accepted, standing, "MemberApplicationFailed", err)

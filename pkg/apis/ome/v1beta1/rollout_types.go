@@ -152,11 +152,13 @@ type RolloutGroup struct {
 	// +optional
 	Soak *metav1.Duration `json:"soak,omitempty"`
 
-	// MaintainRatio guards the cross-Component replica ratio while this group
-	// rolls. Meaningful only on multi-Component blueGreen/rollingUpdate groups
-	// (e.g. a PD engine+decoder pair); ignored on single-Component groups and
-	// rejected by admission on canary groups (the canary engine does not enforce
-	// it).
+	// MaintainRatio bounds how far the two sides of a multi-Component
+	// blueGreen/rollingUpdate group (e.g. a PD engine+decoder pair) may drift
+	// apart while the group rolls. A group that lists both the engine and the
+	// decoder is held to the operator's default tolerance even when it omits
+	// this field; set a tolerance of 100 to roll with no bound. Rejected by
+	// admission on single-Component groups (there is no second side) and on
+	// canary groups (the canary engine does not enforce it).
 	// +optional
 	MaintainRatio *MaintainRatio `json:"maintainRatio,omitempty"`
 }
@@ -294,7 +296,22 @@ type MaintainRatio struct {
 	// step that would exceed it is paused until the pools rebalance. An explicit
 	// 0 means zero drift. When omitted, the operator-configured default (the
 	// coordination block of the operator's ConfigMap) applies; if the operator
-	// configures no default either, the group rolls with no drift bound.
+	// configures no default either, the group rolls with no drift bound. A
+	// value of 100 opts out of the bound.
+	// Admission rejects a drain-first member (RecreatePod, or an in-place
+	// strategy on multi-node gangs) whose single drain would empty its side or
+	// move the serving ratio more than twice the tolerance from the start,
+	// since such a member could never take its first step. A group whose
+	// members all roll drain-first is paced by the batch step instead: each
+	// member's drains are counted in batches of its maxUnavailable, and no
+	// member opens its next batch until every member's previous batch serves.
+	// The ratio band is not consulted for such a group, so admission admits it.
+	// With the operator's prefillDecodeRoll.keepRatio rule on, the batch step
+	// paces every group that lists both the engine and the decoder, on every
+	// update path, and sizes each batch so that the share of each side already
+	// moving to the new version stays within this tolerance of the other
+	// side's share; a batch that cannot fit shrinks, and at least one Instance
+	// moves per batch, so a tight tolerance slows the roll and never stops it.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100

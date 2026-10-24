@@ -13,7 +13,7 @@ func (h *hfArtifactTaskHandler) handleDelete(ctx context.Context, input hfArtifa
 		return newHfArtifactRetryResult(input.Parent.Key, err), nil
 	}
 	defer unlock()
-	if err := h.retryPendingParentFailure(ctx, input.Parent.Key); err != nil {
+	if err := h.retryPendingLockRelease(ctx, input.Parent.Key); err != nil {
 		return newHfArtifactRetryResult(input.Parent.Key, err), nil
 	}
 	pending, err := h.repository.pendingDeletion(ctx, input.ChildModelKey)
@@ -44,7 +44,7 @@ func (h *hfArtifactTaskHandler) handleDelete(ctx context.Context, input hfArtifa
 	if err := input.validateFilesystemPaths(parent); err != nil {
 		return newHfArtifactRetryResult(parent.Key, err), nil
 	}
-	if parent.Status == HfArtifactStatusUpdating {
+	if parent.blocksNewOperation() {
 		if !h.files.ParentReadyMarkerMatchesLock(parent) {
 			return newHfArtifactRetryResult(parent.Key, nil), nil
 		}
@@ -75,8 +75,9 @@ func (h *hfArtifactTaskHandler) handleDelete(ctx context.Context, input hfArtifa
 	return h.resumePendingDeletion(ctx, input, &HfArtifactPendingDeletion{
 		Identity: parent.Identity, ParentPath: parent.LocalPath,
 		ChildPath: input.ChildModelPath, ModelUID: input.ChildModelUID,
-		ParentLockID:   removal.Artifact.LockID,
-		ParentWasReady: parent.Status == HfArtifactStatusReady,
+		ParentLockID:               removal.Artifact.LockID,
+		ParentWasReady:             parent.Status == HfArtifactStatusReady,
+		ParentStatusBeforeDeletion: parent.Status,
 	})
 }
 
@@ -97,7 +98,7 @@ func (h *hfArtifactTaskHandler) removeUnreferencedChildSymlink(ctx context.Conte
 		if _, referencesChild := parent.Children[input.ChildModelKey]; referencesChild {
 			return newHfArtifactRetryResult(parent.Key, fmt.Errorf("child model %s and shared Hugging Face parent %s do not contain matching references", input.ChildModelKey, parent.Key)), nil
 		}
-		if parent.Status == HfArtifactStatusUpdating {
+		if parent.blocksNewOperation() {
 			return newHfArtifactRetryResult(parent.Key, nil), nil
 		}
 	}
@@ -113,7 +114,7 @@ func (h *hfArtifactTaskHandler) deleteLockedParent(
 	ctx context.Context,
 	parent HfArtifactEntry,
 	modelStoreRoot string,
-	wasReady bool,
+	previousStatus HfArtifactStatus,
 ) (hfArtifactTaskResult, error) {
 	if parent.Status != HfArtifactStatusUpdating || parent.LockID == "" || len(parent.Children) != 0 {
 		return newHfArtifactRetryResult(parent.Key, fmt.Errorf("shared artifact %s is not locked for deletion", parent.Key)), nil
@@ -122,10 +123,14 @@ func (h *hfArtifactTaskHandler) deleteLockedParent(
 	if err != nil {
 		return newHfArtifactRetryResult(parent.Key, fmt.Errorf("scan child symlinks for shared Hugging Face parent %s: %w", parent.Key, err)), nil
 	}
-	if hasChildren {
+	pendingDownloads, err := h.repository.hasPendingDownloads(ctx, parent)
+	if err != nil {
+		return newHfArtifactRetryResult(parent.Key, err), nil
+	}
+	if hasChildren || pendingDownloads {
 		// Preserve files for an unrecorded child and end deletion ownership.
 		// Reconstructing the missing references is separate recovery work.
-		if err := h.releaseParentDeletionLock(ctx, parent, wasReady); err != nil {
+		if err := h.releaseParentDeletionLock(ctx, parent, previousStatus); err != nil {
 			return newHfArtifactRetryResult(parent.Key, err), nil
 		}
 		return hfArtifactTaskResult{Outcome: hfArtifactTaskDone}, nil
@@ -143,9 +148,12 @@ func (h *hfArtifactTaskHandler) deleteLockedParent(
 	return hfArtifactTaskResult{Outcome: hfArtifactTaskDone}, nil
 }
 
-func (h *hfArtifactTaskHandler) releaseParentDeletionLock(ctx context.Context, parent HfArtifactEntry, wasReady bool) error {
-	if wasReady && h.files.ParentReadyMarkerExists(parent) {
+func (h *hfArtifactTaskHandler) releaseParentDeletionLock(ctx context.Context, parent HfArtifactEntry, previousStatus HfArtifactStatus) error {
+	if previousStatus == HfArtifactStatusReady && h.files.ParentReadyMarkerExists(parent) {
 		return h.repository.MarkReady(ctx, parent)
 	}
-	return h.markParentFailed(ctx, parent)
+	if previousStatus == HfArtifactStatusUpdating {
+		return h.releaseParentLock(ctx, parent, HfArtifactStatusUpdating)
+	}
+	return h.releaseParentLock(ctx, parent, HfArtifactStatusFailed)
 }

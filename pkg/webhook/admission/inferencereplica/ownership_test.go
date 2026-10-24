@@ -9,38 +9,25 @@ import (
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/controllerconfig"
 	"sigs.k8s.io/ome/pkg/runtimeselector"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 const (
 	controllerUser       = "system:serviceaccount:ome:ome-controller-manager"
 	plainUser            = "example-user"
 	garbageCollectorUser = "system:serviceaccount:kube-system:generic-garbage-collector"
-
-	// ownerRefDenial is the denial for a controller owner reference only the
-	// InferenceService controller may set.
-	ownerRefDenial = "only the InferenceService controller may set an InferenceService controller owner reference or change a projected replica's"
-	// composerDenial is the denial for a controller write to a user field of
-	// a replica it does not project; it lists the fields the controller may
-	// write.
-	composerDenial = "the InferenceService controller writes only rollout-control fields (pacing.partition, paused, pauseMode, pacing.rollbackToRevision, pairingProtocol) on a replica it does not project"
-	// composedFieldsDenial is the denial for a non-controller write to the
-	// composed-fields annotation.
-	composedFieldsDenial = "the ome.io/composed-fields annotation is written by the InferenceService controller"
 )
 
 // inferenceReplicaConfigMap is the inferenceservice-config ConfigMap holding
@@ -57,14 +44,10 @@ func inferenceReplicaConfigMap(block string) *corev1.ConfigMap {
 func identityValidator(t *testing.T, objs ...client.Object) *Validator {
 	t.Helper()
 	cm := inferenceReplicaConfigMap(`{"controllerIdentity":{"usernames":["` + controllerUser + `"]}}`)
-	scheme := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(scheme); err != nil {
-		t.Fatalf("scheme: %v", err)
-	}
 	return &Validator{
 		Decoder:   newDecoder(t),
 		Clientset: k8sfake.NewSimpleClientset(cm),
-		Reader:    ctrlfake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build(),
+		Reader:    fakeclient.New(t, fakeclient.WithObjects(objs...)),
 	}
 }
 
@@ -84,27 +67,9 @@ func projectedIR() *v1beta1.InferenceReplica {
 	return ir
 }
 
-// standaloneIR is a user-created replica: no owner reference, no parentRef.
-func standaloneIR() *v1beta1.InferenceReplica {
-	ir := baselineIR(nil)
-	ir.Name = "pool-a"
-	ir.OwnerReferences = nil
-	ir.Spec.ParentRef = nil
-	return ir
-}
-
 func withPlacementLimit(ir *v1beta1.InferenceReplica) *v1beta1.InferenceReplica {
 	out := ir.DeepCopy()
 	out.Spec.PlacementReplicaLimit = ptr.To(int32(2))
-	return out
-}
-
-func withAnnotation(ir *v1beta1.InferenceReplica, k, v string) *v1beta1.InferenceReplica {
-	out := ir.DeepCopy()
-	if out.Annotations == nil {
-		out.Annotations = map[string]string{}
-	}
-	out.Annotations[k] = v
 	return out
 }
 
@@ -126,17 +91,6 @@ func controllerRef(apiVersion, kind, name string) metav1.OwnerReference {
 func withOwners(ir *v1beta1.InferenceReplica, refs ...metav1.OwnerReference) *v1beta1.InferenceReplica {
 	out := ir.DeepCopy()
 	out.OwnerReferences = refs
-	return out
-}
-
-// withBlockOwnerDeletion returns a copy of ir whose owner references carry
-// the given blockOwnerDeletion, the field the garbage collector clears
-// during foreground deletion.
-func withBlockOwnerDeletion(ir *v1beta1.InferenceReplica, block bool) *v1beta1.InferenceReplica {
-	out := ir.DeepCopy()
-	for i := range out.OwnerReferences {
-		out.OwnerReferences[i].BlockOwnerDeletion = ptr.To(block)
-	}
 	return out
 }
 
@@ -180,40 +134,6 @@ func withPacingMaxUnavailable(ir *v1beta1.InferenceReplica, n int32) *v1beta1.In
 func withPairingProtocol(ir *v1beta1.InferenceReplica, token string) *v1beta1.InferenceReplica {
 	out := ir.DeepCopy()
 	out.Spec.PairingProtocol = &token
-	return out
-}
-
-// withComposedFields returns a copy of ir carrying the composed-fields
-// annotation with the given value.
-func withComposedFields(ir *v1beta1.InferenceReplica, value string) *v1beta1.InferenceReplica {
-	return withAnnotation(ir, constants.InferenceReplicaComposedFieldsAnnotationKey, value)
-}
-
-// refsIR is a standalone replica of component c that renders from the
-// ClusterServingRuntime runtime-a instead of stored runners.
-func refsIR(c v1beta1.ComponentType) *v1beta1.InferenceReplica {
-	ir := standaloneIR()
-	ir.Spec.Component = c
-	ir.Spec.Runners = nil
-	ir.Spec.RuntimeRef = &v1beta1.ServingRuntimeRef{Name: "runtime-a", Kind: ptr.To(runtimeselector.KindClusterServingRuntime)}
-	return ir
-}
-
-func withModelRef(ir *v1beta1.InferenceReplica, name string) *v1beta1.InferenceReplica {
-	out := ir.DeepCopy()
-	out.Spec.ModelRef = &v1beta1.ModelRef{Name: name}
-	return out
-}
-
-func withRuntimeRef(ir *v1beta1.InferenceReplica, ref *v1beta1.ServingRuntimeRef) *v1beta1.InferenceReplica {
-	out := ir.DeepCopy()
-	out.Spec.RuntimeRef = ref
-	return out
-}
-
-func withoutRunners(ir *v1beta1.InferenceReplica) *v1beta1.InferenceReplica {
-	out := ir.DeepCopy()
-	out.Spec.Runners = nil
 	return out
 }
 
@@ -615,20 +535,10 @@ func TestOwnershipByIdentity(t *testing.T) {
 // modelRef alone, and an update that keeps its runtime reference, read no
 // runtime.
 func TestTemplateSourceReadsTheRuntimeOnlyWhenNamed(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1beta1.AddToScheme(scheme); err != nil {
-		t.Fatalf("scheme: %v", err)
-	}
 	v := identityValidator(t)
-	v.Reader = ctrlfake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{
-		Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-			switch obj.(type) {
-			case *v1beta1.ServingRuntime, *v1beta1.ClusterServingRuntime:
-				t.Errorf("runtime %s was read", key.Name)
-			}
-			return c.Get(ctx, key, obj, opts...)
-		},
-	}).Build()
+	runtimeReads := fakeclient.CountingVerb(fakeclient.Get).OnKind(&v1beta1.ServingRuntime{})
+	clusterRuntimeReads := fakeclient.CountingVerb(fakeclient.Get).OnKind(&v1beta1.ClusterServingRuntime{})
+	v.Reader = fakeclient.New(t, runtimeReads, clusterRuntimeReads)
 
 	modelOnly := withModelRef(withoutRunners(standaloneIR()), "model-a")
 	if resp := v.Handle(context.Background(), asUser(createReq(t, modelOnly), plainUser)); !resp.Allowed {
@@ -642,6 +552,9 @@ func TestTemplateSourceReadsTheRuntimeOnlyWhenNamed(t *testing.T) {
 	// project read no runtime either.
 	if resp := v.Handle(context.Background(), asUser(updateReq(t, refs, withPacingPartition(refs, 1)), controllerUser)); !resp.Allowed {
 		t.Fatalf("partition of a refs replica by the controller denied: %s", resp.Result.Message)
+	}
+	if keys := append(runtimeReads.Keys(), clusterRuntimeReads.Keys()...); len(keys) != 0 {
+		t.Errorf("runtimes %v were read", keys)
 	}
 }
 

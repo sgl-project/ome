@@ -83,6 +83,23 @@ type InferenceServiceValidator struct {
 	// the component fail-closed forever with no actor able to render it.
 	// Production wiring sets this from CRD discovery.
 	AutoscalerPolicyEnabled bool
+
+	// DefaultRatioTolerancePercent is the operator-configured fill for a
+	// rollout group that sets maintainRatio but omits its tolerance (the
+	// coordination block of the operator ConfigMap, read once at startup).
+	// The drain feasibility rule reads it so admission judges such a group
+	// against the same tolerance the rollout will run under. Nil means no
+	// default is configured: such a group rolls with no drift bound and the
+	// rule skips it.
+	DefaultRatioTolerancePercent *int32
+
+	// DefaultMinReplicas is the operator-configured fill for a Component
+	// that sets no minReplicas (the deploy.replicas block of the operator
+	// ConfigMap, read once at startup), the fill the reconciler applies
+	// before it sizes the Component. The drain feasibility rule sizes a
+	// member with no replica fields by it; nil means unconfigured, and such
+	// a member is sized at the API default of one.
+	DefaultMinReplicas *int
 }
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-inferenceservice,mutating=false,failurePolicy=fail,groups=ome.io,resources=inferenceservices,versions=v1beta1,name=inferenceservice.ome-webhook-server.validator
@@ -95,6 +112,9 @@ func (v *InferenceServiceValidator) ValidateCreate(ctx context.Context, isvc *v1
 	// CREATE validates the policy outright; the update-time ratchet lives
 	// in ValidateUpdate, which has the prior object.
 	if err := validation.ValidateScalingPolicy(isvc.Spec.ScalingPolicy, "spec.scalingPolicy"); err != nil {
+		return nil, err
+	}
+	if err := validation.ValidateScalingPolicyService(isvc); err != nil {
 		return nil, err
 	}
 	// old=nil: every migration-request annotation present at CREATE is
@@ -141,10 +161,12 @@ func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldIsvc,
 	if err := validateLegacyAutoscalerFieldsFromCtx(ctx); err != nil {
 		return nil, err
 	}
-	if err := validation.ValidatePlacementPolicyUpdate(&oldIsvc.Spec, &isvc.Spec); err != nil {
+	// The mode rule runs before the policy rule so a removed block is refused
+	// as the mode change it is, with the mode the service keeps named.
+	if err := validation.ValidatePlacementModeUpdate(&oldIsvc.Spec, &isvc.Spec); err != nil {
 		return nil, err
 	}
-	if err := validation.ValidateCoordinationUpdate(&oldIsvc.Spec, &isvc.Spec); err != nil {
+	if err := validation.ValidatePlacementPolicyUpdate(&oldIsvc.Spec, &isvc.Spec); err != nil {
 		return nil, err
 	}
 	if err := validation.ValidatePairingProtocolUpdate(&oldIsvc.Spec, &isvc.Spec); err != nil {
@@ -159,6 +181,9 @@ func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldIsvc,
 	if err := validation.ValidateScalingPolicyUpdate(oldIsvc.Spec.ScalingPolicy, isvc.Spec.ScalingPolicy, "spec.scalingPolicy"); err != nil {
 		return nil, err
 	}
+	if err := validation.ValidateScalingPolicyServiceUpdate(oldIsvc, isvc); err != nil {
+		return nil, err
+	}
 	if err := validateAddedMigrationRequests(oldIsvc, isvc); err != nil {
 		return nil, err
 	}
@@ -169,6 +194,9 @@ func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldIsvc,
 	if err != nil {
 		return warnings, err
 	}
+	// A change to some members of a rollingUpdate group and not others is
+	// admitted; the warning names the members that keep their revision.
+	warnings = append(warnings, validation.CoordinationUpdateWarnings(&oldIsvc.Spec, &isvc.Spec)...)
 	// Ratcheted rollout-ordering enforceability: applied only when this
 	// update changes spec.rollout, so stored objects keep reconciling.
 	// Runs after the structural rules so the more specific rejections keep
@@ -450,8 +478,14 @@ func (v *InferenceServiceValidator) validateInferenceService(ctx context.Context
 	}
 
 	// Cross-Component rollout coordination: structural + RatioBalanced
-	// tolerance warning.
+	// tolerance warning. Runs on create and on update alike, so a scale or
+	// strategy change that leaves a maintainRatio group unable to start its
+	// drain-first member is refused the same way a fresh spec is.
 	if err := validation.ValidateCoordination(&isvc.Spec); err != nil {
+		return allWarnings, err
+	}
+	if err := validation.ValidateRatioDrainFeasibility(&isvc.Spec, validation.RatioDrainDefaults{
+		TolerancePercent: v.DefaultRatioTolerancePercent, MinReplicas: v.DefaultMinReplicas}); err != nil {
 		return allWarnings, err
 	}
 	if warning := validation.CoordinationRatioToleranceWarning(&isvc.Spec); warning != "" {

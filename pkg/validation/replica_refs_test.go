@@ -11,7 +11,7 @@ import (
 	"sigs.k8s.io/ome/pkg/constants"
 )
 
-func TestValidateReplicaRefs(t *testing.T) {
+func TestValidateReplicaRefs_RefShapes_RequiresOneEngineAndNoInlineFields(t *testing.T) {
 	refs := func(engine, decoder, router []string) *v1beta1.ReplicaRefs {
 		return &v1beta1.ReplicaRefs{Engine: engine, Decoder: decoder, Router: router}
 	}
@@ -53,7 +53,7 @@ func TestValidateReplicaRefs(t *testing.T) {
 	}
 }
 
-func TestValidateReplicaRefsUpdate(t *testing.T) {
+func TestValidateReplicaRefsUpdate_RefsChangeAddOrDrop_Rejected(t *testing.T) {
 	engine := func(names ...string) *v1beta1.InferenceServiceSpec {
 		if names == nil {
 			return &v1beta1.InferenceServiceSpec{}
@@ -80,7 +80,7 @@ func TestValidateReplicaRefsUpdate(t *testing.T) {
 	}
 }
 
-func TestReferencedReplicaAndProjectedBy(t *testing.T) {
+func TestReferencedReplicaAndProjectedBy_RefsAndOwners_ResolveNameOrEmpty(t *testing.T) {
 	spec := &v1beta1.InferenceServiceSpec{ReplicaRefs: &v1beta1.ReplicaRefs{Router: []string{"router-a"}}}
 	if got := ReferencedReplica(spec, v1beta1.RouterComponent); got != "" {
 		t.Fatalf("a block without an engine must not apply, got %q", got)

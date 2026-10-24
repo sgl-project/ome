@@ -35,7 +35,7 @@ func setNodeGPU(t *testing.T, tc *testContext, name string, gpus int64) {
 // at zero — a device-plugin/informer lag on a real cluster). The gangs that fit place;
 // the rest wait as no-fit. Then the missing capacity is restored. Every gang must
 // converge — the empty domains are now usable and there are exactly enough for the
-// waiting gangs. A regression wedges the waiting gangs (pinned to a domain they
+// waiting gangs. A regression wedges the waiting gangs (assigned to a domain they
 // can't use, or blocked by leaked reservations) even though capacity is now free.
 //
 // Shape: `domains` domains x `gangSize` nodes, one gang per domain; half the domains

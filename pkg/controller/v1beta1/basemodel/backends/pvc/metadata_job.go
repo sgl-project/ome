@@ -15,8 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/basemodel/shared"
 	"sigs.k8s.io/ome/pkg/utils/storage"
 )
 
@@ -262,14 +262,9 @@ func buildResourceRequirements(cfg MetadataJobConfig) corev1.ResourceRequirement
 }
 
 func storageURIOf(obj client.Object) (string, error) {
-	var spec *v1beta1.BaseModelSpec
-	switch m := obj.(type) {
-	case *v1beta1.BaseModel:
-		spec = &m.Spec
-	case *v1beta1.ClusterBaseModel:
-		spec = &m.Spec
-	default:
-		return "", fmt.Errorf("unsupported object type %T", obj)
+	spec, _, err := shared.ModelSpecAndStatus(obj)
+	if err != nil {
+		return "", err
 	}
 	if spec.Storage == nil || spec.Storage.StorageUri == nil {
 		return "", fmt.Errorf("storage URI is not set on %s/%s", obj.GetNamespace(), obj.GetName())

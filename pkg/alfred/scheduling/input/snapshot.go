@@ -49,67 +49,167 @@ func Capture(ctx context.Context, reader client.Reader, now func() time.Time) (*
 	if reader == nil || now == nil {
 		return nil, fmt.Errorf("capture requires a reader and clock")
 	}
-	s := &Snapshot{StartedAt: now(), ListResourceVersions: make(map[string]string)}
 	group := schema.GroupVersion{Group: "scheduling.x-k8s.io", Version: "v1alpha1"}
 	groups := &unstructured.UnstructuredList{}
 	groups.SetGroupVersionKind(group.WithKind("PodGroupList"))
-	lists := []struct {
-		list client.ObjectList
-		kind schema.GroupVersionKind
-	}{
-		{&corev1.NodeList{}, corev1.SchemeGroupVersion.WithKind("Node")},
-		{&corev1.PodList{}, corev1.SchemeGroupVersion.WithKind("Pod")},
-		{&corev1.NamespaceList{}, corev1.SchemeGroupVersion.WithKind("Namespace")},
-		{&corev1.ServiceList{}, corev1.SchemeGroupVersion.WithKind("Service")},
-		{&corev1.ReplicationControllerList{}, corev1.SchemeGroupVersion.WithKind("ReplicationController")},
-		{&appsv1.ReplicaSetList{}, appsv1.SchemeGroupVersion.WithKind("ReplicaSet")},
-		{&appsv1.StatefulSetList{}, appsv1.SchemeGroupVersion.WithKind("StatefulSet")},
-		{groups, group.WithKind("PodGroup")},
-		{&v1beta1.InferenceServiceList{}, v1beta1.SchemeGroupVersion.WithKind("InferenceService")},
-		{&v1beta1.InferenceReplicaList{}, v1beta1.SchemeGroupVersion.WithKind("InferenceReplica")},
+	return capture(ctx, reader, now, []captureList{
+		{list: &corev1.NodeList{}, kind: corev1.SchemeGroupVersion.WithKind("Node")},
+		{list: &corev1.PodList{}, kind: corev1.SchemeGroupVersion.WithKind("Pod")},
+		{list: &corev1.NamespaceList{}, kind: corev1.SchemeGroupVersion.WithKind("Namespace")},
+		{list: &corev1.ServiceList{}, kind: corev1.SchemeGroupVersion.WithKind("Service")},
+		{list: &corev1.ReplicationControllerList{}, kind: corev1.SchemeGroupVersion.WithKind("ReplicationController")},
+		{list: &appsv1.ReplicaSetList{}, kind: appsv1.SchemeGroupVersion.WithKind("ReplicaSet")},
+		{list: &appsv1.StatefulSetList{}, kind: appsv1.SchemeGroupVersion.WithKind("StatefulSet")},
+		{list: groups, kind: group.WithKind("PodGroup")},
+		{list: &v1beta1.InferenceServiceList{}, kind: v1beta1.SchemeGroupVersion.WithKind("InferenceService")},
+		{list: &v1beta1.InferenceReplicaList{}, kind: v1beta1.SchemeGroupVersion.WithKind("InferenceReplica")},
+	}, nil)
+}
+
+// CaptureSource is the bounded, lossless capture for a move onto a new TPU
+// slice, which runs no scheduler simulation. It reads every InferenceService
+// and InferenceReplica (in-flight migrations and budgets), the source
+// Instance's Pods, the PodGroups they name, and the source Node: what
+// ExecutionSourcePods and the dispatch checks read. Listing every Pod would not
+// fit a large cluster, and anything wider than the source would make two
+// captures differ on unrelated churn. Pods are selected by their identity
+// labels, so unlike Capture it cannot reject a Pod that the source
+// InferenceReplica owns but that carries other identity labels; the
+// InferenceReplica's Pod counts must still match. It is not a scheduling input;
+// BuildExecutionRequest needs Capture.
+func CaptureSource(ctx context.Context, reader client.Reader, source Source, now func() time.Time) (*Snapshot, error) {
+	if reader == nil || now == nil {
+		return nil, fmt.Errorf("capture requires a reader and clock")
 	}
+	if err := validateSourceKey(source); err != nil {
+		return nil, err
+	}
+	started := now()
+	node := &corev1.Node{}
+	if err := reader.Get(ctx, client.ObjectKey{Name: source.FromNode}, node); err != nil {
+		return nil, fmt.Errorf("capture source Node: %w", err)
+	}
+	pods := &corev1.PodList{}
+	if err := reader.List(ctx, pods, client.InNamespace(source.Namespace), client.MatchingLabels{
+		labelInferenceService: source.InferenceService,
+		labelComponent:        string(source.Component),
+		labelInstanceIndex:    fmt.Sprintf("%d", source.Instance),
+	}); err != nil {
+		return nil, fmt.Errorf("capture source Pods: %w", err)
+	}
+	objects := []capturedObject{{object: node, kind: corev1.SchemeGroupVersion.WithKind("Node")}}
+	groupKind := schema.GroupVersionKind{Group: "scheduling.x-k8s.io", Version: "v1alpha1", Kind: "PodGroup"}
+	groups := map[string]bool{}
+	for i := range pods.Items {
+		if name := pods.Items[i].Labels[labelPodGroup]; name != "" && !groups[name] {
+			groups[name] = true
+			group := &unstructured.Unstructured{}
+			group.SetGroupVersionKind(groupKind)
+			if err := reader.Get(ctx, client.ObjectKey{Namespace: source.Namespace, Name: name}, group); err != nil {
+				return nil, fmt.Errorf("capture source PodGroup %q: %w", name, err)
+			}
+			objects = append(objects, capturedObject{object: group, kind: groupKind})
+		}
+	}
+	return capture(ctx, reader, startedAt(started, now), []captureList{
+		{list: pods, kind: corev1.SchemeGroupVersion.WithKind("Pod"), listed: true},
+		{list: &v1beta1.InferenceServiceList{}, kind: v1beta1.SchemeGroupVersion.WithKind("InferenceService")},
+		{list: &v1beta1.InferenceReplicaList{}, kind: v1beta1.SchemeGroupVersion.WithKind("InferenceReplica")},
+	}, objects)
+}
+
+// startedAt returns a clock whose first reading is start, so a capture's
+// StartedAt precedes the reads made before capture runs.
+func startedAt(start time.Time, now func() time.Time) func() time.Time {
+	first := true
+	return func() time.Time {
+		if first {
+			first = false
+			return start
+		}
+		return now()
+	}
+}
+
+// captureList is one list a capture reads, with its kind and list options.
+// listed marks a list the caller already read.
+type captureList struct {
+	list   client.ObjectList
+	kind   schema.GroupVersionKind
+	opts   []client.ListOption
+	listed bool
+}
+
+// capturedObject is one object a capture read with Get instead of a list.
+type capturedObject struct {
+	object runtime.Object
+	kind   schema.GroupVersionKind
+}
+
+// capture reads lists, then adds objects, into one Snapshot with a stable
+// order and content identity.
+func capture(ctx context.Context, reader client.Reader, now func() time.Time, lists []captureList, objects []capturedObject) (*Snapshot, error) {
+	s := &Snapshot{StartedAt: now(), ListResourceVersions: make(map[string]string)}
 	seen := make(map[string]bool)
+	add := func(item runtime.Object, kind schema.GroupVersionKind) error {
+		object := item.DeepCopyObject()
+		object.GetObjectKind().SetGroupVersionKind(kind)
+		meta, err := apiMeta.Accessor(object)
+		if err != nil {
+			return fmt.Errorf("capture %s metadata: %w", kind.Kind, err)
+		}
+		key := kind.String() + "/" + meta.GetNamespace() + "/" + meta.GetName()
+		if meta.GetName() == "" || seen[key] {
+			return fmt.Errorf("capture has empty or duplicate object identity %q", key)
+		}
+		seen[key] = true
+		switch typed := object.(type) {
+		case *v1beta1.InferenceService:
+			s.InferenceServices = append(s.InferenceServices, *typed)
+			return nil
+		case *v1beta1.InferenceReplica:
+			s.InferenceReplicas = append(s.InferenceReplicas, *typed)
+			return nil
+		case *corev1.Pod:
+			if typed.Status.Phase == corev1.PodSucceeded || typed.Status.Phase == corev1.PodFailed {
+				return nil
+			}
+		}
+		raw, err := json.Marshal(object)
+		if err != nil {
+			return fmt.Errorf("capture %s JSON: %w", key, err)
+		}
+		s.Objects = append(s.Objects, runtime.RawExtension{Raw: raw})
+		return nil
+	}
 	for _, entry := range lists {
-		if err := reader.List(ctx, entry.list); err != nil {
-			return nil, fmt.Errorf("capture %s: %w", entry.kind.Kind, err)
+		if !entry.listed {
+			if err := reader.List(ctx, entry.list, entry.opts...); err != nil {
+				return nil, fmt.Errorf("capture %s: %w", entry.kind.Kind, err)
+			}
 		}
 		if entry.list.GetContinue() != "" {
 			return nil, fmt.Errorf("capture %s returned a partial list", entry.kind.Kind)
 		}
 		s.ListResourceVersions[entry.kind.String()] = entry.list.GetResourceVersion()
-		objects, err := apiMeta.ExtractList(entry.list)
+		items, err := apiMeta.ExtractList(entry.list)
 		if err != nil {
 			return nil, fmt.Errorf("capture %s objects: %w", entry.kind.Kind, err)
 		}
-		for _, item := range objects {
-			object := item.DeepCopyObject()
-			object.GetObjectKind().SetGroupVersionKind(entry.kind)
-			meta, err := apiMeta.Accessor(object)
-			if err != nil {
-				return nil, fmt.Errorf("capture %s metadata: %w", entry.kind.Kind, err)
+		for _, item := range items {
+			if err := add(item, entry.kind); err != nil {
+				return nil, err
 			}
-			key := entry.kind.String() + "/" + meta.GetNamespace() + "/" + meta.GetName()
-			if meta.GetName() == "" || seen[key] {
-				return nil, fmt.Errorf("capture has empty or duplicate object identity %q", key)
-			}
-			seen[key] = true
-			switch typed := object.(type) {
-			case *v1beta1.InferenceService:
-				s.InferenceServices = append(s.InferenceServices, *typed)
-				continue
-			case *v1beta1.InferenceReplica:
-				s.InferenceReplicas = append(s.InferenceReplicas, *typed)
-				continue
-			case *corev1.Pod:
-				if typed.Status.Phase == corev1.PodSucceeded || typed.Status.Phase == corev1.PodFailed {
-					continue
-				}
-			}
-			raw, err := json.Marshal(object)
-			if err != nil {
-				return nil, fmt.Errorf("capture %s JSON: %w", key, err)
-			}
-			s.Objects = append(s.Objects, runtime.RawExtension{Raw: raw})
+		}
+	}
+	for _, entry := range objects {
+		meta, err := apiMeta.Accessor(entry.object)
+		if err != nil {
+			return nil, fmt.Errorf("capture %s metadata: %w", entry.kind.Kind, err)
+		}
+		s.ListResourceVersions[entry.kind.String()] = meta.GetResourceVersion()
+		if err := add(entry.object, entry.kind); err != nil {
+			return nil, err
 		}
 	}
 	// JSON is deterministic for the typed objects and string-keyed maps above.

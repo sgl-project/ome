@@ -159,6 +159,26 @@ func runnerContainerPorts(runner *v1beta1.RunnerSpec, containers []corev1.Contai
 	return containers[0].Ports
 }
 
+// ServiceHasPort reports whether the named Service exposes port. It reports
+// false when the client is nil or the Service can't be read, so a caller
+// never routes to a port it could not confirm.
+func ServiceHasPort(ctx context.Context, c client.Client, namespace, serviceName string, port int32) bool {
+	if c == nil {
+		return false
+	}
+	service := &corev1.Service{}
+	// Service names are truncated to 63 chars on creation; match that here.
+	if err := c.Get(ctx, types.NamespacedName{Name: constants.TruncateNameWithMaxLength(serviceName, 63), Namespace: namespace}, service); err != nil {
+		return false
+	}
+	for _, p := range service.Spec.Ports {
+		if p.Port == port {
+			return true
+		}
+	}
+	return false
+}
+
 // ResolveServicePort returns the first port of the named Service, which is
 // the authoritative serving port a component exposes (Services are built
 // from the merged runner's containerPort before ingress runs). It falls

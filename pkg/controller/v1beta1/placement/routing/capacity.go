@@ -16,45 +16,42 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/clock"
+	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 )
 
-// CapacityReport is the contract a home's capacity endpoint answers with.
-//
-// Servable is an ABSOLUTE count in servable units — usable prefill/decode
-// pairs, or servable replicas for a non-disaggregated home. Deliberately not a
-// utilization ratio: a saturated home and an idle one report the same fraction,
-// which says nothing about how much either can serve. Deliberately not a flat
-// sum of per-worker request slots either, since that counts prefill slots with
-// no decode partner and so OVERSTATES capacity during exactly the rollout skew
-// this input exists to correct.
-//
-// ObservedAt is when the home computed the figure, so a frozen reporter is
-// detectable. Without it a stale read is indistinguishable from a fresh one and
-// a wedged home would hold its weight forever.
+// CapacityReport carries capacity in replicas: a whole count for Ceiling mode,
+// or a weight that may be fractional for Reported mode. Neither value
+// represents utilization. ObservedAt lets the poller reject frozen reports even
+// when the endpoint still answers.
 type CapacityReport struct {
-	Servable   int32     `json:"servable"`
+	// Servable is an absolute replica count in Ceiling mode. A report without
+	// one omits the field, so a report written for Reported mode cannot tell a
+	// Ceiling consumer that the cluster serves zero replicas.
+	Servable *int32 `json:"servable,omitempty"`
+	// Weight is the cluster's capacity in replicas for Reported mode, already
+	// normalized by the producer for its hardware and workload.
+	Weight     *float64  `json:"weight,omitempty"`
 	ObservedAt time.Time `json:"observedAt"`
 }
 
 type capacitySample struct {
-	servable int32
+	servable float64
 	expires  time.Time
 }
 
-// capacityState is the poller's running view of one home.
+// capacityState is the poller's running view of one cluster.
 type capacityState struct {
 	// generation identifies the polling pass allowed to update this state. A
 	// completion from an older pass cannot overwrite a newer observation.
 	generation uint64
-	// window holds the most recent accepted readings, oldest first. The applied
-	// ceiling is their Quorum-th smallest, so no single reading -- however low
-	// -- can set it alone.
+	// window holds accepted readings, oldest first. The applied value is
+	// derived from them by estimate.
 	window []capacitySample
-	// reported is the applied ceiling, or nil when the home has not answered
-	// usably. Nil means the control-plane plan stands.
-	reported *int32
-	// reason explains why reported is nil, for the fail-open condition. It is
-	// empty only while an applied ceiling exists.
+	// reported is the accepted value, or nil without a fresh quorum. Nil means
+	// the cluster keeps its replica count in either mode.
+	reported *float64
+	// reason describes a failed observation or insufficient evidence. A failed
+	// poll can leave a fresh cached value in Reported mode.
 	reason string
 	// nextPollTime is the next absolute deadline for this exact target and
 	// policy. Advancing from the prior deadline avoids cadence drift.
@@ -90,37 +87,42 @@ type CapacityReconcileRequest struct {
 	Targets  []Target
 }
 
-// observe folds one accepted reading into the window and returns the resulting
-// ceiling -- the quorum-th smallest retained reading -- and whether one applies
-// at all.
-//
-// Until the window holds quorum readings, none does: the plan stands. A ceiling
-// derived from fewer readings than the quorum would be exactly the thing the
-// quorum exists to prevent, since the first reading after startup or recovery
-// could come from the one broken reporter and would set the ceiling with
-// nothing to corroborate it.
-func (st *capacityState) observe(v int32, expires time.Time, samples, quorum int) (int32, bool) {
+// observe adds a reading and returns the resulting estimate. Fewer than quorum
+// readings cannot supply an accepted value in either mode.
+func (st *capacityState) observe(v float64, expires time.Time, config CapacityConfig) (float64, bool) {
 	st.window = append(st.window, capacitySample{servable: v, expires: expires})
-	if len(st.window) > samples {
+	if samples := config.samples(); len(st.window) > samples {
 		st.window = st.window[len(st.window)-samples:]
 	}
-	return st.ceiling(quorum)
+	return st.estimate(config)
 }
 
-func (st *capacityState) ceiling(quorum int) (int32, bool) {
+// estimate derives the applied value from the window once it holds quorum
+// readings.
+//
+// As a ceiling it is the quorum-th smallest reading, so a lower value needs
+// quorum readings to corroborate it. In Reported mode the value is the cluster's
+// capacity, and a high reading can overload the cluster as surely as a low one
+// starves it. So the value is the lower median: a single outlier cannot move it
+// in a window of three or more readings, and of two readings the smaller wins.
+func (st *capacityState) estimate(config CapacityConfig) (float64, bool) {
+	quorum := config.quorum()
 	if len(st.window) < quorum {
 		return 0, false
 	}
-	sorted := make([]int32, len(st.window))
+	sorted := make([]float64, len(st.window))
 	for i := range st.window {
 		sorted[i] = st.window[i].servable
 	}
 	slices.Sort(sorted)
+	if config.Mode == v1beta1.RoutingCapacityModeReported {
+		return sorted[(len(sorted)-1)/2], true
+	}
 	return sorted[quorum-1], true
 }
 
 // expire removes evidence that has reached its producer timestamp's maximum
-// age and recomputes the ceiling from the remaining fresh samples. Samples can
+// age and recomputes the estimate from the remaining fresh samples. Samples can
 // arrive with out-of-order timestamps, so every entry is checked.
 func (st *capacityState) expire(config CapacityConfig, now time.Time) bool {
 	kept := st.window[:0]
@@ -133,9 +135,9 @@ func (st *capacityState) expire(config CapacityConfig, now time.Time) bool {
 		return false
 	}
 	st.window = kept
-	if v, ok := st.ceiling(config.quorum()); ok {
+	if v, ok := st.estimate(config); ok {
 		st.reported = &v
-		st.reason = ""
+		// Expiry is not a successful observation; preserve any failed-poll reason.
 	} else {
 		st.reported = nil
 		if len(st.window) == 0 {
@@ -150,25 +152,10 @@ func (st *capacityState) expire(config CapacityConfig, now time.Time) bool {
 	return true
 }
 
-// CapacityPoller asks each home what it can currently serve and turns the
-// answer into a CEILING on that home's planned allocation.
-//
-// Only the home knows its realized prefill/decode pairing: the control plane
-// computes MIN(ready_prefill, ready_decode), an upper bound on usable pairs
-// rather than a count of them, and during a rollout the two components recover
-// at different rates so the skew is widest exactly when the number matters
-// most.
-//
-// It shares the prober's HTTP client: both outputs talk to the same homes with
-// the same credentials and fail the same ways, so splitting them across two
-// clients would mean two auth paths, two staleness semantics, and two ways for
-// an operator to half-configure the feature. They stay independently
-// enabled — neither implies the other.
-//
-// Every failure mode falls open to the plan. Fail-closed would turn a
-// control-plane-to-data-plane network blip into a fleet-wide traffic cutoff,
-// which is a far worse outcome than routing to a home that is briefly
-// over-weighted.
+// CapacityPoller collects capacity using the prober's HTTP client and worker
+// limits. Ceiling mode falls back to replica counts on failures. Reported mode
+// keeps fresh accepted samples through a failed poll; without them the cluster
+// falls back to its replica count.
 type CapacityPoller struct {
 	Log    logr.Logger
 	Client *http.Client
@@ -215,20 +202,15 @@ func NewCapacityPoller(
 	}, nil
 }
 
-// Reported returns the home's last accepted servable count, or nil when the
-// plan should stand — polling off, no answer yet, or the last answer was
-// unusable. Nil is the fail-open value.
-func (c *CapacityPoller) Reported(tgt Target, policy ResolvedCapacityPolicy) *int32 {
+// Reported returns the accepted count or weight, or nil without fresh evidence.
+// The caller applies the selected mode's behavior for a missing report.
+func (c *CapacityPoller) Reported(tgt Target, policy ResolvedCapacityPolicy) *float64 {
 	reported, _ := c.observation(tgt, policy)
 	return reported
 }
 
-// FellOpen reports why a home's report was not applied, or empty when it was
-// applied or polling is off.
-//
-// Silent fallback is as bad as fail-closed for an operator: the weight looks
-// the same whether the home agreed with the plan or the poll failed, and those
-// have opposite remediations.
+// FellOpen returns the observation failure reason. Reported mode may retain a
+// fresh cached value alongside that reason. Empty means usable or disabled.
 func (c *CapacityPoller) FellOpen(tgt Target, policy ResolvedCapacityPolicy) string {
 	_, reason := c.observation(tgt, policy)
 	return reason
@@ -240,7 +222,7 @@ func (c *CapacityPoller) FellOpen(tgt Target, policy ResolvedCapacityPolicy) str
 func (c *CapacityPoller) observation(
 	tgt Target,
 	policy ResolvedCapacityPolicy,
-) (*int32, string) {
+) (*float64, string) {
 	if c == nil || !policy.IsEnabled() {
 		return nil, ""
 	}
@@ -262,7 +244,7 @@ func (c *CapacityPoller) observation(
 		return nil, st.reason
 	}
 	v := *st.reported
-	return &v, ""
+	return &v, st.reason
 }
 
 // Forget removes every capacity history for one TrafficMap. An observation
@@ -420,13 +402,13 @@ func normalizeCapacityTargets(req CapacityReconcileRequest) ([]Target, error) {
 	return targets, nil
 }
 
-// pollOne fetches and validates one home's capacity report. It returns the
+// pollOne fetches and validates one cluster's capacity report. It returns the
 // accepted count, or nil plus the reason the plan stands instead.
 func (c *CapacityPoller) pollOne(
 	ctx context.Context,
 	tgt Target,
 	config CapacityConfig,
-) (*int32, string) {
+) (*float64, string) {
 	reported, _, reason := c.pollOneDetailed(ctx, tgt, config)
 	return reported, reason
 }
@@ -435,7 +417,7 @@ func (c *CapacityPoller) pollOneDetailed(
 	ctx context.Context,
 	tgt Target,
 	config CapacityConfig,
-) (*int32, time.Time, string) {
+) (*float64, time.Time, string) {
 	config = cloneCapacityConfig(config)
 	capacityURL, err := capacityURL(tgt, config)
 	if err != nil {
@@ -469,10 +451,24 @@ func (c *CapacityPoller) pollOneDetailed(
 	if err := ctx.Err(); err != nil {
 		return nil, time.Time{}, fmt.Sprintf("capacity request did not complete: %v", err)
 	}
-	if report.Servable < 0 {
-		// Malformed, not an instruction to serve nothing. A parse or arithmetic
-		// bug on the home must not be able to black-hole it.
-		return nil, time.Time{}, fmt.Sprintf("capacity report is negative (%d)", report.Servable)
+	var v float64
+	if config.Mode == v1beta1.RoutingCapacityModeReported {
+		if report.Weight == nil {
+			return nil, time.Time{}, "capacity report has no weight"
+		}
+		v = *report.Weight
+	} else {
+		if report.Servable == nil {
+			return nil, time.Time{}, "capacity report has no servable count"
+		}
+		v = float64(*report.Servable)
+	}
+	if math.IsNaN(v) || math.IsInf(v, 0) || v > math.MaxInt32 {
+		return nil, time.Time{}, "capacity report must be finite and no greater than int32 maximum"
+	}
+	if v < 0 {
+		// A negative value is malformed, not an explicit zero-capacity report.
+		return nil, time.Time{}, fmt.Sprintf("capacity report is negative (%v)", v)
 	}
 	if report.ObservedAt.After(now) {
 		return nil, time.Time{}, "capacity report timestamp is in the future"
@@ -480,7 +476,6 @@ func (c *CapacityPoller) pollOneDetailed(
 	if age := now.Sub(report.ObservedAt); age >= config.MaxAge {
 		return nil, time.Time{}, capacityStaleReason(config.MaxAge)
 	}
-	v := report.Servable
 	return &v, report.ObservedAt, ""
 }
 
@@ -669,13 +664,13 @@ func (c *CapacityPoller) nextDelay(
 	return next.Sub(now)
 }
 
-// record stores a home's outcome without a polling generation. It supports
+// record stores a cluster's outcome without a polling generation. It supports
 // synchronous callers and tests; executor jobs use recordCurrent so a late
 // predecessor cannot overwrite current state.
 func (c *CapacityPoller) record(
 	tgt Target,
 	policy ResolvedCapacityPolicy,
-	reported *int32,
+	reported *float64,
 	reason string,
 ) bool {
 	if c == nil || c.Clock == nil {
@@ -687,7 +682,7 @@ func (c *CapacityPoller) record(
 func (c *CapacityPoller) recordAt(
 	tgt Target,
 	policy ResolvedCapacityPolicy,
-	reported *int32,
+	reported *float64,
 	observedAt time.Time,
 	reason string,
 ) bool {
@@ -712,7 +707,7 @@ func (c *CapacityPoller) recordCurrent(
 	k capacityKey,
 	generation uint64,
 	config CapacityConfig,
-	reported *int32,
+	reported *float64,
 	observedAt time.Time,
 	reason string,
 ) bool {
@@ -730,14 +725,14 @@ func (c *CapacityPoller) recordCurrent(
 func (c *CapacityPoller) recordLocked(
 	st *capacityState,
 	config CapacityConfig,
-	reported *int32,
+	reported *float64,
 	observedAt time.Time,
 	reason string,
 	now time.Time,
 ) bool {
 	previousReported := st.reported
 	previousReason := st.reason
-	var applied *int32
+	var applied *float64
 	if reported != nil {
 		if observedAt.IsZero() {
 			observedAt = now
@@ -751,16 +746,26 @@ func (c *CapacityPoller) recordLocked(
 		}
 	}
 	if reported != nil {
-		if v, ok := st.observe(*reported, observedAt.Add(config.MaxAge), config.samples(), config.quorum()); ok {
+		if v, ok := st.observe(*reported, observedAt.Add(config.MaxAge), config); ok {
 			applied = &v
 			reason = ""
 		} else if reason == "" {
 			reason = fmt.Sprintf("capacity report awaiting quorum (%d/%d accepted samples)",
 				len(st.window), config.quorum())
 		}
+	} else if config.Mode == v1beta1.RoutingCapacityModeReported {
+		// A failed poll cannot refresh a report. Samples inside their original age
+		// bound still stand; once they expire the cluster keeps its replica count.
+		st.expire(config, now)
+		if v, ok := st.estimate(config); ok {
+			applied = &v
+		}
+		if reason == "" {
+			reason = "capacity report unavailable"
+		}
 	} else {
 		// A failed poll falls open and releases the ceiling, so the window must
-		// not survive it: retaining readings would keep constraining a home we
+		// not survive it: retaining readings would keep constraining a cluster we
 		// can no longer observe, which is the opposite of failing open.
 		st.window = nil
 		if reason == "" {
@@ -784,9 +789,9 @@ func (c *CapacityPoller) abandon(key capacityKey, generation uint64) {
 	state.nextPollTime = c.Clock.Now()
 }
 
-// sameReport compares two optional counts, treating nil as its own value so a
-// home that stops reporting is a change rather than a no-op.
-func sameReport(a, b *int32) bool {
+// sameReport compares two optional values, treating nil as its own value so a
+// cluster that stops reporting is a change rather than a no-op.
+func sameReport(a, b *float64) bool {
 	switch {
 	case a == nil && b == nil:
 		return true

@@ -7,8 +7,9 @@ import (
 
 	"github.com/go-logr/logr/funcr"
 	"github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 // captureLogs returns a context carrying a V(1)-enabled logger and a getter
@@ -33,7 +34,7 @@ func TestEnsureInferenceReplica_ChangedProjectionLogsPatch(t *testing.T) {
 	ctx, logged, reset := captureLogs(t)
 
 	isvc := baselineISVC("llama", "prod")
-	p := minimalParams(t, isvc, fake.NewClientBuilder().WithScheme(testScheme(t)).Build())
+	p := minimalParams(t, isvc, fakeclient.New(t))
 
 	_, err := EnsureInferenceReplica(ctx, p)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -62,7 +63,7 @@ func TestEnsureInferenceReplica_UnchangedProjectionLogsNothing(t *testing.T) {
 	ctx, logged, reset := captureLogs(t)
 
 	isvc := baselineISVC("llama", "prod")
-	p := minimalParams(t, isvc, fake.NewClientBuilder().WithScheme(testScheme(t)).Build())
+	p := minimalParams(t, isvc, fakeclient.New(t))
 
 	_, err := EnsureInferenceReplica(ctx, p)
 	g.Expect(err).NotTo(gomega.HaveOccurred())

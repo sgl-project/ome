@@ -279,25 +279,33 @@ func TestARefusedRepinIsConsumedWithoutTouchingThePin(t *testing.T) {
 	}
 }
 
-// A repin cannot reach the empty plan: with no spec group left the pass
-// returns before the verb is read, so the annotation stays, the run stays
-// pinned under drift and the Superseded close the verb promises never
-// happens.
-func TestARepinToTheEmptyPlanIsNeverRead(t *testing.T) {
-	isvc, _ := openInlineCanary(t)
-	id := isvc.Status.Rollout.ActiveRun.RunID
+// A repin with no spec group left renders the empty plan and closes the run
+// Superseded in the pass that reads it: the annotation is removed, the plan
+// conditions read NoActiveRun and InSync, and the passes after find nothing
+// open and open nothing, since nothing is declared.
+func TestARepinToTheEmptyPlanClosesTheRun(t *testing.T) {
+	isvc, ir := openInlineCanary(t)
 	isvc.Spec.Rollout = nil
 	annotate(isvc, constants.RolloutRepinAnnotation, "now")
-	for i := 0; i < 3; i++ {
-		out := pass(t, isvc, settledIR(newRev))
-		if out.StateChanged || out.RequeueAfter != shortRequeue {
-			t.Fatalf("pass %d = %+v, want the drift pass with its ten-second requeue", i, out)
+	out, events := passWith(t, isvc, nil, ir)
+	if !out.StateChanged || v1beta1.RolloutRunActive(isvc) {
+		t.Fatalf("outcome = %+v active=%v, want the run closed by the repin", out, v1beta1.RolloutRunActive(isvc))
+	}
+	if last := isvc.Status.Rollout.LastRun; last == nil || last.Outcome != v1beta1.RolloutRunSuperseded {
+		t.Fatalf("lastRun = %+v, want the Superseded close", last)
+	}
+	if !hasEvent(events, "closed by repin to an empty plan") {
+		t.Fatalf("events = %v, want the close named after the repin", events)
+	}
+	if _, ok := isvc.Annotations[constants.RolloutRepinAnnotation]; ok {
+		t.Fatal("the repin annotation was not removed with the close")
+	}
+	requireNoRun(t, isvc, v1beta1.RolloutPlanReasonNoRun)
+	requireDrift(t, isvc, corev1.ConditionFalse, v1beta1.RolloutPlanDriftReasonInSync)
+	for i := 0; i < 2; i++ {
+		if out := pass(t, isvc, ir); !emptyOutcome(out) || v1beta1.RolloutRunActive(isvc) {
+			t.Fatalf("pass %d after the close = %+v active=%v, want nothing: no group is declared", i, out, v1beta1.RolloutRunActive(isvc))
 		}
-		if isvc.Annotations[constants.RolloutRepinAnnotation] != "now" {
-			t.Fatalf("pass %d read the verb; it is never reached with no spec group", i)
-		}
-		requireSameRun(t, isvc, id)
-		requireDrift(t, isvc, corev1.ConditionTrue, v1beta1.RolloutPlanDriftReasonSpecNewerThanRun)
 	}
 }
 

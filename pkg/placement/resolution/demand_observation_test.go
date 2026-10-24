@@ -14,6 +14,7 @@ import (
 	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
 func updateDemandInput[T client.Object](t *testing.T, cl client.Client, object T, change func(T)) {
@@ -113,7 +114,7 @@ func TestResolvedDemandDependencyFences(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newDemandFixture()
-			cl := unitClient(t, f.runtimeFixture, interceptor.Funcs{})
+			cl := unitClient(t, f.runtimeFixture)
 			resolver := Resolver{Client: cl, OperatorNamespace: f.namespace}
 			original, err := resolver.ResolveDemand(t.Context(), f.service, nil, f.root.Name)
 			if err != nil {
@@ -147,7 +148,7 @@ func TestResolveDemandRejectsConcurrentChanges(t *testing.T) {
 		t.Run(target, func(t *testing.T) {
 			f := newDemandFixture()
 			changed := false
-			cl := unitClient(t, f.runtimeFixture, interceptor.Funcs{List: func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+			cl := unitClient(t, f.runtimeFixture, fakeclient.WithInterceptors(interceptor.Funcs{List: func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
 				if err := cl.List(ctx, list, opts...); err != nil {
 					return err
 				}
@@ -160,7 +161,7 @@ func TestResolveDemandRejectsConcurrentChanges(t *testing.T) {
 					}
 				}
 				return nil
-			}})
+			}}))
 			got, err := (Resolver{Client: cl, OperatorNamespace: f.namespace}).ResolveDemand(t.Context(), f.service, nil, f.root.Name)
 			if err == nil {
 				t.Fatal("changed observation was accepted")

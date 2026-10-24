@@ -2,10 +2,12 @@ package canary
 
 import (
 	"context"
+	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	corev1 "k8s.io/api/core/v1"
+	"knative.dev/pkg/apis"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
@@ -19,10 +21,21 @@ func parkedWithoutStable(cs *v1beta1.CanaryStatus) bool {
 	return cs.Failed != nil && cs.Failed.Reason == v1beta1.CanaryFailureStableRevisionMissing
 }
 
-// ignoreRollback consumes a rollback request that has no canary to act on
-// and says so: left in place it would fire on the next canary's first pass.
-func ignoreRollback(in ReconcileInputs, take func(string)) {
-	if !isRollbackRequested(in.ISVC) {
+// cutoverRolling reports a unit at its done sentinel whose cutover has not
+// landed: the pre-canary stable identity is still on record and the unit has
+// not read Stable, so the released floor is still rolling and the stable
+// revision is still one the unit can return to.
+func cutoverRolling(in ReconcileInputs, cs *v1beta1.CanaryStatus, steps int) bool {
+	return int(cs.CurrentStep) >= steps && cs.StableRevisionHash != "" &&
+		in.ISVC.Status.Components[in.Component].RolloutPhase != v1beta1.RolloutPhaseStable
+}
+
+// ignoreRollback consumes a rollback request no unit of the service can act
+// on and says so: left in place it would fire on the next canary's first
+// pass. A request a unit holds, or one another unit's canary can still
+// apply, is that unit's and is left for it.
+func ignoreRollback(in ReconcileInputs, cs *v1beta1.CanaryStatus, take func(string)) {
+	if !rollbackRequestSpendable(in.ISVC, in.Policies, in.Component, cs) {
 		return
 	}
 	emit(in.Recorder, in.ISVC, corev1.EventTypeWarning, EventReasonCanaryRollbackIgnored,
@@ -45,9 +58,11 @@ func ignoreForce(in ReconcileInputs, cs *v1beta1.CanaryStatus, take func(string)
 // refuseRollback hands back a rollback request against a unit parked because
 // its stable revision is not retained, and says so. The request is spent:
 // the rejected hash it recorded keeps a copy still visible after the flush
-// inert, and the park is the only answer it can get.
+// inert, and the park is the only answer it can get. A request another unit
+// holds, or one another unit's canary can still apply, is that unit's and is
+// left for it.
 func refuseRollback(in ReconcileInputs, cs *v1beta1.CanaryStatus, take func(string)) {
-	if !parkedWithoutStable(cs) || !isRollbackRequested(in.ISVC) {
+	if !parkedWithoutStable(cs) || !rollbackRequestSpendable(in.ISVC, in.Policies, in.Component, cs) {
 		return
 	}
 	emit(in.Recorder, in.ISVC, corev1.EventTypeWarning, EventReasonCanaryRollbackIgnored,
@@ -115,17 +130,110 @@ func shouldRearm(in ReconcileInputs, cs *v1beta1.CanaryStatus, targetChanged boo
 	return true
 }
 
+// targetReverted reports a record whose roll no longer exists: no run is
+// open, the targets the record was written for are not the members'
+// targets any more, and every member already has its full capacity Ready
+// on the target it has now with no pod on another revision. A push
+// reverted before any Instance moved reads so on the pass that closes its
+// run; with Instances still trailing, the run layer opens a run toward the
+// restored revision instead and the record is reset under it.
+func targetReverted(in ReconcileInputs, g *v1beta1.RolloutGroup, cs *v1beta1.CanaryStatus) bool {
+	if in.RunActive || cs == nil {
+		return false
+	}
+	if cs.TargetID != "" {
+		observed := observedTargetID(in, g)
+		if observed == "" || observed == cs.TargetID {
+			return false
+		}
+	} else if in.CanaryRevisionHash == "" || in.CanaryRevisionHash == cs.CanaryRevisionHash {
+		return false
+	}
+	return cutoverComplete(in)
+}
+
+// observedTargetID fingerprints the targets the unit's members have now,
+// the way the bind fingerprints a run's targets, so the two compare.
+func observedTargetID(in ReconcileInputs, g *v1beta1.RolloutGroup) string {
+	members := []v1beta1.ComponentType{in.Component}
+	if g != nil {
+		members = g.Components
+	}
+	return rollout.CanaryTargetID(members, func(c v1beta1.ComponentType) string {
+		if c == in.Component {
+			return in.CanaryRevisionHash
+		}
+		if m, ok := in.Secondaries[c]; ok {
+			return m.CanaryRevisionHash
+		}
+		return ""
+	})
+}
+
+// endCanary ends a record whose roll no longer exists: the unit reads
+// Stable with no record, as before its push, and a split a step wrote is
+// moved onto the revision every member runs.
+func endCanary(in ReconcileInputs, cs *v1beta1.CanaryStatus) *Result {
+	emit(in.Recorder, in.ISVC, corev1.EventTypeNormal, EventReasonCanaryTargetReverted,
+		"%s canary toward revision %s ended: the spec returned to revision %s and every Instance already runs it, so nothing is left to roll", in.Component, cs.CanaryRevisionHash, in.CanaryRevisionHash)
+	if unitHoldsSplit(in) {
+		applyCutoverTraffic(in)
+	}
+	rollout.SetCanaryStatusFor(&in.ISVC.Status, in.Component, nil)
+	if !anyUnitRecord(in.ISVC) {
+		in.ISVC.Status.Canary = nil
+	}
+	setPhase(in.ISVC, in.Component, v1beta1.RolloutPhaseStable)
+	return &Result{Active: false}
+}
+
+// unitHoldsSplit reports whether any member of the unit has a traffic split
+// written.
+func unitHoldsSplit(in ReconcileInputs) bool {
+	if len(in.ISVC.Status.Components[in.Component].Traffic) > 0 {
+		return true
+	}
+	for c := range in.Secondaries {
+		if len(in.ISVC.Status.Components[c].Traffic) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// planHoldClause is the tail of the run-lost event while the run layer holds
+// the plan (RolloutPlanReady False): the reason and message the operator
+// must act on, what still applies under the hold and what waits. Empty
+// while the plan composes, since the run layer then takes the record over
+// on its next pass.
+func planHoldClause(isvc *v1beta1.InferenceService) string {
+	cond := isvc.Status.GetCondition(apis.ConditionType(v1beta1.RolloutPlanReadyCondition))
+	if cond == nil || cond.Status != corev1.ConditionFalse {
+		return ""
+	}
+	return fmt.Sprintf("; the run layer cannot take it over because the rollout plan does not compose (%s: %s): fix the plan, or undo the plan edit, and the canary continues; a rollback request (ome.io/rollout-rollback) still applies under this hold, while a promote waits until the plan composes again", cond.Reason, cond.Message)
+}
+
 // applyHolds runs the verbs and holds of the canary grid in the order they
 // take precedence: a live canary's retarget, the rollback hold, a rollback
 // request, the Failed hold, the done sentinel, then arming. It returns the
 // status the step machine runs against (freshly armed when it was nil) and
 // a non-nil Result when the pass ends inside a hold.
-func applyHolds(ctx context.Context, in ReconcileInputs, cs *v1beta1.CanaryStatus, plan *v1beta1.GroupCanary, targetChanged bool, take func(string)) (*v1beta1.CanaryStatus, *Result, error) {
+func applyHolds(ctx context.Context, in ReconcileInputs, g *v1beta1.RolloutGroup, cs *v1beta1.CanaryStatus, plan *v1beta1.GroupCanary, targetChanged bool, take func(string)) (*v1beta1.CanaryStatus, *Result, error) {
 	steps := len(plan.Steps)
+
+	// The request a unit applied is its own through its hold and is released
+	// when it is observed removed; the hold rests on the rejected hash and
+	// stays.
+	if cs != nil && cs.RollbackRequested && !isRollbackRequested(in.ISVC) {
+		cs.RollbackRequested = false
+	}
 
 	// A live canary binds to the IR's authoritative target before any verb
 	// is read. A changed target restarts the staged plan with fresh
-	// per-target state while preserving the original stable identity.
+	// per-target state while preserving the original stable identity. With
+	// no run open and every member already resting on the target it has
+	// now, the record names a roll that no longer exists and ends.
 	if cs != nil && int(cs.CurrentStep) < steps && cs.RolledBackRevisionHash == "" &&
 		rollout.StateOf(cs, in.ISVC.Status.Components[in.Component].RolloutPhase, steps) != rollout.CanaryStateFailed {
 		if cs.StableRevisionHash == "" && in.StableRevisionHash != "" {
@@ -133,6 +241,8 @@ func applyHolds(ctx context.Context, in ReconcileInputs, cs *v1beta1.CanaryStatu
 		}
 		if shouldRearm(in, cs, targetChanged, rearmLive) {
 			resetCanaryStatus(in.ISVC, in.Component, cs, in.TargetID, in.CanaryRevisionHash, in.Now)
+		} else if targetReverted(in, g, cs) {
+			return nil, endCanary(in, cs), nil
 		}
 	}
 
@@ -163,12 +273,18 @@ func applyHolds(ctx context.Context, in ReconcileInputs, cs *v1beta1.CanaryStatu
 				ignoreForce(in, cs, take, why)
 				return cs, reconcileRollback(in, cs), nil
 			}
-		} else if isRollbackRequested(in.ISVC) && int(cs.CurrentStep) < steps {
+		} else if rollbackRequestPending(in.ISVC) && (int(cs.CurrentStep) < steps || cutoverRolling(in, cs, steps)) {
 			// A rollback is the operator's decision about the canary, parked
 			// or not: it ends a Failed park and drains the rejected revision,
-			// toward an empty stable revision too, which is said out loud.
+			// toward an empty stable revision too, which is said out loud. It
+			// is taken until the cutover lands: a unit at its sentinel whose
+			// last stable instance is still rolling can still return, and the
+			// record keeps the sentinel beside the rejection.
+			// The request is this unit's from here: it stays on the object
+			// through the hold, and no other unit acts on it.
 			warnEmptyRollbackTargets(in, cs)
 			cs.RolledBackRevisionHash = cs.CanaryRevisionHash
+			cs.RollbackRequested = true
 			cs.Failed = nil
 			recordRollback(in.ISVC, in.Component, "manual")
 			return cs, reconcileRollback(in, cs), nil
@@ -182,6 +298,10 @@ func applyHolds(ctx context.Context, in ReconcileInputs, cs *v1beta1.CanaryStatu
 	if cs != nil && rollout.StateOf(cs, in.ISVC.Status.Components[in.Component].RolloutPhase, steps) == rollout.CanaryStateFailed {
 		if shouldRearm(in, cs, targetChanged, rearmFailed) {
 			resetCanaryStatus(in.ISVC, in.Component, cs, in.TargetID, in.CanaryRevisionHash, in.Now)
+		} else if targetReverted(in, g, cs) {
+			// The stop holds the roll where it stands; a roll that no longer
+			// exists leaves nothing to hold.
+			return nil, endCanary(in, cs), nil
 		} else {
 			// The marker is the record; the phase is re-projected from it
 			// every pass, so a status write that dropped the phase cannot
@@ -199,7 +319,9 @@ func applyHolds(ctx context.Context, in ReconcileInputs, cs *v1beta1.CanaryStatu
 	// old revision after completion. The sentinel is the release of the held
 	// floor, so the unit finishes the cutover from here: it stays Promoting
 	// while the last stable instance rolls and reads Stable once every
-	// member serves on its target alone.
+	// member serves on its target alone. A rollback request reaches this
+	// branch only once the cutover has landed, with no stable revision left
+	// to return to.
 	if cs != nil && int(cs.CurrentStep) >= steps {
 		if shouldRearm(in, cs, targetChanged, rearmDone) {
 			resetCanaryStatus(in.ISVC, in.Component, cs, in.TargetID, in.CanaryRevisionHash, in.Now)
@@ -208,7 +330,7 @@ func applyHolds(ctx context.Context, in ReconcileInputs, cs *v1beta1.CanaryStatu
 			// waiting on observed annotation absence; converge it here since
 			// a done canary evaluates no gates.
 			syncPromotedThrough(in, cs, take)
-			ignoreRollback(in, take)
+			ignoreRollback(in, cs, take)
 			return cs, finishCutover(in, cs), nil
 		}
 	}
@@ -216,10 +338,12 @@ func applyHolds(ctx context.Context, in ReconcileInputs, cs *v1beta1.CanaryStatu
 	// A live canary with no pinned run holds in place: opening, adopting or
 	// parking the run is the run layer's job, and stepping an unpinned plan
 	// is the same hazard arming one would be. The update gates already hold
-	// the forward roll fail-closed underneath.
+	// the forward roll fail-closed underneath. When the run layer holds the
+	// plan, the event says why, so the operator knows the hold ends with the
+	// plan and not with a promote.
 	if cs != nil && !in.RunActive {
 		emit(in.Recorder, in.ISVC, corev1.EventTypeWarning, EventReasonCanaryRunLost,
-			"%s canary has no pinned rollout run; holding at step %d until the run layer reopens or adopts it", in.Component, cs.CurrentStep)
+			"%s canary has no pinned rollout run; holding at step %d until the run layer reopens or adopts it%s", in.Component, cs.CurrentStep, planHoldClause(in.ISVC))
 		partition := stepPartition(plan.Steps[cs.CurrentStep], in.DesiredReplicas)
 		return cs, (&Result{Active: true, Partition: partition}).wake(in.Requeue), nil
 	}
@@ -230,7 +354,7 @@ func applyHolds(ctx context.Context, in ReconcileInputs, cs *v1beta1.CanaryStatu
 	// it would walk a full ladder, spend its analysis budget on a no-op, and
 	// could reach a rollback for a rollout that never happened.
 	if cs == nil {
-		ignoreRollback(in, take)
+		ignoreRollback(in, nil, take)
 		if in.CanaryRevisionHash == "" || in.StableRevisionHash == "" ||
 			(in.TargetID == "" && readyCanaryCapacity(in) >= in.DesiredReplicas) ||
 			!unitRetargeted(in) {

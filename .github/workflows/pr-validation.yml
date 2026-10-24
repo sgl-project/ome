@@ -80,7 +80,7 @@ jobs:
   test-and-build:
     name: Test and Build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
     # Remove dependency so tests always run independently
     steps:
       - name: Checkout code

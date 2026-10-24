@@ -13,7 +13,7 @@ import (
 // OME renders topologySpread as a standard DoNotSchedule constraint on each
 // gang's anchor (leader) pod — the scheduler carries NO spread logic of its
 // own. These tests prove the plugin's existing machinery absorbs that
-// constraint: gangpack best-fit-pins a packed domain, PodTopologySpread's
+// constraint: gangpack best-fits the gang into a packed domain, PodTopologySpread's
 // Filter (kept enabled for hard constraints) vetoes it, PostFilter remembers
 // the failed domain, and the retry re-plans into a compatible one.
 
@@ -55,7 +55,7 @@ func spreadLeaderPod(name, ns, pgName, spreadKey string, when v1.UnsatisfiableCo
 }
 
 // spreadWorkerPod mirrors the worker's spread-relevant surface: no
-// constraint of its own. Under this scheduler the gang PIN is what
+// constraint of its own. Under this scheduler the gang's domain assignment is what
 // co-locates workers with their leader (the rendered worker→leader
 // affinity is defense-in-depth for non-gang schedulers and is exercised
 // by the controller-side suites); the TSC-gated leader decides the fault
@@ -136,30 +136,24 @@ func TestTSCSpreadsGangsAcrossCubes(t *testing.T) {
 	}
 }
 
-// TestTSCBalancesThenBlocksThenFrees pins the maxSkew semantics end to end
-// on the same-key (rack) shape: three gangs on two racks balance 2/1; a
-// fourth that would over-skew the only rack with capacity holds Pending; and
-// draining a gang from the under-loaded rack lets it place there — the
-// requeue path is PodTopologySpread's own pod-delete hint.
-func TestTSCBalancesThenBlocksThenFrees(t *testing.T) {
-	tc := startScheduler(t, globalKubeConfig, gangPackOptions(t)...)
-	defer tc.teardown(t)
-
-	const ns = "tsc-balance"
-	createNamespace(t, tc, ns)
-	// Rack a fits three 2-node gangs; rack b fits one.
+// balanceThreeGangs lays out two racks under nodePrefix, rack a with room for
+// three 2-node gangs and rack b with room for one, and places three gangs so
+// the racks balance 2/1 with rack b full. It returns the racks of the first
+// two gangs.
+func balanceThreeGangs(t *testing.T, tc *testContext, ns, nodePrefix string) (r0, r1 string) {
+	t.Helper()
 	for _, n := range []struct{ name, rack string }{
-		{"tb-a1", "a"}, {"tb-a2", "a"}, {"tb-a3", "a"},
-		{"tb-a4", "a"}, {"tb-a5", "a"}, {"tb-a6", "a"},
-		{"tb-b1", "b"}, {"tb-b2", "b"},
+		{"a1", "a"}, {"a2", "a"}, {"a3", "a"},
+		{"a4", "a"}, {"a5", "a"}, {"a6", "a"},
+		{"b1", "b"}, {"b2", "b"},
 	} {
-		if _, err := tc.ClientSet.CoreV1().Nodes().Create(tc.Ctx, makeGPUNode(n.name, n.rack, 1), metav1.CreateOptions{}); err != nil {
-			t.Fatalf("create node %s: %v", n.name, err)
+		if _, err := tc.ClientSet.CoreV1().Nodes().Create(tc.Ctx, makeGPUNode(nodePrefix+n.name, n.rack, 1), metav1.CreateOptions{}); err != nil {
+			t.Fatalf("create node %s: %v", nodePrefix+n.name, err)
 		}
 	}
 
-	r0 := placeTSCGang(t, tc, ns, "b0", domainLabelKey, domainLabelKey)
-	r1 := placeTSCGang(t, tc, ns, "b1", domainLabelKey, domainLabelKey)
+	r0 = placeTSCGang(t, tc, ns, "b0", domainLabelKey, domainLabelKey)
+	r1 = placeTSCGang(t, tc, ns, "b1", domainLabelKey, domainLabelKey)
 	if r0 == r1 {
 		t.Fatalf("first two gangs share rack %q, want balanced 1/1", r0)
 	}
@@ -169,9 +163,14 @@ func TestTSCBalancesThenBlocksThenFrees(t *testing.T) {
 	if r2 := placeTSCGang(t, tc, ns, "b2", domainLabelKey, domainLabelKey); r2 != "a" {
 		t.Fatalf("third gang in %q, want a (only rack with capacity, skew stays 1)", r2)
 	}
+	return r0, r1
+}
 
-	// Fourth gang: counts a=2, b=1. The minimum is b, but b is full; a would
-	// make skew 2 — the leader must hold Pending.
+// createHeldGang creates the fourth gang (b3) after balanceThreeGangs. It must
+// hold Pending: counts are a=2, b=1, the minimum is b, but b is full, and a
+// would make the leader's skew 2.
+func createHeldGang(t *testing.T, tc *testContext, ns string) {
+	t.Helper()
 	makePlainPG(t, tc, ns, "b3")
 	if _, err := tc.ClientSet.CoreV1().Pods(ns).Create(tc.Ctx,
 		spreadLeaderPod("b3-0", ns, "b3", domainLabelKey, v1.DoNotSchedule), metav1.CreateOptions{}); err != nil {
@@ -181,16 +180,36 @@ func TestTSCBalancesThenBlocksThenFrees(t *testing.T) {
 		spreadWorkerPod("b3-1", ns, "b3"), metav1.CreateOptions{}); err != nil {
 		t.Fatalf("create worker: %v", err)
 	}
+}
+
+// TestTSCBalancesThenBlocksThenFrees locks the maxSkew semantics end to end
+// on the same-key (rack) shape: three gangs on two racks balance 2/1; a
+// fourth that would over-skew the only rack with capacity holds Pending; and
+// once a gang is drained from the under-loaded rack, the held gang's recreated
+// pods place there.
+func TestTSCBalancesThenBlocksThenFrees(t *testing.T) {
+	tc := startScheduler(t, globalKubeConfig, gangPackOptions(t)...)
+	defer tc.teardown(t)
+
+	const ns = "tsc-balance"
+	createNamespace(t, tc, ns)
+	r0, r1 := balanceThreeGangs(t, tc, ns, "tb-")
+	createHeldGang(t, tc, ns)
 	ensureNotBound(t, tc, ns, "b3-0", 3*time.Second)
 
-	// Drain the rack-b gang: counts drop to a=2, b=0 — b still has no room
-	// for skew until it does, but now the two free b nodes CAN take the gang
-	// at skew ≤ 1. The scheduler carries no spread logic, so the retry that
-	// finds b is driven by cluster events: here, as in production, the pod
-	// churn OME's controller generates (attempt pods are recreated on its
-	// escalation cadence) — modeled by recreating the held gang's pods. The
-	// scheduler's periodic unschedulable flush remains the generic backstop.
+	// Drop the held gang, gated worker first: its own delete ends its attempt,
+	// while losing the leader first would reject the gated worker into a retry
+	// that fails while that rejection is still unwinding.
 	zero := int64(0)
+	for _, name := range []string{"b3-1", "b3-0"} {
+		if err := tc.ClientSet.CoreV1().Pods(ns).Delete(tc.Ctx, name, metav1.DeleteOptions{GracePeriodSeconds: &zero}); err != nil {
+			t.Fatalf("delete pod %s: %v", name, err)
+		}
+	}
+
+	// Drain the rack-b gang: counts drop to a=2, b=0, and the two freed b nodes
+	// take a gang at skew 1. Recreating the held gang's pods models the churn
+	// OME's controller generates for a held gang; the new attempt lands in b.
 	var bGang string
 	for _, g := range []string{"b0", "b1"} {
 		if map[string]bool{"b0": r0 == "b", "b1": r1 == "b"}[g] {
@@ -199,11 +218,6 @@ func TestTSCBalancesThenBlocksThenFrees(t *testing.T) {
 	}
 	for i := 0; i < 2; i++ {
 		name := bGang + "-" + string(rune('0'+i))
-		if err := tc.ClientSet.CoreV1().Pods(ns).Delete(tc.Ctx, name, metav1.DeleteOptions{GracePeriodSeconds: &zero}); err != nil {
-			t.Fatalf("delete pod %s: %v", name, err)
-		}
-	}
-	for _, name := range []string{"b3-0", "b3-1"} {
 		if err := tc.ClientSet.CoreV1().Pods(ns).Delete(tc.Ctx, name, metav1.DeleteOptions{GracePeriodSeconds: &zero}); err != nil {
 			t.Fatalf("delete pod %s: %v", name, err)
 		}

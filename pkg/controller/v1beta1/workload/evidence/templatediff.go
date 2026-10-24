@@ -6,13 +6,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"sigs.k8s.io/ome/pkg/constants"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 )
-
-// inPlaceImageTransitionAnnotation is the marker the in-place roll writes
-// on a pod to name the images it is converging toward. It is the roll's
-// own bookkeeping, never part of the revision's PodMeta, so the
-// annotation diff must neither add nor delete it.
-var inPlaceImageTransitionAnnotation = constants.InferenceServiceInPlaceImageTransitionAnnotationKey
 
 // CanonicalImage normalizes Docker Hub references for the runtime-vs-spec
 // equality compare. Container runtimes may qualify a short reference with
@@ -143,13 +138,32 @@ func PodImagesMatch(pod *corev1.Pod, target *corev1.PodSpec) bool {
 // edit. The previous-CR diff lets OMENative remove ONLY keys it once
 // authored that the user has since deleted from spec.
 func AnnotationsDiff(podAnnotations, previousTargetAnnotations, newTargetAnnotations map[string]string) map[string]any {
+	return metadataDiff(podAnnotations, previousTargetAnnotations, newTargetAnnotations, func(key string) bool {
+		// The in-place roll's image-transition record is the roll's own
+		// bookkeeping, never part of a revision's PodMeta, so the diff
+		// neither adds nor deletes it.
+		return key == constants.InferenceServiceInPlaceImageTransitionAnnotationKey
+	})
+}
+
+// LabelsDiff is AnnotationsDiff for metadata.labels: the target's labels are
+// written, the previous revision's dropped ones removed, foreign ones kept.
+// Labels the workload stamps (query.WorkloadOwnedLabel) are never touched.
+func LabelsDiff(podLabels, previousTargetLabels, newTargetLabels map[string]string) map[string]any {
+	return metadataDiff(podLabels, previousTargetLabels, newTargetLabels, query.WorkloadOwnedLabel)
+}
+
+// metadataDiff is the add/update/delete/leave-alone rule shared by the
+// label and annotation diffs; reserved names the keys neither diff may
+// write or remove.
+func metadataDiff(pod, previousTarget, newTarget map[string]string, reserved func(string) bool) map[string]any {
 	out := map[string]any{}
 	// Add/update: every key in the new target whose pod value differs.
-	for k, want := range newTargetAnnotations {
-		if k == inPlaceImageTransitionAnnotation {
+	for k, want := range newTarget {
+		if reserved(k) {
 			continue
 		}
-		if got, ok := podAnnotations[k]; !ok || got != want {
+		if got, ok := pod[k]; !ok || got != want {
 			out[k] = want
 		}
 	}
@@ -158,14 +172,14 @@ func AnnotationsDiff(podAnnotations, previousTargetAnnotations, newTargetAnnotat
 	// on the pod (no need to issue a delete for a no-op) and skip keys
 	// still present in the new target (they were handled by the
 	// add/update loop above).
-	for k := range previousTargetAnnotations {
-		if k == inPlaceImageTransitionAnnotation {
+	for k := range previousTarget {
+		if reserved(k) {
 			continue
 		}
-		if _, stillTarget := newTargetAnnotations[k]; stillTarget {
+		if _, stillTarget := newTarget[k]; stillTarget {
 			continue
 		}
-		if _, onPod := podAnnotations[k]; !onPod {
+		if _, onPod := pod[k]; !onPod {
 			continue
 		}
 		out[k] = nil

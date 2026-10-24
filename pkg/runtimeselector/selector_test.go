@@ -6,18 +6,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
-
-func createFakeClient() client.Client {
-	scheme := runtime.NewScheme()
-	_ = v1beta1.AddToScheme(scheme)
-	return fake.NewClientBuilder().WithScheme(scheme).Build()
-}
 
 func ptr[T any](v T) *T {
 	return &v
@@ -47,7 +39,7 @@ func fwVersion(version string, op *v1beta1.RuntimeSelectorOperator) *v1beta1.Mod
 }
 
 func TestNewSelector(t *testing.T) {
-	fakeClient := fake.NewClientBuilder().Build()
+	fakeClient := fakeclient.New(t)
 	selector := New(fakeClient)
 
 	assert.NotNil(t, selector)
@@ -56,7 +48,7 @@ func TestNewSelector(t *testing.T) {
 }
 
 func TestValidateModel(t *testing.T) {
-	fakeClient := fake.NewClientBuilder().Build()
+	fakeClient := fakeclient.New(t)
 	selector := New(fakeClient).(*defaultSelector)
 
 	tests := []struct {
@@ -224,7 +216,7 @@ func TestErrorTypes(t *testing.T) {
 }
 
 func TestGetSupportingRuntimes(t *testing.T) {
-	fakeClient := createFakeClient()
+	fakeClient := fakeclient.New(t)
 
 	baseModels := []struct {
 		name  string
@@ -835,7 +827,7 @@ func TestScore(t *testing.T) {
 
 func TestGetCompatibleRuntimes_ExcludeNoAutoSelect(t *testing.T) {
 	// Create client and selector
-	fakeClient := createFakeClient()
+	fakeClient := fakeclient.New(t)
 	selector := New(fakeClient)
 
 	rtNoAuto := &v1beta1.ServingRuntime{
@@ -869,7 +861,7 @@ func TestGetCompatibleRuntimes_ExcludeNoAutoSelect(t *testing.T) {
 }
 
 func TestSelectRuntime_NoRuntimeFoundError_Details(t *testing.T) {
-	fakeClient := createFakeClient()
+	fakeClient := fakeclient.New(t)
 	selector := New(fakeClient)
 
 	rtWrongFormat := &v1beta1.ServingRuntime{
@@ -910,7 +902,7 @@ func TestSelectRuntime_NoRuntimeFoundError_Details(t *testing.T) {
 }
 
 func TestValidateRuntime_DisabledAndNoAutoSelect(t *testing.T) {
-	fakeClient := createFakeClient()
+	fakeClient := fakeclient.New(t)
 	selector := New(fakeClient)
 
 	disabled := &v1beta1.ServingRuntime{
@@ -944,7 +936,7 @@ func TestValidateRuntime_DisabledAndNoAutoSelect(t *testing.T) {
 }
 
 func TestGetSupportedModelFormat_CustomRuntime(t *testing.T) {
-	fakeClient := createFakeClient()
+	fakeClient := fakeclient.New(t)
 	selector := New(fakeClient).(*defaultSelector)
 	ctx := context.Background()
 
@@ -1068,7 +1060,7 @@ func TestGetSupportedModelFormat_CustomRuntime(t *testing.T) {
 
 func TestSupportedRuntimeWithAC(t *testing.T) {
 	// Create a fake fakeClient with our custom types registered
-	fakeClient := createFakeClient()
+	fakeClient := fakeclient.New(t)
 	ac1 := "nvidia-tesla-t4"
 	ac2 := "H100"
 	// Create test base models with different formats and sizes
@@ -1465,7 +1457,7 @@ func TestSupportedRuntimeWithAC(t *testing.T) {
 // points must reject a nil model with a typed error instead of
 // dereferencing it.
 func TestSelectRuntime_NilModelReturnsError(t *testing.T) {
-	selector := New(fake.NewClientBuilder().Build())
+	selector := New(fakeclient.New(t))
 	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "lean", Namespace: "default"}}
 
 	_, err := selector.SelectRuntime(context.Background(), nil, isvc)
@@ -1474,7 +1466,7 @@ func TestSelectRuntime_NilModelReturnsError(t *testing.T) {
 }
 
 func TestValidateRuntime_NilModelReturnsError(t *testing.T) {
-	selector := New(fake.NewClientBuilder().Build())
+	selector := New(fakeclient.New(t))
 	isvc := &v1beta1.InferenceService{ObjectMeta: metav1.ObjectMeta{Name: "lean", Namespace: "default"}}
 
 	err := selector.ValidateRuntime(context.Background(), "some-runtime", nil, isvc)

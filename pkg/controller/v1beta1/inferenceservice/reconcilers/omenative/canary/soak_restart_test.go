@@ -211,6 +211,7 @@ func armLadderCanaryWire(t *testing.T, steps []v1beta1.RolloutGroupStep, t0 time
 	rec := record.NewFakeRecorder(16)
 	w := &timedCanaryWire{ctx: ctx, client: c, rec: rec, isvc: isvc, ns: ns,
 		deps: DispatchDeps{Client: c, Reader: c, Recorder: rec, ISVC: isvc, ComponentRunnerPorts: canaryRunnerPorts(), Group: rollout.CanaryGroup(isvc, rollout.Policies{}), Now: t0}}
+	syncInstanceRows(t, c, isvc, v1beta1.EngineComponent)
 	if _, err := Dispatch(ctx, w.deps); err != nil {
 		t.Fatalf("Dispatch arming the canary: %v", err)
 	}
@@ -241,6 +242,7 @@ func (w *timedCanaryWire) setRunner(t *testing.T, name string, status corev1.Con
 func (w *timedCanaryWire) dispatchAt(t *testing.T, now time.Time) {
 	t.Helper()
 	w.deps.Now = now
+	syncInstanceRows(t, w.client, w.isvc, v1beta1.EngineComponent)
 	if _, err := Dispatch(w.ctx, w.deps); err != nil {
 		t.Fatalf("Dispatch at %v: %v", now, err)
 	}
@@ -535,6 +537,7 @@ func (w *timedCanaryWire) rebuildInstance(t *testing.T, name string, index int32
 	}
 	w.mutateRow(t, index, func(row *v1beta1.OMENativeInstanceStatus) {
 		row.Phase = v1beta1.OMENativeInstanceRestarting
+		row.Operation = repairOperation(index)
 		row.Incarnation = 2
 		exit := int32(1)
 		row.LastFailure = &v1beta1.InstanceTermination{PodName: name, ContainerName: constants.MainContainerName,
@@ -691,6 +694,7 @@ func TestDispatch_DyingPodAndRebuildStampInOnePassIsOneDeath(t *testing.T) {
 	w.setRunner(t, "target-3", runnerDied(died), false)
 	w.mutateRow(t, 3, func(row *v1beta1.OMENativeInstanceStatus) {
 		row.Phase = v1beta1.OMENativeInstanceRestarting
+		row.Operation = repairOperation(3)
 		row.Incarnation = 2
 		exit := int32(1)
 		row.LastFailure = &v1beta1.InstanceTermination{PodName: "target-3", ContainerName: constants.MainContainerName,

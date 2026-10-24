@@ -11,16 +11,16 @@ import (
 )
 
 // One series per capacity-enabled TrafficMap keeps cardinality proportional to
-// live routing objects. Per-home details remain in
+// live routing objects. Per-cluster details remain in
 // spec.entries[].capacity.fallbackReason, where they do not create metric label
 // values from transport or decoder errors.
-var capacityFallbackHomes = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+var capacityFallbackClusters = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Name: "ome_trafficmap_capacity_fallback_homes",
-	Help: "Number of homes currently using control-plane allocation because configured endpoint capacity did not produce a usable ceiling.",
+	Help: "Number of homes lacking a current endpoint capacity observation.",
 }, []string{"namespace", "trafficmap"})
 
 func init() {
-	ctrlmetrics.Registry.MustRegister(capacityFallbackHomes)
+	ctrlmetrics.Registry.MustRegister(capacityFallbackClusters)
 }
 
 func capacityFallbackCount(spec v1beta1.TrafficMapSpec) int {
@@ -60,7 +60,7 @@ func capacityFallbackCondition(
 		condition.Status = metav1.ConditionTrue
 		condition.Reason = v1beta1.TrafficMapReasonEndpointCapacityFallback
 		condition.Message = fmt.Sprintf(
-			"%d of %d home(s) are using control-plane capacity; inspect spec.entries[].capacity.fallbackReason",
+			"%d of %d home(s) lack a current capacity observation; inspect spec.capacityMode and spec.entries[].capacity.fallbackReason",
 			fallbacks, len(spec.Entries),
 		)
 	}
@@ -75,12 +75,12 @@ func recordCapacityFallbackMetric(namespace, trafficMap string, enabled bool, sp
 		deleteCapacityFallbackMetric(namespace, trafficMap)
 		return
 	}
-	capacityFallbackHomes.WithLabelValues(namespace, trafficMap).Set(float64(capacityFallbackCount(spec)))
+	capacityFallbackClusters.WithLabelValues(namespace, trafficMap).Set(float64(capacityFallbackCount(spec)))
 }
 
 func deleteCapacityFallbackMetric(namespace, trafficMap string) {
 	if trafficMap == "" {
 		return
 	}
-	capacityFallbackHomes.DeleteLabelValues(namespace, trafficMap)
+	capacityFallbackClusters.DeleteLabelValues(namespace, trafficMap)
 }

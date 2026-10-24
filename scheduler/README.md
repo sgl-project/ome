@@ -21,7 +21,7 @@ scheduler/
 ├── go.mod                        # own module; k8s 1.35 staging replace block
 ├── cmd/ome-scheduler/main.go     # entry point: kube-scheduler + our plugin
 ├── pkg/topology/                 # pure best-fit domain accounting (no k8s deps)
-├── pkg/placement/                # per-gang domain pins
+├── pkg/placement/                # per-gang domain assignments
 ├── pkg/plugins/gangpack/         # OMEGangPack placement plugin
 └── test/integration/             # envtest + real in-process scheduler
 ```
@@ -43,7 +43,7 @@ build Go discards the executable. Use the explicit `-o` form (or `go install
 
 `test/integration/` runs the plugin inside a **real in-process kube-scheduler**
 against an [envtest](https://book.kubebuilder.io/reference/envtest) API server —
-the authoritative proof that the choose → pin → enforce → gate → bind loop
+the authoritative proof that the choose → assign → enforce → gate → bind loop
 actually schedules a gang, covering the informer/`New`/snapshot glue the unit
 tests fake. The scheduler-plugins `PodGroup` CRD is sourced from the go.mod
 module at test time (not vendored — go.mod is the source of truth, matching OME's
@@ -57,9 +57,9 @@ go test ./test/integration/... -v
 ## Status
 
 The placement loop is live end to end: `PreFilter` best-fits and
-pins the gang's domain, `Filter` enforces it, `Permit` gates the gang until all
+assigns the gang's domain, `Filter` enforces it, `Permit` gates the gang until all
 members are present, and `Unreserve` unwinds a half-formed gang. `Reserve` claims
-the gang's whole-node capacity in its pinned domain so two gangs can't race into
+the gang's whole-node capacity in its assigned domain so two gangs can't race into
 one and over-commit it. Gang membership + size come from the standard
 scheduler-plugins `PodGroup`; the domain label is declared per-workload via a
 configured PodGroup annotation key; and node free-ness is inferred from the gang
@@ -73,10 +73,15 @@ no cluster event represents (a member set reaching `minMember`, a member
 reaching the gate, a forming gang's domain reservation draining or unwinding)
 are turned into explicit activations. `NodeResourcesFit` supplies
 node-level `MostAllocated` packing. Placement
-decisions, gate outcomes, unwinds, and the count of pinned groups are exported as
+decisions, gate outcomes, unwinds, and the count of assigned groups are exported as
 `ome_scheduler_*` metrics on the
-scheduler's `/metrics` endpoint. Still ahead: replica spreading across domains
-for fault isolation, and topology-aware preemption.
+scheduler's `/metrics` endpoint. Replica spreading for fault isolation
+needs no scheduler support: OME renders it as a standard leader-pod
+`topologySpreadConstraint`, whose hard (`DoNotSchedule`) form the retained
+PodTopologySpread Filter enforces — a best-fit assignment the constraint vetoes is
+released by PostFilter, remembered, and re-planned into a compatible domain
+(covered by `test/integration/spread_tsc_test.go`). Still ahead:
+topology-aware preemption.
 
 ## Version policy
 

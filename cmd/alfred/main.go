@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/ome/pkg/alfred/policy"
 	"sigs.k8s.io/ome/pkg/alfred/policy/defrag"
 	"sigs.k8s.io/ome/pkg/alfred/policy/nodehealth"
+	"sigs.k8s.io/ome/pkg/alfred/scheduling"
 	"sigs.k8s.io/ome/pkg/alfred/scheduling/process"
 	"sigs.k8s.io/ome/pkg/alfred/snapshot"
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
@@ -81,6 +82,7 @@ type Options struct {
 	migrationServiceAccount string
 	migrationAckTimeout     time.Duration
 	migrationFailureBackoff time.Duration
+	maintenanceCordon       bool
 	zapOpts                 zap.Options
 }
 
@@ -112,10 +114,11 @@ func GetOptions() Options {
 		"Namespace holding Alfred's ConfigMaps and leader-election Lease.")
 	flag.StringVar(&opts.configMapName, "config-name", opts.configMapName, "Name of the Alfred configuration ConfigMap.")
 	flag.StringVar(&opts.configMapKey, "config-key", opts.configMapKey, "Key inside the ConfigMap holding config.yaml.")
-	flag.StringVar(&opts.simulationWorkers, "simulation-workers", "", "Absolute path to the trusted startup worker registry JSON; empty disables prediction.")
+	flag.StringVar(&opts.simulationWorkers, "simulation-workers", "", "Absolute path to the trusted startup worker registry JSON; empty disables prediction and dispatch of moves that need a simulation.")
 	flag.DurationVar(&opts.simulationTimeout, "simulation-timeout", opts.simulationTimeout, "Whole-process timeout per scheduler prediction (positive, at most 1m).")
 	flag.StringVar(&opts.migrationAPIVersion, "migration-api-version", "", "Operator-confirmed migration API compatibility (v1); empty disables migration dispatch.")
 	flag.StringVar(&opts.migrationServiceAccount, "migration-service-account", "", "Alfred service account name enforced by the migration admission guard; required with migration-api-version.")
+	flag.BoolVar(&opts.maintenanceCordon, "enable-maintenance-cordon", false, "Let execute mode cordon nodes that a maintenance rule with cordon: true puts under maintenance. Requires node patch permission; Alfred never uncordons.")
 	flag.DurationVar(&opts.migrationAckTimeout, "migration-ack-timeout", opts.migrationAckTimeout, "Timeout before marking an unacknowledged request stalled (positive, at most 1h).")
 	flag.DurationVar(&opts.migrationFailureBackoff, "migration-failure-backoff", opts.migrationFailureBackoff, "Backoff after migration failure (positive, at most 1h).")
 	opts.zapOpts.BindFlags(flag.CommandLine)
@@ -240,6 +243,15 @@ func main() {
 		Log:       ctrl.Log.WithName("alfred-decision"),
 		EarlyTick: earlyTicker.C,
 	}
+	if opts.maintenanceCordon {
+		decisionLoop.Cordoner = &engine.MaintenanceCordoner{
+			Client:   mgr.GetClient(),
+			Reader:   mgr.GetAPIReader(),
+			Recorder: mgr.GetEventRecorderFor("alfred"),
+			Metrics:  alfredMetrics,
+			Log:      ctrl.Log.WithName("alfred-cordon"),
+		}
+	}
 	if err := configureMigration(opts, mgr.GetAPIReader(), mgr.GetClient(), observationLoop, decisionLoop); err != nil {
 		setupLog.Error(err, "unable to configure migration dispatch")
 		os.Exit(1)
@@ -297,9 +309,6 @@ func validateOptions(opts Options) error {
 	if !opts.enableLeaderElection {
 		return fmt.Errorf("migration dispatch requires leader election")
 	}
-	if opts.simulationWorkers == "" {
-		return fmt.Errorf("migration dispatch requires simulation-workers")
-	}
 	return nil
 }
 
@@ -310,17 +319,30 @@ func configureMigration(opts Options, reader client.Reader, cl client.Client, ob
 	if opts.migrationAPIVersion == "" {
 		return nil
 	}
-	if decisions.Predictions == nil || decisions.Predictions.Simulator == nil {
-		return fmt.Errorf("migration dispatch requires a successfully loaded simulation worker")
+	// Without simulation-workers, only moves that need no simulation (onto a
+	// new TPU slice) dispatch; the dispatcher withholds the others. Configured
+	// workers must have loaded.
+	var simulator scheduling.Simulator
+	if opts.simulationWorkers != "" {
+		if decisions.Predictions == nil || decisions.Predictions.Simulator == nil {
+			return fmt.Errorf("migration dispatch requires the configured simulation worker to load")
+		}
+		simulator = decisions.Predictions.Simulator
 	}
 	admissionGuard := &guard.Guard{Reader: reader, Namespace: opts.namespace, ServiceAccount: opts.migrationServiceAccount}
-	decisions.Dispatcher = &engine.Dispatcher{
-		Reader: reader, Client: cl, Simulator: decisions.Predictions.Simulator,
+	dispatcher := &engine.Dispatcher{
+		// cl reads through the manager's cache, so a move onto a new TPU slice
+		// replays the policy without listing every Pod from the API server.
+		Reader: reader, CacheReader: cl, Client: cl, Simulator: simulator,
 		Guard: admissionGuard.Check, Namespace: opts.namespace,
 		Options: engine.DispatchOptions{APIVersion: opts.migrationAPIVersion,
 			AcknowledgementTimeout: opts.migrationAckTimeout, FailureBackoff: opts.migrationFailureBackoff},
 		Policies: decisions.Policies, Store: decisions.Store,
 	}
+	if decisions.Cordoner != nil {
+		dispatcher.MaintenanceFence = decisions.Cordoner.Fenced
+	}
+	decisions.Dispatcher = dispatcher
 	observations.OMENativeExecutor = func(context.Context) snapshot.OMENativeExecutorState {
 		return snapshot.OMENativeExecutorState{Available: true, WireVersion: "v1", Reason: "OperatorConfigured"}
 	}
@@ -361,15 +383,26 @@ func podIdentity() string {
 // they enter the informer cache. Caching every pod in a large cluster is
 // Alfred's dominant memory cost; this keeps only scheduling-relevant state:
 // labels, node name, node selector, container resources, phase, conditions,
-// start/deletion timestamps.
+// start/deletion timestamps. A pod that requests TPUs also keeps the
+// slice-provisioning annotation and the required node affinity, which TPU
+// slice moves read.
 func podCacheTransform(obj interface{}) (interface{}, error) {
 	pod, ok := obj.(*corev1.Pod)
 	if !ok {
 		return obj, nil
 	}
 	controllerOwner := metav1.GetControllerOf(pod)
+	tpu := snapshot.PodTPURequest(pod) > 0
+	sliceProvisioning, hasSliceProvisioning := pod.Annotations[constants.TPUSliceProvisioningAnnotationKey]
+	var requiredNodeAffinity *corev1.NodeSelector
+	if a := pod.Spec.Affinity; tpu && a != nil && a.NodeAffinity != nil {
+		requiredNodeAffinity = a.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+	}
 	pod.ManagedFields = nil
 	pod.Annotations = nil
+	if tpu && hasSliceProvisioning {
+		pod.Annotations = map[string]string{constants.TPUSliceProvisioningAnnotationKey: sliceProvisioning}
+	}
 	if controllerOwner == nil {
 		pod.OwnerReferences = nil
 	} else {
@@ -399,6 +432,11 @@ func podCacheTransform(obj interface{}) (interface{}, error) {
 	pod.Spec.Volumes = nil
 	pod.Spec.ImagePullSecrets = nil
 	pod.Spec.Affinity = nil
+	if requiredNodeAffinity != nil {
+		pod.Spec.Affinity = &corev1.Affinity{NodeAffinity: &corev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: requiredNodeAffinity,
+		}}
+	}
 	pod.Spec.Tolerations = nil
 
 	pod.Status.ContainerStatuses = nil

@@ -1,6 +1,7 @@
 package status_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/status"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/types"
 )
@@ -217,10 +219,186 @@ func TestCurrentRevisionFor(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := status.CurrentRevisionFor(tc.rows, tc.current, tc.update, tc.blocks, tc.withdrawn); got != tc.want {
+			if got := status.CurrentRevisionFor(tc.rows, tc.current, tc.update, tc.blocks, tc.withdrawn, nil); got != tc.want {
 				t.Errorf("CurrentRevisionFor(current=%q, update=%q, withdrawn=%q) = %q, want %q", tc.current, tc.update, tc.withdrawn, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestCurrentRevisionFor_ReadsTheRevisionThePodsCarry: a live pod decides
+// what its Instance runs, over the revision its row still records; a row
+// with no labelled live pod runs what it records.
+func TestCurrentRevisionFor_ReadsTheRevisionThePodsCarry(t *testing.T) {
+	const prior, next = "isvc-engine-aaaaaaaa", "isvc-engine-bbbbbbbb"
+	at := func(idx int32, phase types.InstancePhase, rev string) types.InstanceStatus {
+		return types.InstanceStatus{Index: idx, Phase: phase, RunningRevision: rev}
+	}
+	// parkedOn is the row a failed recreate onto target leaves: Failed with
+	// the attempt parked on target and the revision it ran before still
+	// recorded as running.
+	parkedOn := func(idx int32, running, target string) types.InstanceStatus {
+		return types.InstanceStatus{Index: idx, Phase: types.InstancePhaseFailed, RunningRevision: running, TargetRevision: target,
+			Operation: &types.InstanceOperation{Type: types.InstanceOperationUpdate, Step: types.UpdateStepParked, TargetRevision: target}}
+	}
+	on := func(revs ...string) []query.RevisionID {
+		ids := make([]query.RevisionID, 0, len(revs))
+		for _, rev := range revs {
+			ids = append(ids, query.RevisionFromHash(query.RevisionFromName(rev).Hash()))
+		}
+		return ids
+	}
+	heldPrior := []types.RetryBlock{{TargetRevision: prior, State: types.RetryBlockHeld, AttemptsStarted: 3}}
+	cases := []struct {
+		name            string
+		rows            []types.InstanceStatus
+		pods            status.PodRevisions
+		current, update string
+		blocks          []types.RetryBlock
+		withdrawn       string
+		want            string
+	}{
+		{"a withdrawn current comes back once every Instance's pods carry the withdrawn revision, whatever a Failed row still records",
+			[]types.InstanceStatus{at(0, types.InstancePhaseReady, prior), parkedOn(1, next, prior)},
+			status.PodRevisions{0: on(prior), 1: on(prior, prior)}, "", prior, heldPrior, prior, prior},
+		{"the restore waits while a pod of another revision is alive under an Instance",
+			[]types.InstanceStatus{at(0, types.InstancePhaseReady, prior), parkedOn(1, next, prior)},
+			status.PodRevisions{0: on(prior), 1: on(next)}, "", prior, heldPrior, prior, ""},
+		{"the restore waits while one member of a gang still carries another revision",
+			[]types.InstanceStatus{at(0, types.InstancePhaseReady, prior), parkedOn(1, next, prior)},
+			status.PodRevisions{0: on(prior), 1: on(prior, next)}, "", prior, heldPrior, prior, ""},
+		{"an Instance with no labelled live pod runs the revision its row records",
+			[]types.InstanceStatus{at(0, types.InstancePhaseReady, prior), parkedOn(1, next, prior)},
+			status.PodRevisions{0: on(prior)}, "", prior, heldPrior, prior, ""},
+		{"a pod of another revision under an index with no row keeps the current revision withdrawn",
+			[]types.InstanceStatus{at(0, types.InstancePhaseReady, prior), at(1, types.InstancePhaseFailed, prior)},
+			status.PodRevisions{0: on(prior), 1: on(prior), 2: on(next)}, "", prior, heldPrior, prior, ""},
+		{"a pod of the withdrawn revision under an index with no row decides nothing",
+			[]types.InstanceStatus{at(0, types.InstancePhaseReady, prior), at(1, types.InstancePhaseFailed, prior)},
+			status.PodRevisions{0: on(prior), 1: on(prior), 2: on(prior)}, "", prior, heldPrior, prior, prior},
+		{"a rollback onto the current revision withdraws it while a pod of the superseded revision is alive, whatever the row records",
+			[]types.InstanceStatus{at(0, types.InstancePhaseReady, prior), at(1, types.InstancePhaseRestarting, prior)},
+			status.PodRevisions{0: on(prior), 1: on(next)}, prior, prior, nil, "", ""},
+		{"a rollback onto the current revision keeps it while every pod carries it, whatever a mid-roll row records",
+			[]types.InstanceStatus{at(0, types.InstancePhaseReady, prior), parkedOn(1, next, prior)},
+			status.PodRevisions{0: on(prior), 1: on(prior)}, prior, prior, heldPrior, "", prior},
+		{"an operation pinned to another revision is off it whatever its pods carry",
+			[]types.InstanceStatus{at(0, types.InstancePhaseReady, prior), parkedOn(1, prior, next)},
+			status.PodRevisions{0: on(prior), 1: on(prior)}, "", prior, heldPrior, prior, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := status.CurrentRevisionFor(tc.rows, tc.current, tc.update, tc.blocks, tc.withdrawn, tc.pods); got != tc.want {
+				t.Errorf("CurrentRevisionFor(current=%q, update=%q, withdrawn=%q, pods=%v) = %q, want %q", tc.current, tc.update, tc.withdrawn, tc.pods, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestCurrentRevisionFor_AnAttemptInFlightKeepsTheRollbackOpen: a roll back
+// onto the withdrawn revision rebuilds an Instance's pods on it before
+// anything promotes the row, so while the new set starts its pods carry
+// the withdrawn revision and the row still records the superseded one.
+// The current revision stays withdrawn until that attempt promotes the
+// Instance; a spent attempt leaves the pods to decide, so a rollback whose
+// Instance comes back broken and held still reads landed.
+func TestCurrentRevisionFor_AnAttemptInFlightKeepsTheRollbackOpen(t *testing.T) {
+	const prior, next = "isvc-decoder-aaaaaaaa", "isvc-decoder-bbbbbbbb"
+	ready := func(idx int32, rev string) types.InstanceStatus {
+		return types.InstanceStatus{Index: idx, Phase: types.InstancePhaseReady, RunningRevision: rev}
+	}
+	// inFlight is a row whose update attempt from running onto target a
+	// pass still drives: a recreate past its drain, or an in-place patch.
+	inFlight := func(idx int32, step, running, target string) types.InstanceStatus {
+		return types.InstanceStatus{Index: idx, Phase: types.InstancePhaseUpdating, RunningRevision: running, TargetRevision: target,
+			Operation: &types.InstanceOperation{Type: types.InstanceOperationUpdate, Step: step, TargetRevision: target}}
+	}
+	// parked is the same attempt spent: Failed, parked on target, the
+	// revision it ran before still recorded.
+	parked := func(idx int32, running, target string) types.InstanceStatus {
+		return types.InstanceStatus{Index: idx, Phase: types.InstancePhaseFailed, RunningRevision: running, TargetRevision: target,
+			Operation: &types.InstanceOperation{Type: types.InstanceOperationUpdate, Step: types.UpdateStepParked, TargetRevision: target}}
+	}
+	on := func(revs ...string) []query.RevisionID {
+		ids := make([]query.RevisionID, 0, len(revs))
+		for _, rev := range revs {
+			ids = append(ids, query.RevisionFromHash(query.RevisionFromName(rev).Hash()))
+		}
+		return ids
+	}
+	heldPrior := []types.RetryBlock{{TargetRevision: prior, State: types.RetryBlockHeld, AttemptsStarted: 3}}
+	// Three gangs of two roll back onto prior one at a time: the first and
+	// the third are Ready on it again, and the second has just had its new
+	// gang created, nothing Ready yet, with its row still on next.
+	lastGangStarting := []types.InstanceStatus{ready(0, prior), inFlight(1, types.UpdateStepDrain, next, prior), ready(2, prior)}
+	gangsOnPrior := status.PodRevisions{0: on(prior, prior), 1: on(prior, prior), 2: on(prior, prior)}
+	cases := []struct {
+		name            string
+		rows            []types.InstanceStatus
+		pods            status.PodRevisions
+		current, update string
+		blocks          []types.RetryBlock
+		withdrawn       string
+		want            string
+	}{
+		{"the restore waits while the last Instance's recreate onto the withdrawn revision has created its gang but not promoted it",
+			lastGangStarting, gangsOnPrior, "", prior, nil, prior, ""},
+		{"the restore waits while an in-place patch back onto the withdrawn revision has relabelled the pod but not promoted the Instance",
+			[]types.InstanceStatus{ready(0, prior), inFlight(1, types.UpdateStepInPlace, next, prior)},
+			status.PodRevisions{0: on(prior), 1: on(prior)}, "", prior, nil, prior, ""},
+		{"the promote of the last Instance brings the current revision back",
+			[]types.InstanceStatus{ready(0, prior), ready(1, prior), ready(2, prior)}, gangsOnPrior, "", prior, nil, prior, prior},
+		{"a rollback onto the current revision withdraws it while an attempt in flight still records an Instance on the superseded revision, whatever its pods carry",
+			lastGangStarting, gangsOnPrior, prior, prior, nil, "", ""},
+		{"an attempt in flight whose row already names the withdrawn revision does not hold the restore",
+			[]types.InstanceStatus{ready(0, prior), inFlight(1, types.UpdateStepInPlace, prior, prior)},
+			status.PodRevisions{0: on(prior), 1: on(prior)}, "", prior, nil, prior, prior},
+		{"a spent attempt leaves the pods to decide: a Failed Instance whose pods carry the withdrawn revision does not hold the restore",
+			[]types.InstanceStatus{ready(0, prior), parked(1, next, prior)},
+			status.PodRevisions{0: on(prior), 1: on(prior)}, "", prior, heldPrior, prior, prior},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := status.CurrentRevisionFor(tc.rows, tc.current, tc.update, tc.blocks, tc.withdrawn, tc.pods); got != tc.want {
+				t.Errorf("CurrentRevisionFor(current=%q, update=%q, withdrawn=%q) = %q, want %q", tc.current, tc.update, tc.withdrawn, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestPodRevisionsByInstance pins what counts as a pod's revision for the
+// rollup: the revision-hash label of a pod that is not in a terminal phase,
+// a pod being deleted included; a pod without the label is left out.
+func TestPodRevisionsByInstance(t *testing.T) {
+	pod := func(hash string, phase corev1.PodPhase, deleting bool) *corev1.Pod {
+		p := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "p-" + hash + string(phase), Labels: map[string]string{}}}
+		if hash != "" {
+			p.Labels[query.LabelRevisionHash] = hash
+		}
+		p.Status.Phase = phase
+		if deleting {
+			now := metav1.Now()
+			p.DeletionTimestamp = &now
+		}
+		return p
+	}
+	byInstance := map[int32][]*corev1.Pod{
+		0: {pod("aaaaaaaa", corev1.PodRunning, false), pod("bbbbbbbb", corev1.PodFailed, false)},
+		1: {pod("bbbbbbbb", corev1.PodRunning, true), pod("", corev1.PodRunning, false)},
+		2: {pod("cccccccc", corev1.PodSucceeded, false)},
+	}
+	got := status.PodRevisionsByInstance(byInstance)
+	want := status.PodRevisions{
+		0: {query.RevisionFromHash("aaaaaaaa")},
+		1: {query.RevisionFromHash("bbbbbbbb")},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("PodRevisionsByInstance = %v, want %v", got, want)
+	}
+	for idx, revs := range want {
+		if len(got[idx]) != len(revs) || !got[idx][0].Same(revs[0]) {
+			t.Errorf("instance %d: got %v, want %v", idx, got[idx], revs)
+		}
 	}
 }
 
@@ -443,5 +621,161 @@ func TestWithdrawnRevisionAfter(t *testing.T) {
 					tc.before, tc.oldCurrent, tc.current, tc.update, got, tc.want)
 			}
 		})
+	}
+}
+
+// An Instance serves through its routable pod: the leader of a gang, or
+// the one pod of a single-pod Instance. A Service never publishes a
+// worker, so an Instance with no routable serving pod serves nothing,
+// whatever its workers read, and its serving count is 0. While the
+// routable pod serves, the count takes in every serving member: a whole
+// gang counts N and a gang with a worker gone counts N-1.
+func TestCountServingPods_ReadsAGangWithoutItsLeaderAsServingNothing(t *testing.T) {
+	servingPod := func(name, runner string) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: map[string]string{query.LabelRunner: runner}},
+			Status: corev1.PodStatus{Conditions: []corev1.PodCondition{
+				{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				{Type: podreadiness.ConditionType, Status: corev1.ConditionTrue},
+			}},
+		}
+	}
+	// The pod's node died: the node lifecycle controller revoked PodReady
+	// while the containers and the gate keep their last values.
+	nodeLost := func(pod *corev1.Pod) *corev1.Pod {
+		for i := range pod.Status.Conditions {
+			if pod.Status.Conditions[i].Type == corev1.PodReady {
+				pod.Status.Conditions[i].Status = corev1.ConditionFalse
+			}
+		}
+		return pod
+	}
+	leaving := func(pod *corev1.Pod) *corev1.Pod {
+		now := metav1.Now()
+		pod.DeletionTimestamp = &now
+		return pod
+	}
+	leader := func() *corev1.Pod { return servingPod("engine-0-leader-0", types.RunnerLeader) }
+	workers := func(n int) []*corev1.Pod {
+		out := make([]*corev1.Pod, 0, n)
+		for i := 0; i < n; i++ {
+			out = append(out, servingPod(fmt.Sprintf("engine-0-worker-%d", i), types.RunnerWorker))
+		}
+		return out
+	}
+	withLeader := func(lead *corev1.Pod, workers []*corev1.Pod) []*corev1.Pod {
+		return append([]*corev1.Pod{lead}, workers...)
+	}
+	single := func() *corev1.Pod { return servingPod("engine-1-default-0", types.RunnerDefault) }
+
+	for _, tc := range []struct {
+		name string
+		pods []*corev1.Pod
+		want int32
+	}{
+		{name: "the whole gang counts every member", pods: withLeader(leader(), workers(7)), want: 8},
+		{name: "a worker gone leaves the rest counting", pods: withLeader(leader(), workers(6)), want: 7},
+		{name: "a worker's node died, the rest keep counting", pods: withLeader(leader(), append(workers(6), nodeLost(servingPod("engine-0-worker-6", types.RunnerWorker)))), want: 7},
+		{name: "the leader is gone and every worker keeps the gate", pods: workers(7), want: 0},
+		{name: "the leader's node died and every worker keeps the gate", pods: withLeader(nodeLost(leader()), workers(7)), want: 0},
+		{name: "the leader is being deleted and every worker keeps the gate", pods: withLeader(leaving(leader()), workers(7)), want: 0},
+		{name: "a single-pod Instance serves through its one pod", pods: []*corev1.Pod{single()}, want: 1},
+		{name: "a single-pod Instance whose node died serves nothing", pods: []*corev1.Pod{nodeLost(single())}, want: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := status.CountServingPods(tc.pods); got != tc.want {
+				t.Fatalf("CountServingPods = %d, want %d", got, tc.want)
+			}
+		})
+	}
+
+	// The counters an Instance publishes and the Component's count of
+	// serving Instances follow the same rule: a gang with its leader gone is
+	// as far out of rotation as one with no pod at all, and a gang with a
+	// worker gone is short of its desired count as before.
+	desired := map[int32]int32{0: 8}
+	servingInstances := func(c status.InstanceCounters) int32 {
+		return status.CountServingInstances([]types.InstanceStatus{{Index: 0, PodCount: c.PodCount, ServingPodCount: c.ServingPodCount}}, desired)
+	}
+	whole := status.CountersForInstance(withLeader(leader(), workers(7)), nil, status.AvailabilityWindow{})
+	if whole.PodCount != 8 || whole.ServingPodCount != 8 || servingInstances(whole) != 1 {
+		t.Fatalf("whole gang: %s, serving Instances %d; want pods=8 serving=8 and 1 serving Instance", whole, servingInstances(whole))
+	}
+	workerGone := status.CountersForInstance(withLeader(leader(), workers(6)), nil, status.AvailabilityWindow{})
+	if workerGone.PodCount != 7 || workerGone.ServingPodCount != 7 || servingInstances(workerGone) != 0 {
+		t.Fatalf("gang with a worker gone: %s, serving Instances %d; want pods=7 serving=7 and no serving Instance", workerGone, servingInstances(workerGone))
+	}
+	leaderGone := status.CountersForInstance(workers(7), nil, status.AvailabilityWindow{})
+	if leaderGone.PodCount != 7 || leaderGone.ServingPodCount != 0 || servingInstances(leaderGone) != 0 {
+		t.Fatalf("gang with its leader gone: %s, serving Instances %d; want pods=7 serving=0 and no serving Instance", leaderGone, servingInstances(leaderGone))
+	}
+}
+
+// TestReachedDesiredShape_APartitionAboveTheOldCountIsMetAtWhatItHolds records
+// the staged shape under a partition the roll cannot fill: a partition holds
+// the Instances still on the prior revision, so a member whose every
+// Instance is Ready and whose Instances off the target number between one
+// and the partition rests staged. 12 Instances with 8 on the new revision
+// and 4 on the old are staged under a partition of 8 (raised after 8 moved)
+// and under a partition of 4 (met exactly), not under a partition of 2
+// (two more must move). 4 Instances all on the old revision are staged
+// under a partition of 6 (the count scaled below the partition) and under
+// one of 4. A member with nothing left to hold is complete, not staged, and
+// a held Instance that is not Ready keeps the member in progress.
+func TestReachedDesiredShape_APartitionAboveTheOldCountIsMetAtWhatItHolds(t *testing.T) {
+	ready := func(rev string) types.InstanceStatus {
+		return types.InstanceStatus{Phase: types.InstancePhaseReady, RunningRevision: rev}
+	}
+	newRev, oldRev := "isvc-engine-newaaaaa", "isvc-engine-oldbbbbb"
+	fleet := func(onNew, onOld int) []types.InstanceStatus {
+		var out []types.InstanceStatus
+		for i := 0; i < onNew; i++ {
+			out = append(out, ready(newRev))
+		}
+		for i := 0; i < onOld; i++ {
+			out = append(out, ready(oldRev))
+		}
+		return out
+	}
+	for _, tc := range []struct {
+		name      string
+		insts     []types.InstanceStatus
+		partition int32
+		want      bool
+	}{
+		{name: "partition 8 raised after 8 of 12 moved holds the 4 still old", insts: fleet(8, 4), partition: 8, want: true},
+		{name: "partition 4 on 8 of 12 moved is met exactly", insts: fleet(8, 4), partition: 4, want: true},
+		{name: "partition 2 on 8 of 12 moved still has two to move", insts: fleet(8, 4), partition: 2, want: false},
+		{name: "partition 6 on a count scaled to 4, all still old", insts: fleet(0, 4), partition: 6, want: true},
+		{name: "partition 4 on 4 Instances all still old", insts: fleet(0, 4), partition: 4, want: true},
+		{name: "partition 20 above the count holds every Instance", insts: fleet(0, 12), partition: 20, want: true},
+		{name: "partition 8 with every Instance moved is complete, not staged", insts: fleet(12, 0), partition: 8, want: false},
+		{name: "partition 0 with every Instance moved is complete", insts: fleet(12, 0), partition: 0, want: true},
+		{name: "partition 0 with one Instance still old is in progress", insts: fleet(11, 1), partition: 0, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := status.ReachedDesiredShape(tc.insts, newRev, tc.partition, int32(len(tc.insts))); got != tc.want {
+				t.Fatalf("ReachedDesiredShape(%d on new, %d on old, partition %d) = %v, want %v",
+					len(tc.insts)-int(status.HeldInstanceCount(tc.insts, newRev)), status.HeldInstanceCount(tc.insts, newRev), tc.partition, got, tc.want)
+			}
+		})
+	}
+
+	notReady := fleet(8, 4)
+	notReady[10].Phase = types.InstancePhaseRestarting
+	if status.ReachedDesiredShape(notReady, newRev, 8, 12) {
+		t.Fatal("a held Instance that is not Ready keeps the member off its staged shape")
+	}
+	if status.ReachedDesiredShape(fleet(8, 4), newRev, 8, 13) {
+		t.Fatal("a member short of an Instance is not at its staged shape")
+	}
+	if got := status.HeldInstanceCount(fleet(8, 4), newRev); got != 4 {
+		t.Fatalf("HeldInstanceCount = %d, want the 4 Instances off the target", got)
+	}
+	unset := fleet(8, 3)
+	unset = append(unset, types.InstanceStatus{Phase: types.InstancePhaseReady})
+	if got := status.HeldInstanceCount(unset, newRev); got != 4 {
+		t.Fatalf("HeldInstanceCount = %d, want an unset running revision counted as off the target", got)
 	}
 }

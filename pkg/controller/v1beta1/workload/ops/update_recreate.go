@@ -7,6 +7,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/drain"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
@@ -25,6 +26,28 @@ func recreateRevisionCause(input workload.ReconcileInput, idx int32, targetRev s
 		from = s.RunningRevision
 	}
 	return fmt.Sprintf("revision %s -> %s", from, targetRev)
+}
+
+// runningRevisionNeverServed reports whether the row names a running
+// revision the Instance never served: the revision was created after the
+// row last entered Ready, so no set of it was ever promoted. A repair that
+// rebuilds an Instance at the roll target records that revision before
+// the set serves; a recreate that replaces the set leaves no set of the
+// revision behind the record. A row that was never Ready, or whose
+// revision is gone, keeps what it records.
+func runningRevisionNeverServed(ctx context.Context, reads client.Reader, input workload.ReconcileInput, idx int32) (bool, error) {
+	row := input.ObservedState.Instance(idx)
+	if row == nil || row.RunningRevision == "" || row.ReadySince == nil || row.ReadySince.IsZero() {
+		return false, nil
+	}
+	cr := &appsv1.ControllerRevision{}
+	if err := reads.Get(ctx, client.ObjectKey{Namespace: input.Key.Namespace, Name: row.RunningRevision}, cr); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("get running revision %s: %w", row.RunningRevision, err)
+	}
+	return row.ReadySince.Time.Before(cr.CreationTimestamp.Time), nil
 }
 
 // recreateUpdate runs the recreate rollout: drain + delete every
@@ -46,7 +69,17 @@ func recreateUpdate(ctx context.Context, deps workload.Deps, input workload.Reco
 	// a revision-pair reason vs a termination reason). "from" is the
 	// recorded RunningRevision; empty on the first-ever rollout.
 	cause := recreateRevisionCause(input, inst.Index, target.Name)
-	newInc, err := status.StampRecreating(ctx, input, inst.Index, target.Name, cause, plan.UpdateStrategy.Type, plan.InstanceReadyTimeout)
+	// The row is written on the first pass and on a retarget; only then does
+	// its running revision need reading against the revision's own age.
+	runningNeverServed := false
+	if s := input.ObservedState.Instance(inst.Index); wasNotRecreating || s == nil || s.TargetRevision != target.Name {
+		unserved, uerr := runningRevisionNeverServed(ctx, deps.Reader(), input, inst.Index)
+		if uerr != nil {
+			return false, fmt.Errorf("read the running revision (instance=%d): %w", inst.Index, uerr)
+		}
+		runningNeverServed = unserved
+	}
+	newInc, err := status.StampRecreating(ctx, input, inst.Index, target.Name, cause, plan.UpdateStrategy.Type, plan.InstanceReadyTimeout, runningNeverServed)
 	if err != nil {
 		return false, fmt.Errorf("bump Incarnation (instance=%d): %w", inst.Index, err)
 	}
@@ -130,8 +163,10 @@ func recreateUpdate(ctx context.Context, deps workload.Deps, input workload.Reco
 		return false, nil
 	}
 
+	// The rebuild renders the roll target, at the width the target records.
 	newInst := inst
 	newInst.Incarnation = newInc
+	newInst.Runners = plan.RunnersFor(inst, target.Name)
 
 	desired := expectedPodNamesForInstance(input, plan, newInst)
 	// A rebuilt pod in a terminal phase — crashed, exited, evicted or

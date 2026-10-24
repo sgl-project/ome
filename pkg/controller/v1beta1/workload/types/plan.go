@@ -115,6 +115,39 @@ type ComponentPlan struct {
 	// being rendered; Render stamps it as the ome.io/pairing-protocol label
 	// on every pod. Empty renders no label (pairs with anything).
 	PairingProtocol string
+
+	// Runners is the Runner layout the roll target renders: one default
+	// Runner, or a leader beside the desired worker count. An Instance
+	// rendered at another revision carries that revision's layout on its
+	// own entry (InstancePlan.Runners).
+	Runners []RunnerPlan
+
+	// WorkerSizeByRevision is the worker count each referenced revision was
+	// minted at (WorkloadObservedState.WorkerSizeByRevision). A revision
+	// absent here records no width and renders the desired one.
+	WorkerSizeByRevision map[string]int32
+}
+
+// RunnersFor returns the Runner layout Instance inst renders at revision
+// rev: the roll target's layout at the width rev recorded, when the plan
+// knows it, else as the target renders it. A plan built without a target
+// layout answers with the Instance's own entry.
+func (p ComponentPlan) RunnersFor(inst InstancePlan, rev string) []RunnerPlan {
+	base := p.Runners
+	if len(base) == 0 {
+		base = inst.Runners
+	}
+	out := append([]RunnerPlan(nil), base...)
+	size, known := p.WorkerSizeByRevision[rev]
+	if rev == "" || !known {
+		return out
+	}
+	for i := range out {
+		if out[i].Name == RunnerWorker {
+			out[i].Size = size
+		}
+	}
+	return out
 }
 
 // TopologyKeyForInstance returns the live-safe topology contract for an
@@ -228,31 +261,65 @@ func (i InstancePlan) TotalPods() int32 {
 	return n
 }
 
-// AllocateSurgeIndex returns the lowest int32 not present in any of
-// the InstanceStatuses — the slot the migration op picks for its +1
-// surge pod without colliding with steady-state indices or other
-// in-flight surges.
-func AllocateSurgeIndex(instances []InstanceStatus) int32 {
-	used := make(map[int32]struct{}, len(instances)*2)
-	for _, s := range instances {
-		used[s.Index] = struct{}{}
-		// Also exclude in-flight surge slots. A source mid-surge records its
-		// replacement's index in Operation.SurgeIndex BEFORE the replacement
-		// Instance exists (it's created a pass later, and within a single
-		// reconcile pass a sibling that just claimed a slot has it recorded
-		// here but not yet as a real Index). Without excluding these, every
-		// Instance surging in the same pass collides on the same lowest-free
-		// index; when that single shared surge becomes Ready the drain-on-ready
-		// logic releases ALL sharing sources at once — a full-fleet wipe.
+// SurgeIndexAllocator hands out the Instance indexes the surges of one
+// pass take: each is the lowest index that no row holds and no surge in
+// flight has claimed. A source mid-surge records its replacement's index
+// in Operation.SurgeIndex before the replacement's row exists, so those
+// claims count as taken; without them every surge of one pass would land
+// on the same index, and when that one replacement became Ready every
+// source sharing it would drain at once. The rows are read once, on the
+// first ask, and every index below from is taken, so the surges of a pass
+// pay one pass over the indexes in all.
+type SurgeIndexAllocator struct {
+	rows  []InstanceStatus
+	taken map[int32]struct{}
+	from  int32
+}
+
+// NewSurgeIndexAllocator is the allocator over rows, which it reads when
+// the first index is asked for.
+func NewSurgeIndexAllocator(rows []InstanceStatus) *SurgeIndexAllocator {
+	return &SurgeIndexAllocator{rows: rows}
+}
+
+// Next is the index the next surge takes. It is offered again until Claim
+// marks it, so a surge that fails to claim it leaves it to the next. The
+// taken set is finite, so the scan ends.
+func (a *SurgeIndexAllocator) Next() int32 {
+	a.read()
+	for {
+		if _, taken := a.taken[a.from]; !taken {
+			return a.from
+		}
+		a.from++
+	}
+}
+
+// Claim marks idx as taken by a surge of this pass.
+func (a *SurgeIndexAllocator) Claim(idx int32) {
+	a.read()
+	a.taken[idx] = struct{}{}
+}
+
+// read builds the taken set from the rows once: every row's index and
+// every surge index a row's operation claims.
+func (a *SurgeIndexAllocator) read() {
+	if a.taken != nil {
+		return
+	}
+	a.taken = make(map[int32]struct{}, len(a.rows)*2)
+	for i := range a.rows {
+		s := &a.rows[i]
+		a.taken[s.Index] = struct{}{}
 		if s.Operation != nil && s.Operation.SurgeIndex != nil {
-			used[*s.Operation.SurgeIndex] = struct{}{}
+			a.taken[*s.Operation.SurgeIndex] = struct{}{}
 		}
 	}
-	// Lowest-free exists at or below |used| (distinct ints), so an unbounded
-	// scan terminates; keep it unbounded so the 2x-entry set can't off-by-one.
-	for i := int32(0); ; i++ {
-		if _, taken := used[i]; !taken {
-			return i
-		}
-	}
+}
+
+// AllocateSurgeIndex is the lowest index that no row of instances holds
+// and no surge in flight has claimed: the one index a caller outside a
+// pass's allocator takes.
+func AllocateSurgeIndex(instances []InstanceStatus) int32 {
+	return NewSurgeIndexAllocator(instances).Next()
 }

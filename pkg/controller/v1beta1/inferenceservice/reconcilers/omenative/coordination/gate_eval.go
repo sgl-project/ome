@@ -23,11 +23,21 @@ import (
 // here — in the coordination package the IR path depends on — means
 // there is exactly one tested implementation.
 //
-// Gate order: pairing -> ratio -> surge | unavailability -> sequential.
-// First denial wins; later gates short-circuit. The caller reads the
-// allowed bit and may also surface gate + denyReason as a RolloutHold;
-// gate names Pairing, Ratio, Budget (surge or unavailability), or
-// Sequential accordingly.
+// Gate order: pairing -> batch step | ratio -> surge | unavailability ->
+// sequential. First denial wins; later gates short-circuit. The caller
+// reads the allowed bit and may also surface gate + denyReason as a
+// RolloutHold; gate names Pairing, Ratio (the batch step reports under
+// it), Budget (surge or unavailability), or Sequential accordingly.
+//
+// The batch step takes the ratio gate's place for the members of a group
+// whose engine and decoder both step (readBatchStep): a drain-first member
+// counts its drains in batches of its maxUnavailable, a surging member its
+// surges in batches of its maxSurge, and none opens batch b+1 until every
+// one's batch b serves, which keeps the ratio at every step boundary without
+// the serving band. The budget gates still cap each wake-up. Under the
+// operator's keepRatio setting a pairing member that patches single pods in
+// place steps too, and the two sides' batches are planned to the group's
+// tolerance; under firstSide the named side moves first inside each batch.
 //
 // Ratio projection is strategy-aware (see the projDelta computation
 // below): SurgeThenDrain projects +1 (a Ready pod is added before the old
@@ -39,25 +49,31 @@ import (
 // (ReconcileInput.UpdateGate): an in-place strategy that resolves to a
 // recreate on the Instance (a gang, or a single-pod diff beyond container
 // images) arrives as RecreatePod, so an in-place value here is a start
-// that patches the same pod. In-place starts (InPlaceIfPossible / InPlaceOnly) skip
-// CheckRatio entirely. For in-place the drain is paired 1:1 with a
-// same-pod return (mark-not-ready -> patch -> mark-ready), so the net
-// capacity change is ~0; running the gate would project a -1 loss that
-// misrepresents that transient as permanent and indefinitely over-blocks
+// that patches the same pod. In-place starts (InPlaceIfPossible / InPlaceOnly)
+// consult only the new-revision lockstep half of the ratio gate
+// (CheckRatioLockstep): the patched Instance moves to the new revision like
+// any other, so a Component already rolled further than its peer by more
+// than the tolerance waits. The serving-capacity band is waived for them:
+// the drain is paired 1:1 with a same-pod return (mark-not-ready -> patch
+// -> mark-ready), so the net capacity change is ~0; projecting a -1 loss
+// would misrepresent that transient as permanent and indefinitely over-block
 // the smaller Component of a ratio pair (e.g. the decoder in a 4:2
 // engine:decoder pair with 25% tolerance deadlocks because 4:1 = 4.0 sits
 // above the [1.5, 2.5] band). CheckUnavailability (called below for
 // non-surge strategies, which includes both in-place variants) already
 // governs concurrent disruption via the MaxUnavailable budget, so
 // RatioBalanced safety is preserved without the structural deadlock. The
-// RatioGateBypassed event + metric fire so operators see why the gate
+// RatioGateBypassed event + metric fire so operators see why the band
 // did not run.
 //
 // Reads authoritative InferenceReplica status via the provided context and
-// reader. targetRevision is the ControllerRevision the Component's Instances
-// move to in this pass (the rollback revision while a rollback is pinned,
-// else the spec target); the pairing gate orients its cohort simulation by
-// that revision's protocol. recorder may be nil (the event is best-effort
+// reader. fromRevision is the ControllerRevision the Instance being started
+// runs now (its row's RunningRevision), the cohort the pairing gate charges
+// the start to; empty when the row records none. targetRevision is the
+// ControllerRevision the Component's Instances move to in this pass (the
+// rollback revision while a rollback is pinned, else the spec target); the
+// pairing gate orients its cohort simulation by that revision's protocol.
+// recorder may be nil (the event is best-effort
 // observability). defaults carries the operator-configured group fill-ins
 // (e.g. the ratio tolerance default) so the gates see the same resolved
 // groups as the coordination reconciler.
@@ -66,6 +82,7 @@ func EvaluateUpdateGate(
 	reads client.Reader,
 	isvc *v1beta1.InferenceService,
 	component v1beta1.ComponentType,
+	fromRevision string,
 	targetRevision *appsv1.ControllerRevision,
 	recorder record.EventRecorder,
 	defaults GroupDefaults,
@@ -88,31 +105,66 @@ func EvaluateUpdateGate(
 	// capacity flat (which is why CheckRatio bypasses it below) but still
 	// moves the instance across pairing cohorts — the exact transition the
 	// pair floor exists to pace.
-	if ok, reason := gateCtx.CheckPairing(strategy, inFlightSurge, inFlightUnavail); !ok {
-		return false, v1beta1.RolloutHoldGatePairing, reason
+	pairing := gateCtx.pairingVerdict(fromRevision, strategy, inFlightSurge, inFlightUnavail)
+	if !pairing.allowed {
+		return false, v1beta1.RolloutHoldGatePairing, pairing.reason
+	}
+
+	// The batch step reads every member's replica; a read it cannot make
+	// fails closed like the other gates, under the gate name its hold uses.
+	batch, err := gateCtx.readBatchStep()
+	if err != nil {
+		return false, v1beta1.RolloutHoldGateRatio, err.Error()
 	}
 
 	inPlace := strategy == workloadtypes.UpdateStrategyInPlaceIfPossible ||
 		strategy == workloadtypes.UpdateStrategyInPlaceOnly
-	if !inPlace {
+	switch {
+	case batch.governs:
+		// The engine and decoder both step, so the batch step is the batched
+		// members' lockstep and the serving band is not consulted for them.
+		// A pairing peer the pairing gate holds still is not waited on.
+		var waived v1beta1.ComponentType
+		if pairing.peerHeldStill {
+			waived = pairingPeer(component)
+		}
+		if held, reason := batch.hold(waived); held {
+			return false, v1beta1.RolloutHoldGateRatio, reason
+		}
+	case !inPlace:
 		// Strategy-aware ratio projection. SurgeThenDrain adds a Ready pod
 		// (+1) BEFORE draining the old, so the transient is a capacity GAIN,
 		// not a -1 loss. Projecting -1 for a surge roll mis-models it and
 		// deadlocks symmetric RatioBalanced groups (both members denied at
 		// the start, neither can go first). Drain-first strategies (recreate)
-		// keep the honest -1.
+		// keep the honest -1. Both signs apply the new-revision lockstep
+		// before the band.
 		projDelta := int32(-1)
 		if strategy == workloadtypes.UpdateStrategySurgeThenDrain || strategy == "" {
 			projDelta = 1
 		}
-		if ok, reason := gateCtx.CheckRatio(inFlightSurge, inFlightUnavail, projDelta); !ok {
+		ok, reason, outsideTolerance := gateCtx.checkRatio(inFlightSurge, inFlightUnavail, projDelta)
+		if !ok {
 			return false, v1beta1.RolloutHoldGateRatio, reason
 		}
-	} else {
+		// A step no single step could keep inside the tolerance is admitted
+		// rather than held for good; the service says so with the numbers.
+		if outsideTolerance && recorder != nil && isvc != nil {
+			recorder.Eventf(isvc, corev1.EventTypeWarning, EventReasonRatioStepOutsideTolerance,
+				"%s: %s. The serving ratio is outside the tolerance while this step runs; the band admits one such step at a time rather than hold the roll for good. Widen the tolerance or resize the group to a shape one step keeps inside it.",
+				EventReasonRatioStepOutsideTolerance, reason)
+		}
+	default:
+		// A same-pod start keeps its serving capacity, so only the
+		// new-revision lockstep is consulted; the band waiver is recorded
+		// once the start is admitted.
+		if ok, reason := gateCtx.CheckRatioLockstep(); !ok {
+			return false, v1beta1.RolloutHoldGateRatio, reason
+		}
 		RecordRatioGateBypassed(string(component), string(strategy))
 		if recorder != nil && isvc != nil {
 			recorder.Eventf(isvc, corev1.EventTypeNormal, EventReasonRatioGateBypassed,
-				"RatioGateBypassed: Component=%s, Strategy=%s. RatioBalanced is bypassed for in-place strategies because the drain is paired 1:1 with a same-pod return. Per-Component pacing (CoordinationPacing.PerComponent) still governs concurrent disruption.",
+				"RatioGateBypassed: Component=%s, Strategy=%s. The RatioBalanced serving-capacity band is waived for an in-place start because the drain is paired 1:1 with a same-pod return; the new-revision lockstep still applies, and per-Component pacing (CoordinationPacing.PerComponent) still governs concurrent disruption.",
 				component, strategy)
 		}
 	}

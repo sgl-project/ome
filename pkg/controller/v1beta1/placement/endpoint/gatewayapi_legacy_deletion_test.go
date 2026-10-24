@@ -10,25 +10,24 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/utils/testing/fakeclient"
 )
 
-func TestGatewayAPIPublisherUnpublishWaitsForRouteDeletion(t *testing.T) {
-	c := newGatewayFakeClientBuilder(t, pubScheme(t)).Build()
+func TestGatewayAPIPublisher_UnpublishRouteHeldByFinalizer_WaitsKeepingChildren(t *testing.T) {
+	c := gatewayClient(t)
 	p := NewGatewayAPIPublisher(c, gatewayBackendConfig(), WithBackendAddressResolver(staticBackendAddressResolver{
 		"cluster-a": {{Address: "192.0.2.10", Type: discoveryv1.AddressTypeIPv4}},
 		"cluster-b": {{Address: "2001:db8::10", Type: discoveryv1.AddressTypeIPv6}},
 	}))
 	isvc := testISVC()
-	target := Target{GlobalHost: "svc.prod.global.example", Homes: []Home{
+	target := Target{GlobalHost: "svc.prod.global.example", Clusters: []ServingCluster{
 		{Cluster: "cluster-a", BackendHost: "a.example", Weight: 3},
 		{Cluster: "cluster-b", BackendHost: "b.example", Weight: 1},
 	}}
@@ -61,37 +60,38 @@ func TestGatewayAPIPublisherUnpublishWaitsForRouteDeletion(t *testing.T) {
 	assertLegacyGatewayChildren(t, p, isvc, 0, 0, 0)
 }
 
-func TestGatewayAPIPublisherUnpublishRouteErrorsRetainChildren(t *testing.T) {
+func TestGatewayAPIPublisher_UnpublishRouteCallFails_KeepsChildren(t *testing.T) {
+	routeReadFailed := errors.New("injected HTTPRoute read failure")
+	routeDeleteFailed := apierrors.NewConflict(gatewayapiv1.Resource("httproutes"), "svc-global", errors.New("injected HTTPRoute delete failure"))
 	for _, tc := range []struct {
 		name      string
-		publisher func(client.Client) *GatewayAPIPublisher
+		publisher func(client.WithWatch) *GatewayAPIPublisher
 	}{
 		{
 			name: "read",
-			publisher: func(c client.Client) *GatewayAPIPublisher {
-				return NewGatewayAPIPublisher(c, baseConfig(), WithGatewayAPIReader(&httpRouteGetErrorReader{
-					Reader: c, failAt: 1,
-				}))
+			publisher: func(c client.WithWatch) *GatewayAPIPublisher {
+				reader := fakeclient.Wrap(t, c, fakeclient.FailingVerb(fakeclient.Get, 1, routeReadFailed).OnKind(&gatewayapiv1.HTTPRoute{}))
+				return NewGatewayAPIPublisher(c, baseConfig(), WithGatewayAPIReader(reader))
 			},
 		},
 		{
 			name: "update",
-			publisher: func(c client.Client) *GatewayAPIPublisher {
-				return NewGatewayAPIPublisher(routeUpdateFailClient{Client: c}, baseConfig(), WithGatewayAPIReader(c))
+			publisher: func(c client.WithWatch) *GatewayAPIPublisher {
+				return NewGatewayAPIPublisher(fakeclient.Wrap(t, c, routeUpdatesRefused()), baseConfig(), WithGatewayAPIReader(c))
 			},
 		},
 		{
 			name: "delete",
-			publisher: func(c client.Client) *GatewayAPIPublisher {
-				return NewGatewayAPIPublisher(httpRouteDeleteErrorClient{Client: c}, baseConfig(), WithGatewayAPIReader(c))
+			publisher: func(c client.WithWatch) *GatewayAPIPublisher {
+				refusing := fakeclient.Wrap(t, c, fakeclient.FailingVerb(fakeclient.Delete, fakeclient.EveryCall, routeDeleteFailed).OnKind(&gatewayapiv1.HTTPRoute{}))
+				return NewGatewayAPIPublisher(refusing, baseConfig(), WithGatewayAPIReader(c))
 			},
 		},
 		{
 			name: "confirmation",
-			publisher: func(c client.Client) *GatewayAPIPublisher {
-				return NewGatewayAPIPublisher(c, baseConfig(), WithGatewayAPIReader(&httpRouteGetErrorReader{
-					Reader: c, failAt: 2,
-				}))
+			publisher: func(c client.WithWatch) *GatewayAPIPublisher {
+				reader := fakeclient.Wrap(t, c, fakeclient.FailingVerb(fakeclient.Get, 2, routeReadFailed).OnKind(&gatewayapiv1.HTTPRoute{}))
+				return NewGatewayAPIPublisher(c, baseConfig(), WithGatewayAPIReader(reader))
 			},
 		},
 	} {
@@ -105,11 +105,11 @@ func TestGatewayAPIPublisherUnpublishRouteErrorsRetainChildren(t *testing.T) {
 	}
 }
 
-func TestGatewayAPIPublisherUnpublishFencesPostDrainRouteReplacement(t *testing.T) {
+func TestGatewayAPIPublisher_UnpublishRouteReplacedAfterDrain_LeavesReplacement(t *testing.T) {
 	isvc := testISVC()
 	renderer := NewGatewayAPIPublisher(nil, baseConfig())
-	route := renderer.buildHTTPRoute(isvc, oneHome("svc.prod.global.example", "cluster-a", "a.example"))
-	service := renderer.buildExternalNameService(isvc, renderer.serviceName(isvc, "cluster-a"), Home{
+	route := renderer.buildHTTPRoute(isvc, oneCluster("svc.prod.global.example", "cluster-a", "a.example"))
+	service := renderer.buildExternalNameService(isvc, renderer.serviceName(isvc, "cluster-a"), ServingCluster{
 		Cluster: "cluster-a", BackendHost: "a.example",
 	})
 	route.UID = types.UID("owned-route")
@@ -121,10 +121,10 @@ func TestGatewayAPIPublisherUnpublishFencesPostDrainRouteReplacement(t *testing.
 	initialResourceVersion := route.ResourceVersion
 	var postDrainResourceVersion string
 
-	c := fakeclient.NewClientBuilder().
-		WithScheme(pubScheme(t)).
-		WithObjects(route, service).
-		WithInterceptorFuncs(interceptor.Funcs{
+	c := fakeclient.New(t,
+		fakeclient.WithTypes(gatewayapiv1.Install),
+		fakeclient.WithObjects(route, service),
+		fakeclient.WithInterceptors(interceptor.Funcs{
 			Update: func(ctx context.Context, c client.WithWatch, object client.Object, opts ...client.UpdateOption) error {
 				if updated, ok := object.(*gatewayapiv1.HTTPRoute); ok {
 					for _, rule := range updated.Spec.Rules {
@@ -166,8 +166,8 @@ func TestGatewayAPIPublisherUnpublishFencesPostDrainRouteReplacement(t *testing.
 					gatewayapiv1.Resource("httproutes"), routeKey.Name, errors.New("delete preconditions no longer match"),
 				)
 			},
-		}).
-		Build()
+		}),
+	)
 	p := NewGatewayAPIPublisher(c, baseConfig(), WithGatewayAPIReader(c))
 
 	err := p.Unpublish(context.Background(), isvc)
@@ -181,17 +181,17 @@ func TestGatewayAPIPublisherUnpublishFencesPostDrainRouteReplacement(t *testing.
 	require.NoError(t, c.Get(context.Background(), serviceKey, &corev1.Service{}))
 }
 
-func TestGatewayAPIPublisherUnpublishUsesLiveAPIReader(t *testing.T) {
+func TestGatewayAPIPublisher_UnpublishWithStaleCache_ReadsRouteLive(t *testing.T) {
 	isvc := testISVC()
 	renderer := NewGatewayAPIPublisher(nil, baseConfig())
-	route := renderer.buildHTTPRoute(isvc, oneHome("svc.prod.global.example", "cluster-a", "a.example"))
+	route := renderer.buildHTTPRoute(isvc, oneCluster("svc.prod.global.example", "cluster-a", "a.example"))
 	route.Finalizers = []string{"example.com/hold"}
-	service := renderer.buildExternalNameService(isvc, renderer.serviceName(isvc, "cluster-a"), Home{
+	service := renderer.buildExternalNameService(isvc, renderer.serviceName(isvc, "cluster-a"), ServingCluster{
 		Cluster: "cluster-a", BackendHost: "a.example",
 	})
 	setGatewayFakeObjectIdentity(route, service)
-	live := fakeclient.NewClientBuilder().WithScheme(pubScheme(t)).WithObjects(route, service).Build()
-	stale := blindGatewayCacheClient{Client: live}
+	live := fakeclient.New(t, fakeclient.WithTypes(gatewayapiv1.Install), fakeclient.WithObjects(route, service))
+	stale := fakeclient.Wrap(t, live, blindCache())
 	p := NewGatewayAPIPublisher(stale, baseConfig(), WithGatewayAPIReader(live))
 
 	err := p.Unpublish(context.Background(), isvc)
@@ -204,7 +204,7 @@ func TestGatewayAPIPublisherUnpublishUsesLiveAPIReader(t *testing.T) {
 	require.NoError(t, live.Get(context.Background(), client.ObjectKeyFromObject(service), &corev1.Service{}))
 }
 
-func TestGatewayAPIPublisherUnpublishPreservesLegacyUnlabeledRouteOwnership(t *testing.T) {
+func TestGatewayAPIPublisher_UnpublishUnlabeledRoute_DeletesItAsOwn(t *testing.T) {
 	c, isvc, serviceKey := publishLegacyGatewayFixture(t)
 	p := NewGatewayAPIPublisher(c, baseConfig())
 	routeKey := types.NamespacedName{Namespace: "prod", Name: "svc-global"}
@@ -218,7 +218,7 @@ func TestGatewayAPIPublisherUnpublishPreservesLegacyUnlabeledRouteOwnership(t *t
 	assert.True(t, apierrors.IsNotFound(c.Get(context.Background(), serviceKey, &corev1.Service{})))
 }
 
-func TestGatewayAPIPublisherUnpublishRejectsForeignRouteBeforeChildCleanup(t *testing.T) {
+func TestGatewayAPIPublisher_UnpublishRouteOwnedByAnotherISVC_FailsKeepingChildren(t *testing.T) {
 	c, isvc, serviceKey := publishLegacyGatewayFixture(t)
 	p := NewGatewayAPIPublisher(c, baseConfig())
 	routeKey := types.NamespacedName{Namespace: "prod", Name: "svc-global"}
@@ -231,7 +231,7 @@ func TestGatewayAPIPublisherUnpublishRejectsForeignRouteBeforeChildCleanup(t *te
 	require.NoError(t, c.Get(context.Background(), serviceKey, &corev1.Service{}))
 }
 
-func TestGatewayAPIPublisherUnpublishAlreadyTerminatingRoute(t *testing.T) {
+func TestGatewayAPIPublisher_UnpublishTerminatingRoute_SendsNoSecondDelete(t *testing.T) {
 	c, isvc, serviceKey := publishLegacyGatewayFixture(t)
 	routeKey := types.NamespacedName{Namespace: "prod", Name: "svc-global"}
 	route := &gatewayapiv1.HTTPRoute{}
@@ -240,18 +240,17 @@ func TestGatewayAPIPublisherUnpublishAlreadyTerminatingRoute(t *testing.T) {
 	require.NoError(t, c.Update(context.Background(), route))
 	require.NoError(t, c.Delete(context.Background(), route))
 
-	deleteCalls := 0
-	countingClient := &httpRouteDeleteCountingClient{Client: c, calls: &deleteCalls}
-	p := NewGatewayAPIPublisher(countingClient, baseConfig(), WithGatewayAPIReader(c))
+	routeDeletes := fakeclient.CountingVerb(fakeclient.Delete).OnKind(&gatewayapiv1.HTTPRoute{})
+	p := NewGatewayAPIPublisher(fakeclient.Wrap(t, c, routeDeletes), baseConfig(), WithGatewayAPIReader(c))
 	require.ErrorContains(t, p.Unpublish(context.Background(), isvc), "deletion is pending")
-	assert.Zero(t, deleteCalls, "an already terminating route must not receive another delete request")
+	assert.Zero(t, routeDeletes.Count(), "an already terminating route must not receive another delete request")
 	require.NoError(t, c.Get(context.Background(), routeKey, route))
 	require.NotNil(t, route.Spec.Rules[0].BackendRefs[0].Weight)
 	assert.Zero(t, *route.Spec.Rules[0].BackendRefs[0].Weight)
 	require.NoError(t, c.Get(context.Background(), serviceKey, &corev1.Service{}))
 }
 
-func TestGatewayAPIPublisherUnpublishAbsentRouteCleansChildren(t *testing.T) {
+func TestGatewayAPIPublisher_UnpublishWithRouteGone_DeletesChildren(t *testing.T) {
 	c, isvc, serviceKey := publishLegacyGatewayFixture(t)
 	routeKey := types.NamespacedName{Namespace: "prod", Name: "svc-global"}
 	route := &gatewayapiv1.HTTPRoute{}
@@ -262,70 +261,15 @@ func TestGatewayAPIPublisherUnpublishAbsentRouteCleansChildren(t *testing.T) {
 	assert.True(t, apierrors.IsNotFound(c.Get(context.Background(), serviceKey, &corev1.Service{})))
 }
 
-type httpRouteGetErrorReader struct {
-	client.Reader
-	reads  int
-	failAt int
-}
-
-func (r *httpRouteGetErrorReader) Get(
-	ctx context.Context,
-	key client.ObjectKey,
-	object client.Object,
-	opts ...client.GetOption,
-) error {
-	if _, ok := object.(*gatewayapiv1.HTTPRoute); ok {
-		r.reads++
-		if r.reads == r.failAt {
-			return errors.New("injected HTTPRoute read failure")
-		}
-	}
-	return r.Reader.Get(ctx, key, object, opts...)
-}
-
-type httpRouteDeleteErrorClient struct {
-	client.Client
-}
-
-func (c httpRouteDeleteErrorClient) Delete(
-	ctx context.Context,
-	object client.Object,
-	opts ...client.DeleteOption,
-) error {
-	if _, ok := object.(*gatewayapiv1.HTTPRoute); ok {
-		return apierrors.NewConflict(
-			schema.GroupResource{Group: gatewayapiv1.GroupVersion.Group, Resource: "httproutes"},
-			object.GetName(), errors.New("injected HTTPRoute delete failure"),
-		)
-	}
-	return c.Client.Delete(ctx, object, opts...)
-}
-
-type httpRouteDeleteCountingClient struct {
-	client.Client
-	calls *int
-}
-
-func (c httpRouteDeleteCountingClient) Delete(
-	ctx context.Context,
-	object client.Object,
-	opts ...client.DeleteOption,
-) error {
-	if _, ok := object.(*gatewayapiv1.HTTPRoute); ok {
-		(*c.calls)++
-	}
-	return c.Client.Delete(ctx, object, opts...)
-}
-
 func publishLegacyGatewayFixture(
 	t *testing.T,
-) (client.Client, *v1beta1.InferenceService, types.NamespacedName) {
+) (client.WithWatch, *v1beta1.InferenceService, types.NamespacedName) {
 	t.Helper()
-	c := newGatewayFakeClientBuilder(t, pubScheme(t)).Build()
+	c := gatewayClient(t)
 	p := NewGatewayAPIPublisher(c, baseConfig())
 	isvc := testISVC()
 	require.NoError(t, p.Publish(context.Background(), isvc,
-		oneHome("svc.prod.global.example", "cluster-a", "a.example")))
+		oneCluster("svc.prod.global.example", "cluster-a", "a.example")))
 	return c, isvc, types.NamespacedName{Namespace: "prod", Name: "svc-global-cluster-a"}
 }
 

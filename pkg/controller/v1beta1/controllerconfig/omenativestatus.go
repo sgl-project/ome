@@ -49,11 +49,7 @@ func (c *OMENativeStatusConfig) DecodeBound() uint64 {
 
 // NewOMENativeStatusConfig loads and validates the block once at startup.
 func NewOMENativeStatusConfig(clientset kubernetes.Interface) (*OMENativeStatusConfig, error) {
-	configMap, err := getInferenceServiceConfigMap(clientset)
-	if err != nil {
-		return nil, err
-	}
-	return ParseOMENativeStatusConfig(configMap)
+	return loadBlock(clientset, ParseOMENativeStatusConfig)
 }
 
 // ParseOMENativeStatusConfig decodes the block strictly: it must be a single

@@ -357,7 +357,10 @@ func TestApportionReplicaFloors(t *testing.T) {
 		{name: "negative minimum", primary: v1beta1.EngineComponent, primaryMinimum: 1, targets: map[string]int32{"member-a": 1}, minimums: map[v1beta1.ComponentType]int32{v1beta1.DecoderComponent: -1}, wantErr: "nonnegative"},
 		{name: "primary minimum must be positive", primary: v1beta1.EngineComponent, targets: map[string]int32{"member-a": 1}, wantErr: "positive"},
 		{name: "primary cannot be apportioned", primary: v1beta1.EngineComponent, primaryMinimum: 1, targets: map[string]int32{"member-a": 1}, minimums: map[v1beta1.ComponentType]int32{v1beta1.EngineComponent: 1}, wantErr: "primary"},
-		{name: "router keeps its per-home policy", primary: v1beta1.EngineComponent, primaryMinimum: 1, targets: map[string]int32{"member-a": 1}, minimums: map[v1beta1.ComponentType]int32{v1beta1.RouterComponent: 1}, wantErr: "router"},
+		{name: "a divided router follows the engine shares", primary: v1beta1.EngineComponent, primaryMinimum: 4, targets: map[string]int32{"member-a": 3, "member-b": 1}, minimums: map[v1beta1.ComponentType]int32{v1beta1.RouterComponent: 3},
+			want: map[string][]v1beta1.PlacementComponentFloor{"member-a": {{Component: v1beta1.EngineComponent, Replicas: 3}, {Component: v1beta1.RouterComponent, Replicas: 2}}, "member-b": {{Component: v1beta1.EngineComponent, Replicas: 1}, {Component: v1beta1.RouterComponent, Replicas: 1}}}},
+		{name: "fewer routers than engine homes", primary: v1beta1.EngineComponent, primaryMinimum: 4, targets: map[string]int32{"member-a": 3, "member-b": 1}, minimums: map[v1beta1.ComponentType]int32{v1beta1.RouterComponent: 1}, wantErr: "router minimum 1 cannot give each of the 2 homes"},
+		{name: "an unknown component cannot be apportioned", primary: v1beta1.EngineComponent, primaryMinimum: 1, targets: map[string]int32{"member-a": 1}, minimums: map[v1beta1.ComponentType]int32{"predictor": 1}, wantErr: "cannot apportion"},
 		{name: "unnamed home", primary: v1beta1.EngineComponent, primaryMinimum: 1, targets: map[string]int32{"": 1}, wantErr: "name"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -403,6 +406,58 @@ func TestReplicaUnitRatio(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if diff := cmp.Diff(tt.want, ReplicaUnitRatio(tt.minimums)); diff != "" {
 				t.Fatal(diff)
+			}
+		})
+	}
+}
+
+func TestApportionWeightedReplicaFloor(t *testing.T) {
+	for _, tt := range []struct {
+		name           string
+		component      v1beta1.ComponentType
+		primaryMinimum int32
+		targets        map[string]int32
+		minimum        int32
+		weights        map[string]int64
+		want           map[string]int32
+		wantErr        string
+	}{
+		{name: "own weights over the engine homes", primaryMinimum: 4, targets: map[string]int32{"member-a": 3, "member-b": 1}, minimum: 12,
+			weights: map[string]int64{"member-a": 1, "member-b": 1}, want: map[string]int32{"member-a": 6, "member-b": 6}},
+		{name: "a weight on a home without an engine goes unused", primaryMinimum: 1, targets: map[string]int32{"member-a": 1, "member-b": 0}, minimum: 3,
+			weights: map[string]int64{"member-a": 1, "member-b": 1}, want: map[string]int32{"member-a": 3, "member-b": 0}},
+		{name: "every engine home receives at least one", primaryMinimum: 4, targets: map[string]int32{"member-a": 3, "member-b": 1}, minimum: 4,
+			weights: map[string]int64{"member-a": 10, "member-b": 0}, want: map[string]int32{"member-a": 3, "member-b": 1}},
+		{name: "the total follows the engine targets during a move", primaryMinimum: 4, targets: map[string]int32{"member-a": 3, "member-b": 2}, minimum: 12,
+			weights: map[string]int64{"member-a": 1, "member-b": 1}, want: map[string]int32{"member-a": 8, "member-b": 7}},
+		{name: "no weight on any engine home follows the engine targets", primaryMinimum: 4, targets: map[string]int32{"member-a": 3, "member-b": 1}, minimum: 12,
+			weights: map[string]int64{"member-c": 5}, want: map[string]int32{"member-a": 9, "member-b": 3}},
+		{name: "fewer replicas than engine homes is an error", primaryMinimum: 4, targets: map[string]int32{"member-a": 2, "member-b": 1, "member-c": 1}, minimum: 2,
+			weights: map[string]int64{"member-a": 1, "member-b": 1, "member-c": 1}, wantErr: "decoder minimum 2 cannot give each of the 3 homes"},
+		{name: "a negative weight is an error", primaryMinimum: 4, targets: map[string]int32{"member-a": 4}, minimum: 4,
+			weights: map[string]int64{"member-a": -1}, wantErr: "must be nonnegative"},
+		{name: "a divided router follows its own weights", component: v1beta1.RouterComponent, primaryMinimum: 4, targets: map[string]int32{"member-a": 3, "member-b": 1}, minimum: 4,
+			weights: map[string]int64{"member-a": 1, "member-b": 1}, want: map[string]int32{"member-a": 2, "member-b": 2}},
+		{name: "an unknown component is not apportioned by weight", component: "predictor", primaryMinimum: 4, targets: map[string]int32{"member-a": 4}, minimum: 4,
+			weights: map[string]int64{"member-a": 1}, wantErr: "cannot apportion component"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			component := tt.component
+			if component == "" {
+				component = v1beta1.DecoderComponent
+			}
+			got, err := ApportionWeightedReplicaFloor(component, tt.primaryMinimum, tt.targets, tt.minimum, tt.weights)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("error = %v, want it to contain %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("shares (-want +got):\n%s", diff)
 			}
 		})
 	}

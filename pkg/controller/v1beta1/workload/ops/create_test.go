@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -24,6 +25,7 @@ import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/ome/pkg/constants"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/audit"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/podreadiness"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/query"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/revision"
 	"sigs.k8s.io/ome/pkg/controller/v1beta1/workload/status"
@@ -722,7 +724,8 @@ func TestRestartPhaseB_QuotaExceeded_WaitsWithoutFailing(t *testing.T) {
 	input := legacyTestInput(isvc, base, workload.ComponentEngine)
 	plan := legacyComponentPlan(workload.UpdateStrategySurgeThenDrain, nil)
 
-	done, err := Restart(context.Background(), legacyTestDeps(c), input, plan, plan.Instances[0], nil, "pod lost")
+	target := legacyEnsureTargetCR(t, base, isvc, input.DesiredSpec.PodSpec)
+	done, err := Restart(context.Background(), legacyTestDeps(c), input, plan, plan.Instances[0], target, "pod lost")
 	if err != nil {
 		t.Fatalf("Restart: %v (a quota refusal is a wait, not an error)", err)
 	}
@@ -1191,8 +1194,8 @@ func TestRestartPhaseB_RejectionDispositions(t *testing.T) {
 			base := legacyNewFakeClient(t, isvc, ir)
 			c := rejectPodCreates(t, base, tc.reject)
 			input := legacyTestInput(isvc, base, workload.ComponentEngine)
-			// The repair pins no revision of its own, so the revision a
-			// 422 blames is the owner's current one.
+			// A repair of a never-promoted row records the current version
+			// before creating pods, so a rejection is charged to that version.
 			input.ObservedState.UpdateRevision = "llama-70b-engine-newhash"
 			blocks := &[]string{}
 			input.MutateRetryBlock = func(_ context.Context, rev string, mutate func(*workload.RetryBlock) workload.RetryBlockDisposition) error {
@@ -1204,7 +1207,8 @@ func TestRestartPhaseB_RejectionDispositions(t *testing.T) {
 			}
 			plan := legacyComponentPlan(workload.UpdateStrategySurgeThenDrain, nil)
 
-			if _, err := Restart(context.Background(), legacyTestDeps(c), input, plan, plan.Instances[0], nil, "pod lost"); err != nil {
+			target := &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: input.ObservedState.UpdateRevision, Namespace: isvc.Namespace}}
+			if _, err := Restart(context.Background(), legacyTestDeps(c), input, plan, plan.Instances[0], target, "pod lost"); err != nil {
 				t.Fatalf("Restart: %v (a classified rejection is disposed, not returned)", err)
 			}
 
@@ -2036,32 +2040,43 @@ func TestCreate_PodlessDemotedRowRendersTheTarget(t *testing.T) {
 	}
 }
 
-// A row that lost every pod while the canary step holds its Instance is the
-// step's stable side: the rebuild renders the revision the row records and
-// pins it, so the step keeps its planned size and only the step machine
-// promotes the Instance. Released by the step, the same row renders the roll
-// target; a Failed row whose attempt was disposed follows the same rule, and
-// so does a parked attempt whose pods are gone, in either phase its pods
-// last gave it. The user's own rollingUpdate partition is no canary and
-// leaves the rebuild at the target.
-func TestCreate_PodlessStableRowUnderACanaryKeepsItsRevision(t *testing.T) {
+// A row that lost every pod while the roll's partition holds its Instance
+// is the held side of the split: the rebuild renders the revision the row
+// records and pins it, so the held set keeps its size and only a release of
+// the hold moves the Instance. The canary step's projected partition and
+// the user's own rollingUpdate partition hold alike, and the roll target's
+// retry record paces attempts at the target, not this rebuild. Released,
+// the same row renders the roll target under that record; a Failed row
+// whose attempt was disposed follows the same rule, and so does a held
+// attempt whose pods are gone, in either phase its pods last gave it.
+func TestCreate_PodlessHeldRowKeepsItsRevision(t *testing.T) {
+	t0 := time.Now()
 	for _, tc := range []struct {
 		name  string
 		phase v1beta1.OMENativeInstancePhase
-		// parked keeps a parked Update attempt on the row.
+		// parked keeps a held Update attempt on the row.
 		parked bool
 		// step is the canary step's projected partition; user is the
 		// user's own rollingUpdate partition. nil leaves either unset.
 		step, user *int32
-		keeps      bool
+		// targetBlocked seeds a Backoff block on the roll target that is
+		// not due for an hour.
+		targetBlocked bool
+		keeps         bool
+		// denied expects no pod and no write: the target's block holds a
+		// rebuild at the target.
+		denied bool
 	}{
 		{name: "demoted row the step holds", phase: v1beta1.OMENativeInstancePending, step: ptr.To[int32](1), keeps: true},
 		{name: "demoted row the step released", phase: v1beta1.OMENativeInstancePending, step: ptr.To[int32](0)},
 		{name: "disposed Failed row the step holds", phase: v1beta1.OMENativeInstanceFailed, step: ptr.To[int32](1), keeps: true},
-		{name: "parked attempt the step holds", phase: v1beta1.OMENativeInstanceFailed, parked: true, step: ptr.To[int32](1), keeps: true},
+		{name: "held attempt the step holds", phase: v1beta1.OMENativeInstanceFailed, parked: true, step: ptr.To[int32](1), keeps: true},
 		{name: "parked attempt last read serving the step holds", phase: v1beta1.OMENativeInstanceUpdating, parked: true, step: ptr.To[int32](1), keeps: true},
-		{name: "parked attempt the step released", phase: v1beta1.OMENativeInstanceFailed, parked: true, step: ptr.To[int32](0)},
-		{name: "demoted row under the user's own partition", phase: v1beta1.OMENativeInstancePending, user: ptr.To[int32](1)},
+		{name: "held attempt the step released", phase: v1beta1.OMENativeInstanceFailed, parked: true, step: ptr.To[int32](0)},
+		{name: "demoted row under the user's own partition", phase: v1beta1.OMENativeInstancePending, user: ptr.To[int32](1), keeps: true},
+		{name: "held attempt under the user's own partition", phase: v1beta1.OMENativeInstanceFailed, parked: true, user: ptr.To[int32](1), keeps: true},
+		{name: "held attempt under the user's own partition with the target's block not due", phase: v1beta1.OMENativeInstanceFailed, parked: true, user: ptr.To[int32](1), targetBlocked: true, keeps: true},
+		{name: "held attempt released with the target's block not due", phase: v1beta1.OMENativeInstanceFailed, parked: true, targetBlocked: true, denied: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			seed := v1beta1.OMENativeInstanceStatus{Index: 0, Incarnation: 1, Phase: tc.phase}
@@ -2071,16 +2086,37 @@ func TestCreate_PodlessStableRowUnderACanaryKeepsItsRevision(t *testing.T) {
 					TargetRevision: "comp-rev-parked", Waiting: string(workload.RolloutHoldGateRetryBlock),
 				}
 			}
-			f := newRefillFixture(t, time.Now(), seed, true)
+			f := newRefillFixture(t, t0, seed, true)
 			if tc.step != nil {
 				f.input.DesiredSpec.Pacing = &workload.WorkloadPacing{Partition: tc.step}
 			}
 			if tc.user != nil {
 				f.plan.UpdateStrategy.RollingUpdate = &workload.RollingUpdate{Partition: tc.user}
 			}
+			if tc.targetBlocked {
+				f.input.ObservedState.RetryBlocks = []workload.RetryBlock{{
+					TargetRevision: f.target.Name, State: workload.RetryBlockBackoff, AttemptsStarted: 1,
+					NextRetryAt: ptr.To(metav1.NewTime(t0.Add(time.Hour))), Reason: "DeadlineExceeded",
+				}}
+			}
 
-			f.run(t, legacyTestDeps(f.client))
+			res := f.run(t, legacyTestDeps(f.client))
 
+			if tc.denied {
+				if pods := createGatePods(t, f.client, f.isvc.Namespace); len(pods) != 0 {
+					t.Fatalf("the target's block must hold a rebuild at the target: got %d pod(s)", len(pods))
+				}
+				if row := f.row(t); row.Phase != tc.phase || row.Operation == nil || row.Operation.Type != v1beta1.InstanceOperationUpdate {
+					t.Errorf("a held rebuild must leave the row as it was, got %+v", row)
+				}
+				if len(*f.calls) != 0 {
+					t.Errorf("a held rebuild must not touch any block: %d call(s)", len(*f.calls))
+				}
+				if res.RequeueAfter <= 0 || res.RequeueAfter > time.Hour {
+					t.Errorf("the pass must wait for the block, got %+v", res)
+				}
+				return
+			}
 			if pods := createGatePods(t, f.client, f.isvc.Namespace); len(pods) != 2 {
 				t.Fatalf("got %d pod(s) want the whole gang", len(pods))
 			}
@@ -2280,4 +2316,291 @@ func gangObservationsFor(idx int32, state workload.GangState) *workload.GangObse
 	g := workload.NewGangObservations()
 	g.Record(idx, workload.GangObservation{Name: "llama-70b-engine-0", State: state, Message: "PodGroup llama-70b-engine-0 is controlled by StatefulSet/other-owner, not by this owner"})
 	return g
+}
+
+// TestCreate_PutsASourceBackIntoServiceByLiftingTheDrainHoldItsSurgeLeft
+// pins the gate write of the Create pass on a row it re-proves. A single-pod
+// surge disposed at its drain step left its source out of rotation under
+// the drain's hold, and the roll target is back on the revision the source
+// runs. The hold is lifted before the serving gate is written, so the source
+// returns to rotation: with PodReady already folded the row promotes in the
+// same pass, and without it the row waits on the promote bar with its pod
+// routable again.
+func TestCreate_PutsASourceBackIntoServiceByLiftingTheDrainHoldItsSurgeLeft(t *testing.T) {
+	const running = "llama-70b-engine-rev-v1hash"
+	for _, tc := range []struct {
+		name     string
+		podReady bool
+	}{
+		{"PodReady folded, the row promotes", true},
+		{"PodReady not yet folded, the row waits with its pod routable", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			legacyResetExpectations(t)
+			isvc, ir := surgeISVCReady("llama-70b", "prod", 1)
+			ir.Status.InstanceStatuses[0] = v1beta1.OMENativeInstanceStatus{
+				Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceFailed, RunningRevision: running,
+			}
+			source := surgePodAtOrdinal(isvc, 0, 1, 0, true, false)
+			source.Labels[query.LabelRevisionHash] = query.RevisionHashFromControllerRevisionName(running)
+			if tc.podReady {
+				podReadyAt(source, time.Now().Add(-time.Minute))
+			}
+			c := legacyNewFakeClient(t, isvc, ir, source)
+			holdSourceForDrain(t, c, source)
+			target := makeCR(t, c, isvc, running)
+			input := legacyTestInput(isvc, c, workload.ComponentEngine)
+			if _, err := Create(context.Background(), legacyTestDeps(c), input, surgePlan(), target); err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+
+			fresh := &corev1.Pod{}
+			if err := c.Get(context.Background(), client.ObjectKeyFromObject(source), fresh); err != nil {
+				t.Fatalf("read the source: %v", err)
+			}
+			if !podreadiness.IsServing(fresh) || podreadiness.HeldNotServingBy(fresh, podreadiness.WriterUpdateSurgeDrain) {
+				t.Fatalf("the source is still held out of rotation after the gate write: conditions=%+v", fresh.Status.Conditions)
+			}
+			s := legacyInstanceStatusesOnIR(c, isvc, workload.ComponentEngine)[0]
+			wantPhase := v1beta1.OMENativeInstanceFailed
+			if tc.podReady {
+				wantPhase = v1beta1.OMENativeInstanceReady
+			}
+			if s.Phase != wantPhase || s.Operation != nil || s.RunningRevision != running {
+				t.Fatalf("row after the pass: phase=%s running=%s op=%+v, want phase=%s on %s with no operation",
+					s.Phase, s.RunningRevision, s.Operation, wantPhase, running)
+			}
+		})
+	}
+}
+
+// A migration pair's two rows are the migration record's for as long as
+// their pins stand: the drive moves them, and only the record's completion
+// or expiry ends a pin. A migration mode set to Never plans no migrate
+// pass, so the Create pass is the first to meet the pair. It leaves both
+// rows as they are and writes nothing on their pods. Two shapes, the
+// source serving under its pin in both: the surge still coming up, and the
+// surge stamped Failed by the scheduler grace.
+func TestCreate_MigrationPairStandsUnderModeNever(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		failSurge bool
+	}{
+		{name: "surge pending"},
+		{name: "surge Failed under the scheduler grace", failSurge: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newSinglePodMigFixture(t)
+			const uuid = "mig-mode-never"
+			f.records = []workload.MigrationRecord{mkMigRecord(uuid, 0, "node-a")}
+			surgePods := driveToSurgePods(t, f, uuid, 1)
+			if tc.failSurge {
+				ir := f.getIR(t)
+				surge := migrationStatusByIndex(t, ir, 1)
+				surge.Phase = v1beta1.OMENativeInstanceFailed
+				surge.LastFailure = &v1beta1.InstanceTermination{PodName: surgePods[0].Name, Reason: "Unschedulable", Time: metav1.Now()}
+				if err := f.c.Status().Update(context.Background(), ir); err != nil {
+					t.Fatalf("seed Failed surge row: %v", err)
+				}
+			}
+			// The source pod is PodReady past any availability window, the
+			// shape the promote bar admits; the kubelet stand-in brings the
+			// surge pod's containers up.
+			legacyFoldServingIntoPodReady(t, f.c, migPodsForInstance(t, f, 0)[0], time.Now().Add(-time.Hour))
+			f.react(t)
+			before := f.getIR(t).Status.InstanceStatuses
+
+			// The plan keeps the surge index as the pair's protected index,
+			// as the engine's plan does, and the mode plans no migrate pass
+			// ahead of the Create pass.
+			plan := f.plan
+			plan.MigrationMode = workload.MigrationModeNever
+			plan.Instances = append(append([]workload.InstancePlan(nil), plan.Instances...),
+				workload.InstancePlan{Index: 1, Incarnation: 1, Runners: []workload.RunnerPlan{{Name: "default", Size: 1}}})
+			f.recorder = record.NewFakeRecorder(16)
+			legacyResetExpectations(t)
+			if _, err := Create(context.Background(), f.deps(), f.input(t), plan, f.target); err != nil {
+				t.Fatalf("create pass: %v", err)
+			}
+
+			after := f.getIR(t).Status.InstanceStatuses
+			if diff := cmp.Diff(before, after); diff != "" {
+				t.Errorf("the pair rows stand as they were (-before +after):\n%s", diff)
+			}
+			if pods := migPodsForInstance(t, f, 1); len(pods) != 1 || podreadiness.IsServing(pods[0]) {
+				t.Errorf("the surge pod's serving gate is the drive's to write; got %d pod(s), serving=%v",
+					len(pods), len(pods) == 1 && podreadiness.IsServing(pods[0]))
+			}
+			select {
+			case ev := <-f.recorder.Events:
+				t.Errorf("event recorded for a pair the record owns: %s", ev)
+			default:
+			}
+		})
+	}
+}
+
+func TestCreateMissingPods_RequiresANamedRevision(t *testing.T) {
+	for _, rev := range []query.RevisionID{{}, query.RevisionFromHash("v1"), query.RevisionFromName("example-engine-")} {
+		t.Run(rev.String(), func(t *testing.T) {
+			legacyResetExpectations(t)
+			isvc := legacyMinimalISVC("example-model", "namespace-a", 1)
+			c := legacyNewFakeClient(t, isvc)
+			input := legacyTestInput(isvc, c, workload.ComponentEngine)
+			plan := legacyComponentPlan(workload.UpdateStrategySurgeThenDrain, nil)
+			inst := plan.Instances[0]
+			targets := expectedPodNamesForInstance(input, plan, inst)
+			created, err := createMissingPods(context.Background(), workload.Deps{Client: c}, input, plan, inst, inst.Index, targets, desiredTemplate(input, plan, rev))
+			if created != 0 || !errors.Is(err, query.ErrRevisionUnknown) {
+				t.Fatalf("created=%d error=%v, want no pods and an unknown revision error", created, err)
+			}
+			pods := &corev1.PodList{}
+			if err := c.List(context.Background(), pods, client.InNamespace(isvc.Namespace)); err != nil {
+				t.Fatal(err)
+			}
+			if len(pods.Items) != 0 {
+				t.Fatalf("unknown revision created %d pods", len(pods.Items))
+			}
+		})
+	}
+}
+
+func TestCreateMissingPods_RejectsARevisionLabelChangedByTheRenderHook(t *testing.T) {
+	for _, hash := range []string{"", "v2"} {
+		t.Run(hash, func(t *testing.T) {
+			legacyResetExpectations(t)
+			isvc := legacyMinimalISVC("example-model", "namespace-a", 1)
+			c := legacyNewFakeClient(t, isvc)
+			input := legacyTestInput(isvc, c, workload.ComponentEngine)
+			plan := legacyComponentPlan(workload.UpdateStrategySurgeThenDrain, nil)
+			inst := plan.Instances[0]
+			deps := workload.Deps{Client: c, RenderHook: func(pod *corev1.Pod, _ string, _ int32, _ string) {
+				pod.Labels[query.LabelRevisionHash] = hash
+			}}
+			rev := query.RevisionFromName("example-model-engine-v1")
+			created, err := createMissingPods(context.Background(), deps, input, plan, inst, inst.Index, expectedPodNamesForInstance(input, plan, inst), desiredTemplate(input, plan, rev))
+			if created != 0 || err == nil || !strings.Contains(err.Error(), "revision label") {
+				t.Fatalf("created=%d error=%v, want the changed label rejected", created, err)
+			}
+		})
+	}
+}
+
+func TestCreate_PromotionRequiresTheActivePodsKnownRevision(t *testing.T) {
+	const oldRevision = "example-model-engine-v1"
+	const newRevision = "example-model-engine-v2"
+	cases := []struct {
+		name      string
+		row       v1beta1.OMENativeInstanceStatus
+		hash      string
+		wantError bool
+		wantReady bool
+		wantRev   string
+	}{
+		{name: "first create keeps its version after the target moves", hash: "v1", wantReady: true, wantRev: oldRevision,
+			row: v1beta1.OMENativeInstanceStatus{Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceCreating,
+				Operation: &v1beta1.InstanceOperation{ID: "create-0", Type: v1beta1.InstanceOperationCreate, TargetRevision: oldRevision}}},
+		{name: "unlabeled pods do not complete a create", wantError: true,
+			row: v1beta1.OMENativeInstanceStatus{Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceCreating,
+				Operation: &v1beta1.InstanceOperation{ID: "create-0", Type: v1beta1.InstanceOperationCreate, TargetRevision: oldRevision}}},
+		{name: "mismatched pods do not complete a create", hash: "v3", wantError: true, wantRev: oldRevision,
+			row: v1beta1.OMENativeInstanceStatus{Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceCreating, RunningRevision: oldRevision,
+				Operation: &v1beta1.InstanceOperation{ID: "create-0", Type: v1beta1.InstanceOperationCreate, TargetRevision: oldRevision}}},
+		{name: "legacy Ready pods stay in service", wantReady: true,
+			row: v1beta1.OMENativeInstanceStatus{Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceReady}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			legacyResetExpectations(t)
+			isvc := legacyMinimalISVC("example-model", "namespace-a", 1)
+			pod := legacyPodForInstance(isvc, 0, true, true)
+			pod.Status.Phase = corev1.PodRunning
+			pod.Status.Conditions = append(pod.Status.Conditions, corev1.PodCondition{Type: corev1.PodReady, Status: corev1.ConditionTrue, LastTransitionTime: metav1.NewTime(time.Now().Add(-time.Minute))})
+			if tc.hash != "" {
+				pod.Labels[query.LabelRevisionHash] = tc.hash
+			} else {
+				delete(pod.Labels, query.LabelRevisionHash)
+			}
+			ir := legacyInstanceIR(isvc, workload.ComponentEngine, tc.row)
+			c := legacyNewFakeClient(t, isvc, ir, pod)
+			input := legacyTestInput(isvc, c, workload.ComponentEngine)
+			plan := legacyComponentPlan(workload.UpdateStrategySurgeThenDrain, nil)
+			target := &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: newRevision, Namespace: isvc.Namespace}}
+			_, err := Create(context.Background(), workload.Deps{Client: c}, input, plan, target)
+			if errors.Is(err, query.ErrRevisionUnknown) != tc.wantError || (!tc.wantError && err != nil) {
+				t.Fatalf("Create error = %v, want unknown revision=%t", err, tc.wantError)
+			}
+			rows := legacyInstanceStatusesOnIR(c, isvc, workload.ComponentEngine)
+			if len(rows) != 1 {
+				t.Fatalf("rows = %+v, want one row", rows)
+			}
+			if (rows[0].Phase == v1beta1.OMENativeInstanceReady) != tc.wantReady || rows[0].RunningRevision != tc.wantRev {
+				t.Fatalf("row = %+v, want Ready=%t revision=%q", rows[0], tc.wantReady, tc.wantRev)
+			}
+			if tc.wantError && !reflect.DeepEqual(rows[0], tc.row) {
+				t.Fatalf("unverified promotion discarded or changed its attempt: %+v", rows[0])
+			}
+			freshPod := &corev1.Pod{}
+			if err := c.Get(context.Background(), client.ObjectKeyFromObject(pod), freshPod); err != nil {
+				t.Fatalf("serving pod was removed: %v", err)
+			}
+			if freshPod.Labels[query.LabelRevisionHash] != tc.hash {
+				t.Fatal("promotion invented or changed a revision label")
+			}
+		})
+	}
+}
+
+func TestPodSetRevision_RequiresEveryGangMemberToMatch(t *testing.T) {
+	const running = "example-model-engine-v1"
+	row := &workload.InstanceStatus{Index: 0, RunningRevision: running}
+	target := &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: "example-model-engine-v2"}}
+	for _, tc := range []struct {
+		name   string
+		hashes []string
+		want   string
+	}{
+		{name: "leader and worker run the old version", hashes: []string{"v1", "v1"}, want: running},
+		{name: "worker has no label", hashes: []string{"v1", ""}},
+		{name: "mixed versions", hashes: []string{"v1", "v2"}},
+		{name: "no pods"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pods := make([]*corev1.Pod, 0, len(tc.hashes))
+			for _, hash := range tc.hashes {
+				pods = append(pods, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{query.LabelRevisionHash: hash}}})
+			}
+			if got := podSetRevision(pods, row, target); got != tc.want {
+				t.Fatalf("verified revision = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCreate_RevisionVerificationIgnoresTheInactiveSurgePod(t *testing.T) {
+	legacyResetExpectations(t)
+	isvc := legacyMinimalISVC("example-model", "namespace-a", 1)
+	row := v1beta1.OMENativeInstanceStatus{Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceCreating,
+		RunningRevision: "example-model-engine-v1", ActiveOrdinal: 1}
+	inactive := legacyPodForInstance(isvc, 0, true, true)
+	inactive.Labels[query.LabelRevisionHash] = "v2"
+	active := inactive.DeepCopy()
+	active.Name = query.PodName(isvc.Name, workload.ComponentEngine, 0, "default", 1)
+	active.Labels[query.LabelPodOrdinal] = "1"
+	active.Labels[query.LabelRevisionHash] = "v1"
+	for _, pod := range []*corev1.Pod{active, inactive} {
+		pod.Status.Phase = corev1.PodRunning
+		pod.Status.Conditions = append(pod.Status.Conditions, corev1.PodCondition{Type: corev1.PodReady, Status: corev1.ConditionTrue, LastTransitionTime: metav1.NewTime(time.Now().Add(-time.Minute))})
+	}
+	c := legacyNewFakeClient(t, isvc, legacyInstanceIR(isvc, workload.ComponentEngine, row), active, inactive)
+	input := legacyTestInput(isvc, c, workload.ComponentEngine)
+	plan := legacyComponentPlan(workload.UpdateStrategySurgeThenDrain, nil)
+	target := &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: "example-model-engine-v2", Namespace: isvc.Namespace}}
+	if _, err := Create(context.Background(), workload.Deps{Client: c}, input, plan, target); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	rows := legacyInstanceStatusesOnIR(c, isvc, workload.ComponentEngine)
+	if len(rows) != 1 || rows[0].Phase != v1beta1.OMENativeInstanceReady || rows[0].RunningRevision != row.RunningRevision || rows[0].ActiveOrdinal != row.ActiveOrdinal {
+		t.Fatalf("active version was not promoted: %+v", rows)
+	}
 }

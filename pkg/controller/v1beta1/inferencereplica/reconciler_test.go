@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -19,6 +20,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -2052,6 +2054,9 @@ func TestRestart_PendingGangMemberLost_RebuildsOnceRetryBlockIsDue(t *testing.T)
 			ir := gangLossIR("llama-engine", "prod")
 			survivor := podForIR(ir, 0, string(v1beta1.RunnerNameLeader), 0, true, true)
 			worker := podForIR(ir, 0, string(v1beta1.RunnerNameWorker), 0, true, true)
+			hash := query.RevisionFromName(targetRevisionNameFor(t, ir)).Hash()
+			survivor.Labels[query.LabelRevisionHash] = hash
+			worker.Labels[query.LabelRevisionHash] = hash
 			r, c := newReconciler(t, ir, survivor, worker)
 			r.Clock = clocktesting.NewFakeClock(base)
 			r.Recorder = record.NewFakeRecorder(32)
@@ -2641,11 +2646,9 @@ func gangMigHasCond(p *corev1.Pod, ct corev1.PodConditionType, st corev1.Conditi
 	return false
 }
 
-// The walk also carries the migration tail's two terminal arrows, which
-// need the published pod counters the surge availability gate reads:
-// the surge promotes to Ready on the source's revision with its pin
-// cleared, and the drained source's row is then removed with the record
-// stamped Completed.
+// The walk also carries the migration tail to its end: the surge promotes
+// to Ready on the source's revision with its pin cleared, and the drained
+// source's row is then removed with the record stamped Completed.
 func TestReconcile_GangMigrationCompletesAfterSourcePlanRelease(t *testing.T) {
 	ir := baselineIR("llama-engine", "prod", 1)
 	ir.Spec.Runners = []v1beta1.Runner{
@@ -3223,13 +3226,13 @@ func TestBumpCollisionCount_SameNameReplacementUntouched(t *testing.T) {
 func TestParseExcludedAnnotationKeys(t *testing.T) {
 	g := gomega.NewWithT(t)
 
-	g.Expect(parseExcludedAnnotationKeys(&v1beta1.InferenceReplica{})).To(gomega.BeNil(),
+	g.Expect(v1beta1convert.ExcludedAnnotationKeys(&v1beta1.InferenceReplica{})).To(gomega.BeNil(),
 		"no annotation -> nil")
 
 	ir := &v1beta1.InferenceReplica{ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
 		constants.RevisionExcludedAnnotationKeysAnnotationKey: "a,b,,c",
 	}}}
-	got := parseExcludedAnnotationKeys(ir)
+	got := v1beta1convert.ExcludedAnnotationKeys(ir)
 	g.Expect(got).To(gomega.HaveLen(3), "empty split entries are dropped")
 	g.Expect(got).To(gomega.HaveKey("a"))
 	g.Expect(got).To(gomega.HaveKey("b"))
@@ -3241,17 +3244,17 @@ func TestStripExcludedAnnotations(t *testing.T) {
 
 	// nil excluded -> same pointer, untouched.
 	meta := &metav1.ObjectMeta{Annotations: map[string]string{"a": "1"}}
-	g.Expect(stripExcludedAnnotations(meta, nil)).To(gomega.BeIdenticalTo(meta))
+	g.Expect(v1beta1convert.StripExcludedAnnotations(meta, nil)).To(gomega.BeIdenticalTo(meta))
 
 	// nil meta -> nil.
-	g.Expect(stripExcludedAnnotations(nil, map[string]struct{}{"x": {}})).To(gomega.BeNil())
+	g.Expect(v1beta1convert.StripExcludedAnnotations(nil, map[string]struct{}{"x": {}})).To(gomega.BeNil())
 
 	excluded := map[string]struct{}{"drop": {}}
 	in := &metav1.ObjectMeta{
 		Labels:      map[string]string{"l": "1"},
 		Annotations: map[string]string{"keep": "1", "drop": "2"},
 	}
-	out := stripExcludedAnnotations(in, excluded)
+	out := v1beta1convert.StripExcludedAnnotations(in, excluded)
 	g.Expect(out).NotTo(gomega.BeIdenticalTo(in), "must return a copy, not mutate in place")
 	g.Expect(out.Annotations).To(gomega.HaveKey("keep"))
 	g.Expect(out.Annotations).NotTo(gomega.HaveKey("drop"))
@@ -3260,7 +3263,7 @@ func TestStripExcludedAnnotations(t *testing.T) {
 	g.Expect(out.Labels).To(gomega.HaveKeyWithValue("l", "1"), "labels must be preserved")
 
 	// nothing to drop -> same pointer (no needless copy).
-	g.Expect(stripExcludedAnnotations(in, map[string]struct{}{"absent": {}})).
+	g.Expect(v1beta1convert.StripExcludedAnnotations(in, map[string]struct{}{"absent": {}})).
 		To(gomega.BeIdenticalTo(in))
 }
 
@@ -3285,14 +3288,14 @@ func TestRevisionHashStableUnderExcludedAnnotations(t *testing.T) {
 			"editor.example.com/resource-version": "v1beta1",
 		},
 	}
-	excluded := parseExcludedAnnotationKeys(&v1beta1.InferenceReplica{
+	excluded := v1beta1convert.ExcludedAnnotationKeys(&v1beta1.InferenceReplica{
 		ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
 			constants.RevisionExcludedAnnotationKeysAnnotationKey: "editor.example.com/resource-version",
 		}},
 	})
 
 	strippedHash, _, err := revision.HashWithWorker(
-		podSpec, nil, stripExcludedAnnotations(withAmbient, excluded), nil, "uid")
+		podSpec, nil, v1beta1convert.StripExcludedAnnotations(withAmbient, excluded), nil, "uid")
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(strippedHash).To(gomega.Equal(baseHash),
 		"an excluded inherited annotation must not change the revision hash")
@@ -3309,7 +3312,7 @@ func TestRevisionHashStableUnderExcludedAnnotations(t *testing.T) {
 		Annotations: map[string]string{"ome.io/declared": "2"},
 	}
 	declHash, _, err := revision.HashWithWorker(
-		podSpec, nil, stripExcludedAnnotations(declaredChanged, excluded), nil, "uid")
+		podSpec, nil, v1beta1convert.StripExcludedAnnotations(declaredChanged, excluded), nil, "uid")
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(declHash).NotTo(gomega.Equal(baseHash),
 		"a deliberate declared-annotation change must still produce a new revision")
@@ -3389,7 +3392,7 @@ func TestRevisionHashCacheInvalidatesWhenExcludedAnnotationsChange(t *testing.T)
 	updatedHash, _, err := r.revisionHash(ir, input, nil, "scope-uid")
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	expectedMeta := stripExcludedAnnotations(meta, map[string]struct{}{inheritedKey: {}})
+	expectedMeta := v1beta1convert.StripExcludedAnnotations(meta, map[string]struct{}{inheritedKey: {}})
 	expectedHash, _, err := revision.HashWithWorkerAndTopology(
 		podSpec, nil, expectedMeta, "", nil, "scope-uid")
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -3885,6 +3888,7 @@ func TestReconcile_TPUSlices_FailedRecoveryFailsThePass(t *testing.T) {
 	r, c := newSliceReconciler(t, ir)
 	name := seedSlice(t, r, c, ir, sliceprovision.Slot{Instance: 0}, sliceStateReady)
 	pod := podForIR(ir, 0, string(v1beta1.RunnerNameDefault), 0, true, true)
+	pod.Labels[query.LabelRevisionHash] = query.RevisionFromName(targetRevisionNameFor(t, ir)).Hash()
 	pod.Spec.NodeSelector = map[string]string{sliceKeyAccelerator: "tpu-a", sliceKeyTopology: "2x2x1", sliceKeySlice: name}
 	if err := c.Create(ctx, pod); err != nil {
 		t.Fatalf("create pod: %v", err)
@@ -4977,5 +4981,485 @@ func TestReconcile_RollbackOverABrokenInstanceRestoresTheCurrentRevisionOnceEver
 	}
 	if stalled.Status != metav1.ConditionFalse || stalled.Message != "no rollout in flight" {
 		t.Fatalf("RolloutStalled=%s %q: with current back on %s there is no rollout to report", stalled.Status, stalled.Message, prior)
+	}
+}
+
+// A gang's width — the worker pods per Instance — is part of its revision.
+// A width edit therefore rolls every gang through the Component's strategy
+// like any template edit, and an operation in flight sees it as a retarget.
+// No pass adds a member to, or removes one from, a running gang in place.
+
+// gangWidthIR is a one-Instance leader+worker replica with workers worker
+// pods per Instance, rolling under strategy with a budget of one.
+func gangWidthIR(name, namespace string, workers int32, strategy v1beta1.UpdateStrategyType) *v1beta1.InferenceReplica {
+	ir := baselineIR(name, namespace, 1)
+	template := corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+		Containers: []corev1.Container{{Name: "ome-container", Image: "sgl:1.0"}},
+	}}
+	ir.Spec.Runners = []v1beta1.Runner{
+		{Name: v1beta1.RunnerNameLeader, Size: 1, Template: template},
+		{Name: v1beta1.RunnerNameWorker, Size: workers, Template: template},
+	}
+	ir.Spec.Lifecycle = &v1beta1.LifecycleSpec{
+		RestartPolicy: ptr.To(v1beta1.InstanceRestartPolicyRecreateInstance),
+		UpdateStrategy: &v1beta1.UpdateStrategy{
+			Type: strategy,
+			RollingUpdate: &v1beta1.RollingUpdate{
+				MaxSurge:       ptr.To(intstr.FromInt32(1)),
+				MaxUnavailable: ptr.To(intstr.FromInt32(1)),
+			},
+		},
+	}
+	return ir
+}
+
+// setGangWidth rewrites the worker count the way an apiserver write does:
+// the spec moves and the generation advances with it.
+func setGangWidth(ir *v1beta1.InferenceReplica, workers int32) {
+	for i := range ir.Spec.Runners {
+		if ir.Spec.Runners[i].Name == v1beta1.RunnerNameWorker {
+			ir.Spec.Runners[i].Size = workers
+		}
+	}
+	ir.Generation++
+}
+
+// seedReadyGang records Instance 0 Ready on rev with every member serving:
+// the status, the pods carrying rev's hash and their routed endpoints.
+func seedReadyGang(ir *v1beta1.InferenceReplica, rev string, workers int32) []client.Object {
+	ir.Status.CurrentRevision = rev
+	ir.Status.UpdateRevision = rev
+	ir.Status.ObservedGeneration = ir.Generation
+	ir.Status.InstanceStatuses = []v1beta1.OMENativeInstanceStatus{{
+		Index: 0, Incarnation: 1, Phase: v1beta1.OMENativeInstanceReady,
+		RunningRevision: rev, PodCount: 1 + workers, ServingPodCount: 1 + workers,
+	}}
+	var objs []client.Object
+	seed := func(runner string, ordinal int32) {
+		pod := podForIR(ir, 0, runner, ordinal, true, true)
+		pod.Labels[query.LabelRevisionHash] = query.RevisionFromName(rev).Hash()
+		objs = append(objs, pod, sliceForIRPod(ir, pod, true))
+	}
+	seed("leader", 0)
+	for o := int32(0); o < workers; o++ {
+		seed("worker", o)
+	}
+	return objs
+}
+
+// gangPodsByInstance groups the stored pods by Instance index, each as
+// "<runner>-<ordinal>@<revision hash>".
+func gangPodsByInstance(t *testing.T, c client.Client, namespace string) map[string][]string {
+	t.Helper()
+	out := map[string][]string{}
+	for _, pod := range listPods(t, c, namespace) {
+		idx := pod.Labels[query.LabelInstanceIdx]
+		out[idx] = append(out[idx], fmt.Sprintf("%s-%s@%s", pod.Labels[query.LabelRunner], pod.Labels[query.LabelPodOrdinal], pod.Labels[query.LabelRevisionHash]))
+	}
+	return out
+}
+
+// countOnRevision counts pods, each as rendered by gangPodsByInstance, that
+// carry rev's hash.
+func countOnRevision(pods []string, rev string) int {
+	suffix := "@" + query.RevisionFromName(rev).Hash()
+	n := 0
+	for _, p := range pods {
+		if len(p) >= len(suffix) && p[len(p)-len(suffix):] == suffix {
+			n++
+		}
+	}
+	return n
+}
+
+// TestGangWidth_EditCutsANewRevision: a change to the worker count is a
+// template change, so the replica's target revision moves with it; the
+// single-pod shape has no width and its revision stays.
+func TestGangWidth_EditCutsANewRevision(t *testing.T) {
+	ir := gangWidthIR("llama-engine", "prod", 1, v1beta1.UpdateStrategySurgeThenDrain)
+	narrow := targetRevisionNameFor(t, ir)
+	setGangWidth(ir, 2)
+	wide := targetRevisionNameFor(t, ir)
+	if wide == narrow {
+		t.Fatalf("a width edit must cut a new revision; one and two workers both resolve to %s", narrow)
+	}
+	setGangWidth(ir, 1)
+	if again := targetRevisionNameFor(t, ir); again != narrow {
+		t.Fatalf("the same width must resolve to the same revision: %s then %s", narrow, again)
+	}
+
+	single := baselineIR("router", "prod", 1)
+	before := targetRevisionNameFor(t, single)
+	single.Spec.Runners[0].Size = 1
+	single.Generation++
+	if after := targetRevisionNameFor(t, single); after != before {
+		t.Fatalf("a single-pod replica has no width; its revision moved %s -> %s", before, after)
+	}
+}
+
+// TestGangWidth_SettledGangGrowsBySurge: under SurgeThenDrain a Ready gang
+// whose width grows rolls like any revision change — the source keeps its
+// members and a replacement gang of the new width is created at the new
+// revision — and the restart detector, which reads the Instance against
+// the width its own revision records, claims nothing.
+func TestGangWidth_SettledGangGrowsBySurge(t *testing.T) {
+	ir := gangWidthIR("llama-engine", "prod", 1, v1beta1.UpdateStrategySurgeThenDrain)
+	narrow := targetRevisionNameFor(t, ir)
+	objs := seedReadyGang(ir, narrow, 1)
+	setGangWidth(ir, 2)
+	wide := targetRevisionNameFor(t, ir)
+
+	r, c := newReconciler(t, append([]client.Object{ir}, objs...)...)
+	req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ir)}
+	ctx := context.Background()
+	for pass := 0; pass < 4; pass++ {
+		r.Expectations = workloadtypes.NewExpectations() // the watch has confirmed the last pass's writes
+		if _, err := r.Reconcile(ctx, req); err != nil {
+			t.Fatalf("pass %d: %v", pass, err)
+		}
+		if pods := gangPodsByInstance(t, c, ir.Namespace); len(pods["1"]) == 3 {
+			break
+		}
+	}
+
+	pods := gangPodsByInstance(t, c, ir.Namespace)
+	if got := pods["0"]; len(got) != 2 || countOnRevision(got, narrow) != 2 {
+		t.Fatalf("the source gang must keep its two members on %s, got %v", narrow, pods)
+	}
+	if got := pods["1"]; len(got) != 3 || countOnRevision(got, wide) != 3 {
+		t.Fatalf("the replacement gang must be created whole at the new width on %s, got %v", wide, pods)
+	}
+
+	fresh := &v1beta1.InferenceReplica{}
+	if err := c.Get(ctx, client.ObjectKeyFromObject(ir), fresh); err != nil {
+		t.Fatal(err)
+	}
+	var source *v1beta1.OMENativeInstanceStatus
+	for i := range fresh.Status.InstanceStatuses {
+		if fresh.Status.InstanceStatuses[i].Index == 0 {
+			source = &fresh.Status.InstanceStatuses[i]
+		}
+	}
+	if source == nil || source.Phase != v1beta1.OMENativeInstanceUpdating || source.Operation == nil ||
+		source.Operation.Type != v1beta1.InstanceOperationType(workloadtypes.InstanceOperationUpdate) ||
+		source.Operation.TargetRevision != wide || source.Incarnation != 1 {
+		t.Fatalf("the source must be surging to %s at its own incarnation, got %+v (op %+v)", wide, source, source.Operation)
+	}
+}
+
+// TestGangWidth_SettledGangShrinksByRecreate: under RecreatePod a Ready gang
+// whose width shrinks is drained, deleted and rebuilt at exactly the new
+// width on the new revision; the member above the new width goes with the
+// rest and nothing survives on the old revision.
+func TestGangWidth_SettledGangShrinksByRecreate(t *testing.T) {
+	ir := gangWidthIR("llama-engine", "prod", 2, v1beta1.UpdateStrategyRecreatePod)
+	wide := targetRevisionNameFor(t, ir)
+	objs := seedReadyGang(ir, wide, 2)
+	setGangWidth(ir, 1)
+	narrow := targetRevisionNameFor(t, ir)
+
+	r, c := newReconciler(t, append([]client.Object{ir}, objs...)...)
+	req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ir)}
+	ctx := context.Background()
+	for pass := 0; pass < 6; pass++ {
+		r.Expectations = workloadtypes.NewExpectations() // the watch has confirmed the last pass's writes
+		if _, err := r.Reconcile(ctx, req); err != nil {
+			t.Fatalf("pass %d: %v", pass, err)
+		}
+		if pods := gangPodsByInstance(t, c, ir.Namespace)["0"]; len(pods) == 2 && countOnRevision(pods, narrow) == 2 {
+			break
+		}
+	}
+
+	pods := gangPodsByInstance(t, c, ir.Namespace)
+	if len(pods) != 1 {
+		t.Fatalf("a recreate rebuilds the Instance in place; pods landed on indices %v", pods)
+	}
+	got := pods["0"]
+	if len(got) != 2 || countOnRevision(got, narrow) != 2 {
+		t.Fatalf("the gang must be rebuilt as exactly leader + one worker on %s, got %v", narrow, got)
+	}
+	row := instanceRow(t, c, ir)
+	if row.Incarnation != 2 || row.Operation == nil || row.Operation.TargetRevision != narrow {
+		t.Fatalf("the rebuild must run as a recreate to %s at a bumped incarnation, got %+v (op %+v)", narrow, row, row.Operation)
+	}
+}
+
+// TestGangWidth_ChangeDuringASurgeRetargets: a width edit that lands while
+// a gang surge is in flight moves the target away from the pinned
+// revision, so the surge is abandoned while its source stands, exactly as
+// a template edit abandons it, and a fresh surge builds the replacement at
+// the new width on the new revision.
+func TestGangWidth_ChangeDuringASurgeRetargets(t *testing.T) {
+	ir := gangWidthIR("llama-engine", "prod", 1, v1beta1.UpdateStrategySurgeThenDrain)
+	first := targetRevisionNameFor(t, ir)
+	objs := seedReadyGang(ir, first, 1)
+	ir.Spec.Runners[0].Template.Spec.Containers[0].Image = "sgl:2.0"
+	ir.Spec.Runners[1].Template.Spec.Containers[0].Image = "sgl:2.0"
+	ir.Generation++
+	pinned := targetRevisionNameFor(t, ir)
+
+	r, c := newReconciler(t, append([]client.Object{ir}, objs...)...)
+	req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ir)}
+	ctx := context.Background()
+	for pass := 0; pass < 4; pass++ {
+		r.Expectations = workloadtypes.NewExpectations() // the watch has confirmed the last pass's writes
+		if _, err := r.Reconcile(ctx, req); err != nil {
+			t.Fatalf("surge pass %d: %v", pass, err)
+		}
+		if pods := gangPodsByInstance(t, c, ir.Namespace); len(pods["1"]) == 2 {
+			break
+		}
+	}
+	if pods := gangPodsByInstance(t, c, ir.Namespace); len(pods["1"]) != 2 || countOnRevision(pods["1"], pinned) != 2 {
+		t.Fatalf("premise: the surge must have built its replacement on %s, got %v", pinned, pods)
+	}
+
+	// The width grows while the replacement is up but not yet promoted.
+	live := &v1beta1.InferenceReplica{}
+	if err := c.Get(ctx, client.ObjectKeyFromObject(ir), live); err != nil {
+		t.Fatal(err)
+	}
+	setGangWidth(live, 2)
+	if err := c.Update(ctx, live); err != nil {
+		t.Fatalf("widen the gang: %v", err)
+	}
+	wide := targetRevisionNameFor(t, live)
+	if wide == pinned {
+		t.Fatalf("premise: the width edit must cut a new revision; both resolve to %s", pinned)
+	}
+
+	for pass := 0; pass < 8; pass++ {
+		r.Expectations = workloadtypes.NewExpectations() // the watch has confirmed the last pass's writes
+		if _, err := r.Reconcile(ctx, req); err != nil {
+			t.Fatalf("retarget pass %d: %v", pass, err)
+		}
+		if pods := gangPodsByInstance(t, c, ir.Namespace); countOnRevision(pods["1"], wide) == 3 && countOnRevision(pods["1"], pinned) == 0 {
+			break
+		}
+	}
+	pods := gangPodsByInstance(t, c, ir.Namespace)
+	if got := pods["0"]; len(got) != 2 || countOnRevision(got, first) != 2 {
+		t.Fatalf("the source gang must stand throughout on %s, got %v", first, got)
+	}
+	if got := pods["1"]; countOnRevision(got, pinned) != 0 || countOnRevision(got, wide) != 3 || len(got) != 3 {
+		t.Fatalf("the pinned replacement must be retired and a three-member replacement built on %s, got %v", wide, got)
+	}
+}
+
+// revisionWithoutWidthFor mints a ControllerRevision for ir that records no
+// width: the same templates, metadata and topology, hashed without a worker
+// count, owned by ir.
+func revisionWithoutWidthFor(t *testing.T, ir *v1beta1.InferenceReplica) *appsv1.ControllerRevision {
+	t.Helper()
+	desired := desiredFromIR(ir, ir.Spec.Runners)
+	scopeUID, err := revisionScopeUID(ir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash, raw, err := revision.HashWithWorkerTopologyAndPairing(
+		desired.PodSpec, desired.WorkerPodSpec,
+		v1beta1convert.StripExcludedAnnotations(desired.PodTemplateObjectMeta, hashExcludedAnnotationKeys(ir)),
+		desired.TopologyKey, desired.PairingProtocol, nil, scopeUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := irRevisionKey(ir)
+	return &appsv1.ControllerRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            revision.Name(key, hash),
+			Namespace:       ir.Namespace,
+			Labels:          revision.Labels(key),
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(ir, irGVK)},
+		},
+		Data:     runtime.RawExtension{Raw: raw},
+		Revision: 1,
+	}
+}
+
+// revisionNamesFor lists the ControllerRevisions carrying ir's revision labels.
+func revisionNamesFor(t *testing.T, c client.Client, ir *v1beta1.InferenceReplica) []string {
+	t.Helper()
+	list := &appsv1.ControllerRevisionList{}
+	if err := c.List(context.Background(), list, client.InNamespace(ir.Namespace), client.MatchingLabels(revision.Labels(irRevisionKey(ir)))); err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for i := range list.Items {
+		names = append(names, list.Items[i].Name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// TestGangWidth_RevisionWithoutWidthIsAdoptedWhenTheGangsMatch: a
+// Component whose gangs run a revision that records no width reconciles at
+// the width those gangs run. No revision exists under the hashed name, the
+// width-free one records the
+// same templates and its gangs run the desired width, so it stays the
+// target: nothing is minted, no pod is created or deleted, and the rows
+// stay Ready on it.
+func TestGangWidth_RevisionWithoutWidthIsAdoptedWhenTheGangsMatch(t *testing.T) {
+	ir := gangWidthIR("llama-engine", "prod", 2, v1beta1.UpdateStrategySurgeThenDrain)
+	free := revisionWithoutWidthFor(t, ir)
+	objs := append([]client.Object{free}, seedReadyGang(ir, free.Name, 2)...)
+	r, c := newReconciler(t, append([]client.Object{ir}, objs...)...)
+	req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ir)}
+	ctx := context.Background()
+	before := gangPodsByInstance(t, c, ir.Namespace)
+	for pass := 0; pass < 3; pass++ {
+		r.Expectations = workloadtypes.NewExpectations() // the watch has confirmed the last pass's writes
+		if _, err := r.Reconcile(ctx, req); err != nil {
+			t.Fatalf("pass %d: %v", pass, err)
+		}
+	}
+	fresh := &v1beta1.InferenceReplica{}
+	if err := c.Get(ctx, client.ObjectKeyFromObject(ir), fresh); err != nil {
+		t.Fatal(err)
+	}
+	if fresh.Status.UpdateRevision != free.Name {
+		t.Fatalf("the revision minted without a width must stay the target while its gangs run the desired width: update revision moved %s -> %s", free.Name, fresh.Status.UpdateRevision)
+	}
+	if after := gangPodsByInstance(t, c, ir.Namespace); fmt.Sprint(after) != fmt.Sprint(before) {
+		t.Fatalf("no pod may be created or deleted: before %v after %v", before, after)
+	}
+	if names := revisionNamesFor(t, c, ir); len(names) != 1 || names[0] != free.Name {
+		t.Fatalf("no revision may be minted beside the adopted one, got %v", names)
+	}
+	row := instanceRow(t, c, ir)
+	if row.Phase != v1beta1.OMENativeInstanceReady || row.RunningRevision != free.Name || row.Operation != nil {
+		t.Fatalf("the gang must stay Ready on %s, got %+v (op %+v)", free.Name, row, row.Operation)
+	}
+}
+
+// TestGangWidth_RevisionWithoutWidthIsKeptFromTheCacheOnceRecorded: the
+// same Component across reconciles, its status naming the revision the
+// spec last targeted rather than the one its gangs run, as it does once a
+// pinned rollback has completed. The first pass confirms live that nothing
+// exists under the hashed name and that the width-free revision is the
+// replica's own; once the status names it, every later pass keeps it from
+// the cache and reads no revision live. The pods are read from the cache
+// throughout.
+func TestGangWidth_RevisionWithoutWidthIsKeptFromTheCacheOnceRecorded(t *testing.T) {
+	ir := gangWidthIR("llama-engine", "prod", 2, v1beta1.UpdateStrategySurgeThenDrain)
+	free := revisionWithoutWidthFor(t, ir)
+	objs := append([]client.Object{free}, seedReadyGang(ir, free.Name, 2)...)
+	ir.Status.UpdateRevision = revision.Name(irRevisionKey(ir), "0123abcd")
+	r, c := newReconciler(t, append([]client.Object{ir}, objs...)...)
+	liveRevisionGets := 0
+	r.APIReader = interceptor.NewClient(c.(client.WithWatch), interceptor.Funcs{
+		Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			if _, ok := obj.(*appsv1.ControllerRevision); ok {
+				liveRevisionGets++
+			}
+			return cl.Get(ctx, key, obj, opts...)
+		},
+	})
+	req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ir)}
+	ctx := context.Background()
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	if liveRevisionGets != 2 {
+		t.Fatalf("the first pass confirms the hashed name and the width-free revision live, once each: %d revision reads", liveRevisionGets)
+	}
+	fresh := &v1beta1.InferenceReplica{}
+	if err := c.Get(ctx, client.ObjectKeyFromObject(ir), fresh); err != nil {
+		t.Fatal(err)
+	}
+	if fresh.Status.UpdateRevision != free.Name {
+		t.Fatalf("the status must name the width-free revision after the first pass, got %q", fresh.Status.UpdateRevision)
+	}
+	for pass := 1; pass < 4; pass++ {
+		r.Expectations = workloadtypes.NewExpectations() // the watch has confirmed the last pass's writes
+		if _, err := r.Reconcile(ctx, req); err != nil {
+			t.Fatalf("pass %d: %v", pass, err)
+		}
+	}
+	if liveRevisionGets != 2 {
+		t.Fatalf("once the status names the width-free revision no pass reads a revision live: %d revision reads after four passes", liveRevisionGets)
+	}
+	if names := revisionNamesFor(t, c, ir); len(names) != 1 || names[0] != free.Name {
+		t.Fatalf("no revision may be minted beside the kept one, got %v", names)
+	}
+}
+
+// TestGangWidth_RevisionWithoutWidthRollsWhenTheWidthIsEdited: the same
+// Component with its width edited to three. Its gangs run two workers, so
+// the width-free revision is not kept: the width-bearing revision is minted
+// and the roll takes the gangs to it at the new width.
+func TestGangWidth_RevisionWithoutWidthRollsWhenTheWidthIsEdited(t *testing.T) {
+	ir := gangWidthIR("llama-engine", "prod", 2, v1beta1.UpdateStrategySurgeThenDrain)
+	free := revisionWithoutWidthFor(t, ir)
+	objs := append([]client.Object{free}, seedReadyGang(ir, free.Name, 2)...)
+	setGangWidth(ir, 3)
+	r, c := newReconciler(t, append([]client.Object{ir}, objs...)...)
+	req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ir)}
+	ctx := context.Background()
+	for pass := 0; pass < 4; pass++ {
+		r.Expectations = workloadtypes.NewExpectations() // the watch has confirmed the last pass's writes
+		if _, err := r.Reconcile(ctx, req); err != nil {
+			t.Fatalf("pass %d: %v", pass, err)
+		}
+		if pods := gangPodsByInstance(t, c, ir.Namespace); len(pods["1"]) == 4 {
+			break
+		}
+	}
+	fresh := &v1beta1.InferenceReplica{}
+	if err := c.Get(ctx, client.ObjectKeyFromObject(ir), fresh); err != nil {
+		t.Fatal(err)
+	}
+	if fresh.Status.UpdateRevision == free.Name {
+		t.Fatalf("a desired width the gangs do not run must mint the width-bearing revision; the target is still %s", free.Name)
+	}
+	pods := gangPodsByInstance(t, c, ir.Namespace)
+	if got := pods["0"]; len(got) != 3 || countOnRevision(got, free.Name) != 3 {
+		t.Fatalf("the source gang must keep its three members on %s, got %v", free.Name, pods)
+	}
+	if got := pods["1"]; len(got) != 4 || countOnRevision(got, fresh.Status.UpdateRevision) != 4 {
+		t.Fatalf("the replacement gang must be created whole at the new width on %s, got %v", fresh.Status.UpdateRevision, pods)
+	}
+}
+
+// TestRunPassSteps_StopsAtTheFirstStepThatEndsThePass holds the step runner
+// to the order of a pass: every step runs while each lets the pass go on,
+// and the first step that ends the pass, or fails, is the last one run. A
+// step that ends the pass leaves the result the pass returns on the record.
+func TestRunPassSteps_StopsAtTheFirstStepThatEndsThePass(t *testing.T) {
+	var ran []string
+	step := func(name string, next bool, err error) passStep {
+		return func(context.Context) (bool, error) {
+			ran = append(ran, name)
+			return next, err
+		}
+	}
+	run := func(steps ...passStep) (done bool, order string, err error) {
+		ran = nil
+		done, err = runPassSteps(context.Background(), steps)
+		return done, strings.Join(ran, ","), err
+	}
+
+	done, order, err := run(step("first", true, nil), step("second", true, nil))
+	if err != nil || !done || order != "first,second" {
+		t.Fatalf("every step went on: done=%v err=%v ran=%q, want done=true err=nil ran=first,second", done, err, order)
+	}
+	done, order, err = run(step("first", true, nil), step("ends", false, nil), step("never", true, nil))
+	if err != nil || done || order != "first,ends" {
+		t.Fatalf("a step ended the pass: done=%v err=%v ran=%q, want done=false err=nil ran=first,ends", done, err, order)
+	}
+	writeFailed := errors.New("write the status")
+	done, order, err = run(step("fails", true, writeFailed), step("never", true, nil))
+	if !errors.Is(err, writeFailed) || done || order != "fails" {
+		t.Fatalf("a step failed: done=%v err=%v ran=%q, want done=false the step's error ran=fails", done, err, order)
+	}
+
+	pass := &replicaPass{}
+	requeue := ctrl.Result{Requeue: true}
+	done, order, err = run(step("first", true, nil), func(context.Context) (bool, error) {
+		ran = append(ran, "ends")
+		return pass.end(requeue, nil)
+	}, step("never", true, nil))
+	if err != nil || done || order != "first,ends" || pass.result != requeue {
+		t.Fatalf("a step ended the pass with a result: done=%v err=%v ran=%q result=%+v, want done=false err=nil ran=first,ends result=%+v", done, err, order, pass.result, requeue)
 	}
 }

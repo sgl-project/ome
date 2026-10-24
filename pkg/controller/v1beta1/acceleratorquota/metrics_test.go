@@ -83,7 +83,7 @@ func sampleFor(t *testing.T, name string, labels prometheus.Labels) float64 {
 // The registration itself is the contract the scrape path depends on: a metric
 // that is declared but never registered is served by nothing, which is the
 // failure this whole package exists to stop repeating.
-func TestMetricsAreRegistered(t *testing.T) {
+func TestMetrics_AfterRecording_EveryFamilyIsRegistered(t *testing.T) {
 	recordCapacity(capacity.Result{
 		Capacities: []capacity.Capacity{{
 			ResourceName: "example.com/accelerator", ResourceFlavor: "flavor-a",
@@ -123,7 +123,7 @@ func TestMetricsAreRegistered(t *testing.T) {
 	}
 }
 
-func TestRecordCapacitySplitsSchedulableFromParked(t *testing.T) {
+func TestRecordCapacity_UnavailableNodes_SplitsSchedulableFromUnavailable(t *testing.T) {
 	recordCapacity(capacity.Result{Capacities: []capacity.Capacity{{
 		ResourceName:     "example.com/gpu",
 		ResourceFlavor:   "flavor-split",
@@ -154,7 +154,7 @@ func TestRecordCapacitySplitsSchedulableFromParked(t *testing.T) {
 // Unattributed carries one entry per (node, resource). Accelerators sum across those
 // entries; nodes must not, or a node advertising two unclaimed resources is
 // counted twice and the fleet looks bigger than it is.
-func TestRecordCapacityCountsNodesOnceAcrossResources(t *testing.T) {
+func TestRecordCapacity_NodeWithTwoUnattributedResources_CountsItOnce(t *testing.T) {
 	recordCapacity(capacity.Result{Unattributed: []capacity.Unattributed{
 		{Node: "dual", ResourceName: "example.com/a", Quantity: qty("4"), Reason: capacity.ReasonNoFlavor},
 		{Node: "dual", ResourceName: "example.com/b", Quantity: qty("2"), Reason: capacity.ReasonNoFlavor},
@@ -173,7 +173,7 @@ func TestRecordCapacityCountsNodesOnceAcrossResources(t *testing.T) {
 
 // The two reasons must not be merged: a missing ResourceFlavor and an ambiguous
 // one need different fixes, and the whole point of the metric is to say which.
-func TestRecordCapacitySeparatesUnattributedReasons(t *testing.T) {
+func TestRecordCapacity_NoFlavorAndAmbiguous_KeepsSeparateSeries(t *testing.T) {
 	recordCapacity(capacity.Result{Unattributed: []capacity.Unattributed{
 		{Node: "n1", ResourceName: "example.com/r", Quantity: qty("1"), Reason: capacity.ReasonNoFlavor},
 		{Node: "n2", ResourceName: "example.com/r", Quantity: qty("5"), Reason: capacity.ReasonAmbiguous},
@@ -192,7 +192,7 @@ func TestRecordCapacitySeparatesUnattributedReasons(t *testing.T) {
 // A flavor being added has to drive the series it used to own back to zero. A
 // gauge that merely stops updating keeps reporting unattributed accelerators on a
 // cluster that has just been fixed.
-func TestRecordCapacityClearsResolvedSeries(t *testing.T) {
+func TestRecordCapacity_FlavorAddedNextPass_ClearsTheOldUnattributedSeries(t *testing.T) {
 	recordCapacity(capacity.Result{Unattributed: []capacity.Unattributed{
 		{Node: "n1", ResourceName: "example.com/transient", Quantity: qty("9"), Reason: capacity.ReasonNoFlavor},
 	}})
@@ -214,7 +214,7 @@ func TestRecordCapacityClearsResolvedSeries(t *testing.T) {
 
 // A sweep that finds nothing is the steady state. Recording it would make a
 // counter that never moves indistinguishable from one whose sweep never ran.
-func TestRecordSweptIgnoresEmptySweeps(t *testing.T) {
+func TestRecordSwept_ZeroThenThree_CountsOnlyTheNonEmptySweep(t *testing.T) {
 	l := prometheus.Labels{"trigger": SweepTriggerFinalize}
 	before := sampleFor(t, "ome_quota_backend_swept_total", l)
 
@@ -231,7 +231,7 @@ func TestRecordSweptIgnoresEmptySweeps(t *testing.T) {
 
 // The two triggers answer different questions -- routine orphan collection
 // versus a node being deleted -- so they must not share a series.
-func TestRecordSweptSeparatesTriggers(t *testing.T) {
+func TestRecordSwept_MaterializeTrigger_LeavesFinalizeSeriesAlone(t *testing.T) {
 	mat := prometheus.Labels{"trigger": SweepTriggerMaterialize}
 	fin := prometheus.Labels{"trigger": SweepTriggerFinalize}
 	beforeMat := sampleFor(t, "ome_quota_backend_swept_total", mat)
@@ -247,7 +247,7 @@ func TestRecordSweptSeparatesTriggers(t *testing.T) {
 	}
 }
 
-func TestRecordAppliedIgnoresEmptyPasses(t *testing.T) {
+func TestRecordApplied_ZeroThenSeven_CountsOnlyTheNonEmptyPass(t *testing.T) {
 	before := sampleFor(t, "ome_quota_backend_applied_total", nil)
 
 	recordApplied(0)
@@ -280,7 +280,7 @@ func oneBudget(t *testing.T, nominal, admitted, reserved, borrowed string) []v1b
 // The four figures must land on four distinct series. Collapsing any pair would
 // make "at its ceiling" and "holding accelerators it has not started using" read the
 // same.
-func TestRecordBudgetsPublishesEveryFigure(t *testing.T) {
+func TestRecordBudgets_OneBudget_PublishesFourDistinctSeries(t *testing.T) {
 	recordBudgets(string(ModeWorkload), "tenant-a", string(v1beta1.AcceleratorQuotaRoleClusterQueue), oneBudget(t, "16", "8", "8", "0"))
 
 	l := budgetLabelsFor("tenant-a", "google.com/tpu")
@@ -301,7 +301,7 @@ func TestRecordBudgetsPublishesEveryFigure(t *testing.T) {
 
 // The same series name means the authored fleet total on one plane and one
 // cluster's share on the other, so the two must not merge.
-func TestRecordBudgetsSeparatesPlanes(t *testing.T) {
+func TestRecordBudgets_SameNameOnBothPlanes_KeepsSeparateSeries(t *testing.T) {
 	recordBudgets(string(ModeWorkload), "shared", string(v1beta1.AcceleratorQuotaRoleClusterQueue),
 		oneBudget(t, "16", "0", "0", "0"))
 	recordBudgets(string(ModeManagement), "shared", string(v1beta1.AcceleratorQuotaRoleClusterQueue),
@@ -319,7 +319,7 @@ func TestRecordBudgetsSeparatesPlanes(t *testing.T) {
 
 // A blank plane or quota would land a series keyed on nothing, which no
 // dashboard can select and no sweep can find again.
-func TestRecordBudgetsDropsUnlabelledSamples(t *testing.T) {
+func TestRecordBudgets_BlankPlaneOrQuota_PublishesNothing(t *testing.T) {
 	recordBudgets("", "no-plane", string(v1beta1.AcceleratorQuotaRoleClusterQueue),
 		oneBudget(t, "1", "0", "0", "0"))
 	recordBudgets(string(ModeWorkload), "", string(v1beta1.AcceleratorQuotaRoleClusterQueue),
@@ -337,7 +337,7 @@ func TestRecordBudgetsDropsUnlabelledSamples(t *testing.T) {
 
 // Deleting a node has to take its series with it, or a deleted tenant's
 // allowance is reported forever.
-func TestDeleteQuotaSeriesDropsEveryVector(t *testing.T) {
+func TestDeleteQuotaSeries_RecordedNode_RemovesAllFourSeries(t *testing.T) {
 	recordBudgets(string(ModeWorkload), "doomed", string(v1beta1.AcceleratorQuotaRoleClusterQueue),
 		oneBudget(t, "8", "4", "4", "0"))
 	if got := sampleFor(t, "ome_quota_budget_nominal",
@@ -359,7 +359,7 @@ func TestDeleteQuotaSeriesDropsEveryVector(t *testing.T) {
 
 // The finalizer is the ordinary path; this is the one that catches a node
 // force-stripped, or deleted while the manager was down.
-func TestSweepBudgetsDropsNodesNoLongerInTheTree(t *testing.T) {
+func TestSweepBudgets_NodeAbsentFromTree_RemovesItsSeriesOnly(t *testing.T) {
 	recordBudgets(string(ModeWorkload), "stays", string(v1beta1.AcceleratorQuotaRoleClusterQueue),
 		oneBudget(t, "8", "0", "0", "0"))
 	recordBudgets(string(ModeWorkload), "vanished", string(v1beta1.AcceleratorQuotaRoleClusterQueue),
@@ -380,7 +380,7 @@ func TestSweepBudgetsDropsNodesNoLongerInTheTree(t *testing.T) {
 // Nodes are named by their path, so the quota label already says where a budget
 // sits and no second ancestry label is published beside it — two of them would
 // only give a query a way to disagree with itself.
-func TestRecordBudgetsCarriesNoSeparatePathLabel(t *testing.T) {
+func TestRecordBudgets_PathNamedNode_SelectsByQuotaLabelAlone(t *testing.T) {
 	recordBudgets(string(ModeWorkload), "root.team.nested",
 		string(v1beta1.AcceleratorQuotaRoleClusterQueue), oneBudget(t, "12", "0", "0", "0"))
 
@@ -394,7 +394,7 @@ func TestRecordBudgetsCarriesNoSeparatePathLabel(t *testing.T) {
 // role is part of the series key, so the role it vacated has to stop reporting
 // -- otherwise one node is counted twice in every sum until the stale series
 // ages out of the store.
-func TestRecordBudgetsRoleFlipLeavesOneSeries(t *testing.T) {
+func TestRecordBudgets_RoleChanges_OldRoleSeriesGoesLeavingOne(t *testing.T) {
 	const quota = "convertible"
 	recordBudgets(string(ModeWorkload), quota,
 		string(v1beta1.AcceleratorQuotaRoleClusterQueue), oneBudget(t, "8", "0", "0", "0"))
@@ -421,7 +421,7 @@ func TestRecordBudgetsRoleFlipLeavesOneSeries(t *testing.T) {
 
 // Republishing a node that has not moved must not disturb its series, since
 // that is what every resync tick does.
-func TestRecordBudgetsRepublishesInPlace(t *testing.T) {
+func TestRecordBudgets_SameNodeAgain_UpdatesSeriesInPlace(t *testing.T) {
 	recordBudgets(string(ModeWorkload), "steady", string(v1beta1.AcceleratorQuotaRoleClusterQueue), oneBudget(t, "8", "2", "2", "0"))
 	recordBudgets(string(ModeWorkload), "steady", string(v1beta1.AcceleratorQuotaRoleClusterQueue), oneBudget(t, "8", "6", "6", "0"))
 

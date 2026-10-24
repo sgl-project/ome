@@ -2,6 +2,7 @@ package canary
 
 import (
 	"sigs.k8s.io/ome/pkg/apis/ome/v1beta1"
+	"sigs.k8s.io/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/irprojector"
 	"sigs.k8s.io/ome/pkg/rollout"
 )
 
@@ -23,6 +24,9 @@ import (
 //     drains through the window after it. A step's capacity is staged on the
 //     remaining instances, and the 100% write moves traffic onto the canary
 //     capacity that is Ready before the stable instance is released.
+//   - A unit stopped Failed holds every Instance on the revision it runs
+//     (Partition = desired): the roll stands where the stop found it until a
+//     rollback, a resume or a new revision moves it.
 //
 // Rollback (ome.io/rollout-rollback) is special-cased: when the status records
 // a rolled-back revision, this returns Partition 0 (hold nothing). Partition
@@ -41,24 +45,32 @@ func EffectivePartition(isvc *v1beta1.InferenceService, policies rollout.Policie
 		return nil, false
 	}
 	plan := g.Canary
-	// Rolled back: hold NOTHING via partition (0). The component is driven back
-	// onto the stable revision by the IR's RollbackToRevision target, not by the
-	// partition; a non-zero partition here would fight that revert.
 	// The group's run state is keyed by its primary; a member of the group's
 	// other unit must read the same state to stay in step with it.
 	cs := rollout.GroupCanaryStatusFor(isvc, policies, component)
+	phase := isvc.Status.Components[rollout.PrimaryOf(g)].RolloutPhase
+	// Stopped Failed: hold EVERY Instance where it stands. A stop promises
+	// that nothing moves, so no further Instance of any member rolls onto
+	// the stopped revision until a rollback, a resume or a new revision;
+	// the step's own partition would keep releasing the Instances the step
+	// had not reached yet.
+	if rollout.StateOf(cs, phase, len(plan.Steps)) == rollout.CanaryStateFailed {
+		all := desiredReplicas
+		return &all, true
+	}
+	// Rolled back: hold NOTHING via partition (0). The component is driven back
+	// onto the stable revision by the IR's RollbackToRevision target, not by the
+	// partition; a non-zero partition here would fight that revert.
 	if cs != nil && cs.RolledBackRevisionHash != "" {
 		zero := int32(0)
 		return &zero, true
 	}
 	idx := int32(0)
 	if cs != nil {
-		idx = cs.CurrentStep
-	}
-	// Status is an unvalidated subresource: clamp a negative step (an external
-	// write) before it can index plan.Steps.
-	if idx < 0 {
-		idx = 0
+		// Status is an unvalidated subresource: a negative step is an
+		// external write, read back from the record before it can index
+		// plan.Steps.
+		idx = rollout.StepOf(cs, phase, plan.Steps)
 	}
 	// Done sentinel (CurrentStep past the last step): hold NOTHING, the
 	// component rolls entirely onto the canary revision (partition 0). This
@@ -75,26 +87,65 @@ func EffectivePartition(isvc *v1beta1.InferenceService, policies rollout.Policie
 	return &p, true
 }
 
-// StepPartition returns the current canary step's partition for a merged
-// Component, the value the projector writes to the InferenceReplica's
-// rollout-control spec.pacing.partition so the engine's partition hold
-// stages the split. The merged Component's lifecycle is left untouched: it
-// is the user's update strategy. nil when no canary is active for the
-// Component. desiredReplicas is read from the Component's MinReplicas
-// (fallback MaxReplicas).
-func StepPartition(isvc *v1beta1.InferenceService, policies rollout.Policies, component v1beta1.ComponentType, ext *v1beta1.ComponentExtensionSpec) *int32 {
-	if ext == nil {
-		return nil
-	}
-	desired := int32(ext.MaxReplicas)
-	if ext.MinReplicas != nil {
-		desired = int32(*ext.MinReplicas)
-	}
-	p, ok := EffectivePartition(isvc, policies, component, desired)
+// StepPartition returns the current canary step's partition for a Component,
+// the value the projector writes to the InferenceReplica's rollout-control
+// spec.pacing.partition so the engine's partition hold stages the split. The
+// Component's lifecycle is left untouched: it is the user's update strategy.
+// nil when no canary is active for the Component. desiredReplicas is the
+// Instance count the Component's replica is scaled to (DesiredReplicas), so
+// the partition and the replica count it is stamped beside describe the same
+// fleet.
+func StepPartition(isvc *v1beta1.InferenceService, policies rollout.Policies, component v1beta1.ComponentType, desiredReplicas int32) *int32 {
+	p, ok := EffectivePartition(isvc, policies, component, desiredReplicas)
 	if !ok {
 		return nil
 	}
 	return p
+}
+
+// PartitionResolver is the rollout-control partition a canary projects for
+// a Component, sized by the projector against the Instance count it stamps:
+// the current step's hold under an effective plan, else the full plan-gate
+// hold. nil when no canary governs the Component.
+func PartitionResolver(isvc *v1beta1.InferenceService, policies rollout.Policies, component v1beta1.ComponentType) irprojector.PartitionResolver {
+	if !Governs(isvc, policies, component) {
+		return nil
+	}
+	return func(desiredReplicas int32) *int32 {
+		if p := StepPartition(isvc, policies, component, desiredReplicas); p != nil {
+			return p
+		}
+		return PlanGateHoldPartition(isvc, policies, component, desiredReplicas)
+	}
+}
+
+// Governs reports whether a canary governs the Component's partition: an
+// effective canary group drives it (StepPartition), or a declared
+// canary-kind spec group holds it while no plan is effective
+// (PlanGateHoldPartition).
+func Governs(isvc *v1beta1.InferenceService, policies rollout.Policies, component v1beta1.ComponentType) bool {
+	if isvc == nil {
+		return false
+	}
+	if rollout.CanaryGroupFor(isvc, policies, component) != nil {
+		return true
+	}
+	return declaredCanaryMember(isvc, component)
+}
+
+// declaredCanaryMember reports whether the raw spec places the Component in
+// a canary-kind group: an inline canary or a policyRef declaring canary.
+func declaredCanaryMember(isvc *v1beta1.InferenceService, component v1beta1.ComponentType) bool {
+	if isvc.Spec.Rollout == nil {
+		return false
+	}
+	for i := range isvc.Spec.Rollout.Groups {
+		g := &isvc.Spec.Rollout.Groups[i]
+		if g.DeclaredProgression() == v1beta1.RolloutProgressionCanary && groupHasComponent(g, component) {
+			return true
+		}
+	}
+	return false
 }
 
 // groupHasComponent reports whether c is a member of the group.
@@ -117,25 +168,12 @@ func groupHasComponent(g *v1beta1.RolloutGroup, c v1beta1.ComponentType) bool {
 // step partition and no partition (which churns the IR generation and
 // starves every fresh-snapshot gate downstream). nil when a canary plan IS
 // effective (StepPartition owns that) or the Component is not in a
-// canary-kind group.
-func PlanGateHoldPartition(isvc *v1beta1.InferenceService, policies rollout.Policies, component v1beta1.ComponentType, ext *v1beta1.ComponentExtensionSpec) *int32 {
-	if ext == nil || isvc.Spec.Rollout == nil || rollout.CanaryGroupFor(isvc, policies, component) != nil {
+// canary-kind group. desiredReplicas is the Instance count the Component's
+// replica is scaled to: a hold at the declared minimum would release every
+// Instance an autoscaler added above it.
+func PlanGateHoldPartition(isvc *v1beta1.InferenceService, policies rollout.Policies, component v1beta1.ComponentType, desiredReplicas int32) *int32 {
+	if rollout.CanaryGroupFor(isvc, policies, component) != nil || !declaredCanaryMember(isvc, component) {
 		return nil
 	}
-	member := false
-	for i := range isvc.Spec.Rollout.Groups {
-		g := &isvc.Spec.Rollout.Groups[i]
-		if g.DeclaredProgression() == v1beta1.RolloutProgressionCanary && groupHasComponent(g, component) {
-			member = true
-			break
-		}
-	}
-	if !member {
-		return nil
-	}
-	desired := int32(ext.MaxReplicas)
-	if ext.MinReplicas != nil {
-		desired = int32(*ext.MinReplicas)
-	}
-	return &desired
+	return &desiredReplicas
 }
